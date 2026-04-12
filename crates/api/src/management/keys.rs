@@ -1,6 +1,8 @@
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::Json;
+use chrono::{DateTime, Utc};
+use serde::Serialize;
 use std::sync::Arc;
 
 use llm_gateway_auth::{generate_api_key, hash_api_key};
@@ -10,21 +12,30 @@ use crate::error::ApiError;
 use crate::extractors::verify_admin_token;
 use crate::AppState;
 
+#[derive(Serialize)]
+pub struct CreateKeyResponse {
+    pub id: String,
+    pub name: String,
+    pub key: String,
+    pub rate_limit: Option<i64>,
+    pub budget_monthly: Option<f64>,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+}
+
 pub async fn create_key(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(input): Json<StorageCreateApiKey>,
-) -> Result<Json<ApiKey>, ApiError> {
+) -> Result<Json<CreateKeyResponse>, ApiError> {
     verify_admin_token(&headers, &state.admin_token)?;
 
-    let raw_key = generate_api_key();
-    let key_hash = hash_api_key(&raw_key);
     let now = chrono::Utc::now();
-
-    let api_key = ApiKey {
+    let raw_key = generate_api_key();
+    let key = ApiKey {
         id: uuid::Uuid::new_v4().to_string(),
         name: input.name,
-        key_hash,
+        key_hash: hash_api_key(&raw_key),
         rate_limit: input.rate_limit,
         budget_monthly: input.budget_monthly,
         enabled: true,
@@ -34,12 +45,19 @@ pub async fn create_key(
 
     let created = state
         .storage
-        .create_key(&api_key)
+        .create_key(&key)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // Note: raw_key is not returned here; it will be handled in Task 19.
-    Ok(Json(created))
+    Ok(Json(CreateKeyResponse {
+        id: created.id,
+        name: created.name,
+        key: raw_key,
+        rate_limit: created.rate_limit,
+        budget_monthly: created.budget_monthly,
+        enabled: created.enabled,
+        created_at: created.created_at,
+    }))
 }
 
 pub async fn list_keys(

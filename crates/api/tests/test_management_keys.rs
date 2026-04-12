@@ -47,7 +47,7 @@ async fn test_create_key() {
     )
     .unwrap();
     assert_eq!(body["name"], "test-key");
-    assert!(body["key_hash"].is_string());
+    assert!(body["key"].is_string());
     assert_eq!(body["enabled"], true);
 }
 
