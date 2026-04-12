@@ -255,7 +255,7 @@ async fn test_login_and_me() {
                 .method("POST")
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
-                .body(Body::from(json!({"username": "testuser", "password": "pass123"}).to_string()))
+                .body(Body::from(json!({"username": "testuser", "password": "password123"}).to_string()))
                 .unwrap(),
         )
         .await

@@ -19,12 +19,35 @@ use serde::{Deserialize, Serialize};
 
 // --- Password hashing (bcrypt) ---
 
-pub fn hash_password(plain: &str) -> String {
-    bcrypt::hash(plain, bcrypt::DEFAULT_COST).unwrap()
+pub fn hash_password(plain: &str) -> Result<String, String> {
+    bcrypt::hash(plain, bcrypt::DEFAULT_COST).map_err(|e| e.to_string())
 }
 
 pub fn verify_password(plain: &str, hash: &str) -> bool {
     bcrypt::verify(plain, hash).unwrap_or(false)
+}
+
+pub fn validate_password(password: &str) -> Result<(), String> {
+    if password.len() < 8 {
+        return Err("Password must be at least 8 characters".to_string());
+    }
+    if password.len() > 128 {
+        return Err("Password must be at most 128 characters".to_string());
+    }
+    Ok(())
+}
+
+pub fn validate_username(username: &str) -> Result<(), String> {
+    if username.len() < 2 {
+        return Err("Username must be at least 2 characters".to_string());
+    }
+    if username.len() > 32 {
+        return Err("Username must be at most 32 characters".to_string());
+    }
+    if !username.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') {
+        return Err("Username can only contain letters, numbers, hyphens, and underscores".to_string());
+    }
+    Ok(())
 }
 
 // --- JWT ---
@@ -149,9 +172,24 @@ mod tests {
 
     #[test]
     fn test_hash_and_verify_password() {
-        let hash = hash_password("my-password");
+        let hash = hash_password("my-password").unwrap();
         assert!(verify_password("my-password", &hash));
         assert!(!verify_password("wrong-password", &hash));
+    }
+
+    #[test]
+    fn test_validate_password() {
+        assert!(validate_password("password123").is_ok());
+        assert!(validate_password("short").is_err());
+        assert!(validate_password("").is_err());
+    }
+
+    #[test]
+    fn test_validate_username() {
+        assert!(validate_username("test_user").is_ok());
+        assert!(validate_username("a").is_err());
+        assert!(validate_username("invalid user!").is_err());
+        assert!(validate_username("").is_err());
     }
 
     #[test]

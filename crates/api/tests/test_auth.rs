@@ -359,7 +359,7 @@ async fn test_refresh_returns_new_tokens() {
         &to_bytes(register_resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
-    let original_token = body["token"].as_str().unwrap().to_string();
+    let _original_token = body["token"].as_str().unwrap().to_string();
     let original_refresh_token = body["refresh_token"].as_str().unwrap().to_string();
 
     // Refresh
@@ -587,6 +587,50 @@ async fn test_change_password_unauthenticated_returns_401() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_register_short_password_returns_400() {
+    let db = common::setup_test_db().await;
+    let app = build_app(make_state(db));
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"username": "testuser", "password": "short"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_register_invalid_username_returns_400() {
+    let db = common::setup_test_db().await;
+    let app = build_app(make_state(db));
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"username": "invalid user!", "password": "password123"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

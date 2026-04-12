@@ -14,6 +14,7 @@ pub trait Storage: Send + Sync {
     async fn get_key_by_hash(&self, hash: &str) -> Result<Option<ApiKey>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_keys(&self) -> Result<Vec<ApiKey>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_keys_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_keys_paginated_for_user(&self, created_by: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_key(&self, key: &ApiKey) -> Result<ApiKey, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_key(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
@@ -61,6 +62,7 @@ pub trait Storage: Send + Sync {
     async fn delete_user(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn count_admin_users(&self) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
     async fn user_count(&self) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
+    async fn rotate_refresh_token(&self, user_id: &str, old_token: &str, new_token: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
 
     // Settings
     async fn get_setting(&self, key: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;

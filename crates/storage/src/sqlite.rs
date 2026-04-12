@@ -394,6 +394,29 @@ impl crate::Storage for SqliteStorage {
         })
     }
 
+    async fn list_keys_paginated_for_user(&self, created_by: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>> {
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM api_keys WHERE created_by = ?")
+            .bind(created_by)
+            .fetch_one(&self.pool)
+            .await?;
+        let offset = (page - 1) * page_size;
+        let rows: Vec<SqliteKeyRow> = sqlx::query_as(
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
+             FROM api_keys WHERE created_by = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        )
+        .bind(created_by)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(PaginatedResponse {
+            items: rows.into_iter().map(ApiKey::from).collect(),
+            total: total.0,
+            page,
+            page_size,
+        })
+    }
+
     async fn update_key(&self, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
             "UPDATE api_keys SET name = ?, key_hash = ?, rate_limit = ?, budget_monthly = ?,
@@ -1012,6 +1035,20 @@ impl crate::Storage for SqliteStorage {
             .fetch_one(&self.pool)
             .await?;
         Ok(row.0)
+    }
+
+    async fn rotate_refresh_token(&self, user_id: &str, old_token: &str, new_token: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let result = sqlx::query(
+            "UPDATE users SET refresh_token = ?, updated_at = ? WHERE id = ? AND refresh_token = ?",
+        )
+        .bind(new_token)
+        .bind(&now)
+        .bind(user_id)
+        .bind(old_token)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     // ---- Settings ----

@@ -69,18 +69,19 @@ pub async fn list_keys(
     let claims = require_auth(&headers, &state.jwt_secret)?;
 
     let (page, page_size) = pagination.normalized();
-    let mut result = state
-        .storage
-        .list_keys_paginated(page, page_size)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    if claims.role != "admin" {
-        result.items = result.items
-            .into_iter()
-            .filter(|k| k.created_by.as_deref() == Some(&claims.sub))
-            .collect();
-    }
+    let result = if claims.role == "admin" {
+        state
+            .storage
+            .list_keys_paginated(page, page_size)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+    } else {
+        state
+            .storage
+            .list_keys_paginated_for_user(&claims.sub, page, page_size)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+    };
 
     Ok(Json(result))
 }

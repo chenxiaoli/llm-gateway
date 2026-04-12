@@ -11,9 +11,9 @@ export default function Dashboard() {
   const today = dayjs().startOf('day').toISOString();
   const monthStart = dayjs().startOf('month').toISOString();
 
-  const { data: allUsage } = useUsage({});
-  const { data: todayUsage } = useUsage({ since: today });
-  const { data: monthUsage } = useUsage({ since: monthStart });
+  const { data: allUsage } = useUsage({}, 1, 99999);
+  const { data: todayUsage } = useUsage({ since: today }, 1, 99999);
+  const { data: monthUsage } = useUsage({ since: monthStart }, 1, 99999);
   const { data: recentLogs } = useLogs({});
 
   const todayItems = todayUsage?.items ?? [];
