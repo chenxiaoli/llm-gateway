@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod channels;
 pub mod keys;
 pub mod providers;
 pub mod models;
@@ -35,6 +36,14 @@ pub fn management_router() -> Router<Arc<AppState>> {
         .route(
             "/api/v1/providers/{id}",
             get(providers::get_provider).patch(providers::update_provider).delete(providers::delete_provider),
+        )
+        .route(
+            "/api/v1/providers/{id}/channels",
+            post(channels::create_channel).get(channels::list_channels),
+        )
+        .route(
+            "/api/v1/channels/{id}",
+            get(channels::get_channel).patch(channels::update_channel).delete(channels::delete_channel),
         )
         .route(
             "/api/v1/providers/{id}/models",
