@@ -1,0 +1,20 @@
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[admin]
+token = "change-me-in-production"
+
+[database]
+driver = "sqlite"
+sqlite_path = "./data/gateway.db"
+
+[rate_limit]
+flush_interval_secs = 30
+window_size_secs = 60
+
+[upstream]
+timeout_secs = 30
+
+[audit]
+retention_days = 90
