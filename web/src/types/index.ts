@@ -166,6 +166,11 @@ export interface RefreshResponse {
   refresh_token: string;
 }
 
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
 export interface UserResponse {
   id: string;
   username: string;

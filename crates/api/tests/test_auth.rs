@@ -446,6 +446,150 @@ async fn test_refresh_with_invalid_token_returns_401() {
 }
 
 #[tokio::test]
+async fn test_change_password_success() {
+    let db = common::setup_test_db().await;
+    let app = build_app(make_state(db));
+
+    // Register a user
+    let register_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"username": "testuser", "password": "password123"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body: Value = serde_json::from_slice(
+        &to_bytes(register_resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    let token = body["token"].as_str().unwrap().to_string();
+
+    // Change password
+    let change_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/change-password")
+                .header("content-type", "application/json")
+                .header("authorization", bearer_token(&token))
+                .body(Body::from(
+                    json!({"current_password": "password123", "new_password": "newpass456"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(change_resp.status(), StatusCode::OK);
+
+    // Login with new password
+    let login_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"username": "testuser", "password": "newpass456"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(login_resp.status(), StatusCode::OK);
+
+    // Old password no longer works
+    let old_login_resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"username": "testuser", "password": "password123"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(old_login_resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_change_password_wrong_current_returns_400() {
+    let db = common::setup_test_db().await;
+    let app = build_app(make_state(db));
+
+    // Register a user
+    let register_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"username": "testuser", "password": "password123"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body: Value = serde_json::from_slice(
+        &to_bytes(register_resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    let token = body["token"].as_str().unwrap().to_string();
+
+    // Try to change with wrong current password
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/change-password")
+                .header("content-type", "application/json")
+                .header("authorization", bearer_token(&token))
+                .body(Body::from(
+                    json!({"current_password": "wrongpassword", "new_password": "newpass456"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_change_password_unauthenticated_returns_401() {
+    let db = common::setup_test_db().await;
+    let app = build_app(make_state(db));
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/change-password")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"current_password": "password123", "new_password": "newpass456"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn test_refresh_with_revoked_token_returns_401() {
     let db = common::setup_test_db().await;
     let state = make_state(db.clone());

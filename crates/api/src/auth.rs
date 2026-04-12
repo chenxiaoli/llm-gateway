@@ -55,6 +55,12 @@ pub struct RefreshRequest {
     pub refresh_token: String,
 }
 
+#[derive(Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
 #[derive(Serialize)]
 pub struct RefreshResponse {
     pub token: String,
@@ -275,4 +281,34 @@ pub async fn refresh(
         token: new_token,
         refresh_token: new_refresh_jwt,
     }))
+}
+
+pub async fn change_password(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(input): Json<ChangePasswordRequest>,
+) -> Result<Json<UserInfo>, ApiError> {
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+
+    let user = state
+        .storage
+        .get_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::Unauthorized)?;
+
+    if !verify_password(&input.current_password, &user.password) {
+        return Err(ApiError::BadRequest("Current password is incorrect".to_string()));
+    }
+
+    let mut updated_user = user.clone();
+    updated_user.password = hash_password(&input.new_password);
+    updated_user.updated_at = chrono::Utc::now();
+    state
+        .storage
+        .update_user(&updated_user)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(UserInfo::from(&updated_user)))
 }
