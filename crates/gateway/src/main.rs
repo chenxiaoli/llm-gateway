@@ -1,11 +1,18 @@
 use axum::middleware;
 use axum::routing::{get, post};
+use axum::http::{header, StatusCode, Uri};
+use axum::response::{IntoResponse, Response};
 use llm_gateway_api::{self as api, AppState};
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
 use llm_gateway_storage::sqlite::SqliteStorage;
+use rust_embed::{Embed, RustEmbed};
 use std::sync::Arc;
+
+#[derive(Embed)]
+#[folder = "../../web/dist"]
+struct Frontend;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -50,6 +57,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/messages", post(api::anthropic::messages))
         // Management API
         .merge(api::management::management_router())
+        // Frontend static files (fallback for SPA)
+        .fallback(get(serve_frontend))
         // State + middleware
         .with_state(state)
         .layer(middleware::from_fn(trace_middleware));
@@ -64,6 +73,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .await?;
 
     Ok(())
+}
+
+async fn serve_frontend(uri: Uri) -> impl IntoResponse {
+    let path = uri.path().trim_start_matches('/');
+
+    // Try exact file first
+    if let Some(content) = Frontend::get(path) {
+        let mime = mime_guess::from_path(path).first_or_octet_stream();
+        return Response::builder()
+            .header(header::CONTENT_TYPE, mime.as_ref())
+            .body(content.data.to_vec().into())
+            .unwrap();
+    }
+
+    // SPA fallback: serve index.html for non-API, non-file routes
+    if let Some(content) = Frontend::get("index.html") {
+        return Response::builder()
+            .header(header::CONTENT_TYPE, "text/html")
+            .body(content.data.to_vec().into())
+            .unwrap();
+    }
+
+    StatusCode::NOT_FOUND.into_response()
 }
 
 async fn trace_middleware(

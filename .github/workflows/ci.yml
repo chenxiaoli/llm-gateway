@@ -44,7 +44,7 @@ jobs:
           path: web/dist/
 
   build-release:
-    needs: backend-test
+    needs: [backend-test, frontend-build]
     runs-on: ${{ matrix.os }}
     if: startsWith(github.ref, 'refs/tags/v')
     strategy:
@@ -68,6 +68,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: llm-gateway-frontend
+          path: web/dist
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -90,7 +95,7 @@ jobs:
           path: ${{ matrix.archive }}
 
   release:
-    needs: [build-release, frontend-build]
+    needs: build-release
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
@@ -103,11 +108,6 @@ jobs:
           path: artifacts
           pattern: llm-gateway-*
           merge-multiple: true
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: llm-gateway-frontend
-          path: artifacts/frontend
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -123,6 +123,7 @@ jobs:
             | `llm-gateway-linux-x86_64` | Linux x86_64 |
             | `llm-gateway-macos-arm64` | macOS ARM64 (Apple Silicon) |
             | `llm-gateway-windows-x86_64.exe` | Windows x86_64 |
-            | `frontend/` | React dashboard |
+
+            Web dashboard is embedded in the binary. Access it at `http://localhost:8080/` after starting.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
