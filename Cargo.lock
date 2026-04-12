@@ -1025,6 +1025,7 @@ dependencies = [
  "llm-gateway-provider",
  "llm-gateway-ratelimit",
  "llm-gateway-storage",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",
