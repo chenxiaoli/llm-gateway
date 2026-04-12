@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { getToken } from './api/client';
 import Layout from './components/Layout';
+import Home from './pages/Home';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Keys from './pages/Keys';
@@ -20,9 +21,10 @@ function App() {
   return (
     <BrowserRouter basename="/admin">
       <Routes>
+        <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-          <Route index element={<Dashboard />} />
+          <Route path="dashboard" element={<Dashboard />} />
           <Route path="keys" element={<Keys />} />
           <Route path="keys/:id" element={<KeyDetail />} />
           <Route path="providers" element={<Providers />} />
@@ -30,7 +32,7 @@ function App() {
           <Route path="usage" element={<Usage />} />
           <Route path="logs" element={<Logs />} />
         </Route>
-        <Route path="*" element={<Navigate to="/admin/" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

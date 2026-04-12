@@ -15,7 +15,7 @@ export default function Login() {
     setToken(values.token);
     try {
       await apiClient.get('/keys');
-      navigate('/admin/');
+      navigate('/admin/dashboard');
     } catch {
       message.error('Invalid admin token');
       setToken('');

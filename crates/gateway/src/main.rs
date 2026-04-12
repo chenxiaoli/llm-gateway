@@ -1,7 +1,7 @@
 use axum::middleware;
 use axum::routing::{get, post};
 use axum::http::{header, StatusCode, Uri};
-use axum::response::{IntoResponse, Response, Redirect};
+use axum::response::{IntoResponse, Response};
 use llm_gateway_api::{self as api, AppState};
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
@@ -57,8 +57,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/messages", post(api::anthropic::messages))
         // Management API
         .merge(api::management::management_router())
-        // Redirect root to dashboard
-        .route("/", get(|| async { Redirect::permanent("/admin/") }))
         // Frontend static files (fallback for SPA)
         .fallback(get(serve_frontend))
         // State + middleware

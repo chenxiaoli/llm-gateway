@@ -14,7 +14,7 @@ import { clearToken } from '../api/client';
 const { Header, Sider, Content } = Layout;
 
 const menuItems = [
-  { key: '/admin/', icon: <DashboardOutlined />, label: 'Dashboard' },
+  { key: '/admin/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
   { key: '/admin/keys', icon: <KeyOutlined />, label: 'API Keys' },
   { key: '/admin/providers', icon: <CloudServerOutlined />, label: 'Providers' },
   { key: '/admin/usage', icon: <BarChartOutlined />, label: 'Usage' },
