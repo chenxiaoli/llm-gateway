@@ -54,14 +54,17 @@ jobs:
             target: x86_64-unknown-linux-gnu
             artifact: llm-gateway-linux-x86_64
             binary: llm-gateway
+            archive: llm-gateway-linux-x86_64
           - os: macos-14
             target: aarch64-apple-darwin
             artifact: llm-gateway-macos-arm64
             binary: llm-gateway
+            archive: llm-gateway-macos-arm64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact: llm-gateway-windows-x86_64
             binary: llm-gateway.exe
+            archive: llm-gateway-windows-x86_64.exe
     steps:
       - uses: actions/checkout@v4
 
@@ -76,11 +79,15 @@ jobs:
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
 
+      - name: Rename binary with platform suffix
+        shell: bash
+        run: cp target/${{ matrix.target }}/release/${{ matrix.binary }} ${{ matrix.archive }}
+
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: target/${{ matrix.target }}/release/${{ matrix.binary }}
+          path: ${{ matrix.archive }}
 
   release:
     needs: [build-release, frontend-build]
@@ -113,9 +120,9 @@ jobs:
             ### Assets
             | File | Platform |
             |------|----------|
-            | `llm-gateway` | Linux x86_64 |
-            | `llm-gateway` | macOS ARM64 (Apple Silicon) |
-            | `llm-gateway.exe` | Windows x86_64 |
+            | `llm-gateway-linux-x86_64` | Linux x86_64 |
+            | `llm-gateway-macos-arm64` | macOS ARM64 (Apple Silicon) |
+            | `llm-gateway-windows-x86_64.exe` | Windows x86_64 |
             | `frontend/` | React dashboard |
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
