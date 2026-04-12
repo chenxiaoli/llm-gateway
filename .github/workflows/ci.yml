@@ -20,15 +20,6 @@ jobs:
       - name: Run tests
         run: cargo test --workspace
 
-      - name: Build release
-        run: cargo build --release --target x86_64-unknown-linux-gnu
-
-      - name: Upload release binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: llm-gateway-linux-x86_64
-          path: target/x86_64-unknown-linux-gnu/release/llm-gateway
-
   frontend-build:
     runs-on: ubuntu-latest
     steps:
@@ -52,35 +43,79 @@ jobs:
           name: llm-gateway-frontend
           path: web/dist/
 
+  build-release:
+    needs: backend-test
+    runs-on: ${{ matrix.os }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: llm-gateway-linux-x86_64
+            binary: llm-gateway
+          - os: macos-14
+            target: aarch64-apple-darwin
+            artifact: llm-gateway-macos-arm64
+            binary: llm-gateway
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: llm-gateway-windows-x86_64
+            binary: llm-gateway.exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: target/${{ matrix.target }}/release/${{ matrix.binary }}
+
   release:
-    needs: [backend-test, frontend-build]
+    needs: [build-release, frontend-build]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
     steps:
-      - name: Download release binary
-        uses: actions/download-artifact@v4
-        with:
-          name: llm-gateway-linux-x86_64
+      - uses: actions/checkout@v4
 
-      - name: Download frontend dist
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: llm-gateway-*
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
         with:
           name: llm-gateway-frontend
-          path: frontend
+          path: artifacts/frontend
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            llm-gateway
+          files: artifacts/*
           name: Release ${{ github.ref_name }}
           body: |
             ## llm-gateway ${{ github.ref_name }}
 
             ### Assets
-            - `llm-gateway` — Linux x86_64 binary
-            - `frontend/` — React dashboard (embed or serve separately)
+            | File | Platform |
+            |------|----------|
+            | `llm-gateway` | Linux x86_64 |
+            | `llm-gateway` | macOS ARM64 (Apple Silicon) |
+            | `llm-gateway.exe` | Windows x86_64 |
+            | `frontend/` | React dashboard |
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
