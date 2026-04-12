@@ -1,24 +1,30 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Form, Input, Button, Card, Typography, message } from 'antd';
-import { setToken } from '../api/client';
-import { apiClient } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
+import { useQuery } from '@tanstack/react-query';
+import { getAuthConfig } from '../api/auth';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
-  const onFinish = async (values: { token: string }) => {
+  const { data: authConfig } = useQuery({
+    queryKey: ['authConfig'],
+    queryFn: getAuthConfig,
+    retry: false,
+  });
+
+  const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);
-    setToken(values.token);
     try {
-      await apiClient.get('/keys');
+      await login(values);
       navigate('/admin/dashboard');
     } catch {
-      message.error('Invalid admin token');
-      setToken('');
+      message.error('Invalid username or password');
     } finally {
       setLoading(false);
     }
@@ -29,8 +35,11 @@ export default function Login() {
       <Card style={{ width: 400 }}>
         <Title level={3} style={{ textAlign: 'center' }}>LLM Gateway</Title>
         <Form onFinish={onFinish} layout="vertical">
-          <Form.Item name="token" label="Admin Token" rules={[{ required: true }]}>
-            <Input.Password placeholder="Enter admin token" />
+          <Form.Item name="username" label="Username" rules={[{ required: true, message: 'Enter your username' }]}>
+            <Input placeholder="Username" />
+          </Form.Item>
+          <Form.Item name="password" label="Password" rules={[{ required: true, message: 'Enter your password' }]}>
+            <Input.Password placeholder="Password" />
           </Form.Item>
           <Form.Item>
             <Button type="primary" htmlType="submit" loading={loading} block>
@@ -38,6 +47,11 @@ export default function Login() {
             </Button>
           </Form.Item>
         </Form>
+        {authConfig?.allow_registration && (
+          <Text style={{ display: 'block', textAlign: 'center' }}>
+            <Link to="/admin/register">Create an account</Link>
+          </Text>
+        )}
       </Card>
     </div>
   );

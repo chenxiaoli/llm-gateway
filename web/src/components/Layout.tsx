@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, theme } from 'antd';
+import { Layout, Menu, theme, Typography, Space } from 'antd';
 import {
   DashboardOutlined,
   KeyOutlined,
@@ -8,16 +8,24 @@ import {
   BarChartOutlined,
   FileSearchOutlined,
   LogoutOutlined,
+  UserOutlined,
+  SettingOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
-import { clearToken } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 
 const { Header, Sider, Content } = Layout;
 
-const menuItems = [
+const consoleItems = [
   { key: '/admin/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
   { key: '/admin/keys', icon: <KeyOutlined />, label: 'API Keys' },
-  { key: '/admin/providers', icon: <CloudServerOutlined />, label: 'Providers' },
   { key: '/admin/usage', icon: <BarChartOutlined />, label: 'Usage' },
+];
+
+const adminItems = [
+  { key: '/admin/providers', icon: <CloudServerOutlined />, label: 'Providers' },
+  { key: '/admin/users', icon: <TeamOutlined />, label: 'Users' },
+  { key: '/admin/settings', icon: <SettingOutlined />, label: 'Settings' },
   { key: '/admin/logs', icon: <FileSearchOutlined />, label: 'Logs' },
 ];
 
@@ -25,12 +33,15 @@ export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout } = useAuth();
   const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken();
 
-  const handleLogout = () => {
-    clearToken();
-    navigate('/admin/login');
-  };
+  const isAdmin = user?.role === 'admin';
+
+  const menuItems = [
+    { key: 'console', label: 'Console', type: 'group' as const, children: consoleItems },
+    ...(isAdmin ? [{ key: 'admin', label: 'Admin', type: 'group' as const, children: adminItems }] : []),
+  ];
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -47,10 +58,13 @@ export default function AppLayout() {
         />
       </Sider>
       <Layout>
-        <Header style={{ padding: '0 16px', background: colorBgContainer, display: 'flex', justifyContent: 'flex-end' }}>
-          <a onClick={handleLogout} style={{ cursor: 'pointer' }}>
-            <LogoutOutlined /> Logout
-          </a>
+        <Header style={{ padding: '0 16px', background: colorBgContainer, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+          <Space size="middle">
+            <span><UserOutlined /> {user?.username}</span>
+            <a onClick={logout} style={{ cursor: 'pointer' }}>
+              <LogoutOutlined /> Logout
+            </a>
+          </Space>
         </Header>
         <Content style={{ margin: 16 }}>
           <div style={{ padding: 24, minHeight: 360, background: colorBgContainer, borderRadius: borderRadiusLG }}>
