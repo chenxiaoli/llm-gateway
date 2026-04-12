@@ -38,7 +38,7 @@ describe('Login page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Login' }));
 
     await waitFor(() => {
-      expect(navigate).toHaveBeenCalledWith('/admin/');
+      expect(navigate).toHaveBeenCalledWith('/admin/dashboard');
     });
   });
 
