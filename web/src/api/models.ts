@@ -1,6 +1,11 @@
 import { apiClient } from './client';
 import type { Model, CreateModelRequest, UpdateModelRequest } from '../types';
 
+export async function listModels(providerId: string): Promise<Model[]> {
+  const { data } = await apiClient.get<Model[]>(`/providers/${providerId}/models`);
+  return data;
+}
+
 export async function createModel(providerId: string, input: CreateModelRequest): Promise<Model> {
   const { data } = await apiClient.post<Model>(`/providers/${providerId}/models`, input);
   return data;

@@ -37,6 +37,7 @@ pub trait Storage: Send + Sync {
     async fn create_model(&self, model: &Model) -> Result<Model, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_model(&self, name: &str) -> Result<Option<Model>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_models(&self) -> Result<Vec<ModelWithProvider>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_models_by_provider(&self, provider_id: &str) -> Result<Vec<Model>, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_model(&self, model: &Model) -> Result<Model, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_model(&self, name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 

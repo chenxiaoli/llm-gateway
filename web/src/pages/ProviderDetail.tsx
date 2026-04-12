@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
 import { useProvider, useUpdateProvider, useDeleteProvider, useChannels, useCreateChannel, useUpdateChannel, useDeleteChannel } from '../hooks/useProviders';
-import { useCreateModel, useUpdateModel, useDeleteModel } from '../hooks/useModels';
+import { useModels, useCreateModel, useUpdateModel, useDeleteModel } from '../hooks/useModels';
 import type { Model, CreateModelRequest, UpdateModelRequest, Channel } from '../types';
 
 const { Title } = Typography;
@@ -93,6 +93,7 @@ export default function ProviderDetail() {
   };
 
   const { data: channels } = useChannels(id!);
+  const { data: models } = useModels(id!);
 
   const openAddChannel = () => {
     setEditingChannel(null);
@@ -240,7 +241,7 @@ export default function ProviderDetail() {
         title={<Title level={4} style={{ margin: 0 }}>Models</Title>}
         extra={<Button type="primary" icon={<PlusOutlined />} onClick={openAddModel}>Add Model</Button>}
       >
-        <Table dataSource={[]} columns={modelColumns} rowKey="name" pagination={false} />
+        <Table dataSource={models ?? []} columns={modelColumns} rowKey="name" pagination={false} />
       </Card>
 
       <Card

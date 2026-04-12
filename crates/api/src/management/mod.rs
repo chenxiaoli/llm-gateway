@@ -47,7 +47,7 @@ pub fn management_router() -> Router<Arc<AppState>> {
         )
         .route(
             "/api/v1/providers/{id}/models",
-            post(models::create_model),
+            get(models::list_models).post(models::create_model),
         )
         .route(
             "/api/v1/providers/{id}/models/{model_name}",

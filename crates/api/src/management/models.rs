@@ -9,6 +9,29 @@ use crate::error::ApiError;
 use crate::extractors::require_admin;
 use crate::AppState;
 
+pub async fn list_models(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(provider_id): Path<String>,
+) -> Result<Json<Vec<Model>>, ApiError> {
+    require_admin(&headers, &state.jwt_secret)?;
+
+    state
+        .storage
+        .get_provider(&provider_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
+
+    let models = state
+        .storage
+        .list_models_by_provider(&provider_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(models))
+}
+
 pub async fn create_model(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,

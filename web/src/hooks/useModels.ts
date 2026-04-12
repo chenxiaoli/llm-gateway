@@ -1,7 +1,15 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createModel, updateModel, deleteModel } from '../api/models';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { listModels, createModel, updateModel, deleteModel } from '../api/models';
 import type { CreateModelRequest, UpdateModelRequest } from '../types';
 import { message } from 'antd';
+
+export function useModels(providerId: string) {
+  return useQuery({
+    queryKey: ['providers', providerId, 'models'],
+    queryFn: () => listModels(providerId),
+    enabled: !!providerId,
+  });
+}
 
 export function useCreateModel(providerId: string) {
   const queryClient = useQueryClient();

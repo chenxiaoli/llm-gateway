@@ -21,6 +21,7 @@ tower = { workspace = true }
 hyper = { workspace = true }
 reqwest = { workspace = true }
 futures = "0.3"
+url = "2"
 
 [dev-dependencies]
 llm-gateway-storage = { path = "../storage" }

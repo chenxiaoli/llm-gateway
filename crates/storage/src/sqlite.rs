@@ -700,6 +700,18 @@ impl crate::Storage for SqliteStorage {
         Ok(rows.into_iter().map(ModelWithProvider::from).collect())
     }
 
+    async fn list_models_by_provider(&self, provider_id: &str) -> Result<Vec<Model>, DbErr> {
+        let rows: Vec<SqliteModelRow> = sqlx::query_as(
+            "SELECT name, provider_id, billing_type, input_price, output_price, request_price, enabled, created_at
+             FROM models WHERE provider_id = ? ORDER BY name",
+        )
+        .bind(provider_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(Model::from).collect())
+    }
+
     async fn update_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
             "UPDATE models SET provider_id = ?, billing_type = ?, input_price = ?, output_price = ?,
