@@ -1,10 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { listKeys, createKey, updateKey, deleteKey } from '../api/keys';
+import { listKeys, getKey, createKey, updateKey, deleteKey } from '../api/keys';
 import type { CreateKeyRequest, UpdateKeyRequest } from '../types';
 import { message } from 'antd';
 
 export function useKeys() {
   return useQuery({ queryKey: ['keys'], queryFn: listKeys });
+}
+
+export function useKey(id: string) {
+  return useQuery({ queryKey: ['keys', id], queryFn: () => getKey(id), enabled: !!id });
 }
 
 export function useCreateKey() {
