@@ -20,3 +20,11 @@ tracing = { workspace = true }
 tower = { workspace = true }
 hyper = { workspace = true }
 reqwest = { workspace = true }
+
+[dev-dependencies]
+llm-gateway-storage = { path = "../storage" }
+llm-gateway-audit = { path = "../audit" }
+llm-gateway-ratelimit = { path = "../ratelimit" }
+tower = { workspace = true }
+hyper = { workspace = true }
+serde_json = { workspace = true }
