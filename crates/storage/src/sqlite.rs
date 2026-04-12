@@ -1,4 +1,4 @@
-use crate::migrations::INIT_SQL;
+use crate::migrations::ALL_MIGRATIONS;
 use crate::types::*;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{FromRow, SqlitePool};
@@ -36,6 +36,7 @@ struct SqliteKeyRow {
     rate_limit: Option<i64>,
     budget_monthly: Option<f64>,
     enabled: i64,
+    created_by: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -49,6 +50,7 @@ impl From<SqliteKeyRow> for ApiKey {
             rate_limit: r.rate_limit,
             budget_monthly: r.budget_monthly,
             enabled: r.enabled != 0,
+            created_by: r.created_by,
             created_at: parse_rfc3339(&r.created_at),
             updated_at: parse_rfc3339(&r.updated_at),
         }
@@ -208,6 +210,31 @@ impl From<SqliteAuditRow> for AuditLog {
     }
 }
 
+#[derive(FromRow)]
+struct SqliteUserRow {
+    id: String,
+    username: String,
+    password: String,
+    role: String,
+    enabled: i64,
+    created_at: String,
+    updated_at: String,
+}
+
+impl From<SqliteUserRow> for User {
+    fn from(r: SqliteUserRow) -> Self {
+        User {
+            id: r.id,
+            username: r.username,
+            password: r.password,
+            role: r.role,
+            enabled: r.enabled != 0,
+            created_at: parse_rfc3339(&r.created_at),
+            updated_at: parse_rfc3339(&r.updated_at),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -259,10 +286,18 @@ impl crate::Storage for SqliteStorage {
     // ---- Migrations ----
 
     async fn run_migrations(&self) -> Result<(), DbErr> {
-        for stmt in INIT_SQL.split(';') {
-            let trimmed = stmt.trim();
-            if !trimmed.is_empty() {
-                sqlx::query(trimmed).execute(&self.pool).await?;
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+        )
+        .execute(&self.pool)
+        .await?;
+
+        for migration_sql in ALL_MIGRATIONS {
+            for stmt in migration_sql.split(';') {
+                let trimmed = stmt.trim();
+                if !trimmed.is_empty() {
+                    sqlx::query(trimmed).execute(&self.pool).await?;
+                }
             }
         }
         Ok(())
@@ -272,8 +307,8 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_key(&self, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
-            "INSERT INTO api_keys (id, name, key_hash, rate_limit, budget_monthly, enabled, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO api_keys (id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&key.id)
         .bind(&key.name)
@@ -281,6 +316,7 @@ impl crate::Storage for SqliteStorage {
         .bind(key.rate_limit)
         .bind(key.budget_monthly)
         .bind(key.enabled as i64)
+        .bind(&key.created_by)
         .bind(key.created_at.to_rfc3339())
         .bind(key.updated_at.to_rfc3339())
         .execute(&self.pool)
@@ -291,7 +327,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_key(&self, id: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<SqliteKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
              FROM api_keys WHERE id = ?",
         )
         .bind(id)
@@ -303,7 +339,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_key_by_hash(&self, hash: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<SqliteKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
              FROM api_keys WHERE key_hash = ?",
         )
         .bind(hash)
@@ -315,7 +351,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_keys(&self) -> Result<Vec<ApiKey>, DbErr> {
         let rows: Vec<SqliteKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
              FROM api_keys",
         )
         .fetch_all(&self.pool)
@@ -327,13 +363,14 @@ impl crate::Storage for SqliteStorage {
     async fn update_key(&self, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
             "UPDATE api_keys SET name = ?, key_hash = ?, rate_limit = ?, budget_monthly = ?,
-             enabled = ?, updated_at = ? WHERE id = ?",
+             enabled = ?, created_by = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&key.name)
         .bind(&key.key_hash)
         .bind(key.rate_limit)
         .bind(key.budget_monthly)
         .bind(key.enabled as i64)
+        .bind(&key.created_by)
         .bind(key.updated_at.to_rfc3339())
         .bind(&key.id)
         .execute(&self.pool)
@@ -734,5 +771,116 @@ impl crate::Storage for SqliteStorage {
         .await?;
 
         Ok(row.map(|r| r.0).unwrap_or(0))
+    }
+
+    // ---- Users ----
+
+    async fn create_user(&self, user: &User) -> Result<User, DbErr> {
+        sqlx::query(
+            "INSERT INTO users (id, username, password, role, enabled, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&user.id)
+        .bind(&user.username)
+        .bind(&user.password)
+        .bind(&user.role)
+        .bind(user.enabled as i64)
+        .bind(user.created_at.to_rfc3339())
+        .bind(user.updated_at.to_rfc3339())
+        .execute(&self.pool)
+        .await?;
+        Ok(user.clone())
+    }
+
+    async fn get_user(&self, id: &str) -> Result<Option<User>, DbErr> {
+        let row: Option<SqliteUserRow> = sqlx::query_as(
+            "SELECT id, username, password, role, enabled, created_at, updated_at FROM users WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(User::from))
+    }
+
+    async fn get_user_by_username(&self, username: &str) -> Result<Option<User>, DbErr> {
+        let row: Option<SqliteUserRow> = sqlx::query_as(
+            "SELECT id, username, password, role, enabled, created_at, updated_at FROM users WHERE username = ?",
+        )
+        .bind(username)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(User::from))
+    }
+
+    async fn list_users(&self) -> Result<Vec<User>, DbErr> {
+        let rows: Vec<SqliteUserRow> = sqlx::query_as(
+            "SELECT id, username, password, role, enabled, created_at, updated_at FROM users",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(User::from).collect())
+    }
+
+    async fn update_user(&self, user: &User) -> Result<User, DbErr> {
+        sqlx::query(
+            "UPDATE users SET username = ?, password = ?, role = ?, enabled = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(&user.username)
+        .bind(&user.password)
+        .bind(&user.role)
+        .bind(user.enabled as i64)
+        .bind(user.updated_at.to_rfc3339())
+        .bind(&user.id)
+        .execute(&self.pool)
+        .await?;
+        Ok(user.clone())
+    }
+
+    async fn delete_user(&self, id: &str) -> Result<(), DbErr> {
+        sqlx::query("DELETE FROM users WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn count_admin_users(&self) -> Result<i64, DbErr> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM users WHERE role = 'admin' AND enabled = 1",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.0)
+    }
+
+    async fn user_count(&self) -> Result<i64, DbErr> {
+        let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.0)
+    }
+
+    // ---- Settings ----
+
+    async fn get_setting(&self, key: &str) -> Result<Option<String>, DbErr> {
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT value FROM settings WHERE key = ?",
+        )
+        .bind(key)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| r.0))
+    }
+
+    async fn set_setting(&self, key: &str, value: &str) -> Result<(), DbErr> {
+        sqlx::query(
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = ?",
+        )
+        .bind(key)
+        .bind(value)
+        .bind(value)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }

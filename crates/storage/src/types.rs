@@ -11,6 +11,7 @@ pub struct ApiKey {
     pub rate_limit: Option<i64>,       // global RPM, None = unlimited
     pub budget_monthly: Option<f64>,   // monthly budget cap, None = unlimited
     pub enabled: bool,
+    pub created_by: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -176,12 +177,44 @@ pub struct LogFilter {
     pub limit: Option<i64>,
 }
 
+// --- Users ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct User {
+    pub id: String,
+    pub username: String,
+    pub password: String,
+    pub role: String,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateUser {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateUser {
+    pub role: Option<String>,
+    pub enabled: Option<bool>,
+}
+
+// --- Settings ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Settings {
+    pub allow_registration: bool,
+}
+
 // --- Config ---
 
 #[derive(Debug, Deserialize)]
 pub struct AppConfig {
     pub server: ServerConfig,
-    pub admin: AdminConfig,
+    pub auth: AuthConfig,
     pub database: DatabaseConfig,
     pub rate_limit: RateLimitConfig,
     pub upstream: UpstreamConfig,
@@ -195,8 +228,9 @@ pub struct ServerConfig {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct AdminConfig {
-    pub token: String,
+pub struct AuthConfig {
+    pub jwt_secret: String,
+    pub allow_registration: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

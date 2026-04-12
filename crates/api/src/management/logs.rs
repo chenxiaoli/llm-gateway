@@ -6,7 +6,7 @@ use std::sync::Arc;
 use llm_gateway_storage::{AuditLog, LogFilter};
 
 use crate::error::ApiError;
-use crate::extractors::verify_admin_token;
+use crate::extractors::require_admin;
 use crate::AppState;
 
 pub async fn get_logs(
@@ -14,7 +14,7 @@ pub async fn get_logs(
     headers: HeaderMap,
     Query(filter): Query<LogFilter>,
 ) -> Result<Json<Vec<AuditLog>>, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    require_admin(&headers, &state.jwt_secret)?;
 
     let logs = state
         .storage

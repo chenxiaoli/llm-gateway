@@ -2,8 +2,9 @@
 host = "0.0.0.0"
 port = 8080
 
-[admin]
-token = "change-me-in-production"
+[auth]
+jwt_secret = "change-me-in-production"
+allow_registration = true
 
 [database]
 driver = "sqlite"

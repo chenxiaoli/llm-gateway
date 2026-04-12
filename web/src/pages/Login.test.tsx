@@ -5,7 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Login from './Login';
-import { clearToken } from '../api/client';
+import { clearToken, setToken } from '../api/client';
 
 const navigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -22,19 +22,24 @@ describe('Login page', () => {
   it('renders login form', () => {
     renderWithProviders(<Login />);
     expect(screen.getByText('LLM Gateway')).toBeInTheDocument();
-    expect(screen.getByLabelText('Admin Token')).toBeInTheDocument();
+    expect(screen.getByLabelText('Username')).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Login' })).toBeInTheDocument();
   });
 
-  it('navigates to dashboard on valid token', async () => {
-    server.use(
-      http.get('*/api/v1/keys', () => HttpResponse.json([])),
-    );
-
+  it('shows registration link when allowed', async () => {
     renderWithProviders(<Login />);
 
-    const input = screen.getByLabelText('Admin Token');
-    await userEvent.type(input, 'valid-token');
+    await waitFor(() => {
+      expect(screen.getByText('Create an account')).toBeInTheDocument();
+    });
+  });
+
+  it('navigates to dashboard on valid credentials', async () => {
+    renderWithProviders(<Login />);
+
+    await userEvent.type(screen.getByLabelText('Username'), 'admin');
+    await userEvent.type(screen.getByLabelText('Password'), 'password');
     await userEvent.click(screen.getByRole('button', { name: 'Login' }));
 
     await waitFor(() => {
@@ -42,30 +47,33 @@ describe('Login page', () => {
     });
   });
 
-  it('shows error on invalid token', async () => {
+  it('shows error on invalid credentials', async () => {
     server.use(
-      http.get('*/api/v1/keys', () =>
+      http.post('*/api/v1/auth/login', () =>
         new HttpResponse(null, { status: 401 }),
       ),
     );
 
     renderWithProviders(<Login />);
 
-    const input = screen.getByLabelText('Admin Token');
-    await userEvent.type(input, 'wrong-token');
+    await userEvent.type(screen.getByLabelText('Username'), 'wrong');
+    await userEvent.type(screen.getByLabelText('Password'), 'wrong');
     await userEvent.click(screen.getByRole('button', { name: 'Login' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Invalid admin token')).toBeInTheDocument();
+      expect(screen.getByText('Invalid username or password')).toBeInTheDocument();
     });
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it('requires token field', async () => {
+  it('requires username and password fields', async () => {
     renderWithProviders(<Login />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Login' }));
 
-    expect(await screen.findByText(/required/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Enter your username')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Enter your password')).toBeInTheDocument();
   });
 });

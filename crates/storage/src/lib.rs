@@ -47,4 +47,18 @@ pub trait Storage: Send + Sync {
     // Rate Limit Counters
     async fn increment_rate_limit_counter(&self, key_id: &str, model_name: &str, window: &str) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_rate_limit_counter(&self, key_id: &str, model_name: &str, window: &str) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
+
+    // Users
+    async fn create_user(&self, user: &User) -> Result<User, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_user(&self, id: &str) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_user_by_username(&self, username: &str) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_users(&self) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn update_user(&self, user: &User) -> Result<User, Box<dyn std::error::Error + Send + Sync>>;
+    async fn delete_user(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn count_admin_users(&self) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
+    async fn user_count(&self) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
+
+    // Settings
+    async fn get_setting(&self, key: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn set_setting(&self, key: &str, value: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }

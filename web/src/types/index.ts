@@ -127,3 +127,57 @@ export interface LogFilter {
   offset?: number;
   limit?: number;
 }
+
+export interface User {
+  id: string;
+  username: string;
+  role: 'admin' | 'user';
+}
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  username: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+export interface MeResponse {
+  id: string;
+  username: string;
+  role: 'admin' | 'user';
+  allow_registration: boolean;
+}
+
+export interface AuthConfigResponse {
+  allow_registration: boolean;
+}
+
+export interface UserResponse {
+  id: string;
+  username: string;
+  role: 'admin' | 'user';
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UpdateUserRequest {
+  role?: 'admin' | 'user';
+  enabled?: boolean;
+}
+
+export interface SettingsResponse {
+  allow_registration: boolean;
+}
+
+export interface UpdateSettingsRequest {
+  allow_registration: boolean;
+}

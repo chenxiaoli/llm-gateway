@@ -1,5 +1,7 @@
 use axum::http::HeaderMap;
 use crate::error::ApiError;
+use llm_gateway_auth::verify_jwt;
+use llm_gateway_auth::JwtClaims;
 
 pub fn extract_bearer_token(headers: &HeaderMap) -> Result<String, ApiError> {
     let auth = headers
@@ -12,10 +14,17 @@ pub fn extract_bearer_token(headers: &HeaderMap) -> Result<String, ApiError> {
     Ok(auth[7..].to_string())
 }
 
-pub fn verify_admin_token(headers: &HeaderMap, expected_token: &str) -> Result<(), ApiError> {
+pub fn require_auth(headers: &HeaderMap, jwt_secret: &str) -> Result<JwtClaims, ApiError> {
     let token = extract_bearer_token(headers)?;
-    if token != expected_token {
-        return Err(ApiError::Unauthorized);
+    let claims = verify_jwt(&token, jwt_secret)
+        .map_err(|_| ApiError::Unauthorized)?;
+    Ok(claims)
+}
+
+pub fn require_admin(headers: &HeaderMap, jwt_secret: &str) -> Result<JwtClaims, ApiError> {
+    let claims = require_auth(headers, jwt_secret)?;
+    if claims.role != "admin" {
+        return Err(ApiError::Forbidden);
     }
-    Ok(())
+    Ok(claims)
 }

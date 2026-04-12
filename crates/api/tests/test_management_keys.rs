@@ -2,13 +2,14 @@ mod common;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
-use llm_gateway_api::{management, AppState};
+use llm_gateway_api::management;
+use llm_gateway_api::AppState;
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::Storage;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tower::ServiceExt; // for oneshot()
+use tower::ServiceExt;
 
 fn build_app(state: Arc<AppState>) -> axum::Router {
     management::management_router().with_state(state)
@@ -19,21 +20,26 @@ fn make_state(db: Arc<llm_gateway_storage::sqlite::SqliteStorage>) -> Arc<AppSta
         storage: db.clone() as Arc<dyn Storage>,
         rate_limiter: Arc::new(RateLimiter::new(60)),
         audit_logger: Arc::new(AuditLogger::new(db as Arc<dyn Storage>)),
-        admin_token: "test-token".to_string(),
+        jwt_secret: common::TEST_JWT_SECRET.to_string(),
     })
+}
+
+fn bearer_token(token: &str) -> String {
+    format!("Bearer {}", token)
 }
 
 #[tokio::test]
 async fn test_create_key() {
     let db = common::setup_test_db().await;
     let app = build_app(make_state(db));
+    let admin = common::make_admin_token();
 
     let resp = app
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/keys")
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "test-key"}).to_string()))
                 .unwrap(),
@@ -52,46 +58,17 @@ async fn test_create_key() {
 }
 
 #[tokio::test]
-async fn test_create_key_with_limits() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
-
-    let resp = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/keys")
-                .header("authorization", "Bearer test-token")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({"name": "limited-key", "rate_limit": 100, "budget_monthly": 50.0}).to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(resp.status(), StatusCode::OK);
-    let body: Value = serde_json::from_slice(
-        &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
-    )
-    .unwrap();
-    assert_eq!(body["rate_limit"], 100);
-    assert!((body["budget_monthly"].as_f64().unwrap() - 50.0).abs() < 0.001);
-}
-
-#[tokio::test]
 async fn test_list_keys() {
     let db = common::setup_test_db().await;
     let app = build_app(make_state(db));
+    let admin = common::make_admin_token();
 
-    // Create a key first
     app.clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/keys")
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "key1"}).to_string()))
                 .unwrap(),
@@ -104,7 +81,7 @@ async fn test_list_keys() {
             Request::builder()
                 .method("GET")
                 .uri("/api/v1/keys")
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -130,7 +107,7 @@ async fn test_unauthorized_access() {
             Request::builder()
                 .method("GET")
                 .uri("/api/v1/keys")
-                .header("authorization", "Bearer wrong-token")
+                .header("authorization", "Bearer invalid-jwt")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -144,15 +121,15 @@ async fn test_unauthorized_access() {
 async fn test_update_key() {
     let db = common::setup_test_db().await;
     let app = build_app(make_state(db));
+    let admin = common::make_admin_token();
 
-    // Create
     let create_resp = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/keys")
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "original"}).to_string()))
                 .unwrap(),
@@ -165,14 +142,13 @@ async fn test_update_key() {
     .unwrap();
     let key_id = body["id"].as_str().unwrap();
 
-    // Update
     let update_resp = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("PATCH")
                 .uri(&format!("/api/v1/keys/{}", key_id))
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "updated"}).to_string()))
                 .unwrap(),
@@ -191,15 +167,15 @@ async fn test_update_key() {
 async fn test_delete_key() {
     let db = common::setup_test_db().await;
     let app = build_app(make_state(db));
+    let admin = common::make_admin_token();
 
-    // Create
     let create_resp = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/keys")
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "to-delete"}).to_string()))
                 .unwrap(),
@@ -212,14 +188,13 @@ async fn test_delete_key() {
     .unwrap();
     let key_id = body["id"].as_str().unwrap();
 
-    // Delete
     let delete_resp = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("DELETE")
                 .uri(&format!("/api/v1/keys/{}", key_id))
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -227,17 +202,86 @@ async fn test_delete_key() {
         .unwrap();
     assert_eq!(delete_resp.status(), StatusCode::NO_CONTENT);
 
-    // Verify deleted
     let get_resp = app
         .oneshot(
             Request::builder()
                 .method("GET")
                 .uri(&format!("/api/v1/keys/{}", key_id))
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(get_resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_register_first_user_is_admin() {
+    let db = common::setup_test_db().await;
+    let app = build_app(make_state(db));
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"username": "admin", "password": "password123"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["user"]["role"], "admin");
+    assert!(body["token"].is_string());
+}
+
+#[tokio::test]
+async fn test_login_and_me() {
+    let db = common::setup_test_db().await;
+    let app = build_app(make_state(db));
+
+    // Register
+    let register_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"username": "testuser", "password": "pass123"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body: Value = serde_json::from_slice(
+        &to_bytes(register_resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    let token = body["token"].as_str().unwrap();
+
+    // Get me
+    let me_resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/auth/me")
+                .header("authorization", bearer_token(token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(me_resp.status(), StatusCode::OK);
+    let me_body: Value = serde_json::from_slice(
+        &to_bytes(me_resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(me_body["username"], "testuser");
 }

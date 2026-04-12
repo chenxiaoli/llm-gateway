@@ -19,21 +19,26 @@ fn make_state(db: Arc<llm_gateway_storage::sqlite::SqliteStorage>) -> Arc<AppSta
         storage: db.clone() as Arc<dyn Storage>,
         rate_limiter: Arc::new(RateLimiter::new(60)),
         audit_logger: Arc::new(AuditLogger::new(db as Arc<dyn Storage>)),
-        admin_token: "test-token".to_string(),
+        jwt_secret: common::TEST_JWT_SECRET.to_string(),
     })
+}
+
+fn bearer_token(token: &str) -> String {
+    format!("Bearer {}", token)
 }
 
 #[tokio::test]
 async fn test_create_provider() {
     let db = common::setup_test_db().await;
     let app = build_app(make_state(db));
+    let admin = common::make_admin_token();
 
     let resp = app
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/providers")
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "OpenAI",
@@ -58,13 +63,14 @@ async fn test_create_provider() {
 async fn test_create_provider_dual_protocol() {
     let db = common::setup_test_db().await;
     let app = build_app(make_state(db));
+    let admin = common::make_admin_token();
 
     let resp = app
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/providers")
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "MiniMax",
@@ -90,6 +96,7 @@ async fn test_create_provider_dual_protocol() {
 async fn test_list_providers() {
     let db = common::setup_test_db().await;
     let app = build_app(make_state(db));
+    let admin = common::make_admin_token();
 
     // Create two providers
     for name in ["Provider-A", "Provider-B"] {
@@ -98,7 +105,7 @@ async fn test_list_providers() {
                 Request::builder()
                     .method("POST")
                     .uri("/api/v1/providers")
-                    .header("authorization", "Bearer test-token")
+                    .header("authorization", bearer_token(&admin.token))
                     .header("content-type", "application/json")
                     .body(Body::from(
                         json!({"name": name, "api_key": "sk-test", "openai_base_url": "https://example.com"}).to_string(),
@@ -114,7 +121,7 @@ async fn test_list_providers() {
             Request::builder()
                 .method("GET")
                 .uri("/api/v1/providers")
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -133,6 +140,7 @@ async fn test_list_providers() {
 async fn test_provider_model_lifecycle() {
     let db = common::setup_test_db().await;
     let app = build_app(make_state(db));
+    let admin = common::make_admin_token();
 
     // Create provider
     let create_resp = app
@@ -141,7 +149,7 @@ async fn test_provider_model_lifecycle() {
             Request::builder()
                 .method("POST")
                 .uri("/api/v1/providers")
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "TestProvider",
@@ -165,7 +173,7 @@ async fn test_provider_model_lifecycle() {
             Request::builder()
                 .method("POST")
                 .uri(&format!("/api/v1/providers/{}/models", provider_id))
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "test-model",
@@ -186,7 +194,7 @@ async fn test_provider_model_lifecycle() {
             Request::builder()
                 .method("PATCH")
                 .uri(&format!("/api/v1/providers/{}/models/test-model", provider_id))
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"output_price": 20.0}).to_string()))
                 .unwrap(),
@@ -202,7 +210,7 @@ async fn test_provider_model_lifecycle() {
             Request::builder()
                 .method("DELETE")
                 .uri(&format!("/api/v1/providers/{}/models/test-model", provider_id))
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -217,7 +225,7 @@ async fn test_provider_model_lifecycle() {
             Request::builder()
                 .method("DELETE")
                 .uri(&format!("/api/v1/providers/{}", provider_id))
-                .header("authorization", "Bearer test-token")
+                .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
         )

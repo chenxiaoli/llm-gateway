@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod error;
 pub mod extractors;
 pub mod openai;
@@ -13,5 +14,5 @@ pub struct AppState {
     pub storage: Arc<dyn Storage>,
     pub rate_limiter: Arc<RateLimiter>,
     pub audit_logger: Arc<AuditLogger>,
-    pub admin_token: String,
+    pub jwt_secret: String,
 }

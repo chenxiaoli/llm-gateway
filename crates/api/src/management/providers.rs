@@ -6,7 +6,7 @@ use std::sync::Arc;
 use llm_gateway_storage::{CreateProvider as StorageCreateProvider, Provider, UpdateProvider as StorageUpdateProvider};
 
 use crate::error::ApiError;
-use crate::extractors::verify_admin_token;
+use crate::extractors::require_admin;
 use crate::AppState;
 
 pub async fn create_provider(
@@ -14,7 +14,7 @@ pub async fn create_provider(
     headers: HeaderMap,
     Json(input): Json<StorageCreateProvider>,
 ) -> Result<Json<Provider>, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    require_admin(&headers, &state.jwt_secret)?;
 
     let now = chrono::Utc::now();
     let provider = Provider {
@@ -41,7 +41,7 @@ pub async fn list_providers(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<Provider>>, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    require_admin(&headers, &state.jwt_secret)?;
 
     let providers = state
         .storage
@@ -57,7 +57,7 @@ pub async fn get_provider(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<Provider>, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    require_admin(&headers, &state.jwt_secret)?;
 
     let provider = state
         .storage
@@ -75,7 +75,7 @@ pub async fn update_provider(
     Path(id): Path<String>,
     Json(input): Json<StorageUpdateProvider>,
 ) -> Result<Json<Provider>, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    require_admin(&headers, &state.jwt_secret)?;
 
     let mut provider = state
         .storage
@@ -116,7 +116,7 @@ pub async fn delete_provider(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    require_admin(&headers, &state.jwt_secret)?;
 
     state
         .storage
