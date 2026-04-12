@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -20,7 +21,13 @@ jobs:
         run: cargo test --workspace
 
       - name: Build release
-        run: cargo build --release
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: Upload release binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-gateway-linux-x86_64
+          path: target/x86_64-unknown-linux-gnu/release/llm-gateway
 
   frontend-build:
     runs-on: ubuntu-latest
@@ -38,3 +45,42 @@ jobs:
 
       - name: Build
         run: cd web && npm run build
+
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-gateway-frontend
+          path: web/dist/
+
+  release:
+    needs: [backend-test, frontend-build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: llm-gateway-linux-x86_64
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: llm-gateway-frontend
+          path: frontend
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            llm-gateway
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## llm-gateway ${{ github.ref_name }}
+
+            ### Assets
+            - `llm-gateway` — Linux x86_64 binary
+            - `frontend/` — React dashboard (embed or serve separately)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
