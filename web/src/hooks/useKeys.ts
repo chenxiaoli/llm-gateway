@@ -3,8 +3,8 @@ import { listKeys, getKey, createKey, updateKey, deleteKey } from '../api/keys';
 import type { CreateKeyRequest, UpdateKeyRequest } from '../types';
 import { message } from 'antd';
 
-export function useKeys() {
-  return useQuery({ queryKey: ['keys'], queryFn: listKeys });
+export function useKeys(page = 1, pageSize = 20) {
+  return useQuery({ queryKey: ['keys', page, pageSize], queryFn: () => listKeys(page, pageSize) });
 }
 
 export function useKey(id: string) {

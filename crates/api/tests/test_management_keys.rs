@@ -93,8 +93,8 @@ async fn test_list_keys() {
         &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
-    assert!(body.is_array());
-    assert_eq!(body.as_array().unwrap().len(), 1);
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"].as_array().unwrap().len(), 1);
 }
 
 #[tokio::test]

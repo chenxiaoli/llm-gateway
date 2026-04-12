@@ -192,3 +192,10 @@ export interface SettingsResponse {
 export interface UpdateSettingsRequest {
   allow_registration: boolean;
 }
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+}

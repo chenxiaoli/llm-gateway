@@ -8,7 +8,9 @@ import type { CreateKeyResponse } from '../types';
 const { Text, Paragraph } = Typography;
 
 export default function Keys() {
-  const { data: keys, isLoading } = useKeys();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const { data, isLoading } = useKeys(page, pageSize);
   const createKeyMutation = useCreateKey();
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
@@ -78,7 +80,20 @@ export default function Keys() {
         </Button>
       </div>
 
-      <Table dataSource={keys} columns={columns} rowKey="id" loading={isLoading} />
+      <Table
+        dataSource={data?.items}
+        columns={columns}
+        rowKey="id"
+        loading={isLoading}
+        pagination={{
+          current: page,
+          pageSize,
+          total: data?.total ?? 0,
+          onChange: (p, ps) => { setPage(p); setPageSize(ps); },
+          showSizeChanger: true,
+          showTotal: (total) => `Total ${total}`,
+        }}
+      />
 
       <Modal
         title="Create API Key"

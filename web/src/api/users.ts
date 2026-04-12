@@ -1,8 +1,10 @@
 import { apiClient } from './client';
-import type { UserResponse, UpdateUserRequest } from '../types';
+import type { PaginatedResponse, UpdateUserRequest, UserResponse } from '../types';
 
-export async function listUsers(): Promise<UserResponse[]> {
-  const { data } = await apiClient.get<UserResponse[]>('/users');
+export async function listUsers(page = 1, pageSize = 20): Promise<PaginatedResponse<UserResponse>> {
+  const { data } = await apiClient.get<PaginatedResponse<UserResponse>>('/users', {
+    params: { page, page_size: pageSize },
+  });
   return data;
 }
 

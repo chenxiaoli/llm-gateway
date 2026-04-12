@@ -1,4 +1,4 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
 use chrono::{DateTime, Utc};
@@ -6,7 +6,7 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use llm_gateway_auth::{generate_api_key, hash_api_key};
-use llm_gateway_storage::{ApiKey, CreateApiKey as StorageCreateApiKey, UpdateApiKey as StorageUpdateApiKey};
+use llm_gateway_storage::{ApiKey, CreateApiKey as StorageCreateApiKey, PaginatedResponse, PaginationParams, UpdateApiKey as StorageUpdateApiKey};
 
 use crate::error::ApiError;
 use crate::extractors::require_auth;
@@ -64,24 +64,25 @@ pub async fn create_key(
 pub async fn list_keys(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-) -> Result<Json<Vec<ApiKey>>, ApiError> {
+    Query(pagination): Query<PaginationParams>,
+) -> Result<Json<PaginatedResponse<ApiKey>>, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
 
-    let keys = state
+    let (page, page_size) = pagination.normalized();
+    let mut result = state
         .storage
-        .list_keys()
+        .list_keys_paginated(page, page_size)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     if claims.role != "admin" {
-        let filtered: Vec<ApiKey> = keys
+        result.items = result.items
             .into_iter()
             .filter(|k| k.created_by.as_deref() == Some(&claims.sub))
             .collect();
-        return Ok(Json(filtered));
     }
 
-    Ok(Json(keys))
+    Ok(Json(result))
 }
 
 pub async fn get_key(

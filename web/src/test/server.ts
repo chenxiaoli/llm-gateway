@@ -34,21 +34,21 @@ export const server = setupServer(
     });
   }),
   http.get('*/api/v1/keys', () => {
-    return HttpResponse.json([]);
+    return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
   http.get('*/api/v1/providers', () => {
     return HttpResponse.json([]);
   }),
   http.get('*/api/v1/users', () => {
-    return HttpResponse.json([]);
+    return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
   http.get('*/api/v1/settings', () => {
     return HttpResponse.json({ allow_registration: true });
   }),
   http.get('*/api/v1/usage', () => {
-    return HttpResponse.json([]);
+    return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
   http.get('*/api/v1/logs', () => {
-    return HttpResponse.json([]);
+    return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
 );
