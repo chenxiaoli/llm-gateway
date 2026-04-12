@@ -78,21 +78,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 async fn serve_frontend(uri: Uri) -> impl IntoResponse {
     let path = uri.path().trim_start_matches('/');
 
+    // Strip /admin prefix — Vite builds with base: '/admin/'
+    let asset_path = path.strip_prefix("admin/").unwrap_or(path);
+
     // Try exact file first
-    if let Some(content) = Frontend::get(path) {
-        let mime = mime_guess::from_path(path).first_or_octet_stream();
+    if let Some(content) = Frontend::get(asset_path) {
+        let mime = mime_guess::from_path(asset_path).first_or_octet_stream();
         return Response::builder()
             .header(header::CONTENT_TYPE, mime.as_ref())
             .body(content.data.to_vec().into())
             .unwrap();
     }
 
-    // SPA fallback: serve index.html for non-API, non-file routes
-    if let Some(content) = Frontend::get("index.html") {
-        return Response::builder()
-            .header(header::CONTENT_TYPE, "text/html")
-            .body(content.data.to_vec().into())
-            .unwrap();
+    // SPA fallback: only for paths without a file extension (HTML5 routes)
+    if !path.contains('.') {
+        if let Some(content) = Frontend::get("index.html") {
+            return Response::builder()
+                .header(header::CONTENT_TYPE, "text/html")
+                .body(content.data.to_vec().into())
+                .unwrap();
+        }
     }
 
     StatusCode::NOT_FOUND.into_response()
