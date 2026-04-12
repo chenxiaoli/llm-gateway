@@ -72,7 +72,6 @@ impl From<SqliteKeyRow> for ApiKey {
 struct SqliteProviderRow {
     id: String,
     name: String,
-    api_key: String,
     openai_base_url: Option<String>,
     anthropic_base_url: Option<String>,
     enabled: i64,
@@ -85,7 +84,6 @@ impl From<SqliteProviderRow> for Provider {
         Provider {
             id: r.id,
             name: r.name,
-            api_key: r.api_key,
             openai_base_url: r.openai_base_url,
             anthropic_base_url: r.anthropic_base_url,
             enabled: r.enabled != 0,
@@ -163,6 +161,7 @@ struct SqliteUsageRow {
     key_id: String,
     model_name: String,
     provider_id: String,
+    channel_id: Option<String>,
     protocol: String,
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
@@ -177,6 +176,7 @@ impl From<SqliteUsageRow> for UsageRecord {
             key_id: r.key_id,
             model_name: r.model_name,
             provider_id: r.provider_id,
+            channel_id: r.channel_id,
             protocol: parse_protocol(&r.protocol),
             input_tokens: r.input_tokens,
             output_tokens: r.output_tokens,
@@ -192,6 +192,7 @@ struct SqliteAuditRow {
     key_id: String,
     model_name: String,
     provider_id: String,
+    channel_id: Option<String>,
     protocol: String,
     request_body: String,
     response_body: String,
@@ -209,6 +210,7 @@ impl From<SqliteAuditRow> for AuditLog {
             key_id: r.key_id,
             model_name: r.model_name,
             provider_id: r.provider_id,
+            channel_id: r.channel_id,
             protocol: parse_protocol(&r.protocol),
             request_body: r.request_body,
             response_body: r.response_body,
@@ -217,6 +219,35 @@ impl From<SqliteAuditRow> for AuditLog {
             input_tokens: r.input_tokens,
             output_tokens: r.output_tokens,
             created_at: parse_rfc3339(&r.created_at),
+        }
+    }
+}
+
+#[derive(FromRow)]
+struct SqliteChannelRow {
+    id: String,
+    provider_id: String,
+    name: String,
+    api_key: String,
+    base_url: Option<String>,
+    priority: i32,
+    enabled: i64,
+    created_at: String,
+    updated_at: String,
+}
+
+impl From<SqliteChannelRow> for Channel {
+    fn from(r: SqliteChannelRow) -> Self {
+        Channel {
+            id: r.id,
+            provider_id: r.provider_id,
+            name: r.name,
+            api_key: r.api_key,
+            base_url: r.base_url,
+            priority: r.priority,
+            enabled: r.enabled != 0,
+            created_at: parse_rfc3339(&r.created_at),
+            updated_at: parse_rfc3339(&r.updated_at),
         }
     }
 }
@@ -448,12 +479,11 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
         sqlx::query(
-            "INSERT INTO providers (id, name, api_key, openai_base_url, anthropic_base_url, enabled, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO providers (id, name, openai_base_url, anthropic_base_url, enabled, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&provider.id)
         .bind(&provider.name)
-        .bind(&provider.api_key)
         .bind(&provider.openai_base_url)
         .bind(&provider.anthropic_base_url)
         .bind(provider.enabled as i64)
@@ -467,7 +497,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_provider(&self, id: &str) -> Result<Option<Provider>, DbErr> {
         let row: Option<SqliteProviderRow> = sqlx::query_as(
-            "SELECT id, name, api_key, openai_base_url, anthropic_base_url, enabled, created_at, updated_at
+            "SELECT id, name, openai_base_url, anthropic_base_url, enabled, created_at, updated_at
              FROM providers WHERE id = ?",
         )
         .bind(id)
@@ -479,7 +509,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_providers(&self) -> Result<Vec<Provider>, DbErr> {
         let rows: Vec<SqliteProviderRow> = sqlx::query_as(
-            "SELECT id, name, api_key, openai_base_url, anthropic_base_url, enabled, created_at, updated_at
+            "SELECT id, name, openai_base_url, anthropic_base_url, enabled, created_at, updated_at
              FROM providers",
         )
         .fetch_all(&self.pool)
@@ -490,11 +520,10 @@ impl crate::Storage for SqliteStorage {
 
     async fn update_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
         sqlx::query(
-            "UPDATE providers SET name = ?, api_key = ?, openai_base_url = ?, anthropic_base_url = ?,
+            "UPDATE providers SET name = ?, openai_base_url = ?, anthropic_base_url = ?,
              enabled = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&provider.name)
-        .bind(&provider.api_key)
         .bind(&provider.openai_base_url)
         .bind(&provider.anthropic_base_url)
         .bind(provider.enabled as i64)
@@ -508,6 +537,90 @@ impl crate::Storage for SqliteStorage {
 
     async fn delete_provider(&self, id: &str) -> Result<(), DbErr> {
         sqlx::query("DELETE FROM providers WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    // ---- Channels ----
+
+    async fn create_channel(&self, channel: &Channel) -> Result<Channel, DbErr> {
+        sqlx::query(
+            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, enabled, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&channel.id)
+        .bind(&channel.provider_id)
+        .bind(&channel.name)
+        .bind(&channel.api_key)
+        .bind(&channel.base_url)
+        .bind(channel.priority)
+        .bind(channel.enabled as i64)
+        .bind(channel.created_at.to_rfc3339())
+        .bind(channel.updated_at.to_rfc3339())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(channel.clone())
+    }
+
+    async fn get_channel(&self, id: &str) -> Result<Option<Channel>, DbErr> {
+        let row: Option<SqliteChannelRow> = sqlx::query_as(
+            "SELECT id, provider_id, name, api_key, base_url, priority, enabled, created_at, updated_at
+             FROM channels WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(Channel::from))
+    }
+
+    async fn list_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
+        let rows: Vec<SqliteChannelRow> = sqlx::query_as(
+            "SELECT id, provider_id, name, api_key, base_url, priority, enabled, created_at, updated_at
+             FROM channels WHERE provider_id = ? ORDER BY priority ASC",
+        )
+        .bind(provider_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(Channel::from).collect())
+    }
+
+    async fn list_enabled_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
+        let rows: Vec<SqliteChannelRow> = sqlx::query_as(
+            "SELECT id, provider_id, name, api_key, base_url, priority, enabled, created_at, updated_at
+             FROM channels WHERE provider_id = ? AND enabled = 1 ORDER BY priority ASC",
+        )
+        .bind(provider_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(Channel::from).collect())
+    }
+
+    async fn update_channel(&self, channel: &Channel) -> Result<Channel, DbErr> {
+        sqlx::query(
+            "UPDATE channels SET name = ?, api_key = ?, base_url = ?, priority = ?,
+             enabled = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(&channel.name)
+        .bind(&channel.api_key)
+        .bind(&channel.base_url)
+        .bind(channel.priority)
+        .bind(channel.enabled as i64)
+        .bind(channel.updated_at.to_rfc3339())
+        .bind(&channel.id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(channel.clone())
+    }
+
+    async fn delete_channel(&self, id: &str) -> Result<(), DbErr> {
+        sqlx::query("DELETE FROM channels WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -662,13 +775,14 @@ impl crate::Storage for SqliteStorage {
 
     async fn record_usage(&self, usage: &UsageRecord) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO usage_records (id, key_id, model_name, provider_id, protocol, input_tokens, output_tokens, cost, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO usage_records (id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cost, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&usage.id)
         .bind(&usage.key_id)
         .bind(&usage.model_name)
         .bind(&usage.provider_id)
+        .bind(&usage.channel_id)
         .bind(protocol_str(&usage.protocol))
         .bind(usage.input_tokens)
         .bind(usage.output_tokens)
@@ -681,7 +795,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn query_usage(&self, filter: &UsageFilter) -> Result<Vec<UsageRecord>, DbErr> {
         let mut sql = String::from(
-            "SELECT id, key_id, model_name, provider_id, protocol, input_tokens, output_tokens, cost, created_at
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cost, created_at
              FROM usage_records WHERE 1=1",
         );
         let mut bind_vars: Vec<String> = Vec::new();
@@ -744,7 +858,7 @@ impl crate::Storage for SqliteStorage {
 
         let offset = (page - 1) * page_size;
         let data_sql = format!(
-            "SELECT id, key_id, model_name, provider_id, protocol, input_tokens, output_tokens, cost, created_at \
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cost, created_at \
              FROM usage_records {} ORDER BY created_at DESC LIMIT ? OFFSET ?",
             where_sql
         );
@@ -767,14 +881,15 @@ impl crate::Storage for SqliteStorage {
 
     async fn insert_log(&self, log: &AuditLog) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO audit_logs (id, key_id, model_name, provider_id, protocol, request_body, response_body,
+            "INSERT INTO audit_logs (id, key_id, model_name, provider_id, channel_id, protocol, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&log.id)
         .bind(&log.key_id)
         .bind(&log.model_name)
         .bind(&log.provider_id)
+        .bind(&log.channel_id)
         .bind(protocol_str(&log.protocol))
         .bind(&log.request_body)
         .bind(&log.response_body)
@@ -790,7 +905,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn query_logs(&self, filter: &LogFilter) -> Result<Vec<AuditLog>, DbErr> {
         let mut sql = String::from(
-            "SELECT id, key_id, model_name, provider_id, protocol, request_body, response_body,
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at
              FROM audit_logs WHERE 1=1",
         );
@@ -861,7 +976,7 @@ impl crate::Storage for SqliteStorage {
 
         let offset = (page - 1) * page_size;
         let data_sql = format!(
-            "SELECT id, key_id, model_name, provider_id, protocol, request_body, response_body, \
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, request_body, response_body, \
              status_code, latency_ms, input_tokens, output_tokens, created_at \
              FROM audit_logs {} ORDER BY created_at DESC LIMIT ? OFFSET ?",
             where_sql

@@ -42,7 +42,6 @@ async fn test_create_provider() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "OpenAI",
-                    "api_key": "sk-test",
                     "openai_base_url": "https://api.openai.com/v1"
                 }).to_string()))
                 .unwrap(),
@@ -74,7 +73,6 @@ async fn test_create_provider_dual_protocol() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "MiniMax",
-                    "api_key": "sk-test",
                     "openai_base_url": "https://api.minimax.chat/v1",
                     "anthropic_base_url": "https://api.minimax.chat/v1/anthropic"
                 }).to_string()))
@@ -108,7 +106,7 @@ async fn test_list_providers() {
                     .header("authorization", bearer_token(&admin.token))
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        json!({"name": name, "api_key": "sk-test", "openai_base_url": "https://example.com"}).to_string(),
+                        json!({"name": name, "openai_base_url": "https://example.com"}).to_string(),
                     ))
                     .unwrap(),
             )
@@ -153,7 +151,6 @@ async fn test_provider_model_lifecycle() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "TestProvider",
-                    "api_key": "sk-test",
                     "openai_base_url": "https://example.com"
                 }).to_string()))
                 .unwrap(),
@@ -225,6 +222,164 @@ async fn test_provider_model_lifecycle() {
             Request::builder()
                 .method("DELETE")
                 .uri(&format!("/api/v1/providers/{}", provider_id))
+                .header("authorization", bearer_token(&admin.token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(del_resp.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
+async fn test_create_and_list_channels() {
+    let db = common::setup_test_db().await;
+    let app = build_app(make_state(db));
+    let admin = common::make_admin_token();
+
+    let create_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/providers")
+                .header("authorization", bearer_token(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "name": "OpenAI",
+                    "openai_base_url": "https://api.openai.com/v1"
+                }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body: Value = serde_json::from_slice(
+        &to_bytes(create_resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    let provider_id = body["id"].as_str().unwrap().to_string();
+
+    for (name, priority) in [("primary", 0), ("backup", 1)] {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(&format!("/api/v1/providers/{}/channels", provider_id))
+                    .header("authorization", bearer_token(&admin.token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({
+                        "name": name,
+                        "api_key": "sk-test-key",
+                        "priority": priority
+                    }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    let list_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(&format!("/api/v1/providers/{}/channels", provider_id))
+                .header("authorization", bearer_token(&admin.token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list_resp.status(), StatusCode::OK);
+    let list_body: Value = serde_json::from_slice(
+        &to_bytes(list_resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    let channels = list_body.as_array().unwrap();
+    assert_eq!(channels.len(), 2);
+    assert_eq!(channels[0]["name"], "primary");
+    assert_eq!(channels[1]["name"], "backup");
+}
+
+#[tokio::test]
+async fn test_update_and_delete_channel() {
+    let db = common::setup_test_db().await;
+    let app = build_app(make_state(db));
+    let admin = common::make_admin_token();
+
+    let create_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/providers")
+                .header("authorization", bearer_token(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "name": "TestProvider",
+                    "openai_base_url": "https://example.com"
+                }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body: Value = serde_json::from_slice(
+        &to_bytes(create_resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    let provider_id = body["id"].as_str().unwrap().to_string();
+
+    let ch_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(&format!("/api/v1/providers/{}/channels", provider_id))
+                .header("authorization", bearer_token(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({
+                    "name": "ch1",
+                    "api_key": "sk-old",
+                    "priority": 0
+                }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let ch_body: Value = serde_json::from_slice(
+        &to_bytes(ch_resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    let channel_id = ch_body["id"].as_str().unwrap().to_string();
+
+    let update_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri(&format!("/api/v1/channels/{}", channel_id))
+                .header("authorization", bearer_token(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({"name": "updated-ch", "api_key": "sk-new"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(update_resp.status(), StatusCode::OK);
+    let update_body: Value = serde_json::from_slice(
+        &to_bytes(update_resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(update_body["name"], "updated-ch");
+
+    let del_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(&format!("/api/v1/channels/{}", channel_id))
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),

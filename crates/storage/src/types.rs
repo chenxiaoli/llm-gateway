@@ -61,7 +61,6 @@ pub struct UpdateApiKey {
 pub struct Provider {
     pub id: String,
     pub name: String,
-    pub api_key: String,
     pub openai_base_url: Option<String>,
     pub anthropic_base_url: Option<String>,
     pub enabled: bool,
@@ -72,7 +71,6 @@ pub struct Provider {
 #[derive(Debug, Deserialize)]
 pub struct CreateProvider {
     pub name: String,
-    pub api_key: String,
     pub openai_base_url: Option<String>,
     pub anthropic_base_url: Option<String>,
 }
@@ -80,9 +78,40 @@ pub struct CreateProvider {
 #[derive(Debug, Deserialize)]
 pub struct UpdateProvider {
     pub name: Option<String>,
-    pub api_key: Option<String>,
     pub openai_base_url: Option<Option<String>>,
     pub anthropic_base_url: Option<Option<String>>,
+    pub enabled: Option<bool>,
+}
+
+// --- Channels ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Channel {
+    pub id: String,
+    pub provider_id: String,
+    pub name: String,
+    pub api_key: String,
+    pub base_url: Option<String>,
+    pub priority: i32,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateChannel {
+    pub name: String,
+    pub api_key: String,
+    pub base_url: Option<String>,
+    pub priority: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateChannel {
+    pub name: Option<String>,
+    pub api_key: Option<String>,
+    pub base_url: Option<Option<String>>,
+    pub priority: Option<i32>,
     pub enabled: Option<bool>,
 }
 
@@ -151,6 +180,7 @@ pub struct UsageRecord {
     pub key_id: String,
     pub model_name: String,
     pub provider_id: String,
+    pub channel_id: Option<String>,
     pub protocol: Protocol,
     pub input_tokens: Option<i64>,
     pub output_tokens: Option<i64>,
@@ -181,6 +211,7 @@ pub struct AuditLog {
     pub key_id: String,
     pub model_name: String,
     pub provider_id: String,
+    pub channel_id: Option<String>,
     pub protocol: Protocol,
     pub request_body: String,
     pub response_body: String,

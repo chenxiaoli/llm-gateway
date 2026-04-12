@@ -35,7 +35,6 @@ export interface UpdateKeyRequest {
 export interface Provider {
   id: string;
   name: string;
-  api_key: string;
   openai_base_url: string | null;
   anthropic_base_url: string | null;
   enabled: boolean;
@@ -45,14 +44,12 @@ export interface Provider {
 
 export interface CreateProviderRequest {
   name: string;
-  api_key: string;
   openai_base_url?: string | null;
   anthropic_base_url?: string | null;
 }
 
 export interface UpdateProviderRequest {
   name?: string;
-  api_key?: string;
   openai_base_url?: string | null;
   anthropic_base_url?: string | null;
   enabled?: boolean;
@@ -90,6 +87,7 @@ export interface UsageRecord {
   key_id: string;
   model_name: string;
   provider_id: string;
+  channel_id: string | null;
   protocol: 'openai' | 'anthropic';
   input_tokens: number | null;
   output_tokens: number | null;
@@ -109,6 +107,7 @@ export interface AuditLog {
   key_id: string;
   model_name: string;
   provider_id: string;
+  channel_id: string | null;
   protocol: 'openai' | 'anthropic';
   request_body: string;
   response_body: string;
@@ -191,6 +190,33 @@ export interface SettingsResponse {
 
 export interface UpdateSettingsRequest {
   allow_registration: boolean;
+}
+
+export interface Channel {
+  id: string;
+  provider_id: string;
+  name: string;
+  api_key: string;
+  base_url: string | null;
+  priority: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateChannelRequest {
+  name: string;
+  api_key: string;
+  base_url?: string | null;
+  priority?: number;
+}
+
+export interface UpdateChannelRequest {
+  name?: string;
+  api_key?: string;
+  base_url?: string | null;
+  priority?: number;
+  enabled?: boolean;
 }
 
 export interface PaginatedResponse<T> {

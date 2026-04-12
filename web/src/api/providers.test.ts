@@ -8,7 +8,6 @@ import type { Provider } from '../types';
 const mockProvider: Provider = {
   id: 'prov-1',
   name: 'openai',
-  api_key: 'sk-test',
   openai_base_url: 'https://api.openai.com',
   anthropic_base_url: null,
   enabled: true,
@@ -39,12 +38,10 @@ describe('providers API', () => {
       http.post('*/api/v1/providers', async ({ request }) => {
         const body = await request.json() as Record<string, unknown>;
         expect(body.name).toBe('anthropic');
-        expect(body.api_key).toBe('sk-ant-test');
         return HttpResponse.json({
           ...mockProvider,
           id: 'prov-2',
           name: 'anthropic',
-          api_key: 'sk-ant-test',
           anthropic_base_url: 'https://api.anthropic.com',
           openai_base_url: null,
         });
@@ -53,7 +50,6 @@ describe('providers API', () => {
 
     const result = await createProvider({
       name: 'anthropic',
-      api_key: 'sk-ant-test',
       anthropic_base_url: 'https://api.anthropic.com',
     });
     expect(result.name).toBe('anthropic');

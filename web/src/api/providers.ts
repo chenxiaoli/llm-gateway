@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { Provider, CreateProviderRequest, UpdateProviderRequest } from '../types';
+import type { Provider, CreateProviderRequest, UpdateProviderRequest, Channel, CreateChannelRequest, UpdateChannelRequest } from '../types';
 
 export async function listProviders(): Promise<Provider[]> {
   const { data } = await apiClient.get<Provider[]>('/providers');
@@ -23,4 +23,23 @@ export async function updateProvider(id: string, input: UpdateProviderRequest): 
 
 export async function deleteProvider(id: string): Promise<void> {
   await apiClient.delete(`/providers/${id}`);
+}
+
+export async function listChannels(providerId: string): Promise<Channel[]> {
+  const { data } = await apiClient.get<Channel[]>(`/providers/${providerId}/channels`);
+  return data;
+}
+
+export async function createChannel(providerId: string, input: CreateChannelRequest): Promise<Channel> {
+  const { data } = await apiClient.post<Channel>(`/providers/${providerId}/channels`, input);
+  return data;
+}
+
+export async function updateChannel(id: string, input: UpdateChannelRequest): Promise<Channel> {
+  const { data } = await apiClient.patch<Channel>(`/channels/${id}`, input);
+  return data;
+}
+
+export async function deleteChannel(id: string): Promise<void> {
+  await apiClient.delete(`/channels/${id}`);
 }

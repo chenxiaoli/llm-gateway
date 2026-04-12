@@ -13,10 +13,9 @@ export default function Providers() {
   const [createOpen, setCreateOpen] = useState(false);
   const [form] = Form.useForm();
 
-  const handleCreate = async (values: { name: string; api_key: string; openai_base_url?: string; anthropic_base_url?: string }) => {
+  const handleCreate = async (values: { name: string; openai_base_url?: string; anthropic_base_url?: string }) => {
     await createMutation.mutateAsync({
       name: values.name,
-      api_key: values.api_key,
       openai_base_url: values.openai_base_url || null,
       anthropic_base_url: values.anthropic_base_url || null,
     });
@@ -79,9 +78,6 @@ export default function Providers() {
         <Form form={form} layout="vertical" onFinish={handleCreate}>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}>
             <Input placeholder="e.g., OpenAI" />
-          </Form.Item>
-          <Form.Item name="api_key" label="API Key" rules={[{ required: true }]}>
-            <Input.Password placeholder="Upstream provider API key" />
           </Form.Item>
           <Form.Item name="openai_base_url" label="OpenAI Base URL">
             <Input placeholder="https://api.openai.com/v1" />

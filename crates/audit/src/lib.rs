@@ -28,6 +28,7 @@ impl AuditLogger {
             key_id: key_id.to_string(),
             model_name: model_name.to_string(),
             provider_id: provider_id.to_string(),
+            channel_id: None,
             protocol,
             request_body: request_body.to_string(),
             response_body: response_body.to_string(),
