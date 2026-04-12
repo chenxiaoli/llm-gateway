@@ -359,7 +359,15 @@ impl crate::Storage for SqliteStorage {
             for stmt in migration.sql.split(';') {
                 let trimmed = stmt.trim();
                 if !trimmed.is_empty() {
-                    sqlx::query(trimmed).execute(&self.pool).await?;
+                    if let Err(e) = sqlx::query(trimmed).execute(&self.pool).await {
+                        let msg = e.to_string();
+                        // Skip if column already exists (pre-tracking DB) or column
+                        // doesn't exist (already dropped by a previous run)
+                        if msg.contains("duplicate column name") || msg.contains("no such column") {
+                            continue;
+                        }
+                        return Err(Box::new(e));
+                    }
                 }
             }
 
