@@ -20,7 +20,6 @@ pub async fn create_provider(
     let provider = Provider {
         id: uuid::Uuid::new_v4().to_string(),
         name: input.name,
-        api_key: input.api_key,
         openai_base_url: input.openai_base_url,
         anthropic_base_url: input.anthropic_base_url,
         enabled: true,
@@ -87,9 +86,6 @@ pub async fn update_provider(
     // Apply partial updates
     if let Some(name) = input.name {
         provider.name = name;
-    }
-    if let Some(api_key) = input.api_key {
-        provider.api_key = api_key;
     }
     if let Some(openai_base_url) = input.openai_base_url {
         provider.openai_base_url = openai_base_url;
