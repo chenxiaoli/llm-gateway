@@ -106,6 +106,15 @@ pub async fn chat_completions(
         return Err(ApiError::NotFound(format!("Provider '{}' is disabled", provider_id)));
     }
 
+    // Get first enabled channel for the provider
+    let channels = state
+        .storage
+        .list_enabled_channels_by_provider(provider_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let channel = channels.into_iter().next()
+        .ok_or(ApiError::Internal(format!("Provider '{}' has no enabled channels", provider_id)))?;
+
     // 6. Get provider's openai_base_url
     let base_url = provider
         .openai_base_url
@@ -125,7 +134,7 @@ pub async fn chat_completions(
         let url = format!("{}/v1/chat/completions", base_url);
         let upstream_resp = client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", provider.api_key))
+            .header("Authorization", format!("Bearer {}", channel.api_key))
             .header("Content-Type", "application/json")
             .body(body)
             .send()
@@ -147,6 +156,7 @@ pub async fn chat_completions(
         let audit_logger_clone = state.audit_logger.clone();
         let key_id = api_key.id.clone();
         let provider_id = provider.id.clone();
+        let channel_id = channel.id.clone();
         let model_name_clone = model_name.clone();
         let billing_type = model_entry.model.billing_type.clone();
         let model_input_price = model_entry.model.input_price;
@@ -160,6 +170,7 @@ pub async fn chat_completions(
                 let audit_logger = audit_logger_clone.clone();
                 let key_id = key_id.clone();
                 let provider_id = provider_id.clone();
+                let channel_id = channel_id.clone();
                 let model_name = model_name_clone.clone();
                 let billing_type = billing_type.clone();
                 let start = start;
@@ -190,6 +201,7 @@ pub async fn chat_completions(
                                                 key_id: key_id.clone(),
                                                 model_name: model_name.clone(),
                                                 provider_id: provider_id.clone(),
+                                                channel_id: Some(channel_id.clone()),
                                                 protocol: Protocol::Openai,
                                                 input_tokens,
                                                 output_tokens,
@@ -259,7 +271,7 @@ pub async fn chat_completions(
     let openai_provider = OpenAiProvider {
         name: provider.name.clone(),
         base_url,
-        api_key: provider.api_key.clone(),
+        api_key: channel.api_key.clone(),
     };
 
     let start = Instant::now();
@@ -303,6 +315,7 @@ pub async fn chat_completions(
             key_id: key_id.clone(),
             model_name: model_name_clone.clone(),
             provider_id: provider_id.clone(),
+            channel_id: Some(channel.id.clone()),
             protocol: Protocol::Openai,
             input_tokens,
             output_tokens,

@@ -105,6 +105,15 @@ pub async fn messages(
         return Err(ApiError::NotFound(format!("Provider '{}' is disabled", provider_id)));
     }
 
+    // Get first enabled channel for the provider
+    let channels = state
+        .storage
+        .list_enabled_channels_by_provider(provider_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let channel = channels.into_iter().next()
+        .ok_or(ApiError::Internal(format!("Provider '{}' has no enabled channels", provider_id)))?;
+
     // 6. Get provider's anthropic_base_url
     let base_url = provider
         .anthropic_base_url
@@ -124,7 +133,7 @@ pub async fn messages(
         let url = format!("{}/v1/messages", base_url);
         let upstream_resp = client
             .post(&url)
-            .header("x-api-key", &provider.api_key)
+            .header("x-api-key", &channel.api_key)
             .header("anthropic-version", "2023-06-01")
             .header("Content-Type", "application/json")
             .body(body)
@@ -147,6 +156,7 @@ pub async fn messages(
         let audit_logger_clone = state.audit_logger.clone();
         let key_id = api_key.id.clone();
         let provider_id = provider.id.clone();
+        let channel_id = channel.id.clone();
         let model_name_clone = model_name.clone();
         let billing_type = model_entry.model.billing_type.clone();
         let model_input_price = model_entry.model.input_price;
@@ -160,6 +170,7 @@ pub async fn messages(
                 let audit_logger = audit_logger_clone.clone();
                 let key_id = key_id.clone();
                 let provider_id = provider_id.clone();
+                let channel_id = channel_id.clone();
                 let model_name = model_name_clone.clone();
                 let billing_type = billing_type.clone();
                 let start = start;
@@ -191,6 +202,7 @@ pub async fn messages(
                                                 key_id: key_id.clone(),
                                                 model_name: model_name.clone(),
                                                 provider_id: provider_id.clone(),
+                                                channel_id: Some(channel_id.clone()),
                                                 protocol: Protocol::Anthropic,
                                                 input_tokens,
                                                 output_tokens,
@@ -263,7 +275,7 @@ pub async fn messages(
     let anthropic_provider = AnthropicProvider {
         name: provider.name.clone(),
         base_url,
-        api_key: provider.api_key.clone(),
+        api_key: channel.api_key.clone(),
     };
 
     let start = Instant::now();
@@ -307,6 +319,7 @@ pub async fn messages(
             key_id: key_id.clone(),
             model_name: model_name_clone.clone(),
             provider_id: provider_id.clone(),
+            channel_id: Some(channel.id.clone()),
             protocol: Protocol::Anthropic,
             input_tokens,
             output_tokens,
