@@ -3,8 +3,8 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use futures::stream::StreamExt;
-use serde_json::{json, Value};
 use std::sync::Arc;
+use serde_json::{json, Value};
 use std::time::Instant;
 
 use llm_gateway_auth::hash_api_key;
@@ -18,6 +18,50 @@ use crate::extractors::extract_bearer_token;
 use crate::AppState;
 
 /// POST /v1/chat/completions — proxy to upstream OpenAI-compatible provider.
+
+#[allow(clippy::too_many_arguments)]
+async fn record_stream_usage(
+    storage: Arc<dyn llm_gateway_storage::Storage>,
+    audit_logger: Arc<llm_gateway_audit::AuditLogger>,
+    key_id: String,
+    model_name: String,
+    provider_id: String,
+    channel_id: String,
+    protocol: Protocol,
+    response_desc: &str,
+    status_code: i32,
+    latency_ms: i64,
+    billing_type: llm_gateway_storage::BillingType,
+    model_input_price: f64,
+    model_output_price: f64,
+    model_request_price: f64,
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+) {
+    let cost = llm_gateway_billing::calculate_cost(
+        &billing_type, input_tokens, output_tokens,
+        model_input_price, model_output_price, model_request_price,
+    );
+    let usage = UsageRecord {
+        id: uuid::Uuid::new_v4().to_string(),
+        key_id,
+        model_name,
+        provider_id,
+        channel_id: Some(channel_id),
+        protocol: protocol.clone(),
+        input_tokens,
+        output_tokens,
+        cost: cost.cost,
+        created_at: chrono::Utc::now(),
+    };
+    let _ = storage.record_usage(&usage).await;
+    let _ = audit_logger.log_request(
+        &usage.key_id, &usage.model_name, &usage.provider_id,
+        protocol, "", response_desc, status_code,
+        latency_ms, usage.input_tokens, usage.output_tokens,
+    ).await;
+}
+
 pub async fn chat_completions(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -122,9 +166,10 @@ pub async fn chat_completions(
         .and_then(|s| s.as_bool())
         .unwrap_or(false);
 
+    let client = reqwest::Client::new();
+
     if is_stream {
         let start = Instant::now();
-        let client = reqwest::Client::new();
 
         // Failover loop over channels
         let mut last_error = String::new();
@@ -270,11 +315,29 @@ pub async fn chat_completions(
                                     buffer.push_str(&String::from_utf8_lossy(&bytes));
                                 }
                                 Some(Err(_)) => {
-                                    // Upstream error — end the stream
+                                    tokio::spawn(record_stream_usage(
+                                        storage.clone(), audit_logger.clone(),
+                                        key_id.clone(), model_name.clone(),
+                                        provider_id.clone(), channel_id.clone(),
+                                        Protocol::Openai, "[stream truncated]", 0,
+                                        start.elapsed().as_millis() as i64,
+                                        billing_type.clone(),
+                                        model_input_price, model_output_price, model_request_price,
+                                        input_tokens, output_tokens,
+                                    ));
                                     return None;
                                 }
                                 None => {
-                                    // Upstream closed connection without [DONE]
+                                    tokio::spawn(record_stream_usage(
+                                        storage.clone(), audit_logger.clone(),
+                                        key_id.clone(), model_name.clone(),
+                                        provider_id.clone(), channel_id.clone(),
+                                        Protocol::Openai, "[stream incomplete]", 0,
+                                        start.elapsed().as_millis() as i64,
+                                        billing_type.clone(),
+                                        model_input_price, model_output_price, model_request_price,
+                                        input_tokens, output_tokens,
+                                    ));
                                     return None;
                                 }
                             }
@@ -309,7 +372,6 @@ pub async fn chat_completions(
         };
 
         let start = Instant::now();
-        let client = reqwest::Client::new();
         let proxy_result = match openai_provider
             .proxy_request(&client, "/v1/chat/completions", body.clone(), vec![])
             .await
