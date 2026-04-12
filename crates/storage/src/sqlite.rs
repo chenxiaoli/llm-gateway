@@ -330,19 +330,45 @@ impl crate::Storage for SqliteStorage {
     // ---- Migrations ----
 
     async fn run_migrations(&self) -> Result<(), DbErr> {
+        // Create settings table
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
         )
         .execute(&self.pool)
         .await?;
 
-        for migration_sql in ALL_MIGRATIONS {
-            for stmt in migration_sql.split(';') {
+        // Create migrations tracking table
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)"
+        )
+        .execute(&self.pool)
+        .await?;
+
+        for migration in ALL_MIGRATIONS {
+            let applied: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?)"
+            )
+            .bind(migration.version)
+            .fetch_one(&self.pool)
+            .await?;
+
+            if applied {
+                continue;
+            }
+
+            for stmt in migration.sql.split(';') {
                 let trimmed = stmt.trim();
                 if !trimmed.is_empty() {
                     sqlx::query(trimmed).execute(&self.pool).await?;
                 }
             }
+
+            sqlx::query(
+                "INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))"
+            )
+            .bind(migration.version)
+            .execute(&self.pool)
+            .await?;
         }
         Ok(())
     }
