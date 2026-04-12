@@ -8,3 +8,6 @@ sha2 = { workspace = true }
 hex = { workspace = true }
 uuid = { workspace = true }
 serde = { workspace = true }
+bcrypt = "0.17"
+jsonwebtoken = "9"
+chrono = { workspace = true }

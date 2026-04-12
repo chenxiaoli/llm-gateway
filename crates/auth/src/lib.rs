@@ -14,6 +14,55 @@ pub fn generate_api_key() -> String {
     format!("sk-{}", uuid::Uuid::new_v4().to_string().replace("-", ""))
 }
 
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use serde::{Deserialize, Serialize};
+
+// --- Password hashing (bcrypt) ---
+
+pub fn hash_password(plain: &str) -> String {
+    bcrypt::hash(plain, bcrypt::DEFAULT_COST).unwrap()
+}
+
+pub fn verify_password(plain: &str, hash: &str) -> bool {
+    bcrypt::verify(plain, hash).unwrap_or(false)
+}
+
+// --- JWT ---
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct JwtClaims {
+    pub sub: String,
+    pub role: String,
+    pub exp: usize,
+    pub iat: usize,
+}
+
+pub fn create_jwt(user_id: &str, role: &str, secret: &str) -> Result<String, String> {
+    let now = chrono::Utc::now().timestamp() as usize;
+    let claims = JwtClaims {
+        sub: user_id.to_string(),
+        role: role.to_string(),
+        exp: now + 86400,
+        iat: now,
+    };
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .map_err(|e| e.to_string())
+}
+
+pub fn verify_jwt(token: &str, secret: &str) -> Result<JwtClaims, String> {
+    let token_data = decode::<JwtClaims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::default(),
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(token_data.claims)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -56,5 +105,44 @@ mod tests {
         let k1 = generate_api_key();
         let k2 = generate_api_key();
         assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn test_hash_and_verify_password() {
+        let hash = hash_password("my-password");
+        assert!(verify_password("my-password", &hash));
+        assert!(!verify_password("wrong-password", &hash));
+    }
+
+    #[test]
+    fn test_create_and_verify_jwt() {
+        let secret = "test-secret";
+        let token = create_jwt("user-1", "admin", secret).unwrap();
+        let claims = verify_jwt(&token, secret).unwrap();
+        assert_eq!(claims.sub, "user-1");
+        assert_eq!(claims.role, "admin");
+    }
+
+    #[test]
+    fn test_verify_jwt_wrong_secret() {
+        let token = create_jwt("user-1", "admin", "secret-1").unwrap();
+        assert!(verify_jwt(&token, "secret-2").is_err());
+    }
+
+    #[test]
+    fn test_verify_jwt_expired() {
+        let claims = JwtClaims {
+            sub: "user-1".to_string(),
+            role: "admin".to_string(),
+            exp: 0,
+            iat: 0,
+        };
+        let token = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret("secret".as_bytes()),
+        )
+        .unwrap();
+        assert!(verify_jwt(&token, "secret").is_err());
     }
 }
