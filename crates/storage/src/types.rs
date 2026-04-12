@@ -176,6 +176,38 @@ pub struct LogFilter {
     pub limit: Option<i64>,
 }
 
+// --- Users ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct User {
+    pub id: String,
+    pub username: String,
+    pub password: String,
+    pub role: String,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateUser {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateUser {
+    pub role: Option<String>,
+    pub enabled: Option<bool>,
+}
+
+// --- Settings ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Settings {
+    pub allow_registration: bool,
+}
+
 // --- Config ---
 
 #[derive(Debug, Deserialize)]
