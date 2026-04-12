@@ -13,7 +13,7 @@ vi.mock('react-router-dom', async () => {
 
 describe('Register page', () => {
   it('renders registration form with username, password, and confirm password fields', () => {
-    renderWithProviders(<Register />, { route: '/admin/register' });
+    renderWithProviders(<Register />, { route: '/console/register' });
 
     expect(screen.getByText('Create Account')).toBeInTheDocument();
     expect(screen.getByLabelText('Username')).toBeInTheDocument();
@@ -23,7 +23,7 @@ describe('Register page', () => {
   });
 
   it('shows password validation error for less than 6 characters', async () => {
-    renderWithProviders(<Register />, { route: '/admin/register' });
+    renderWithProviders(<Register />, { route: '/console/register' });
 
     const usernameInput = screen.getByLabelText('Username');
     const passwordInput = screen.getByLabelText('Password');
@@ -40,7 +40,7 @@ describe('Register page', () => {
   });
 
   it('shows confirm password validation error when passwords do not match', async () => {
-    renderWithProviders(<Register />, { route: '/admin/register' });
+    renderWithProviders(<Register />, { route: '/console/register' });
 
     const usernameInput = screen.getByLabelText('Username');
     const passwordInput = screen.getByLabelText('Password');
@@ -63,7 +63,7 @@ describe('Register page', () => {
       ),
     );
 
-    renderWithProviders(<Register />, { route: '/admin/register' });
+    renderWithProviders(<Register />, { route: '/console/register' });
 
     await waitFor(() => {
       expect(screen.getByText('Registration is currently disabled')).toBeInTheDocument();
@@ -77,7 +77,7 @@ describe('Register page', () => {
       ),
     );
 
-    renderWithProviders(<Register />, { route: '/admin/register' });
+    renderWithProviders(<Register />, { route: '/console/register' });
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Register' })).toBeDisabled();
@@ -85,7 +85,7 @@ describe('Register page', () => {
   });
 
   it('has a link to login page', () => {
-    renderWithProviders(<Register />, { route: '/admin/register' });
+    renderWithProviders(<Register />, { route: '/console/register' });
 
     expect(screen.getByText('Already have an account? Login')).toBeInTheDocument();
   });

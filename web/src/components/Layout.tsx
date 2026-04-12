@@ -17,16 +17,16 @@ import { useAuth } from '../contexts/AuthContext';
 const { Header, Sider, Content } = Layout;
 
 const consoleItems = [
-  { key: '/admin/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
-  { key: '/admin/keys', icon: <KeyOutlined />, label: 'API Keys' },
-  { key: '/admin/usage', icon: <BarChartOutlined />, label: 'Usage' },
+  { key: '/console/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
+  { key: '/console/keys', icon: <KeyOutlined />, label: 'API Keys' },
+  { key: '/console/usage', icon: <BarChartOutlined />, label: 'Usage' },
 ];
 
 const adminItems = [
-  { key: '/admin/providers', icon: <CloudServerOutlined />, label: 'Providers' },
-  { key: '/admin/users', icon: <TeamOutlined />, label: 'Users' },
-  { key: '/admin/settings', icon: <SettingOutlined />, label: 'Settings' },
-  { key: '/admin/logs', icon: <FileSearchOutlined />, label: 'Logs' },
+  { key: '/console/providers', icon: <CloudServerOutlined />, label: 'Providers' },
+  { key: '/console/users', icon: <TeamOutlined />, label: 'Users' },
+  { key: '/console/settings', icon: <SettingOutlined />, label: 'Settings' },
+  { key: '/console/logs', icon: <FileSearchOutlined />, label: 'Logs' },
 ];
 
 export default function AppLayout() {

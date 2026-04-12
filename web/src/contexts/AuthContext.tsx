@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMe, login as apiLogin, register as apiRegister } from '../api/auth';
 import { getToken, setToken, clearToken, setRefreshToken, clearRefreshToken } from '../api/client';
@@ -16,6 +16,15 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
+
+  // Listen for auth expiry events from the API interceptor
+  useEffect(() => {
+    const handleExpired = () => {
+      queryClient.clear();
+    };
+    window.addEventListener('auth:expired', handleExpired);
+    return () => window.removeEventListener('auth:expired', handleExpired);
+  }, [queryClient]);
 
   const { data: me, isLoading } = useQuery({
     queryKey: ['me'],

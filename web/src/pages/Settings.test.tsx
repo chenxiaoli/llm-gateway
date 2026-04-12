@@ -11,7 +11,7 @@ beforeEach(() => {
 
 describe('Settings page', () => {
   it('renders settings page with Settings title', async () => {
-    renderWithProviders(<Settings />, { route: '/admin/settings' });
+    renderWithProviders(<Settings />, { route: '/console/settings' });
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
@@ -19,7 +19,7 @@ describe('Settings page', () => {
   });
 
   it('shows Allow Registration label', async () => {
-    renderWithProviders(<Settings />, { route: '/admin/settings' });
+    renderWithProviders(<Settings />, { route: '/console/settings' });
 
     await waitFor(() => {
       expect(screen.getByText('Allow Registration')).toBeInTheDocument();
@@ -27,7 +27,7 @@ describe('Settings page', () => {
   });
 
   it('renders a switch toggle', async () => {
-    renderWithProviders(<Settings />, { route: '/admin/settings' });
+    renderWithProviders(<Settings />, { route: '/console/settings' });
 
     await waitFor(() => {
       expect(screen.getByRole('switch')).toBeInTheDocument();
@@ -35,7 +35,7 @@ describe('Settings page', () => {
   });
 
   it('renders change password form', async () => {
-    renderWithProviders(<Settings />, { route: '/admin/settings' });
+    renderWithProviders(<Settings />, { route: '/console/settings' });
 
     await waitFor(() => {
       expect(screen.getByLabelText('Current Password')).toBeInTheDocument();

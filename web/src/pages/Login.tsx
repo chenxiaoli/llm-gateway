@@ -22,7 +22,7 @@ export default function Login() {
     setLoading(true);
     try {
       await login(values);
-      navigate('/admin/dashboard');
+      navigate('/console/dashboard');
     } catch {
       message.error('Invalid username or password');
     } finally {
@@ -49,7 +49,7 @@ export default function Login() {
         </Form>
         {authConfig?.allow_registration && (
           <Text style={{ display: 'block', textAlign: 'center' }}>
-            <Link to="/admin/register">Create an account</Link>
+            <Link to="/console/register">Create an account</Link>
           </Text>
         )}
       </Card>

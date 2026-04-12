@@ -5,7 +5,7 @@ import Users from './Users';
 
 describe('Users page', () => {
   it('renders users table', async () => {
-    renderWithProviders(<Users />, { route: '/admin/users' });
+    renderWithProviders(<Users />, { route: '/console/users' });
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Users' })).toBeInTheDocument();
@@ -15,7 +15,7 @@ describe('Users page', () => {
   });
 
   it('shows Users title', async () => {
-    renderWithProviders(<Users />, { route: '/admin/users' });
+    renderWithProviders(<Users />, { route: '/console/users' });
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Users' })).toBeInTheDocument();
@@ -23,7 +23,7 @@ describe('Users page', () => {
   });
 
   it('has columns: Username, Role, Status, Created, Actions', async () => {
-    renderWithProviders(<Users />, { route: '/admin/users' });
+    renderWithProviders(<Users />, { route: '/console/users' });
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Users' })).toBeInTheDocument();

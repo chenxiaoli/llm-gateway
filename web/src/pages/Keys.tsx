@@ -40,7 +40,7 @@ export default function Keys() {
       dataIndex: 'name',
       key: 'name',
       render: (name: string, record: { id: string }) => (
-        <a onClick={() => navigate(`/admin/keys/${record.id}`)}>{name}</a>
+        <a onClick={() => navigate(`/console/keys/${record.id}`)}>{name}</a>
       ),
     },
     {

@@ -18,14 +18,14 @@ import Logs from './pages/Logs';
 function RequireAuth() {
   const { user, isLoading } = useAuth();
   if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>;
-  if (!user) return <Navigate to="/admin/login" replace />;
+  if (!user) return <Navigate to="/console/login" replace />;
   return <Outlet />;
 }
 
 function RequireAdmin() {
   const { user, isLoading } = useAuth();
   if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>;
-  if (!user || user.role !== 'admin') return <Navigate to="/admin/dashboard" replace />;
+  if (!user || user.role !== 'admin') return <Navigate to="/console/dashboard" replace />;
   return <Outlet />;
 }
 
@@ -35,9 +35,9 @@ function App() {
       <AuthProvider>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/admin/login" element={<Login />} />
-          <Route path="/admin/register" element={<Register />} />
-          <Route path="/admin" element={<Layout />}>
+          <Route path="/console/login" element={<Login />} />
+          <Route path="/console/register" element={<Register />} />
+          <Route path="/console" element={<Layout />}>
             <Route element={<RequireAuth />}>
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="keys" element={<Keys />} />
@@ -51,7 +51,7 @@ function App() {
               <Route path="settings" element={<Settings />} />
               <Route path="logs" element={<Logs />} />
             </Route>
-            <Route index element={<Navigate to="/admin/dashboard" replace />} />
+            <Route index element={<Navigate to="/console/dashboard" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

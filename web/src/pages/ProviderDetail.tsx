@@ -50,7 +50,7 @@ export default function ProviderDetail() {
 
   const handleDeleteProvider = async () => {
     await deleteMutation.mutateAsync(provider.id);
-    navigate('/admin/providers');
+    navigate('/console/providers');
   };
 
   const openAddModel = () => {
@@ -196,7 +196,7 @@ export default function ProviderDetail() {
 
   return (
     <div>
-      <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/admin/providers')} style={{ marginBottom: 16 }}>
+      <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/console/providers')} style={{ marginBottom: 16 }}>
         Back to Providers
       </Button>
 

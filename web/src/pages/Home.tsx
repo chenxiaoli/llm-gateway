@@ -62,7 +62,7 @@ export default function Home() {
           track usage, and proxy requests to OpenAI and Anthropic from a single endpoint.
         </Paragraph>
         <Space size="large">
-          <Button type="primary" size="large" onClick={() => navigate('/admin/login')}>
+          <Button type="primary" size="large" onClick={() => navigate('/console/login')}>
             Go to Dashboard
           </Button>
           <Button size="large" onClick={() => window.open('https://github.com/chenxiaoli/llm-gateway', '_blank')}>

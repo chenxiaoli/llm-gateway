@@ -51,7 +51,7 @@ apiClient.interceptors.response.use(
       if (!refreshToken) {
         clearToken();
         clearRefreshToken();
-        window.location.href = '/admin/login';
+        window.dispatchEvent(new Event('auth:expired'));
         return Promise.reject(error);
       }
 
@@ -85,7 +85,7 @@ apiClient.interceptors.response.use(
         processQueue(refreshError, null);
         clearToken();
         clearRefreshToken();
-        window.location.href = '/admin/login';
+        window.dispatchEvent(new Event('auth:expired'));
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

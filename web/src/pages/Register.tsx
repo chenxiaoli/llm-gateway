@@ -24,7 +24,7 @@ export default function Register() {
     setLoading(true);
     try {
       await register(values);
-      navigate('/admin/dashboard');
+      navigate('/console/dashboard');
     } catch {
       message.error('Registration failed');
     } finally {
@@ -70,7 +70,7 @@ export default function Register() {
           </Form.Item>
         </Form>
         <Text style={{ display: 'block', textAlign: 'center' }}>
-          <Link to="/admin/login">Already have an account? Login</Link>
+          <Link to="/console/login">Already have an account? Login</Link>
         </Text>
       </Card>
     </div>

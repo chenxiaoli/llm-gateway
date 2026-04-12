@@ -36,7 +36,7 @@ describe('Keys page', () => {
       http.get('*/api/v1/keys', () => HttpResponse.json({ items: mockKeys, total: 2, page: 1, page_size: 20 })),
     );
 
-    renderWithProviders(<Keys />, { route: '/admin/keys' });
+    renderWithProviders(<Keys />, { route: '/console/keys' });
 
     await waitFor(() => {
       expect(screen.getByText('production')).toBeInTheDocument();
@@ -56,7 +56,7 @@ describe('Keys page', () => {
       http.get('*/api/v1/keys', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
     );
 
-    renderWithProviders(<Keys />, { route: '/admin/keys' });
+    renderWithProviders(<Keys />, { route: '/console/keys' });
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'API Keys' })).toBeInTheDocument();
@@ -85,7 +85,7 @@ describe('Keys page', () => {
       ),
     );
 
-    renderWithProviders(<Keys />, { route: '/admin/keys' });
+    renderWithProviders(<Keys />, { route: '/console/keys' });
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'API Keys' })).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe('Keys page', () => {
       http.get('*/api/v1/keys', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
     );
 
-    renderWithProviders(<Keys />, { route: '/admin/keys' });
+    renderWithProviders(<Keys />, { route: '/console/keys' });
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'API Keys' })).toBeInTheDocument();

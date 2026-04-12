@@ -30,12 +30,12 @@ export default function KeyDetail() {
 
   const handleDelete = async () => {
     await deleteMutation.mutateAsync(key.id);
-    navigate('/admin/keys');
+    navigate('/console/keys');
   };
 
   return (
     <div>
-      <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/admin/keys')} style={{ marginBottom: 16 }}>
+      <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/console/keys')} style={{ marginBottom: 16 }}>
         Back to Keys
       </Button>
 

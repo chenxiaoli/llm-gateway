@@ -29,7 +29,7 @@ export default function Providers() {
       dataIndex: 'name',
       key: 'name',
       render: (name: string, record: { id: string }) => (
-        <a onClick={() => navigate(`/admin/providers/${record.id}`)}>{name}</a>
+        <a onClick={() => navigate(`/console/providers/${record.id}`)}>{name}</a>
       ),
     },
     {
