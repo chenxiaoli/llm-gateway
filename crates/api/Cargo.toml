@@ -1,0 +1,21 @@
+[package]
+name = "llm-gateway-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = { workspace = true }
+llm-gateway-storage = { path = "../storage" }
+llm-gateway-auth = { path = "../auth" }
+llm-gateway-provider = { path = "../provider" }
+llm-gateway-billing = { path = "../billing" }
+llm-gateway-audit = { path = "../audit" }
+llm-gateway-ratelimit = { path = "../ratelimit" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tower = { workspace = true }
+hyper = { workspace = true }

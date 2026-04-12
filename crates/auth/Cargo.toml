@@ -1,0 +1,10 @@
+[package]
+name = "llm-gateway-auth"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sha2 = { workspace = true }
+hex = { workspace = true }
+uuid = { workspace = true }
+serde = { workspace = true }
