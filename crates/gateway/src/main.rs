@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         storage,
         rate_limiter,
         audit_logger,
-        admin_token: config.admin.token,
+        jwt_secret: config.auth.jwt_secret.clone(),
     });
 
     // Build router

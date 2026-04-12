@@ -213,7 +213,7 @@ pub struct Settings {
 #[derive(Debug, Deserialize)]
 pub struct AppConfig {
     pub server: ServerConfig,
-    pub admin: AdminConfig,
+    pub auth: AuthConfig,
     pub database: DatabaseConfig,
     pub rate_limit: RateLimitConfig,
     pub upstream: UpstreamConfig,
@@ -227,8 +227,9 @@ pub struct ServerConfig {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct AdminConfig {
-    pub token: String,
+pub struct AuthConfig {
+    pub jwt_secret: String,
+    pub allow_registration: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
