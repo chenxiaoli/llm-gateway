@@ -5,9 +5,9 @@ import {
   Popconfirm, Typography, Select, InputNumber, Tag,
 } from 'antd';
 import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
-import { useProvider, useUpdateProvider, useDeleteProvider } from '../hooks/useProviders';
+import { useProvider, useUpdateProvider, useDeleteProvider, useChannels, useCreateChannel, useUpdateChannel, useDeleteChannel } from '../hooks/useProviders';
 import { useCreateModel, useUpdateModel, useDeleteModel } from '../hooks/useModels';
-import type { Model, CreateModelRequest, UpdateModelRequest } from '../types';
+import type { Model, CreateModelRequest, UpdateModelRequest, Channel } from '../types';
 
 const { Title } = Typography;
 
@@ -26,6 +26,13 @@ export default function ProviderDetail() {
   const [editingModel, setEditingModel] = useState<Model | null>(null);
   const [modelForm] = Form.useForm();
 
+  const createChannelMutation = useCreateChannel(id!);
+  const updateChannelMutation = useUpdateChannel(id!);
+  const deleteChannelMutation = useDeleteChannel(id!);
+  const [channelModalOpen, setChannelModalOpen] = useState(false);
+  const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
+  const [channelForm] = Form.useForm();
+
   if (isLoading) return <div>Loading...</div>;
   if (!provider) return <div>Provider not found</div>;
 
@@ -34,7 +41,6 @@ export default function ProviderDetail() {
       id: provider.id,
       input: {
         name: values.name,
-        api_key: values.api_key,
         openai_base_url: values.openai_base_url || null,
         anthropic_base_url: values.anthropic_base_url || null,
         enabled: values.enabled,
@@ -86,6 +92,53 @@ export default function ProviderDetail() {
     await deleteModelMutation.mutateAsync(modelName);
   };
 
+  const { data: channels } = useChannels(id!);
+
+  const openAddChannel = () => {
+    setEditingChannel(null);
+    channelForm.resetFields();
+    setChannelModalOpen(true);
+  };
+
+  const openEditChannel = (channel: Channel) => {
+    setEditingChannel(channel);
+    channelForm.setFieldsValue({
+      name: channel.name,
+      api_key: channel.api_key,
+      base_url: channel.base_url,
+      priority: channel.priority,
+      enabled: channel.enabled,
+    });
+    setChannelModalOpen(true);
+  };
+
+  const handleSaveChannel = async (values: any) => {
+    if (editingChannel) {
+      await updateChannelMutation.mutateAsync({
+        id: editingChannel.id,
+        input: {
+          name: values.name,
+          api_key: values.api_key,
+          base_url: values.base_url || null,
+          priority: values.priority,
+          enabled: values.enabled,
+        },
+      });
+    } else {
+      await createChannelMutation.mutateAsync({
+        name: values.name,
+        api_key: values.api_key,
+        base_url: values.base_url || null,
+        priority: values.priority,
+      });
+    }
+    setChannelModalOpen(false);
+  };
+
+  const handleDeleteChannel = async (channelId: string) => {
+    await deleteChannelMutation.mutateAsync(channelId);
+  };
+
   const modelColumns = [
     { title: 'Name', dataIndex: 'name', key: 'name' },
     {
@@ -117,6 +170,30 @@ export default function ProviderDetail() {
     },
   ];
 
+  const channelColumns = [
+    { title: 'Name', dataIndex: 'name', key: 'name' },
+    {
+      title: 'Base URL', key: 'base_url',
+      render: (v: string | null) => v || <span style={{ color: '#999' }}>Default</span>,
+    },
+    { title: 'Priority', dataIndex: 'priority', key: 'priority' },
+    {
+      title: 'Status', dataIndex: 'enabled', key: 'enabled',
+      render: (enabled: boolean) => <Tag color={enabled ? 'green' : 'red'}>{enabled ? 'Active' : 'Disabled'}</Tag>,
+    },
+    {
+      title: 'Actions', key: 'actions',
+      render: (_: unknown, record: Channel) => (
+        <Space>
+          <a onClick={() => openEditChannel(record)}>Edit</a>
+          <Popconfirm title={`Delete channel "${record.name}"?`} onConfirm={() => handleDeleteChannel(record.id)}>
+            <a style={{ color: '#ff4d4f' }}>Delete</a>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
   return (
     <div>
       <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/admin/providers')} style={{ marginBottom: 16 }}>
@@ -129,7 +206,6 @@ export default function ProviderDetail() {
           layout="vertical"
           initialValues={{
             name: provider.name,
-            api_key: provider.api_key,
             openai_base_url: provider.openai_base_url,
             anthropic_base_url: provider.anthropic_base_url,
             enabled: provider.enabled,
@@ -139,9 +215,6 @@ export default function ProviderDetail() {
         >
           <Form.Item name="name" label="Name" rules={[{ required: true }]}>
             <Input />
-          </Form.Item>
-          <Form.Item name="api_key" label="API Key" rules={[{ required: true }]}>
-            <Input.Password />
           </Form.Item>
           <Form.Item name="openai_base_url" label="OpenAI Base URL">
             <Input />
@@ -168,6 +241,14 @@ export default function ProviderDetail() {
         extra={<Button type="primary" icon={<PlusOutlined />} onClick={openAddModel}>Add Model</Button>}
       >
         <Table dataSource={[]} columns={modelColumns} rowKey="name" pagination={false} />
+      </Card>
+
+      <Card
+        title={<Title level={4} style={{ margin: 0 }}>Channels</Title>}
+        extra={<Button type="primary" icon={<PlusOutlined />} onClick={openAddChannel}>Add Channel</Button>}
+        style={{ marginTop: 16 }}
+      >
+        <Table dataSource={channels} columns={channelColumns} rowKey="id" pagination={false} />
       </Card>
 
       <Modal
@@ -205,6 +286,38 @@ export default function ProviderDetail() {
           <Form.Item>
             <Button type="primary" htmlType="submit">
               {editingModel ? 'Update' : 'Create'}
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={editingChannel ? `Edit Channel: ${editingChannel.name}` : 'Add Channel'}
+        open={channelModalOpen}
+        onCancel={() => setChannelModalOpen(false)}
+        footer={null}
+      >
+        <Form form={channelForm} layout="vertical" onFinish={handleSaveChannel}>
+          <Form.Item name="name" label="Name" rules={[{ required: true }]}>
+            <Input placeholder="e.g., primary" />
+          </Form.Item>
+          <Form.Item name="api_key" label="API Key" rules={[{ required: true }]}>
+            <Input.Password placeholder="Upstream API key" />
+          </Form.Item>
+          <Form.Item name="base_url" label="Base URL">
+            <Input placeholder="Leave empty to use provider default" />
+          </Form.Item>
+          <Form.Item name="priority" label="Priority" initialValue={0}>
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          {editingChannel && (
+            <Form.Item name="enabled" label="Enabled" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+          )}
+          <Form.Item>
+            <Button type="primary" htmlType="submit" loading={createChannelMutation.isPending || updateChannelMutation.isPending}>
+              {editingChannel ? 'Update' : 'Create'}
             </Button>
           </Form.Item>
         </Form>
