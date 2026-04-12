@@ -80,3 +80,8 @@ CREATE TABLE IF NOT EXISTS rate_limit_counters (
     count      INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (key_id, model_name, window)
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);

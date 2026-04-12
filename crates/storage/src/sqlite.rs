@@ -1,5 +1,5 @@
-use crate::migrations::ALL_MIGRATIONS;
 use crate::types::*;
+use sqlx::migrate::Migrator;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{FromRow, SqlitePool};
 use std::str::FromStr;
@@ -32,6 +32,56 @@ impl SqliteStorage {
 
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
+    }
+
+    /// Copy entries from old `schema_migrations` table into `_sqlx_migrations`
+    /// so sqlx's migrator knows the old migrations have already been applied.
+    async fn migrate_old_tracking(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let has_old: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations')",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if !has_old {
+            return Ok(());
+        }
+
+        let new_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM _sqlx_migrations",
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        if new_count > 0 {
+            return Ok(());
+        }
+
+        let old_entries: Vec<(String,)> = sqlx::query_as(
+            "SELECT version FROM schema_migrations ORDER BY version",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let version_map: &[(&str, i64)] = &[
+            ("001_init", 20260401000000),
+            ("002_users", 20260401000001),
+            ("003_refresh_tokens", 20260401000002),
+            ("004_channels", 20260401000003),
+        ];
+
+        for (old_version,) in &old_entries {
+            if let Some(&(_, ts)) = version_map.iter().find(|(v, _)| *v == old_version.as_str()) {
+                sqlx::query(
+                    "INSERT OR IGNORE INTO _sqlx_migrations (version, description, installed_on, success, checksum, execution_time) VALUES (?, '', datetime('now'), 1, 0, 0)",
+                )
+                .bind(ts)
+                .execute(&self.pool)
+                .await?;
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -330,54 +380,17 @@ impl crate::Storage for SqliteStorage {
     // ---- Migrations ----
 
     async fn run_migrations(&self) -> Result<(), DbErr> {
-        // Create settings table
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-        )
-        .execute(&self.pool)
-        .await?;
+        // Migrate tracking data from old hand-rolled system to sqlx format
+        self.migrate_old_tracking().await?;
 
-        // Create migrations tracking table
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL)"
-        )
-        .execute(&self.pool)
-        .await?;
+        // Resolve migrations path relative to this crate's root, not CWD.
+        // env!() is evaluated at compile time, so it captures the storage crate's manifest dir.
+        let migrations_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let migrator = Migrator::new(migrations_path)
+            .await
+            .map_err(|e: sqlx::migrate::MigrateError| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
+        migrator.run(&self.pool).await.map_err(|e: sqlx::migrate::MigrateError| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
 
-        for migration in ALL_MIGRATIONS {
-            let applied: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?)"
-            )
-            .bind(migration.version)
-            .fetch_one(&self.pool)
-            .await?;
-
-            if applied {
-                continue;
-            }
-
-            for stmt in migration.sql.split(';') {
-                let trimmed = stmt.trim();
-                if !trimmed.is_empty() {
-                    if let Err(e) = sqlx::query(trimmed).execute(&self.pool).await {
-                        let msg = e.to_string();
-                        // Skip if column already exists (pre-tracking DB) or column
-                        // doesn't exist (already dropped by a previous run)
-                        if msg.contains("duplicate column name") || msg.contains("no such column") {
-                            continue;
-                        }
-                        return Err(Box::new(e));
-                    }
-                }
-            }
-
-            sqlx::query(
-                "INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))"
-            )
-            .bind(migration.version)
-            .execute(&self.pool)
-            .await?;
-        }
         Ok(())
     }
 

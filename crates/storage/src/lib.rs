@@ -1,6 +1,5 @@
 pub mod types;
 pub mod sqlite;
-pub mod migrations;
 
 pub use types::*;
 
