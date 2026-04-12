@@ -9,7 +9,7 @@ use llm_gateway_auth::{generate_api_key, hash_api_key};
 use llm_gateway_storage::{ApiKey, CreateApiKey as StorageCreateApiKey, UpdateApiKey as StorageUpdateApiKey};
 
 use crate::error::ApiError;
-use crate::extractors::verify_admin_token;
+use crate::extractors::require_auth;
 use crate::AppState;
 
 #[derive(Serialize)]
@@ -28,7 +28,7 @@ pub async fn create_key(
     headers: HeaderMap,
     Json(input): Json<StorageCreateApiKey>,
 ) -> Result<Json<CreateKeyResponse>, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
 
     let now = chrono::Utc::now();
     let raw_key = generate_api_key();
@@ -39,6 +39,7 @@ pub async fn create_key(
         rate_limit: input.rate_limit,
         budget_monthly: input.budget_monthly,
         enabled: true,
+        created_by: Some(claims.sub),
         created_at: now,
         updated_at: now,
     };
@@ -64,13 +65,21 @@ pub async fn list_keys(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<ApiKey>>, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
 
     let keys = state
         .storage
         .list_keys()
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    if claims.role != "admin" {
+        let filtered: Vec<ApiKey> = keys
+            .into_iter()
+            .filter(|k| k.created_by.as_deref() == Some(&claims.sub))
+            .collect();
+        return Ok(Json(filtered));
+    }
 
     Ok(Json(keys))
 }
@@ -80,7 +89,7 @@ pub async fn get_key(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<ApiKey>, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
 
     let key = state
         .storage
@@ -88,6 +97,10 @@ pub async fn get_key(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Key '{}' not found", id)))?;
+
+    if claims.role != "admin" && key.created_by.as_deref() != Some(&claims.sub) {
+        return Err(ApiError::NotFound(format!("Key '{}' not found", id)));
+    }
 
     Ok(Json(key))
 }
@@ -98,7 +111,7 @@ pub async fn update_key(
     Path(id): Path<String>,
     Json(input): Json<StorageUpdateApiKey>,
 ) -> Result<Json<ApiKey>, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
 
     let mut key = state
         .storage
@@ -107,19 +120,14 @@ pub async fn update_key(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Key '{}' not found", id)))?;
 
-    // Apply partial updates
-    if let Some(name) = input.name {
-        key.name = name;
+    if claims.role != "admin" && key.created_by.as_deref() != Some(&claims.sub) {
+        return Err(ApiError::NotFound(format!("Key '{}' not found", id)));
     }
-    if let Some(rate_limit) = input.rate_limit {
-        key.rate_limit = rate_limit;
-    }
-    if let Some(budget_monthly) = input.budget_monthly {
-        key.budget_monthly = budget_monthly;
-    }
-    if let Some(enabled) = input.enabled {
-        key.enabled = enabled;
-    }
+
+    if let Some(name) = input.name { key.name = name; }
+    if let Some(rate_limit) = input.rate_limit { key.rate_limit = rate_limit; }
+    if let Some(budget_monthly) = input.budget_monthly { key.budget_monthly = budget_monthly; }
+    if let Some(enabled) = input.enabled { key.enabled = enabled; }
     key.updated_at = chrono::Utc::now();
 
     let updated = state
@@ -136,7 +144,20 @@ pub async fn delete_key(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+
+    if claims.role != "admin" {
+        let key = state
+            .storage
+            .get_key(&id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+            .ok_or(ApiError::NotFound(format!("Key '{}' not found", id)))?;
+
+        if key.created_by.as_deref() != Some(&claims.sub) {
+            return Err(ApiError::NotFound(format!("Key '{}' not found", id)));
+        }
+    }
 
     state
         .storage

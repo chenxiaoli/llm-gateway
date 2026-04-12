@@ -6,7 +6,7 @@ use std::sync::Arc;
 use llm_gateway_storage::{CreateModel as StorageCreateModel, Model, UpdateModel as StorageUpdateModel};
 
 use crate::error::ApiError;
-use crate::extractors::verify_admin_token;
+use crate::extractors::require_admin;
 use crate::AppState;
 
 pub async fn create_model(
@@ -15,7 +15,7 @@ pub async fn create_model(
     Path(provider_id): Path<String>,
     Json(input): Json<StorageCreateModel>,
 ) -> Result<Json<Model>, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    require_admin(&headers, &state.jwt_secret)?;
 
     // Verify provider exists
     let _provider = state
@@ -51,7 +51,7 @@ pub async fn update_model(
     Path((provider_id, model_name)): Path<(String, String)>,
     Json(input): Json<StorageUpdateModel>,
 ) -> Result<Json<Model>, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    require_admin(&headers, &state.jwt_secret)?;
 
     let mut model = state
         .storage
@@ -99,7 +99,7 @@ pub async fn delete_model(
     headers: HeaderMap,
     Path((provider_id, model_name)): Path<(String, String)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    verify_admin_token(&headers, &state.admin_token)?;
+    require_admin(&headers, &state.jwt_secret)?;
 
     // Verify the model belongs to the specified provider
     let model = state

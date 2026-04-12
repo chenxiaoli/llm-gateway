@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     rate_limit     INTEGER,
     budget_monthly REAL,
     enabled        BOOLEAN NOT NULL DEFAULT 1,
+    created_by     TEXT,
     created_at     TEXT NOT NULL,
     updated_at     TEXT NOT NULL
 );

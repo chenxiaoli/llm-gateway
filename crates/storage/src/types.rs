@@ -11,6 +11,7 @@ pub struct ApiKey {
     pub rate_limit: Option<i64>,       // global RPM, None = unlimited
     pub budget_monthly: Option<f64>,   // monthly budget cap, None = unlimited
     pub enabled: bool,
+    pub created_by: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

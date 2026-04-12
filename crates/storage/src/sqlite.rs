@@ -36,6 +36,7 @@ struct SqliteKeyRow {
     rate_limit: Option<i64>,
     budget_monthly: Option<f64>,
     enabled: i64,
+    created_by: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -49,6 +50,7 @@ impl From<SqliteKeyRow> for ApiKey {
             rate_limit: r.rate_limit,
             budget_monthly: r.budget_monthly,
             enabled: r.enabled != 0,
+            created_by: r.created_by,
             created_at: parse_rfc3339(&r.created_at),
             updated_at: parse_rfc3339(&r.updated_at),
         }
@@ -305,8 +307,8 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_key(&self, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
-            "INSERT INTO api_keys (id, name, key_hash, rate_limit, budget_monthly, enabled, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO api_keys (id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&key.id)
         .bind(&key.name)
@@ -314,6 +316,7 @@ impl crate::Storage for SqliteStorage {
         .bind(key.rate_limit)
         .bind(key.budget_monthly)
         .bind(key.enabled as i64)
+        .bind(&key.created_by)
         .bind(key.created_at.to_rfc3339())
         .bind(key.updated_at.to_rfc3339())
         .execute(&self.pool)
@@ -324,7 +327,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_key(&self, id: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<SqliteKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
              FROM api_keys WHERE id = ?",
         )
         .bind(id)
@@ -336,7 +339,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_key_by_hash(&self, hash: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<SqliteKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
              FROM api_keys WHERE key_hash = ?",
         )
         .bind(hash)
@@ -348,7 +351,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_keys(&self) -> Result<Vec<ApiKey>, DbErr> {
         let rows: Vec<SqliteKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
              FROM api_keys",
         )
         .fetch_all(&self.pool)
@@ -360,13 +363,14 @@ impl crate::Storage for SqliteStorage {
     async fn update_key(&self, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
             "UPDATE api_keys SET name = ?, key_hash = ?, rate_limit = ?, budget_monthly = ?,
-             enabled = ?, updated_at = ? WHERE id = ?",
+             enabled = ?, created_by = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&key.name)
         .bind(&key.key_hash)
         .bind(key.rate_limit)
         .bind(key.budget_monthly)
         .bind(key.enabled as i64)
+        .bind(&key.created_by)
         .bind(key.updated_at.to_rfc3339())
         .bind(&key.id)
         .execute(&self.pool)
