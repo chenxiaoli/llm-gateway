@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { RefreshResponse } from '../types';
 
 const TOKEN_KEY = 'llm_gateway_admin_token';
 const REFRESH_TOKEN_KEY = 'llm_gateway_refresh_token';
