@@ -19,11 +19,11 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <BrowserRouter basename="/admin">
+    <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
+        <Route path="/admin/login" element={<Login />} />
+        <Route path="/admin" element={<PrivateRoute><Layout /></PrivateRoute>}>
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="keys" element={<Keys />} />
           <Route path="keys/:id" element={<KeyDetail />} />
@@ -31,6 +31,7 @@ function App() {
           <Route path="providers/:id" element={<ProviderDetail />} />
           <Route path="usage" element={<Usage />} />
           <Route path="logs" element={<Logs />} />
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
