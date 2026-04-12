@@ -1,4 +1,4 @@
-use super::{DefaultAdapter, Provider, ProviderAdapter, ProxyResult};
+use super::{Provider, ProviderAdapter, ProxyResult};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde_json::Value;
@@ -59,11 +59,13 @@ fn extract_usage(body: &str) -> (Option<i64>, Option<i64>) {
         Ok(v) => v,
         Err(_) => return (None, None),
     };
-    let usage = v.get("usage").and_then(|u| {
-        Some((
-            u.get("input_tokens")?.as_i64()?,
-            u.get("output_tokens")?.as_i64()?,
-        ))
-    });
-    usage.unwrap_or((None, None))
+    let usage = v.get("usage");
+    match usage {
+        Some(u) => {
+            let input = u.get("input_tokens").and_then(|t| t.as_i64());
+            let output = u.get("output_tokens").and_then(|t| t.as_i64());
+            (input, output)
+        }
+        None => (None, None),
+    }
 }
