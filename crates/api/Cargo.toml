@@ -20,6 +20,7 @@ tracing = { workspace = true }
 tower = { workspace = true }
 hyper = { workspace = true }
 reqwest = { workspace = true }
+futures = "0.3"
 
 [dev-dependencies]
 llm-gateway-storage = { path = "../storage" }

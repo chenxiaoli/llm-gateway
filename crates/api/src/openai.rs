@@ -1,6 +1,8 @@
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
+use axum::response::sse::{Event, KeepAlive, Sse};
+use futures::stream::StreamExt;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Instant;
@@ -20,7 +22,7 @@ pub async fn chat_completions(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     body: String,
-) -> Result<impl IntoResponse, ApiError> {
+) -> Result<Response, ApiError> {
     // 1. Extract bearer token, hash it, look up API key
     let raw_token = extract_bearer_token(&headers)?;
     let token_hash = hash_api_key(&raw_token);
@@ -116,8 +118,141 @@ pub async fn chat_completions(
         .unwrap_or(false);
 
     if is_stream {
-        // TODO: SSE streaming proxy — will be implemented in Task 18
-        return Err(ApiError::BadRequest("Streaming is not yet supported".to_string()));
+        let start = Instant::now();
+        let client = reqwest::Client::new();
+
+        // Build upstream request
+        let url = format!("{}/v1/chat/completions", base_url);
+        let upstream_resp = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", provider.api_key))
+            .header("Content-Type", "application/json")
+            .body(body)
+            .send()
+            .await
+            .map_err(|e| ApiError::UpstreamError(502, e.to_string()))?;
+
+        let status = upstream_resp.status().as_u16();
+        if status != 200 {
+            let error_body = upstream_resp.text().await.unwrap_or_default();
+            return Ok((
+                StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY),
+                error_body,
+            ).into_response());
+        }
+
+        // Create SSE stream from upstream response
+        let byte_stream = upstream_resp.bytes_stream();
+        let storage_clone = state.storage.clone();
+        let audit_logger_clone = state.audit_logger.clone();
+        let key_id = api_key.id.clone();
+        let provider_id = provider.id.clone();
+        let model_name_clone = model_name.clone();
+        let billing_type = model_entry.model.billing_type.clone();
+        let model_input_price = model_entry.model.input_price;
+        let model_output_price = model_entry.model.output_price;
+        let model_request_price = model_entry.model.request_price;
+
+        let event_stream = futures::stream::unfold(
+            (byte_stream, String::new(), None as Option<i64>, None as Option<i64>),
+            move |(mut byte_stream, mut buffer, mut input_tokens, mut output_tokens)| {
+                let storage = storage_clone.clone();
+                let audit_logger = audit_logger_clone.clone();
+                let key_id = key_id.clone();
+                let provider_id = provider_id.clone();
+                let model_name = model_name_clone.clone();
+                let billing_type = billing_type.clone();
+                let start = start;
+                async move {
+                    loop {
+                        // Try to extract a complete SSE event from buffer
+                        while let Some(pos) = buffer.find("\n\n") {
+                            let event_text = buffer[..pos].to_string();
+                            buffer = buffer[pos + 2..].to_string();
+
+                            // Parse "data: ..." lines
+                            for line in event_text.lines() {
+                                if let Some(data) = line.strip_prefix("data: ") {
+                                    if data.trim() == "[DONE]" {
+                                        // Stream finished — spawn audit + billing
+                                        let latency_ms = start.elapsed().as_millis() as i64;
+                                        tokio::spawn(async move {
+                                            let cost = calculate_cost(
+                                                &billing_type,
+                                                input_tokens,
+                                                output_tokens,
+                                                model_input_price,
+                                                model_output_price,
+                                                model_request_price,
+                                            );
+                                            let usage = UsageRecord {
+                                                id: uuid::Uuid::new_v4().to_string(),
+                                                key_id: key_id.clone(),
+                                                model_name: model_name.clone(),
+                                                provider_id: provider_id.clone(),
+                                                protocol: Protocol::Openai,
+                                                input_tokens,
+                                                output_tokens,
+                                                cost: cost.cost,
+                                                created_at: chrono::Utc::now(),
+                                            };
+                                            let _ = storage.record_usage(&usage).await;
+                                            let _ = audit_logger
+                                                .log_request(
+                                                    &key_id,
+                                                    &model_name,
+                                                    &provider_id,
+                                                    Protocol::Openai,
+                                                    "",
+                                                    "[stream]",
+                                                    200,
+                                                    latency_ms,
+                                                    input_tokens,
+                                                    output_tokens,
+                                                )
+                                                .await;
+                                        });
+                                        return None;
+                                    }
+                                    // Try to extract usage from this event
+                                    if let Ok(v) = serde_json::from_str::<Value>(data) {
+                                        if let Some(usage) = v.get("usage") {
+                                            input_tokens = usage
+                                                .get("prompt_tokens")
+                                                .and_then(|t| t.as_i64());
+                                            output_tokens = usage
+                                                .get("completion_tokens")
+                                                .and_then(|t| t.as_i64());
+                                        }
+                                    }
+                                    // Forward to client
+                                    let event = Event::default().data(data.to_string());
+                                    return Some((Ok::<_, std::convert::Infallible>(event), (byte_stream, buffer, input_tokens, output_tokens)));
+                                }
+                            }
+                        }
+
+                        // Read more bytes from upstream
+                        match byte_stream.next().await {
+                            Some(Ok(bytes)) => {
+                                buffer.push_str(&String::from_utf8_lossy(&bytes));
+                            }
+                            Some(Err(_)) => {
+                                // Upstream error — end the stream
+                                return None;
+                            }
+                            None => {
+                                // Upstream closed connection without [DONE]
+                                return None;
+                            }
+                        }
+                    }
+                }
+            },
+        );
+
+        let sse = Sse::new(event_stream).keep_alive(KeepAlive::default());
+        return Ok(sse.into_response());
     }
 
     // 8. Non-streaming: create OpenAiProvider, call proxy_request
@@ -196,7 +331,7 @@ pub async fn chat_completions(
     // 10. Return response to client
     let status = StatusCode::from_u16(proxy_result.status_code)
         .unwrap_or(StatusCode::BAD_GATEWAY);
-    Ok((status, proxy_result.response_body))
+    Ok((status, proxy_result.response_body).into_response())
 }
 
 /// GET /v1/models — list models available via OpenAI-compatible providers.
