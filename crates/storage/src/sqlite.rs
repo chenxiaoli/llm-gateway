@@ -19,6 +19,17 @@ impl SqliteStorage {
         Ok(Self { pool })
     }
 
+    pub async fn new_in_memory() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let db_name = format!("file:testdb_{}?mode=memory&cache=shared", uuid::Uuid::new_v4());
+        let opts = SqliteConnectOptions::from_str(&format!("sqlite:{}", db_name))?
+            .create_if_missing(true);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(opts)
+            .await?;
+        Ok(Self { pool })
+    }
+
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
@@ -217,6 +228,7 @@ struct SqliteUserRow {
     password: String,
     role: String,
     enabled: i64,
+    refresh_token: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -229,6 +241,7 @@ impl From<SqliteUserRow> for User {
             password: r.password,
             role: r.role,
             enabled: r.enabled != 0,
+            refresh_token: r.refresh_token,
             created_at: parse_rfc3339(&r.created_at),
             updated_at: parse_rfc3339(&r.updated_at),
         }
@@ -777,14 +790,15 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "INSERT INTO users (id, username, password, role, enabled, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO users (id, username, password, role, enabled, refresh_token, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&user.id)
         .bind(&user.username)
         .bind(&user.password)
         .bind(&user.role)
         .bind(user.enabled as i64)
+        .bind(&user.refresh_token)
         .bind(user.created_at.to_rfc3339())
         .bind(user.updated_at.to_rfc3339())
         .execute(&self.pool)
@@ -794,7 +808,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_user(&self, id: &str) -> Result<Option<User>, DbErr> {
         let row: Option<SqliteUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, created_at, updated_at FROM users WHERE id = ?",
+            "SELECT id, username, password, role, enabled, refresh_token, created_at, updated_at FROM users WHERE id = ?",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -804,7 +818,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_user_by_username(&self, username: &str) -> Result<Option<User>, DbErr> {
         let row: Option<SqliteUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, created_at, updated_at FROM users WHERE username = ?",
+            "SELECT id, username, password, role, enabled, refresh_token, created_at, updated_at FROM users WHERE username = ?",
         )
         .bind(username)
         .fetch_optional(&self.pool)
@@ -814,7 +828,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_users(&self) -> Result<Vec<User>, DbErr> {
         let rows: Vec<SqliteUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, created_at, updated_at FROM users",
+            "SELECT id, username, password, role, enabled, refresh_token, created_at, updated_at FROM users",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -823,12 +837,13 @@ impl crate::Storage for SqliteStorage {
 
     async fn update_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "UPDATE users SET username = ?, password = ?, role = ?, enabled = ?, updated_at = ? WHERE id = ?",
+            "UPDATE users SET username = ?, password = ?, role = ?, enabled = ?, refresh_token = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&user.username)
         .bind(&user.password)
         .bind(&user.role)
         .bind(user.enabled as i64)
+        .bind(&user.refresh_token)
         .bind(user.updated_at.to_rfc3339())
         .bind(&user.id)
         .execute(&self.pool)

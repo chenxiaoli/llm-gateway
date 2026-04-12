@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { AuthResponse, LoginRequest, MeResponse, RegisterRequest, AuthConfigResponse } from '../types';
+import type { AuthResponse, LoginRequest, MeResponse, RefreshResponse, RegisterRequest, AuthConfigResponse } from '../types';
 
 export async function login(input: LoginRequest): Promise<AuthResponse> {
   const { data } = await apiClient.post<AuthResponse>('/auth/login', input);
@@ -18,5 +18,10 @@ export async function getMe(): Promise<MeResponse> {
 
 export async function getAuthConfig(): Promise<AuthConfigResponse> {
   const { data } = await apiClient.get<AuthConfigResponse>('/auth/config');
+  return data;
+}
+
+export async function refreshToken(input: { refresh_token: string }): Promise<RefreshResponse> {
+  const { data } = await apiClient.post<RefreshResponse>('/auth/refresh', input);
   return data;
 }

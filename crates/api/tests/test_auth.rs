@@ -333,3 +333,168 @@ async fn test_auth_me_returns_401_when_not_authenticated() {
 
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn test_refresh_returns_new_tokens() {
+    let db = common::setup_test_db().await;
+    let app = build_app(make_state(db));
+
+    // Register a user first
+    let register_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"username": "testuser", "password": "password123"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body: Value = serde_json::from_slice(
+        &to_bytes(register_resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    let original_token = body["token"].as_str().unwrap().to_string();
+    let original_refresh_token = body["refresh_token"].as_str().unwrap().to_string();
+
+    // Refresh
+    let refresh_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/refresh")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"refresh_token": original_refresh_token}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(refresh_resp.status(), StatusCode::OK);
+    let refresh_body: Value = serde_json::from_slice(
+        &to_bytes(refresh_resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+
+    // Should get new tokens (access token works for /me)
+    let new_token = refresh_body["token"].as_str().unwrap().to_string();
+    let new_refresh_token = refresh_body["refresh_token"].as_str().unwrap().to_string();
+    assert!(new_token.len() > 0);
+    assert!(new_refresh_token.len() > 0);
+
+    // New access token should work for /me
+    let me_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/auth/me")
+                .header("authorization", bearer_token(&new_token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(me_resp.status(), StatusCode::OK);
+
+    // Old refresh token should no longer work (rotation)
+    let old_refresh_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/refresh")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"refresh_token": original_refresh_token}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(old_refresh_resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_refresh_with_invalid_token_returns_401() {
+    let db = common::setup_test_db().await;
+    let app = build_app(make_state(db));
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/refresh")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"refresh_token": "invalid-token-here"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_refresh_with_revoked_token_returns_401() {
+    let db = common::setup_test_db().await;
+    let state = make_state(db.clone());
+    let app = build_app(state);
+
+    // Register a user
+    let register_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"username": "testuser", "password": "password123"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let body: Value = serde_json::from_slice(
+        &to_bytes(register_resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    let refresh_token = body["refresh_token"].as_str().unwrap().to_string();
+
+    // Revoke the refresh token by clearing it in the DB directly
+    let user = db.get_user_by_username("testuser").await.unwrap().unwrap();
+    let mut revoked_user = user.clone();
+    revoked_user.refresh_token = None;
+    revoked_user.updated_at = chrono::Utc::now();
+    db.update_user(&revoked_user).await.unwrap();
+
+    // Try to use the old refresh token
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/refresh")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({"refresh_token": refresh_token}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}

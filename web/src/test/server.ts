@@ -16,13 +16,21 @@ export const server = setupServer(
   http.post('*/api/v1/auth/login', () => {
     return HttpResponse.json({
       token: 'test-jwt-token',
+      refresh_token: 'test-refresh-jwt-token',
       user: { id: 'user-1', username: 'admin', role: 'admin' },
     });
   }),
   http.post('*/api/v1/auth/register', () => {
     return HttpResponse.json({
       token: 'test-jwt-token',
+      refresh_token: 'test-refresh-jwt-token',
       user: { id: 'user-1', username: 'admin', role: 'admin' },
+    });
+  }),
+  http.post('*/api/v1/auth/refresh', () => {
+    return HttpResponse.json({
+      token: 'new-test-jwt-token',
+      refresh_token: 'new-test-refresh-jwt-token',
     });
   }),
   http.get('*/api/v1/keys', () => {

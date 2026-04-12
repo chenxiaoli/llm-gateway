@@ -146,6 +146,7 @@ export interface RegisterRequest {
 
 export interface AuthResponse {
   token: string;
+  refresh_token: string;
   user: User;
 }
 
@@ -158,6 +159,11 @@ export interface MeResponse {
 
 export interface AuthConfigResponse {
   allow_registration: boolean;
+}
+
+export interface RefreshResponse {
+  token: string;
+  refresh_token: string;
 }
 
 export interface UserResponse {

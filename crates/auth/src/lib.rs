@@ -63,6 +63,46 @@ pub fn verify_jwt(token: &str, secret: &str) -> Result<JwtClaims, String> {
     Ok(token_data.claims)
 }
 
+// --- Refresh Tokens ---
+
+pub fn create_refresh_token() -> String {
+    format!("rt_{}", uuid::Uuid::new_v4().to_string().replace("-", ""))
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RefreshClaims {
+    pub sub: String,
+    pub exp: usize,
+    pub iat: usize,
+    pub jti: String,
+}
+
+pub fn create_refresh_jwt(user_id: &str, secret: &str) -> Result<String, String> {
+    let now = chrono::Utc::now().timestamp() as usize;
+    let claims = RefreshClaims {
+        sub: user_id.to_string(),
+        exp: now + 604800, // 7 days
+        iat: now,
+        jti: uuid::Uuid::new_v4().to_string(),
+    };
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes()),
+    )
+    .map_err(|e| e.to_string())
+}
+
+pub fn verify_refresh_jwt(token: &str, secret: &str) -> Result<RefreshClaims, String> {
+    let token_data = decode::<RefreshClaims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::default(),
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(token_data.claims)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,5 +184,43 @@ mod tests {
         )
         .unwrap();
         assert!(verify_jwt(&token, "secret").is_err());
+    }
+
+    #[test]
+    fn test_create_refresh_token_format() {
+        let rt = create_refresh_token();
+        assert!(rt.starts_with("rt_"));
+        assert_eq!(rt.len(), 35); // "rt_" + 32 hex chars
+    }
+
+    #[test]
+    fn test_create_and_verify_refresh_jwt() {
+        let secret = "test-secret";
+        let token = create_refresh_jwt("user-1", secret).unwrap();
+        let claims = verify_refresh_jwt(&token, secret).unwrap();
+        assert_eq!(claims.sub, "user-1");
+    }
+
+    #[test]
+    fn test_verify_refresh_jwt_wrong_secret() {
+        let token = create_refresh_jwt("user-1", "secret-1").unwrap();
+        assert!(verify_refresh_jwt(&token, "secret-2").is_err());
+    }
+
+    #[test]
+    fn test_verify_refresh_jwt_expired() {
+        let claims = RefreshClaims {
+            sub: "user-1".to_string(),
+            exp: 0,
+            iat: 0,
+            jti: "test-jti".to_string(),
+        };
+        let token = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret("secret".as_bytes()),
+        )
+        .unwrap();
+        assert!(verify_refresh_jwt(&token, "secret").is_err());
     }
 }

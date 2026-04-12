@@ -12,7 +12,7 @@ pub struct TestUser {
 }
 
 pub async fn setup_test_db() -> Arc<SqliteStorage> {
-    let storage = SqliteStorage::new(":memory:").await.unwrap();
+    let storage = SqliteStorage::new_in_memory().await.unwrap();
     storage.run_migrations().await.unwrap();
     Arc::new(storage)
 }

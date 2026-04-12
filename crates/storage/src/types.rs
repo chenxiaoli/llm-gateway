@@ -186,6 +186,7 @@ pub struct User {
     pub password: String,
     pub role: String,
     pub enabled: bool,
+    pub refresh_token: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

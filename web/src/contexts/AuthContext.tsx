@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMe, login as apiLogin, register as apiRegister } from '../api/auth';
-import { getToken, setToken, clearToken } from '../api/client';
+import { getToken, setToken, clearToken, setRefreshToken, clearRefreshToken } from '../api/client';
 import type { User, LoginRequest, RegisterRequest, AuthResponse } from '../types';
 
 interface AuthContextValue {
@@ -27,6 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (input: LoginRequest) => {
     const resp = await apiLogin(input);
     setToken(resp.token);
+    setRefreshToken(resp.refresh_token);
     queryClient.invalidateQueries({ queryKey: ['me'] });
     return resp;
   };
@@ -34,12 +35,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (input: RegisterRequest) => {
     const resp = await apiRegister(input);
     setToken(resp.token);
+    setRefreshToken(resp.refresh_token);
     queryClient.invalidateQueries({ queryKey: ['me'] });
     return resp;
   };
 
   const logout = () => {
     clearToken();
+    clearRefreshToken();
     queryClient.clear();
   };
 

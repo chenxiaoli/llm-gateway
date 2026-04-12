@@ -4,7 +4,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use llm_gateway_auth::{hash_password, verify_password, create_jwt};
+use llm_gateway_auth::{hash_password, verify_password, create_jwt, create_refresh_jwt, verify_refresh_jwt};
 use llm_gateway_storage::User;
 
 use crate::error::ApiError;
@@ -26,6 +26,7 @@ pub struct RegisterRequest {
 #[derive(Serialize)]
 pub struct AuthResponse {
     pub token: String,
+    pub refresh_token: String,
     pub user: UserInfo,
 }
 
@@ -47,6 +48,17 @@ pub struct MeResponse {
 #[derive(Serialize)]
 pub struct AuthConfigResponse {
     pub allow_registration: bool,
+}
+
+#[derive(Deserialize)]
+pub struct RefreshRequest {
+    pub refresh_token: String,
+}
+
+#[derive(Serialize)]
+pub struct RefreshResponse {
+    pub token: String,
+    pub refresh_token: String,
 }
 
 impl From<&User> for UserInfo {
@@ -92,8 +104,22 @@ pub async fn login(
     let token = create_jwt(&user.id, &user.role, &state.jwt_secret)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    let refresh_jwt = create_refresh_jwt(&user.id, &state.jwt_secret)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Store the refresh token in the user record
+    let mut updated_user = user.clone();
+    updated_user.refresh_token = Some(refresh_jwt.clone());
+    updated_user.updated_at = chrono::Utc::now();
+    state
+        .storage
+        .update_user(&updated_user)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
     Ok(Json(AuthResponse {
         token,
+        refresh_token: refresh_jwt,
         user: UserInfo::from(&user),
     }))
 }
@@ -134,6 +160,7 @@ pub async fn register(
         password: hash_password(&input.password),
         role: role.to_string(),
         enabled: true,
+        refresh_token: None,
         created_at: now,
         updated_at: now,
     };
@@ -147,8 +174,22 @@ pub async fn register(
     let token = create_jwt(&user.id, &user.role, &state.jwt_secret)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    let refresh_jwt = create_refresh_jwt(&user.id, &state.jwt_secret)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Store the refresh token in the user record
+    let mut updated_user = user.clone();
+    updated_user.refresh_token = Some(refresh_jwt.clone());
+    updated_user.updated_at = chrono::Utc::now();
+    state
+        .storage
+        .update_user(&updated_user)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
     Ok(Json(AuthResponse {
         token,
+        refresh_token: refresh_jwt,
         user: UserInfo::from(&user),
     }))
 }
@@ -183,5 +224,55 @@ pub async fn auth_config(
 
     Ok(Json(AuthConfigResponse {
         allow_registration: allow_reg,
+    }))
+}
+
+pub async fn refresh(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<RefreshRequest>,
+) -> Result<Json<RefreshResponse>, ApiError> {
+    // Verify the refresh token JWT
+    let claims = verify_refresh_jwt(&input.refresh_token, &state.jwt_secret)
+        .map_err(|_| ApiError::Unauthorized)?;
+
+    // Look up user by id from claims
+    let user = state
+        .storage
+        .get_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::Unauthorized)?;
+
+    if !user.enabled {
+        return Err(ApiError::Unauthorized);
+    }
+
+    // Verify stored refresh token matches the provided one
+    let stored_token = user.refresh_token.as_deref().ok_or(ApiError::Unauthorized)?;
+    if stored_token != input.refresh_token {
+        return Err(ApiError::Unauthorized);
+    }
+
+    // Issue new access token
+    let new_token = create_jwt(&user.id, &user.role, &state.jwt_secret)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Issue new refresh token (rotation)
+    let new_refresh_jwt = create_refresh_jwt(&user.id, &state.jwt_secret)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Store new refresh token in the user record
+    let mut updated_user = user.clone();
+    updated_user.refresh_token = Some(new_refresh_jwt.clone());
+    updated_user.updated_at = chrono::Utc::now();
+    state
+        .storage
+        .update_user(&updated_user)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(RefreshResponse {
+        token: new_token,
+        refresh_token: new_refresh_jwt,
     }))
 }
