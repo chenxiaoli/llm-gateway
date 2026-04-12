@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, theme, Typography, Space } from 'antd';
+import { Layout, Menu, theme, Space } from 'antd';
 import {
   DashboardOutlined,
   KeyOutlined,
