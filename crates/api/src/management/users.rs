@@ -1,10 +1,10 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
 use serde::Serialize;
 use std::sync::Arc;
 
-use llm_gateway_storage::{UpdateUser as StorageUpdateUser, User};
+use llm_gateway_storage::{PaginatedResponse, PaginationParams, UpdateUser as StorageUpdateUser, User};
 
 use crate::error::ApiError;
 use crate::extractors::require_admin;
@@ -36,10 +36,17 @@ impl From<&User> for UserResponse {
 pub async fn list_users(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-) -> Result<Json<Vec<UserResponse>>, ApiError> {
+    Query(pagination): Query<PaginationParams>,
+) -> Result<Json<PaginatedResponse<UserResponse>>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
-    let users = state.storage.list_users().await.map_err(|e| ApiError::Internal(e.to_string()))?;
-    Ok(Json(users.iter().map(UserResponse::from).collect()))
+    let (page, page_size) = pagination.normalized();
+    let result = state.storage.list_users_paginated(page, page_size).await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(Json(PaginatedResponse {
+        items: result.items.iter().map(UserResponse::from).collect(),
+        total: result.total,
+        page: result.page,
+        page_size: result.page_size,
+    }))
 }
 
 pub async fn update_user(

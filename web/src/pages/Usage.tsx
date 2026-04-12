@@ -12,20 +12,23 @@ const { Title } = Typography;
 export default function Usage() {
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   const [keyFilter, setKeyFilter] = useState<string | undefined>(undefined);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const since = dateRange?.[0]?.toISOString();
   const until = dateRange?.[1]?.toISOString();
 
-  const { data: usage, isLoading } = useUsage({ since, until, key_id: keyFilter });
+  const { data, isLoading } = useUsage({ since, until, key_id: keyFilter }, page, pageSize);
   const { data: keys } = useKeys();
 
-  const totalCost = usage?.reduce((sum, r) => sum + r.cost, 0) ?? 0;
-  const totalRequests = usage?.length ?? 0;
-  const totalInputTokens = usage?.reduce((sum, r) => sum + (r.input_tokens ?? 0), 0) ?? 0;
-  const totalOutputTokens = usage?.reduce((sum, r) => sum + (r.output_tokens ?? 0), 0) ?? 0;
+  const usageItems = data?.items ?? [];
+  const totalCost = usageItems.reduce((sum, r) => sum + r.cost, 0);
+  const totalRequests = usageItems.length;
+  const totalInputTokens = usageItems.reduce((sum, r) => sum + (r.input_tokens ?? 0), 0);
+  const totalOutputTokens = usageItems.reduce((sum, r) => sum + (r.output_tokens ?? 0), 0);
 
   const byModel: Record<string, { model: string; requests: number; cost: number }> = {};
-  usage?.forEach((r) => {
+  usageItems.forEach((r) => {
     if (!byModel[r.model_name]) {
       byModel[r.model_name] = { model: r.model_name, requests: 0, cost: 0 };
     }
@@ -65,7 +68,7 @@ export default function Usage() {
               allowClear
               style={{ width: 200 }}
               onChange={(v) => setKeyFilter(v)}
-              options={keys?.map(k => ({ value: k.id, label: k.name })) ?? []}
+              options={keys?.items?.map(k => ({ value: k.id, label: k.name })) ?? []}
             />
           </Col>
         </Row>
@@ -92,7 +95,22 @@ export default function Usage() {
         </Card>
       )}
 
-      <Table dataSource={usage} columns={columns} rowKey="id" loading={isLoading} size="small" scroll={{ x: 800 }} />
+      <Table
+        dataSource={usageItems}
+        columns={columns}
+        rowKey="id"
+        loading={isLoading}
+        size="small"
+        scroll={{ x: 800 }}
+        pagination={{
+          current: page,
+          pageSize,
+          total: data?.total ?? 0,
+          onChange: (p, ps) => { setPage(p); setPageSize(ps); },
+          showSizeChanger: true,
+          showTotal: (total) => `Total ${total}`,
+        }}
+      />
     </div>
   );
 }

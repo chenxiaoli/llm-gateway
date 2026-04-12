@@ -1,8 +1,10 @@
 import { apiClient } from './client';
-import type { ApiKey, CreateKeyRequest, CreateKeyResponse, UpdateKeyRequest } from '../types';
+import type { ApiKey, CreateKeyRequest, CreateKeyResponse, PaginatedResponse, UpdateKeyRequest } from '../types';
 
-export async function listKeys(): Promise<ApiKey[]> {
-  const { data } = await apiClient.get<ApiKey[]>('/keys');
+export async function listKeys(page = 1, pageSize = 20): Promise<PaginatedResponse<ApiKey>> {
+  const { data } = await apiClient.get<PaginatedResponse<ApiKey>>('/keys', {
+    params: { page, page_size: pageSize },
+  });
   return data;
 }
 

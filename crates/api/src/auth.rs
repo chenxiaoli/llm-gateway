@@ -4,7 +4,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use llm_gateway_auth::{hash_password, verify_password, create_jwt};
+use llm_gateway_auth::{hash_password, verify_password, create_jwt, create_refresh_jwt, verify_refresh_jwt, validate_password, validate_username};
 use llm_gateway_storage::User;
 
 use crate::error::ApiError;
@@ -26,6 +26,7 @@ pub struct RegisterRequest {
 #[derive(Serialize)]
 pub struct AuthResponse {
     pub token: String,
+    pub refresh_token: String,
     pub user: UserInfo,
 }
 
@@ -49,6 +50,23 @@ pub struct AuthConfigResponse {
     pub allow_registration: bool,
 }
 
+#[derive(Deserialize)]
+pub struct RefreshRequest {
+    pub refresh_token: String,
+}
+
+#[derive(Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+#[derive(Serialize)]
+pub struct RefreshResponse {
+    pub token: String,
+    pub refresh_token: String,
+}
+
 impl From<&User> for UserInfo {
     fn from(u: &User) -> Self {
         UserInfo {
@@ -70,10 +88,24 @@ async fn get_allow_registration(state: &AppState) -> bool {
         .unwrap_or(true)
 }
 
+async fn store_refresh_token(state: &AppState, user: &User, refresh_jwt: &str) -> Result<(), ApiError> {
+    let mut updated_user = user.clone();
+    updated_user.refresh_token = Some(refresh_jwt.to_string());
+    updated_user.updated_at = chrono::Utc::now();
+    state
+        .storage
+        .update_user(&updated_user)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(())
+}
+
 pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(input): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
+    validate_password(&input.password).map_err(ApiError::BadRequest)?;
+
     let user = state
         .storage
         .get_user_by_username(&input.username)
@@ -92,8 +124,14 @@ pub async fn login(
     let token = create_jwt(&user.id, &user.role, &state.jwt_secret)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    let refresh_jwt = create_refresh_jwt(&user.id, &state.jwt_secret)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    store_refresh_token(&state, &user, &refresh_jwt).await?;
+
     Ok(Json(AuthResponse {
         token,
+        refresh_token: refresh_jwt,
         user: UserInfo::from(&user),
     }))
 }
@@ -116,6 +154,9 @@ pub async fn register(
         return Err(ApiError::Forbidden);
     }
 
+    validate_username(&input.username).map_err(ApiError::BadRequest)?;
+    validate_password(&input.password).map_err(ApiError::BadRequest)?;
+
     if state
         .storage
         .get_user_by_username(&input.username)
@@ -131,9 +172,10 @@ pub async fn register(
     let user = User {
         id: uuid::Uuid::new_v4().to_string(),
         username: input.username.clone(),
-        password: hash_password(&input.password),
+        password: hash_password(&input.password).map_err(|e| ApiError::Internal(e.to_string()))?,
         role: role.to_string(),
         enabled: true,
+        refresh_token: None,
         created_at: now,
         updated_at: now,
     };
@@ -147,8 +189,14 @@ pub async fn register(
     let token = create_jwt(&user.id, &user.role, &state.jwt_secret)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    let refresh_jwt = create_refresh_jwt(&user.id, &state.jwt_secret)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    store_refresh_token(&state, &user, &refresh_jwt).await?;
+
     Ok(Json(AuthResponse {
         token,
+        refresh_token: refresh_jwt,
         user: UserInfo::from(&user),
     }))
 }
@@ -184,4 +232,81 @@ pub async fn auth_config(
     Ok(Json(AuthConfigResponse {
         allow_registration: allow_reg,
     }))
+}
+
+pub async fn refresh(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<RefreshRequest>,
+) -> Result<Json<RefreshResponse>, ApiError> {
+    // Verify the refresh token JWT
+    let claims = verify_refresh_jwt(&input.refresh_token, &state.jwt_secret)
+        .map_err(|_| ApiError::Unauthorized)?;
+
+    // Look up user by id from claims
+    let user = state
+        .storage
+        .get_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::Unauthorized)?;
+
+    if !user.enabled {
+        return Err(ApiError::Unauthorized);
+    }
+
+    // Issue new access token
+    let new_token = create_jwt(&user.id, &user.role, &state.jwt_secret)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Issue new refresh token (rotation)
+    let new_refresh_jwt = create_refresh_jwt(&user.id, &state.jwt_secret)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Atomically rotate: only succeeds if stored token matches
+    let rotated = state
+        .storage
+        .rotate_refresh_token(&user.id, &input.refresh_token, &new_refresh_jwt)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    if !rotated {
+        return Err(ApiError::Unauthorized);
+    }
+
+    Ok(Json(RefreshResponse {
+        token: new_token,
+        refresh_token: new_refresh_jwt,
+    }))
+}
+
+pub async fn change_password(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(input): Json<ChangePasswordRequest>,
+) -> Result<Json<UserInfo>, ApiError> {
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+
+    let user = state
+        .storage
+        .get_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::Unauthorized)?;
+
+    if !verify_password(&input.current_password, &user.password) {
+        return Err(ApiError::BadRequest("Current password is incorrect".to_string()));
+    }
+
+    validate_password(&input.new_password).map_err(ApiError::BadRequest)?;
+
+    let mut updated_user = user.clone();
+    updated_user.password = hash_password(&input.new_password).map_err(|e| ApiError::Internal(e.to_string()))?;
+    updated_user.updated_at = chrono::Utc::now();
+    state
+        .storage
+        .update_user(&updated_user)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(UserInfo::from(&updated_user)))
 }

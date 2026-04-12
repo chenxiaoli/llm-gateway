@@ -34,7 +34,7 @@ function TestKeysList() {
   if (isLoading) return <div>Loading...</div>;
   return (
     <ul>
-      {data?.map((k) => <li key={k.id}>{k.name}</li>)}
+      {data?.items.map((k) => <li key={k.id}>{k.name}</li>)}
     </ul>
   );
 }
@@ -51,7 +51,7 @@ function TestCreateKey({ onCreate }: { onCreate: (key: string) => void }) {
 describe('useKeys', () => {
   it('fetches and renders keys', async () => {
     server.use(
-      http.get('*/api/v1/keys', () => HttpResponse.json(mockKeys)),
+      http.get('*/api/v1/keys', () => HttpResponse.json({ items: mockKeys, total: 2, page: 1, page_size: 20 })),
     );
 
     renderWithProviders(<TestKeysList />);
@@ -66,7 +66,7 @@ describe('useKeys', () => {
 
   it('shows empty list when no keys', async () => {
     server.use(
-      http.get('*/api/v1/keys', () => HttpResponse.json([])),
+      http.get('*/api/v1/keys', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
     );
 
     renderWithProviders(<TestKeysList />);

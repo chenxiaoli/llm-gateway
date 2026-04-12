@@ -16,31 +16,39 @@ export const server = setupServer(
   http.post('*/api/v1/auth/login', () => {
     return HttpResponse.json({
       token: 'test-jwt-token',
+      refresh_token: 'test-refresh-jwt-token',
       user: { id: 'user-1', username: 'admin', role: 'admin' },
     });
   }),
   http.post('*/api/v1/auth/register', () => {
     return HttpResponse.json({
       token: 'test-jwt-token',
+      refresh_token: 'test-refresh-jwt-token',
       user: { id: 'user-1', username: 'admin', role: 'admin' },
     });
   }),
+  http.post('*/api/v1/auth/refresh', () => {
+    return HttpResponse.json({
+      token: 'new-test-jwt-token',
+      refresh_token: 'new-test-refresh-jwt-token',
+    });
+  }),
   http.get('*/api/v1/keys', () => {
-    return HttpResponse.json([]);
+    return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
   http.get('*/api/v1/providers', () => {
     return HttpResponse.json([]);
   }),
   http.get('*/api/v1/users', () => {
-    return HttpResponse.json([]);
+    return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
   http.get('*/api/v1/settings', () => {
     return HttpResponse.json({ allow_registration: true });
   }),
   http.get('*/api/v1/usage', () => {
-    return HttpResponse.json([]);
+    return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
   http.get('*/api/v1/logs', () => {
-    return HttpResponse.json([]);
+    return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
 );

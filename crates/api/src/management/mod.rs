@@ -19,6 +19,8 @@ pub fn management_router() -> Router<Arc<AppState>> {
         .route("/api/v1/auth/register", post(auth::register))
         .route("/api/v1/auth/config", get(auth::auth_config))
         .route("/api/v1/auth/me", get(auth::me))
+        .route("/api/v1/auth/refresh", post(auth::refresh))
+        .route("/api/v1/auth/change-password", post(auth::change_password))
         // Keys (authenticated)
         .route("/api/v1/keys", post(keys::create_key).get(keys::list_keys))
         .route(

@@ -1,14 +1,12 @@
 import { apiClient } from './client';
-import type { AuditLog, LogFilter } from '../types';
+import type { AuditLog, LogFilter, PaginatedResponse } from '../types';
 
-export async function queryLogs(filter: LogFilter = {}): Promise<AuditLog[]> {
-  const params: Record<string, string | number> = {};
+export async function queryLogs(filter: LogFilter = {}, page = 1, pageSize = 20): Promise<PaginatedResponse<AuditLog>> {
+  const params: Record<string, string | number> = { page, page_size: pageSize };
   if (filter.key_id) params.key_id = filter.key_id;
   if (filter.model_name) params.model_name = filter.model_name;
   if (filter.since) params.since = filter.since;
   if (filter.until) params.until = filter.until;
-  if (filter.offset != null) params.offset = filter.offset;
-  if (filter.limit != null) params.limit = filter.limit;
-  const { data } = await apiClient.get<AuditLog[]>('/logs', { params });
+  const { data } = await apiClient.get<PaginatedResponse<AuditLog>>('/logs', { params });
   return data;
 }

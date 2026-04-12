@@ -1,6 +1,30 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+// --- Pagination ---
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PaginatedResponse<T: Serialize> {
+    pub items: Vec<T>,
+    pub total: i64,
+    pub page: i64,
+    pub page_size: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PaginationParams {
+    pub page: Option<i64>,
+    pub page_size: Option<i64>,
+}
+
+impl PaginationParams {
+    pub fn normalized(&self) -> (i64, i64) {
+        let page = self.page.unwrap_or(1).max(1);
+        let page_size = self.page_size.unwrap_or(20).clamp(1, 100);
+        (page, page_size)
+    }
+}
+
 // --- API Keys ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -186,6 +210,7 @@ pub struct User {
     pub password: String,
     pub role: String,
     pub enabled: bool,
+    pub refresh_token: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

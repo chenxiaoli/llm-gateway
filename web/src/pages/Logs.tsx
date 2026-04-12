@@ -13,11 +13,13 @@ export default function Logs() {
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   const [keyFilter, setKeyFilter] = useState<string | undefined>(undefined);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const since = dateRange?.[0]?.toISOString();
   const until = dateRange?.[1]?.toISOString();
 
-  const { data: logs, isLoading } = useLogs({ since, until, key_id: keyFilter, limit: 100 });
+  const { data, isLoading } = useLogs({ since, until, key_id: keyFilter }, page, pageSize);
   const { data: keys } = useKeys();
 
   const columns = [
@@ -65,19 +67,27 @@ export default function Logs() {
               allowClear
               style={{ width: 200 }}
               onChange={(v) => setKeyFilter(v)}
-              options={keys?.map(k => ({ value: k.id, label: k.name })) ?? []}
+              options={keys?.items?.map(k => ({ value: k.id, label: k.name })) ?? []}
             />
           </Col>
         </Row>
       </Card>
 
       <Table
-        dataSource={logs}
+        dataSource={data?.items}
         columns={columns}
         rowKey="id"
         loading={isLoading}
         size="small"
         scroll={{ x: 1000 }}
+        pagination={{
+          current: page,
+          pageSize,
+          total: data?.total ?? 0,
+          onChange: (p, ps) => { setPage(p); setPageSize(ps); },
+          showSizeChanger: true,
+          showTotal: (total) => `Total ${total}`,
+        }}
       />
 
       <Drawer

@@ -11,15 +11,19 @@ export default function Dashboard() {
   const today = dayjs().startOf('day').toISOString();
   const monthStart = dayjs().startOf('month').toISOString();
 
-  const { data: allUsage } = useUsage({});
-  const { data: todayUsage } = useUsage({ since: today });
-  const { data: monthUsage } = useUsage({ since: monthStart });
-  const { data: recentLogs } = useLogs({ limit: 20 });
+  const { data: allUsage } = useUsage({}, 1, 99999);
+  const { data: todayUsage } = useUsage({ since: today }, 1, 99999);
+  const { data: monthUsage } = useUsage({ since: monthStart }, 1, 99999);
+  const { data: recentLogs } = useLogs({});
 
-  const todayRequests = todayUsage?.length ?? 0;
-  const todayCost = todayUsage?.reduce((sum, r) => sum + r.cost, 0) ?? 0;
-  const monthCost = monthUsage?.reduce((sum, r) => sum + r.cost, 0) ?? 0;
-  const totalModels = new Set(allUsage?.map(r => r.model_name)).size;
+  const todayItems = todayUsage?.items ?? [];
+  const monthItems = monthUsage?.items ?? [];
+  const allItems = allUsage?.items ?? [];
+
+  const todayRequests = todayItems.length;
+  const todayCost = todayItems.reduce((sum, r) => sum + r.cost, 0);
+  const monthCost = monthItems.reduce((sum, r) => sum + r.cost, 0);
+  const totalModels = new Set(allItems.map(r => r.model_name)).size;
 
   const logColumns = [
     { title: 'Time', dataIndex: 'created_at', key: 'created_at', width: 180,
@@ -64,7 +68,7 @@ export default function Dashboard() {
 
       <Title level={5}>Recent Requests</Title>
       <Table
-        dataSource={recentLogs}
+        dataSource={recentLogs?.items}
         columns={logColumns}
         rowKey="id"
         size="small"

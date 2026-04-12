@@ -19,6 +19,17 @@ impl SqliteStorage {
         Ok(Self { pool })
     }
 
+    pub async fn new_in_memory() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let db_name = format!("file:testdb_{}?mode=memory&cache=shared", uuid::Uuid::new_v4());
+        let opts = SqliteConnectOptions::from_str(&format!("sqlite:{}", db_name))?
+            .create_if_missing(true);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(opts)
+            .await?;
+        Ok(Self { pool })
+    }
+
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
@@ -217,6 +228,7 @@ struct SqliteUserRow {
     password: String,
     role: String,
     enabled: i64,
+    refresh_token: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -229,6 +241,7 @@ impl From<SqliteUserRow> for User {
             password: r.password,
             role: r.role,
             enabled: r.enabled != 0,
+            refresh_token: r.refresh_token,
             created_at: parse_rfc3339(&r.created_at),
             updated_at: parse_rfc3339(&r.updated_at),
         }
@@ -358,6 +371,50 @@ impl crate::Storage for SqliteStorage {
         .await?;
 
         Ok(rows.into_iter().map(ApiKey::from).collect())
+    }
+
+    async fn list_keys_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>> {
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM api_keys")
+            .fetch_one(&self.pool)
+            .await?;
+        let offset = (page - 1) * page_size;
+        let rows: Vec<SqliteKeyRow> = sqlx::query_as(
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
+             FROM api_keys ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        )
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(PaginatedResponse {
+            items: rows.into_iter().map(ApiKey::from).collect(),
+            total: total.0,
+            page,
+            page_size,
+        })
+    }
+
+    async fn list_keys_paginated_for_user(&self, created_by: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>> {
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM api_keys WHERE created_by = ?")
+            .bind(created_by)
+            .fetch_one(&self.pool)
+            .await?;
+        let offset = (page - 1) * page_size;
+        let rows: Vec<SqliteKeyRow> = sqlx::query_as(
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
+             FROM api_keys WHERE created_by = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        )
+        .bind(created_by)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(PaginatedResponse {
+            items: rows.into_iter().map(ApiKey::from).collect(),
+            total: total.0,
+            page,
+            page_size,
+        })
     }
 
     async fn update_key(&self, key: &ApiKey) -> Result<ApiKey, DbErr> {
@@ -657,6 +714,55 @@ impl crate::Storage for SqliteStorage {
         Ok(rows.into_iter().map(UsageRecord::from).collect())
     }
 
+    async fn query_usage_paginated(&self, filter: &UsageFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<UsageRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut where_sql = String::from("WHERE 1=1");
+        let mut bind_vars: Vec<String> = Vec::new();
+
+        if let Some(ref key_id) = filter.key_id {
+            where_sql.push_str(" AND key_id = ?");
+            bind_vars.push(key_id.clone());
+        }
+        if let Some(ref model_name) = filter.model_name {
+            where_sql.push_str(" AND model_name = ?");
+            bind_vars.push(model_name.clone());
+        }
+        if let Some(since) = filter.since {
+            where_sql.push_str(" AND created_at >= ?");
+            bind_vars.push(since.to_rfc3339());
+        }
+        if let Some(until) = filter.until {
+            where_sql.push_str(" AND created_at <= ?");
+            bind_vars.push(until.to_rfc3339());
+        }
+
+        let count_sql = format!("SELECT COUNT(*) FROM usage_records {}", where_sql);
+        let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
+        for var in &bind_vars {
+            count_query = count_query.bind(var.clone());
+        }
+        let total = count_query.fetch_one(&self.pool).await?.0;
+
+        let offset = (page - 1) * page_size;
+        let data_sql = format!(
+            "SELECT id, key_id, model_name, provider_id, protocol, input_tokens, output_tokens, cost, created_at \
+             FROM usage_records {} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            where_sql
+        );
+        let mut data_query = sqlx::query_as::<_, SqliteUsageRow>(&data_sql);
+        for var in bind_vars {
+            data_query = data_query.bind(var);
+        }
+        data_query = data_query.bind(page_size).bind(offset);
+        let rows = data_query.fetch_all(&self.pool).await?;
+
+        Ok(PaginatedResponse {
+            items: rows.into_iter().map(UsageRecord::from).collect(),
+            total,
+            page,
+            page_size,
+        })
+    }
+
     // ---- Audit ----
 
     async fn insert_log(&self, log: &AuditLog) -> Result<(), DbErr> {
@@ -725,7 +831,55 @@ impl crate::Storage for SqliteStorage {
         Ok(rows.into_iter().map(AuditLog::from).collect())
     }
 
-    // ---- Rate Limit Counters ----
+    async fn query_logs_paginated(&self, filter: &LogFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<AuditLog>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut where_sql = String::from("WHERE 1=1");
+        let mut bind_vars: Vec<String> = Vec::new();
+
+        if let Some(ref key_id) = filter.key_id {
+            where_sql.push_str(" AND key_id = ?");
+            bind_vars.push(key_id.clone());
+        }
+        if let Some(ref model_name) = filter.model_name {
+            where_sql.push_str(" AND model_name = ?");
+            bind_vars.push(model_name.clone());
+        }
+        if let Some(since) = filter.since {
+            where_sql.push_str(" AND created_at >= ?");
+            bind_vars.push(since.to_rfc3339());
+        }
+        if let Some(until) = filter.until {
+            where_sql.push_str(" AND created_at <= ?");
+            bind_vars.push(until.to_rfc3339());
+        }
+
+        let count_sql = format!("SELECT COUNT(*) FROM audit_logs {}", where_sql);
+        let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
+        for var in &bind_vars {
+            count_query = count_query.bind(var.clone());
+        }
+        let total = count_query.fetch_one(&self.pool).await?.0;
+
+        let offset = (page - 1) * page_size;
+        let data_sql = format!(
+            "SELECT id, key_id, model_name, provider_id, protocol, request_body, response_body, \
+             status_code, latency_ms, input_tokens, output_tokens, created_at \
+             FROM audit_logs {} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            where_sql
+        );
+        let mut data_query = sqlx::query_as::<_, SqliteAuditRow>(&data_sql);
+        for var in bind_vars {
+            data_query = data_query.bind(var);
+        }
+        data_query = data_query.bind(page_size).bind(offset);
+        let rows = data_query.fetch_all(&self.pool).await?;
+
+        Ok(PaginatedResponse {
+            items: rows.into_iter().map(AuditLog::from).collect(),
+            total,
+            page,
+            page_size,
+        })
+    }
 
     async fn increment_rate_limit_counter(
         &self,
@@ -777,14 +931,15 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "INSERT INTO users (id, username, password, role, enabled, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO users (id, username, password, role, enabled, refresh_token, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&user.id)
         .bind(&user.username)
         .bind(&user.password)
         .bind(&user.role)
         .bind(user.enabled as i64)
+        .bind(&user.refresh_token)
         .bind(user.created_at.to_rfc3339())
         .bind(user.updated_at.to_rfc3339())
         .execute(&self.pool)
@@ -794,7 +949,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_user(&self, id: &str) -> Result<Option<User>, DbErr> {
         let row: Option<SqliteUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, created_at, updated_at FROM users WHERE id = ?",
+            "SELECT id, username, password, role, enabled, refresh_token, created_at, updated_at FROM users WHERE id = ?",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -804,7 +959,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_user_by_username(&self, username: &str) -> Result<Option<User>, DbErr> {
         let row: Option<SqliteUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, created_at, updated_at FROM users WHERE username = ?",
+            "SELECT id, username, password, role, enabled, refresh_token, created_at, updated_at FROM users WHERE username = ?",
         )
         .bind(username)
         .fetch_optional(&self.pool)
@@ -814,21 +969,43 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_users(&self) -> Result<Vec<User>, DbErr> {
         let rows: Vec<SqliteUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, created_at, updated_at FROM users",
+            "SELECT id, username, password, role, enabled, refresh_token, created_at, updated_at FROM users",
         )
         .fetch_all(&self.pool)
         .await?;
         Ok(rows.into_iter().map(User::from).collect())
     }
 
+    async fn list_users_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<User>, Box<dyn std::error::Error + Send + Sync>> {
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+            .fetch_one(&self.pool)
+            .await?;
+        let offset = (page - 1) * page_size;
+        let rows: Vec<SqliteUserRow> = sqlx::query_as(
+            "SELECT id, username, password, role, enabled, refresh_token, created_at, updated_at \
+             FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        )
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(PaginatedResponse {
+            items: rows.into_iter().map(User::from).collect(),
+            total: total.0,
+            page,
+            page_size,
+        })
+    }
+
     async fn update_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "UPDATE users SET username = ?, password = ?, role = ?, enabled = ?, updated_at = ? WHERE id = ?",
+            "UPDATE users SET username = ?, password = ?, role = ?, enabled = ?, refresh_token = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&user.username)
         .bind(&user.password)
         .bind(&user.role)
         .bind(user.enabled as i64)
+        .bind(&user.refresh_token)
         .bind(user.updated_at.to_rfc3339())
         .bind(&user.id)
         .execute(&self.pool)
@@ -858,6 +1035,20 @@ impl crate::Storage for SqliteStorage {
             .fetch_one(&self.pool)
             .await?;
         Ok(row.0)
+    }
+
+    async fn rotate_refresh_token(&self, user_id: &str, old_token: &str, new_token: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let result = sqlx::query(
+            "UPDATE users SET refresh_token = ?, updated_at = ? WHERE id = ? AND refresh_token = ?",
+        )
+        .bind(new_token)
+        .bind(&now)
+        .bind(user_id)
+        .bind(old_token)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     // ---- Settings ----

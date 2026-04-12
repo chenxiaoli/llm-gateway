@@ -3,8 +3,8 @@ import { listUsers, updateUser, deleteUser } from '../api/users';
 import type { UpdateUserRequest } from '../types';
 import { message } from 'antd';
 
-export function useUsers() {
-  return useQuery({ queryKey: ['users'], queryFn: listUsers });
+export function useUsers(page = 1, pageSize = 20) {
+  return useQuery({ queryKey: ['users', page, pageSize], queryFn: () => listUsers(page, pageSize) });
 }
 
 export function useUpdateUser() {

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Table, Tag, Button, Popconfirm, Select, Typography } from 'antd';
 import { useUsers, useUpdateUser, useDeleteUser } from '../hooks/useUsers';
 import type { UserResponse } from '../types';
@@ -5,7 +6,9 @@ import type { UserResponse } from '../types';
 const { Title } = Typography;
 
 export default function Users() {
-  const { data: users, isLoading } = useUsers();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const { data, isLoading } = useUsers(page, pageSize);
   const updateMutation = useUpdateUser();
   const deleteMutation = useDeleteUser();
 
@@ -71,7 +74,20 @@ export default function Users() {
   return (
     <div>
       <Title level={4}>Users</Title>
-      <Table dataSource={users} columns={columns} rowKey="id" loading={isLoading} />
+      <Table
+        dataSource={data?.items}
+        columns={columns}
+        rowKey="id"
+        loading={isLoading}
+        pagination={{
+          current: page,
+          pageSize,
+          total: data?.total ?? 0,
+          onChange: (p, ps) => { setPage(p); setPageSize(ps); },
+          showSizeChanger: true,
+          showTotal: (total) => `Total ${total}`,
+        }}
+      />
     </div>
   );
 }

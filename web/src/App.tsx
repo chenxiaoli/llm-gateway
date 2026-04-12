@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { Spin } from 'antd';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import Home from './pages/Home';
@@ -16,14 +17,14 @@ import Logs from './pages/Logs';
 
 function RequireAuth() {
   const { user, isLoading } = useAuth();
-  if (isLoading) return null;
+  if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>;
   if (!user) return <Navigate to="/admin/login" replace />;
   return <Outlet />;
 }
 
 function RequireAdmin() {
   const { user, isLoading } = useAuth();
-  if (isLoading) return null;
+  if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>;
   if (!user || user.role !== 'admin') return <Navigate to="/admin/dashboard" replace />;
   return <Outlet />;
 }
