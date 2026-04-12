@@ -1,5 +1,4 @@
 use crate::types::*;
-use sqlx::migrate::Migrator;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{FromRow, SqlitePool};
 use std::str::FromStr;
@@ -383,12 +382,8 @@ impl crate::Storage for SqliteStorage {
         // Migrate tracking data from old hand-rolled system to sqlx format
         self.migrate_old_tracking().await?;
 
-        // Resolve migrations path relative to this crate's root, not CWD.
-        // env!() is evaluated at compile time, so it captures the storage crate's manifest dir.
-        let migrations_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
-        let migrator = Migrator::new(migrations_path)
-            .await
-            .map_err(|e: sqlx::migrate::MigrateError| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
+        // sqlx::migrate!() embeds migration files at compile time — no disk access at runtime.
+        let migrator = sqlx::migrate!("./migrations");
         migrator.run(&self.pool).await.map_err(|e: sqlx::migrate::MigrateError| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
 
         Ok(())
