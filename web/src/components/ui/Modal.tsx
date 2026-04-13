@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { cn } from '../../lib/cn';
 
 export interface ModalProps {
@@ -11,12 +11,36 @@ export interface ModalProps {
 }
 
 export function Modal({ open, onClose, title, children, footer, className }: ModalProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  const close = useCallback(() => {
+    dialogRef.current?.close();
+  }, []);
+
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') close();
     },
-    [onClose],
+    [close],
   );
+
+  useEffect(() => {
+    if (open) {
+      try {
+        dialogRef.current?.showModal();
+      } catch {
+        dialogRef.current?.setAttribute('open', '');
+      }
+    }
+  }, [open]);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const handler = () => onClose();
+    dialog.addEventListener('close', handler);
+    return () => dialog.removeEventListener('close', handler);
+  }, [onClose]);
 
   useEffect(() => {
     if (open) {
@@ -29,15 +53,13 @@ export function Modal({ open, onClose, title, children, footer, className }: Mod
     };
   }, [open, handleEscape]);
 
-  if (!open) return null;
-
   return (
-    <dialog className={cn('modal modal-open', className)}>
+    <dialog ref={dialogRef} className={cn('modal', className)}>
       <div className="modal-box">
         {title && (
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-lg font-semibold">{title}</h3>
-            <button className="btn btn-sm btn-circle btn-ghost" onClick={onClose}>✕</button>
+            <button className="btn btn-sm btn-circle btn-ghost" onClick={close}>✕</button>
           </div>
         )}
 
@@ -46,7 +68,7 @@ export function Modal({ open, onClose, title, children, footer, className }: Mod
         {footer && <div className="modal-action">{footer}</div>}
       </div>
       <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
+        <button>close</button>
       </form>
     </dialog>
   );
