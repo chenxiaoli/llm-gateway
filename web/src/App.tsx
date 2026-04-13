@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { Spin } from 'antd';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { useAuthStore, useAuthBootstrap } from './stores/authStore';
 import { getToken } from './api/client';
+import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -17,18 +17,18 @@ import Usage from './pages/Usage';
 import Logs from './pages/Logs';
 
 function RequireAuth() {
-  const { user, isLoading } = useAuth();
-  if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>;
+  const user = useAuthStore((s) => s.user);
+  const { isLoading } = useAuthBootstrap();
+  if (isLoading) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
   if (!user) {
-    if (getToken()) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>;
+    if (getToken()) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
     return <Navigate to="/console/login" replace />;
   }
   return <Outlet />;
 }
 
 function RequireAdmin() {
-  const { user, isLoading } = useAuth();
-  if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>;
+  const user = useAuthStore((s) => s.user);
   if (!user || user.role !== 'admin') return <Navigate to="/console/dashboard" replace />;
   return <Outlet />;
 }
@@ -36,30 +36,28 @@ function RequireAdmin() {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/console/login" element={<Login />} />
-          <Route path="/console/register" element={<Register />} />
-          <Route path="/console" element={<Layout />}>
-            <Route element={<RequireAuth />}>
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="keys" element={<Keys />} />
-              <Route path="keys/:id" element={<KeyDetail />} />
-              <Route path="usage" element={<Usage />} />
-            </Route>
-            <Route element={<RequireAdmin />}>
-              <Route path="providers" element={<Providers />} />
-              <Route path="providers/:id" element={<ProviderDetail />} />
-              <Route path="users" element={<Users />} />
-              <Route path="settings" element={<Settings />} />
-              <Route path="logs" element={<Logs />} />
-            </Route>
-            <Route index element={<Navigate to="/console/dashboard" replace />} />
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/console/login" element={<Login />} />
+        <Route path="/console/register" element={<Register />} />
+        <Route path="/console" element={<Layout />}>
+          <Route element={<RequireAuth />}>
+            <Route path="dashboard" element={<Dashboard />} />
+            <Route path="keys" element={<Keys />} />
+            <Route path="keys/:id" element={<KeyDetail />} />
+            <Route path="usage" element={<Usage />} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AuthProvider>
+          <Route element={<RequireAdmin />}>
+            <Route path="providers" element={<Providers />} />
+            <Route path="providers/:id" element={<ProviderDetail />} />
+            <Route path="users" element={<Users />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="logs" element={<Logs />} />
+          </Route>
+          <Route index element={<Navigate to="/console/dashboard" replace />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </BrowserRouter>
   );
 }
