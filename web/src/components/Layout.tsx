@@ -5,6 +5,7 @@ import {
   KeyRound,
   BarChart3,
   Cloud,
+  Globe,
   Users,
   Settings,
   FileText,
@@ -27,6 +28,7 @@ const consoleItems = [
 
 const adminItems = [
   { key: '/console/providers', icon: Cloud, label: 'Providers' },
+  { key: '/console/channels', icon: Globe, label: 'Channels' },
   { key: '/console/users', icon: Users, label: 'Users' },
   { key: '/console/settings', icon: Settings, label: 'Settings' },
   { key: '/console/logs', icon: FileText, label: 'Logs' },
@@ -38,6 +40,7 @@ const routeLabels: Record<string, string> = {
   keys: 'API Keys',
   usage: 'Usage',
   providers: 'Providers',
+  channels: 'Channels',
   users: 'Users',
   settings: 'Settings',
   logs: 'Audit Logs',
