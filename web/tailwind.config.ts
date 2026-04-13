@@ -22,7 +22,6 @@ export default {
       },
       fontFamily: {
         sans: ['Outfit', 'system-ui', 'sans-serif'],
-        display: ['Syne', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       borderRadius: {

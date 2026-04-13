@@ -42,7 +42,7 @@ export default function Dashboard() {
     <div>
       {/* Page Header */}
       <div className="mb-8">
-        <h1 className="font-display text-2xl font-bold">Dashboard</h1>
+        <h1 className="text-2xl font-bold">Dashboard</h1>
         <p className="text-sm text-base-content/50 mt-1">Real-time overview of your LLM gateway activity</p>
       </div>
 

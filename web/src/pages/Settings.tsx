@@ -34,7 +34,7 @@ export default function Settings() {
 
   return (
     <div>
-      <div className="mb-6"><h1 className="font-display text-2xl font-bold">Settings</h1></div>
+      <div className="mb-6"><h1 className="text-2xl font-bold">Settings</h1></div>
 
       {isLoading ? (
         <div className="flex items-center justify-center py-12"><span className="loading loading-spinner loading-lg" /></div>

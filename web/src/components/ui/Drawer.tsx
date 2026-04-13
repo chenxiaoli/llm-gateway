@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 
 export interface DrawerProps {
   open: boolean;
@@ -10,37 +10,32 @@ export interface DrawerProps {
 
 export function Drawer({ open, onClose, title, children, width = 640 }: DrawerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
-  const close = useCallback(() => {
-    dialogRef.current?.close();
-  }, []);
-
-  useEffect(() => {
-    if (open) {
-      try {
-        dialogRef.current?.showModal();
-      } catch {
-        dialogRef.current?.setAttribute('open', '');
-      }
-    }
-  }, [open]);
-
+  // Sync dialog open/close state with React prop
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    const handler = () => onClose();
+    if (open) {
+      try {
+        dialog.showModal();
+      } catch {
+        // Already open
+      }
+    } else if (dialog.open) {
+      dialog.close();
+    }
+  }, [open]);
+
+  // Listen for native close event — stable listener via ref
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const handler = () => onCloseRef.current();
     dialog.addEventListener('close', handler);
     return () => dialog.removeEventListener('close', handler);
-  }, [onClose]);
-
-  useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [open]);
+  }, []);
 
   return (
     <dialog ref={dialogRef} className="modal">
@@ -50,7 +45,7 @@ export function Drawer({ open, onClose, title, children, width = 640 }: DrawerPr
       >
         <div className="flex items-center justify-between border-b border-base-300 px-6 py-4">
           {title && <h3 className="text-lg font-semibold">{title}</h3>}
-          <button className="btn btn-sm btn-circle btn-ghost" onClick={close}>✕</button>
+          <button className="btn btn-sm btn-circle btn-ghost" onClick={() => dialogRef.current?.close()}>✕</button>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
       </div>

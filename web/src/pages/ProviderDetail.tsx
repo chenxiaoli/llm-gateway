@@ -104,7 +104,7 @@ export default function ProviderDetail() {
   return (
     <div>
       <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/console/providers')} className="mb-4">Back to Providers</Button>
-      <div className="mb-6"><h1 className="font-display text-2xl font-bold">Provider: {provider.name}</h1></div>
+      <div className="mb-6"><h1 className="text-2xl font-bold">Provider: {provider.name}</h1></div>
 
       <form onSubmit={handleUpdateProvider} className="mb-8 max-w-lg bg-base-100 rounded-box p-5 shadow-sm space-y-4">
         <div className="form-control"><label className="label"><span className="label-text">Name</span></label><input type="text" value={provName} onChange={(e) => setProvName(e.target.value)} required className="input input-bordered w-full" /></div>

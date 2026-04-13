@@ -57,10 +57,10 @@ export default function AppLayout() {
           className="flex h-14 items-center gap-3 border-b border-base-300 px-4 cursor-pointer overflow-hidden whitespace-nowrap"
           onClick={() => navigate('/')}
         >
-          <div className="h-8 w-8 shrink-0 rounded-lg bg-primary flex items-center justify-center font-display font-extrabold text-[13px] text-primary-content tracking-tight">
+          <div className="h-8 w-8 shrink-0 rounded-lg bg-primary flex items-center justify-center font-semibold text-[13px] text-primary-content tracking-tight">
             GW
           </div>
-          <span className={`font-display font-bold text-[15px] transition-opacity duration-200 ${collapsed ? 'opacity-0' : 'opacity-100'}`}>
+          <span className={`font-semibold text-[15px] transition-opacity duration-200 ${collapsed ? 'opacity-0' : 'opacity-100'}`}>
             LLM Gateway
           </span>
         </div>

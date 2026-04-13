@@ -38,7 +38,7 @@ export default function Logs() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold">Audit Logs</h1>
+          <h1 className="text-2xl font-bold">Audit Logs</h1>
           <p className="text-sm text-base-content/40 mt-1">API request history with full request/response bodies</p>
         </div>
         {data?.total != null && (

@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { cn } from '../../lib/cn';
 
 export interface ModalProps {
@@ -12,46 +12,33 @@ export interface ModalProps {
 
 export function Modal({ open, onClose, title, children, footer, className }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
-  const close = useCallback(() => {
-    dialogRef.current?.close();
-  }, []);
-
-  const handleEscape = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    },
-    [close],
-  );
-
-  useEffect(() => {
-    if (open) {
-      try {
-        dialogRef.current?.showModal();
-      } catch {
-        dialogRef.current?.setAttribute('open', '');
-      }
-    }
-  }, [open]);
-
+  // Sync dialog open/close state with React prop
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    const handler = () => onClose();
+    if (open) {
+      try {
+        dialog.showModal();
+      } catch {
+        // Already open — ignore
+      }
+    } else if (dialog.open) {
+      dialog.close();
+    }
+  }, [open]);
+
+  // Listen for native close event (backdrop click, Escape key, form submit)
+  // Uses a ref for onClose so the listener stays stable across renders
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const handler = () => onCloseRef.current();
     dialog.addEventListener('close', handler);
     return () => dialog.removeEventListener('close', handler);
-  }, [onClose]);
-
-  useEffect(() => {
-    if (open) {
-      document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
-    }
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
-    };
-  }, [open, handleEscape]);
+  }, []);
 
   return (
     <dialog ref={dialogRef} className={cn('modal', className)}>
@@ -59,7 +46,7 @@ export function Modal({ open, onClose, title, children, footer, className }: Mod
         {title && (
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-lg font-semibold">{title}</h3>
-            <button className="btn btn-sm btn-circle btn-ghost" onClick={close}>✕</button>
+            <button className="btn btn-sm btn-circle btn-ghost" onClick={() => dialogRef.current?.close()}>✕</button>
           </div>
         )}
 

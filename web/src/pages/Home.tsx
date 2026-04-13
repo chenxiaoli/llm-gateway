@@ -38,7 +38,7 @@ export default function Home() {
       <div className="hero min-h-[70vh]">
         <div className="hero-content text-center">
           <div className="max-w-2xl">
-            <h1 className="font-display text-5xl font-extrabold">LLM Gateway</h1>
+            <h1 className="text-5xl font-extrabold">LLM Gateway</h1>
             <p className="py-6 text-base-content/60 text-lg">
               A unified API gateway for LLM providers. Manage keys, enforce rate limits,
               track usage, and proxy requests to OpenAI and Anthropic from a single endpoint.

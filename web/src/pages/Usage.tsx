@@ -37,7 +37,7 @@ export default function Usage() {
 
   return (
     <div>
-      <div className="mb-6"><h1 className="font-display text-2xl font-bold">Usage</h1></div>
+      <div className="mb-6"><h1 className="text-2xl font-bold">Usage</h1></div>
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">

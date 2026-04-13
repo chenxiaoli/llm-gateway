@@ -31,7 +31,7 @@ export default function Providers() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold">Providers</h1>
+        <h1 className="text-2xl font-bold">Providers</h1>
         <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>
           Add Provider
         </Button>

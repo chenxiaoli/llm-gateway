@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from './Button';
 
 export interface ConfirmDialogProps {
@@ -13,20 +13,22 @@ export function ConfirmDialog({ title, onConfirm, children, okText = 'Confirm', 
   const [open, setOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  const close = useCallback(() => {
-    dialogRef.current?.close();
-  }, []);
-
+  // Sync dialog open/close state with internal state
   useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
     if (open) {
       try {
-        dialogRef.current?.showModal();
+        dialog.showModal();
       } catch {
-        dialogRef.current?.setAttribute('open', '');
+        // Already open
       }
+    } else if (dialog.open) {
+      dialog.close();
     }
   }, [open]);
 
+  // Listen for native close event — stable listener
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -37,7 +39,7 @@ export function ConfirmDialog({ title, onConfirm, children, okText = 'Confirm', 
 
   const handleConfirm = () => {
     onConfirm();
-    close();
+    dialogRef.current?.close();
   };
 
   return (
@@ -50,7 +52,7 @@ export function ConfirmDialog({ title, onConfirm, children, okText = 'Confirm', 
         <div className="modal-box">
           <h3 className="text-lg font-semibold mb-4">{title}</h3>
           <div className="modal-action">
-            <Button variant="ghost" size="sm" onClick={close}>
+            <Button variant="ghost" size="sm" onClick={() => dialogRef.current?.close()}>
               {cancelText}
             </Button>
             <Button variant="danger" size="sm" onClick={handleConfirm}>

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 @plugin "daisyui";
 
@@ -33,12 +33,7 @@
     font-size: 13px;
   }
 
-  .font-display {
-    font-family: 'Syne', sans-serif;
-  }
-
-  /* Stat card hover effect */
-  .stat-card {
+  .mono {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
