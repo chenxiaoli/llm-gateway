@@ -8,8 +8,9 @@ pub mod logs;
 pub mod users;
 pub mod settings;
 
+use axum::extract::State;
 use axum::routing::{get, patch, post};
-use axum::Router;
+use axum::{Json, Router};
 use std::sync::Arc;
 use crate::AppState;
 
@@ -65,4 +66,12 @@ pub fn management_router() -> Router<Arc<AppState>> {
         )
         // Settings (admin)
         .route("/api/v1/settings", get(settings::get_settings).patch(settings::update_settings))
+        // Version (public)
+        .route("/api/v1/version", get(version))
+}
+
+async fn version(State(_state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "version": option_env!("GIT_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")),
+    }))
 }
