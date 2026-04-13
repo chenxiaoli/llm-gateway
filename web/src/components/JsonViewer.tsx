@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 interface JsonViewerProps {
   data: string;
@@ -17,20 +18,17 @@ export default function JsonViewer({ data, maxHeight = 400 }: JsonViewerProps) {
 
   return (
     <div>
-      <a onClick={() => setCollapsed(!collapsed)} style={{ marginBottom: 8, cursor: 'pointer' }}>
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="btn btn-ghost btn-xs gap-1 mb-2 text-base-content/50"
+      >
+        {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         {collapsed ? 'Expand' : 'Collapse'}
-      </a>
-      <pre style={{
-        maxHeight: collapsed ? 100 : maxHeight,
-        overflow: 'auto',
-        background: '#f5f5f5',
-        padding: 8,
-        borderRadius: 4,
-        fontFamily: 'monospace',
-        fontSize: 12,
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-all',
-      }}>
+      </button>
+      <pre
+        className="mono text-[12px] leading-relaxed bg-base-300/50 text-base-content/80 rounded-lg p-3 overflow-auto whitespace-pre-wrap break-all border border-base-300"
+        style={{ maxHeight: collapsed ? 100 : maxHeight }}
+      >
         {formatted}
       </pre>
     </div>

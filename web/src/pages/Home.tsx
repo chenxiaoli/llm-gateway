@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Globe, Cloud, KeyRound, Zap, ShieldCheck, LayoutDashboard } from 'lucide-react';
+import { Globe, Cloud, KeyRound, Zap, ShieldCheck, LayoutDashboard, Sun, Moon } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { apiClient } from '../api/client';
+import { useTheme } from '../hooks/useTheme';
 
 const features = [
   { icon: Globe, title: 'Dual Protocol', desc: 'OpenAI and Anthropic compatible API endpoints. Drop-in replacement for your existing SDK.' },
@@ -16,13 +17,23 @@ const features = [
 export default function Home() {
   const navigate = useNavigate();
   const [version, setVersion] = useState('');
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     apiClient.get<{ version: string }>('/version').then((r) => setVersion(r.data.version));
   }, []);
 
   return (
-    <div className="min-h-screen bg-base-200">
+    <div className="min-h-screen bg-base-200 relative">
+      {/* Theme toggle */}
+      <button
+        className="btn btn-ghost btn-sm btn-circle fixed top-4 right-4 z-50"
+        onClick={toggleTheme}
+        aria-label="Toggle theme"
+      >
+        {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      </button>
+
       {/* Hero */}
       <div className="hero min-h-[70vh]">
         <div className="hero-content text-center">
