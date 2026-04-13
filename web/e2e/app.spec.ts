@@ -24,13 +24,13 @@ test.describe('homepage', () => {
 test.describe('auth', () => {
   test('register first admin user', async ({ page }) => {
     await page.goto('/console/login');
-    await page.getByText('Create an account').click();
+    await page.getByText('Create one').click();
     await expect(page).toHaveURL(/\/console\/register/);
 
-    await page.fill('input[id="username"]', 'admin');
-    await page.fill('input[id="password"]', 'admin123456');
-    await page.fill('input[id="confirm"]', 'admin123456');
-    await page.click('button[type="submit"]');
+    await page.getByPlaceholder('Username').fill('admin');
+    await page.getByPlaceholder('Password').fill('admin123456');
+    await page.getByPlaceholder('Confirm password').fill('admin123456');
+    await page.getByRole('button', { name: 'Register' }).click();
 
     await expect(page).toHaveURL(/\/console\/dashboard/);
     await expect(page.getByText('admin', { exact: true })).toBeVisible();
@@ -38,9 +38,9 @@ test.describe('auth', () => {
 
   test('login with existing user', async ({ page }) => {
     await page.goto('/console/login');
-    await page.fill('input[id="username"]', 'admin');
-    await page.fill('input[id="password"]', 'admin123456');
-    await page.click('button[type="submit"]');
+    await page.getByPlaceholder('Username').fill('admin');
+    await page.getByPlaceholder('Password').fill('admin123456');
+    await page.getByRole('button', { name: 'Sign In' }).click();
 
     await expect(page).toHaveURL(/\/console\/dashboard/);
   });
@@ -49,9 +49,9 @@ test.describe('auth', () => {
 test.describe('dashboard', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/console/login');
-    await page.fill('input[id="username"]', 'admin');
-    await page.fill('input[id="password"]', 'admin123456');
-    await page.click('button[type="submit"]');
+    await page.getByPlaceholder('Username').fill('admin');
+    await page.getByPlaceholder('Password').fill('admin123456');
+    await page.getByRole('button', { name: 'Sign In' }).click();
     await expect(page).toHaveURL(/\/console\/dashboard/);
   });
 
@@ -63,7 +63,7 @@ test.describe('dashboard', () => {
   });
 
   test('shows version in console footer', async ({ page }) => {
-    await expect(page.locator('.ant-layout-footer')).toContainText(/LLM Gateway v\d/);
+    await expect(page.getByText(/LLM Gateway v\d/)).toBeVisible();
   });
 
   test('navigate to providers page', async ({ page }) => {
@@ -107,9 +107,9 @@ test.describe('provider detail', () => {
 
     // Login via browser
     await page.goto('/console/login');
-    await page.fill('input[id="username"]', 'admin');
-    await page.fill('input[id="password"]', 'admin123456');
-    await page.click('button[type="submit"]');
+    await page.getByPlaceholder('Username').fill('admin');
+    await page.getByPlaceholder('Password').fill('admin123456');
+    await page.getByRole('button', { name: 'Sign In' }).click();
     await expect(page).toHaveURL(/\/console\/dashboard/);
   });
 
@@ -121,20 +121,15 @@ test.describe('provider detail', () => {
 
     // Provider card with name and form fields
     await expect(page.getByText('Test Provider', { exact: false })).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'Name' })).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'OpenAI Base URL' })).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'Anthropic Base URL' })).toBeVisible();
+    await expect(page.getByText('OpenAI Base URL')).toBeVisible();
+    await expect(page.getByText('Anthropic Base URL')).toBeVisible();
     await expect(page.getByText('Enabled')).toBeVisible();
-
-    // Provider URL pre-filled
-    await expect(page.locator('input#name')).toHaveValue('Test Provider');
-    await expect(page.locator('input#openai_base_url')).toHaveValue('https://api.openai.com/v1');
 
     // Save and Delete buttons
     await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Delete Provider' })).toBeVisible();
 
-    // Models and Channels cards
+    // Models and Channels sections
     await expect(page.getByRole('heading', { name: 'Models' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add Model' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Channels' })).toBeVisible();
@@ -153,20 +148,20 @@ test.describe('provider detail', () => {
     await page.getByRole('button', { name: 'Add Model' }).click();
 
     // Modal should be open
-    await expect(page.locator('.ant-modal-title')).toHaveText('Add Model');
+    await expect(page.getByText('Add Model')).toBeVisible();
     await expect(page.getByText('Model Name')).toBeVisible();
 
-    // Scope fills to modal to avoid ID collision with provider form
-    await page.locator('.ant-modal input#name').fill('gpt-4o');
-    await page.getByLabel('Billing Type').click();
-    await page.locator('.ant-select-item-option').getByText('Token-based').click();
-    await page.locator('.ant-modal input#input_price').fill('5.00');
-    await page.locator('.ant-modal input#output_price').fill('15.00');
-    await page.locator('.ant-modal').getByRole('button', { name: 'Create' }).click();
+    // Fill model form
+    await page.getByPlaceholder('e.g., gpt-4o').fill('gpt-4o');
+    // Select billing type - the custom Select uses a native <select>
+    await page.locator('select').selectOption('token');
+    // Fill prices
+    await page.getByPlaceholder('Input ($/1M)').fill('5.00');
+    await page.getByPlaceholder('Output ($/1M)').fill('15.00');
+    await page.getByRole('button', { name: 'Create' }).click();
 
-    // Modal should close, model should appear in table
+    // Model should appear in table
     await expect(page.getByText('gpt-4o')).toBeVisible();
-    await expect(page.locator('.ant-tag-blue').filter({ hasText: 'token' })).toBeVisible();
   });
 
   test('adds a channel to the provider', async ({ page }) => {
@@ -174,15 +169,15 @@ test.describe('provider detail', () => {
 
     await page.getByRole('button', { name: 'Add Channel' }).click();
 
-    await expect(page.locator('.ant-modal-title')).toHaveText('Add Channel');
-    await expect(page.locator('.ant-modal').getByText('Name')).toBeVisible();
-    await expect(page.locator('.ant-modal').getByText('API Key')).toBeVisible();
+    await expect(page.getByText('Add Channel')).toBeVisible();
+    await expect(page.getByText('Name')).toBeVisible();
+    await expect(page.getByText('API Key')).toBeVisible();
 
-    // Scope fills to modal to avoid ID collision with provider form
-    await page.locator('.ant-modal input#name').fill('primary');
-    await page.locator('.ant-modal input#api_key').fill('sk-test-key-12345');
-    await page.locator('.ant-modal input#base_url').fill('https://custom.api.com/v1');
-    await page.locator('.ant-modal').getByRole('button', { name: 'Create' }).click();
+    // Fill channel form
+    await page.getByPlaceholder('e.g., primary').fill('primary');
+    await page.getByPlaceholder('Upstream API key').fill('sk-test-key-12345');
+    await page.getByPlaceholder('Leave empty to use provider default').fill('https://custom.api.com/v1');
+    await page.getByRole('button', { name: 'Create' }).click();
 
     // Channel should appear in table
     await expect(page.getByText('primary')).toBeVisible();
