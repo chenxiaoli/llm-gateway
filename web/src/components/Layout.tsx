@@ -32,6 +32,17 @@ const adminItems = [
   { key: '/console/logs', icon: FileText, label: 'Logs' },
 ];
 
+// Map paths to display names for breadcrumbs
+const routeLabels: Record<string, string> = {
+  dashboard: 'Dashboard',
+  keys: 'API Keys',
+  usage: 'Usage',
+  providers: 'Providers',
+  users: 'Users',
+  settings: 'Settings',
+  logs: 'Audit Logs',
+};
+
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [version, setVersion] = useState('');
@@ -46,15 +57,17 @@ export default function AppLayout() {
     apiClient.get<{ version: string }>('/version').then((r) => setVersion(r.data.version));
   }, []);
 
-  const sidebarWidth = collapsed ? 'w-[72px]' : 'w-[240px]';
+  const sidebarWidth = collapsed ? 'w-[68px]' : 'w-[232px]';
+
+  const breadcrumbSegment = location.pathname.replace('/console/', '');
 
   return (
-    <div className="flex min-h-screen bg-base-100">
-      {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 bottom-0 z-[100] flex flex-col border-r border-base-300 bg-base-200 transition-all duration-300 overflow-hidden ${sidebarWidth}`}>
+    <div className="flex min-h-screen bg-base-200">
+      {/* ── Sidebar ── */}
+      <aside className={`fixed left-0 top-0 bottom-0 z-[100] flex flex-col bg-base-100 border-r border-base-300/60 transition-all duration-300 overflow-hidden ${sidebarWidth}`}>
         {/* Logo */}
         <div
-          className="flex h-14 items-center gap-3 border-b border-base-300 px-4 cursor-pointer overflow-hidden whitespace-nowrap"
+          className="flex h-14 items-center gap-3 border-b border-base-300/60 px-4 cursor-pointer overflow-hidden whitespace-nowrap"
           onClick={() => navigate('/')}
         >
           <div className="h-8 w-8 shrink-0 rounded-lg bg-primary flex items-center justify-center font-semibold text-[13px] text-primary-content tracking-tight">
@@ -66,9 +79,9 @@ export default function AppLayout() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 flex flex-col gap-0.5">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 flex flex-col gap-0.5">
           {!collapsed && (
-            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-base-content/40 px-3 pt-4 pb-1.5">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-1 pb-2">
               Console
             </div>
           )}
@@ -78,12 +91,18 @@ export default function AppLayout() {
             return (
               <div
                 key={item.key}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer text-sm font-medium transition-all duration-200 whitespace-nowrap overflow-hidden select-none ${
-                  active ? 'bg-primary/10 text-primary' : 'text-base-content/60 hover:bg-base-300 hover:text-base-content'
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer text-sm font-medium transition-all duration-150 whitespace-nowrap overflow-hidden select-none relative ${
+                  active
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-base-content/50 hover:bg-base-200 hover:text-base-content/80'
                 } ${collapsed ? 'justify-center px-2' : ''}`}
                 onClick={() => navigate(item.key)}
               >
-                <Icon className="h-[17px] w-[17px] shrink-0" />
+                {/* Active indicator bar */}
+                {active && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-primary" />
+                )}
+                <Icon className="h-[17px] w-[17px] shrink-0" strokeWidth={active ? 2 : 1.5} />
                 <span className={collapsed ? 'opacity-0 pointer-events-none' : ''}>{item.label}</span>
               </div>
             );
@@ -92,22 +111,27 @@ export default function AppLayout() {
           {isAdmin && (
             <>
               {!collapsed && (
-                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-base-content/40 px-3 pt-5 pb-1.5">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-5 pb-2">
                   Admin
                 </div>
               )}
               {adminItems.map((item) => {
                 const Icon = item.icon;
-                const active = location.pathname === item.key;
+                const active = location.pathname === item.key || location.pathname.startsWith(item.key + '/');
                 return (
                   <div
                     key={item.key}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer text-sm font-medium transition-all duration-200 whitespace-nowrap overflow-hidden select-none ${
-                      active ? 'bg-primary/10 text-primary' : 'text-base-content/60 hover:bg-base-300 hover:text-base-content'
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer text-sm font-medium transition-all duration-150 whitespace-nowrap overflow-hidden select-none relative ${
+                      active
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-base-content/50 hover:bg-base-200 hover:text-base-content/80'
                     } ${collapsed ? 'justify-center px-2' : ''}`}
                     onClick={() => navigate(item.key)}
                   >
-                    <Icon className="h-[17px] w-[17px] shrink-0" />
+                    {active && (
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-primary" />
+                    )}
+                    <Icon className="h-[17px] w-[17px] shrink-0" strokeWidth={active ? 2 : 1.5} />
                     <span className={collapsed ? 'opacity-0 pointer-events-none' : ''}>{item.label}</span>
                   </div>
                 );
@@ -117,24 +141,22 @@ export default function AppLayout() {
         </nav>
 
         {/* Footer */}
-        <div className="border-t border-base-300 shrink-0">
+        <div className="border-t border-base-300/60 shrink-0">
           <div className="p-2 flex flex-col gap-1">
-            {/* Version row */}
             {!collapsed && version && (
-              <div className="flex items-center justify-between px-2 py-1">
-                <span className="mono text-[10px] text-base-content/25 truncate">v{version}</span>
+              <div className="flex items-center justify-between px-3 py-1.5">
+                <span className="mono text-[10px] text-base-content/20 truncate">v{version}</span>
                 <a
                   href="https://github.com/chenxiaoli/llm-gateway"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-base-content/20 hover:text-base-content/50 transition-colors"
+                  className="text-base-content/15 hover:text-base-content/40 transition-colors"
                   aria-label="GitHub"
                 >
                   <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
                 </a>
               </div>
             )}
-            {/* Collapse toggle */}
             <button
               className={`btn btn-ghost btn-sm w-full ${collapsed ? 'btn-square justify-center' : 'gap-2 justify-start'}`}
               onClick={() => setCollapsed(!collapsed)}
@@ -142,8 +164,8 @@ export default function AppLayout() {
             >
               {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : (
                 <>
-                  <PanelLeftClose className="h-4 w-4 text-base-content/40" />
-                  <span className="text-xs text-base-content/40">Collapse</span>
+                  <PanelLeftClose className="h-4 w-4 text-base-content/30" />
+                  <span className="text-xs text-base-content/30">Collapse</span>
                 </>
               )}
             </button>
@@ -151,34 +173,31 @@ export default function AppLayout() {
         </div>
       </aside>
 
-      {/* Main content */}
-      <div className={`flex min-h-screen flex-col transition-all duration-300 ${collapsed ? 'ml-[72px]' : 'ml-[240px]'}`}>
+      {/* ── Main content ── */}
+      <div className={`flex min-h-screen flex-col transition-all duration-300 ${collapsed ? 'ml-[68px]' : 'ml-[232px]'}`}>
         {/* Header */}
-        <header className="sticky top-0 z-50 shrink-0">
-          {/* Accent line */}
-          <div className="h-px bg-gradient-to-r from-primary/40 via-primary/10 to-transparent" />
-          <div className="flex h-14 items-center justify-between border-b border-base-300 bg-base-100/95 backdrop-blur-md px-6 gap-3">
+        <header className="sticky top-0 z-50 shrink-0 bg-base-100/80 backdrop-blur-md border-b border-base-300/60">
+          <div className="flex h-12 items-center justify-between px-6 gap-3">
             {/* Left: Breadcrumb */}
-            <nav className="flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider min-w-0">
+            <nav className="flex items-center gap-1.5 text-xs min-w-0">
               <button
                 onClick={() => navigate('/console/dashboard')}
-                className="text-base-content/30 hover:text-base-content/60 transition-colors shrink-0"
+                className="text-base-content/30 hover:text-base-content/50 transition-colors shrink-0 font-medium"
               >
                 Console
               </button>
-              {location.pathname !== '/console/dashboard' && (
+              {breadcrumbSegment !== 'dashboard' && (
                 <>
                   <ChevronRight className="h-3 w-3 text-base-content/15 shrink-0" />
-                  <span className="text-base-content/50 truncate">
-                    {location.pathname.replace('/console/', '')}
+                  <span className="text-base-content/60 truncate">
+                    {routeLabels[breadcrumbSegment] || breadcrumbSegment}
                   </span>
                 </>
               )}
             </nav>
 
             {/* Right: Controls */}
-            <div className="flex items-center gap-1.5">
-              {/* Theme toggle */}
+            <div className="flex items-center gap-1">
               <button
                 className="btn btn-ghost btn-sm btn-circle"
                 onClick={toggleTheme}
@@ -187,49 +206,45 @@ export default function AppLayout() {
                 {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
               </button>
 
-              {/* Divider */}
-              <div className="h-5 w-px bg-base-300 mx-1" />
+              <div className="h-4 w-px bg-base-300/60 mx-1" />
 
-              {/* User */}
-              <div className="flex items-center gap-2.5 text-sm">
+              <div className="flex items-center gap-2 text-sm">
                 <div className="avatar placeholder">
-                  <div className="bg-primary text-primary-content w-7 rounded-md">
+                  <div className="bg-primary/15 text-primary w-7 rounded-md">
                     <span className="text-xs font-semibold">{user?.username?.charAt(0).toUpperCase()}</span>
                   </div>
                 </div>
-                <span className="hidden sm:inline font-medium text-base-content/70">{user?.username}</span>
+                <span className="hidden sm:inline text-[13px] font-medium text-base-content/60">{user?.username}</span>
               </div>
 
-              {/* Divider */}
-              <div className="h-5 w-px bg-base-300 mx-1" />
+              <div className="h-4 w-px bg-base-300/60 mx-1" />
 
-              {/* Logout */}
               <button
                 className="btn btn-ghost btn-sm btn-circle"
                 onClick={logout}
                 aria-label="Logout"
                 title="Logout"
               >
-                <LogOut className="h-3.5 w-3.5 text-base-content/40" />
+                <LogOut className="h-3.5 w-3.5 text-base-content/30" />
               </button>
             </div>
           </div>
         </header>
 
         {/* Content */}
-        <main className="flex-1 bg-base-200/40 p-6 overflow-y-auto">
+        <main className="flex-1 p-6 overflow-y-auto">
           <div className="animate-fade-in-up" key={location.pathname}>
             <Outlet />
           </div>
         </main>
 
         {/* Footer */}
-        <footer className="shrink-0 border-t border-base-300 bg-base-100">
-          <div className="flex items-center justify-between px-6 py-2.5">
-            <span className="text-[11px] text-base-content/20 font-mono">
+        <footer className="shrink-0 border-t border-base-300/60 bg-base-100/50">
+          <div className="flex items-center justify-between px-6 py-2">
+            <span className="text-[11px] text-base-content/15 font-mono">
               LLM Gateway{version ? ` v${version}` : ''}
             </span>
-            <span className="text-[11px] text-base-content/15 font-mono hidden sm:inline">
+            <span className="text-[11px] text-base-content/10 font-mono hidden sm:inline">
               {user?.role === 'admin' ? 'admin' : 'user'}
             </span>
           </div>

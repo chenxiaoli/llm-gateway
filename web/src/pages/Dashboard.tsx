@@ -43,106 +43,112 @@ export default function Dashboard() {
       {/* Page Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-sm text-base-content/50 mt-1">Real-time overview of your LLM gateway activity</p>
+        <p className="text-sm text-base-content/40 mt-1">Real-time overview of your LLM gateway activity</p>
       </div>
 
-      {/* Live Metrics */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
-          <div className="stat-title text-base-content/50 flex items-center gap-2">
-            <Activity className="h-4 w-4 text-primary" /> Avg Latency
+      {/* Metrics Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+        {/* Today's Requests */}
+        <div className="stat-card rounded-xl border border-base-300/50 bg-base-100/60 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Today's Requests</span>
+            <MessageSquare className="h-4 w-4 text-base-content/20" />
           </div>
-          <div className="stat-value text-2xl font-mono">{avgLatency}<span className="text-sm text-base-content/40 ml-1">ms</span></div>
+          <div className="font-mono text-2xl font-bold">{todayRequests.toLocaleString()}</div>
         </div>
-        <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
-          <div className="stat-title text-base-content/50 flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-primary" /> Success Rate
+
+        {/* Today's Cost */}
+        <div className="stat-card rounded-xl border border-base-300/50 bg-base-100/60 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Today's Cost</span>
+            <DollarSign className="h-4 w-4 text-base-content/20" />
           </div>
-          <div className="stat-value text-2xl font-mono">{successRate}<span className="text-sm text-base-content/40 ml-1">%</span></div>
+          <div className="font-mono text-2xl font-bold">${todayCost.toFixed(4)}</div>
         </div>
-        <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
-          <div className="stat-title text-base-content/50 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-primary" /> Recent
+
+        {/* Monthly Cost */}
+        <div className="stat-card rounded-xl border border-base-300/50 bg-base-100/60 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Monthly Cost</span>
+            <TrendingUp className="h-4 w-4 text-base-content/20" />
           </div>
-          <div className="stat-value text-2xl font-mono">{recentLogs?.items?.length ?? 0}<span className="text-sm text-base-content/40 ml-1">reqs</span></div>
+          <div className="font-mono text-2xl font-bold">${monthCost.toFixed(2)}</div>
+        </div>
+
+        {/* Active Models */}
+        <div className="stat-card rounded-xl border border-base-300/50 bg-base-100/60 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Active Models</span>
+            <Zap className="h-4 w-4 text-base-content/20" />
+          </div>
+          <div className="font-mono text-2xl font-bold">{totalModels}</div>
         </div>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-8 max-lg:grid-cols-2 max-sm:grid-cols-1">
-        <div className="stat-card bg-base-100 rounded-box p-5 shadow-sm animate-fade-in-up">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Today's Requests</span>
-            <MessageSquare className="h-4 w-4 text-primary/60" />
-          </div>
-          <div className="font-mono text-3xl font-bold">{todayRequests.toLocaleString()}</div>
+      {/* Live Metrics Bar */}
+      <div className="flex flex-wrap gap-3 mb-8">
+        <div className="flex items-center gap-2.5 rounded-lg border border-base-300/50 bg-base-100/60 px-4 py-2.5">
+          <Activity className="h-4 w-4 text-primary/70" />
+          <span className="text-[11px] uppercase tracking-wider text-base-content/35 font-semibold">Avg Latency</span>
+          <span className="font-mono text-sm font-bold">{avgLatency}<span className="text-base-content/30 ml-0.5">ms</span></span>
         </div>
-        <div className="stat-card bg-base-100 rounded-box p-5 shadow-sm animate-fade-in-up" style={{ animationDelay: '80ms' }}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Today's Cost</span>
-            <DollarSign className="h-4 w-4 text-warning/60" />
-          </div>
-          <div className="font-mono text-3xl font-bold">${todayCost.toFixed(4)}</div>
+        <div className="flex items-center gap-2.5 rounded-lg border border-base-300/50 bg-base-100/60 px-4 py-2.5">
+          <TrendingUp className="h-4 w-4 text-primary/70" />
+          <span className="text-[11px] uppercase tracking-wider text-base-content/35 font-semibold">Success Rate</span>
+          <span className="font-mono text-sm font-bold">{successRate}<span className="text-base-content/30 ml-0.5">%</span></span>
         </div>
-        <div className="stat-card bg-base-100 rounded-box p-5 shadow-sm animate-fade-in-up" style={{ animationDelay: '160ms' }}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Monthly Cost</span>
-            <TrendingUp className="h-4 w-4 text-info/60" />
-          </div>
-          <div className="font-mono text-3xl font-bold">${monthCost.toFixed(2)}</div>
-        </div>
-        <div className="stat-card bg-base-100 rounded-box p-5 shadow-sm animate-fade-in-up" style={{ animationDelay: '240ms' }}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Active Models</span>
-            <Zap className="h-4 w-4 text-secondary/60" />
-          </div>
-          <div className="font-mono text-3xl font-bold">{totalModels}</div>
+        <div className="flex items-center gap-2.5 rounded-lg border border-base-300/50 bg-base-100/60 px-4 py-2.5">
+          <Clock className="h-4 w-4 text-primary/70" />
+          <span className="text-[11px] uppercase tracking-wider text-base-content/35 font-semibold">Recent</span>
+          <span className="font-mono text-sm font-bold">{recentLogs?.items?.length ?? 0}<span className="text-base-content/30 ml-0.5">reqs</span></span>
         </div>
       </div>
 
       {/* Recent Requests */}
-      <div className="animate-fade-in-up" style={{ animationDelay: '300ms' }}>
+      <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold">Recent Requests</h2>
-          <span className="text-xs font-mono text-base-content/40">({recentLogs?.items?.length ?? 0})</span>
+          <h2 className="text-sm font-semibold">Recent Requests</h2>
+          <span className="text-xs font-mono text-base-content/25">{recentLogs?.items?.length ?? 0}</span>
         </div>
 
-        <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
-          <table className="table table-sm">
-            <thead>
-              <tr className="border-b border-base-300">
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Time</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Model</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Protocol</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Tokens</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Latency</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentLogs?.items?.map((log) => (
-                <tr key={log.id} className="border-b border-base-200 hover">
-                  <td className="mono text-[13px]">
-                    {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                  </td>
-                  <td className="mono text-[13px] font-medium">{log.model_name}</td>
-                  <td><Badge variant={log.protocol === 'openai' ? 'blue' : 'purple'}>{log.protocol}</Badge></td>
-                  <td><Badge variant={log.status_code < 400 ? 'green' : log.status_code < 500 ? 'amber' : 'red'}>{log.status_code}</Badge></td>
-                  <td className="mono text-[13px]">
-                    {log.input_tokens ?? 0} + {log.output_tokens ?? 0}
-                  </td>
-                  <td className="mono text-[13px]">{log.latency_ms}ms</td>
+        <div className="rounded-xl border border-base-300/50 bg-base-100/60 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="table table-sm">
+              <thead>
+                <tr className="border-b border-base-300/50">
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Time</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Model</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Protocol</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Status</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Tokens</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Latency</th>
                 </tr>
-              ))}
-              {(!recentLogs?.items?.length) && (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-base-content/40">
-                    No requests yet
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {recentLogs?.items?.map((log) => (
+                  <tr key={log.id} className="border-b border-base-200/50 hover:bg-base-200/30 transition-colors">
+                    <td className="mono text-[13px] text-base-content/60">
+                      {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    </td>
+                    <td className="mono text-[13px] font-medium">{log.model_name}</td>
+                    <td><Badge variant={log.protocol === 'openai' ? 'blue' : 'purple'}>{log.protocol}</Badge></td>
+                    <td><Badge variant={log.status_code < 400 ? 'green' : log.status_code < 500 ? 'amber' : 'red'}>{log.status_code}</Badge></td>
+                    <td className="mono text-[13px] text-base-content/60">
+                      {log.input_tokens ?? 0} + {log.output_tokens ?? 0}
+                    </td>
+                    <td className="mono text-[13px] text-base-content/60">{log.latency_ms}ms</td>
+                  </tr>
+                ))}
+                {(!recentLogs?.items?.length) && (
+                  <tr>
+                    <td colSpan={6} className="text-center py-16 text-base-content/25 text-sm">
+                      No requests yet
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
