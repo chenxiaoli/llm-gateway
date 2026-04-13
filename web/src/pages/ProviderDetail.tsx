@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  Card, Form, Input, Switch, Button, Space, Table, Modal,
-  Popconfirm, Select, InputNumber, Tag,
-} from 'antd';
-import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
+import { ArrowLeft, Plus } from 'lucide-react';
 import { useProvider, useUpdateProvider, useDeleteProvider, useChannels, useCreateChannel, useUpdateChannel, useDeleteChannel } from '../hooks/useProviders';
 import { useModels, useCreateModel, useUpdateModel, useDeleteModel } from '../hooks/useModels';
+import { Button } from '../components/ui/Button';
+import { Modal } from '../components/ui/Modal';
+import { Badge } from '../components/ui/Badge';
+import { Toggle } from '../components/ui/Toggle';
+import { Select } from '../components/ui/Select';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import type { Model, CreateModelRequest, UpdateModelRequest, Channel } from '../types';
 
 export default function ProviderDetail() {
@@ -18,33 +20,59 @@ export default function ProviderDetail() {
   const createModelMutation = useCreateModel(id!);
   const updateModelMutation = useUpdateModel(id!);
   const deleteModelMutation = useDeleteModel(id!);
-
-  const [form] = Form.useForm();
-  const [modelModalOpen, setModelModalOpen] = useState(false);
-  const [editingModel, setEditingModel] = useState<Model | null>(null);
-  const [modelForm] = Form.useForm();
-
   const createChannelMutation = useCreateChannel(id!);
   const updateChannelMutation = useUpdateChannel(id!);
   const deleteChannelMutation = useDeleteChannel(id!);
-  const [channelModalOpen, setChannelModalOpen] = useState(false);
-  const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
-  const [channelForm] = Form.useForm();
 
   const { data: channels } = useChannels(id!);
   const { data: models } = useModels(id!);
 
-  if (isLoading) return <div>Loading...</div>;
-  if (!provider) return <div>Provider not found</div>;
+  // Provider form state
+  const [provName, setProvName] = useState('');
+  const [provOpenaiUrl, setProvOpenaiUrl] = useState('');
+  const [provAnthropicUrl, setProvAnthropicUrl] = useState('');
+  const [provEnabled, setProvEnabled] = useState(false);
 
-  const handleUpdateProvider = async (values: any) => {
+  // Model modal state
+  const [modelModalOpen, setModelModalOpen] = useState(false);
+  const [editingModel, setEditingModel] = useState<Model | null>(null);
+  const [modelName, setModelName] = useState('');
+  const [modelBillingType, setModelBillingType] = useState('token');
+  const [modelInputPrice, setModelInputPrice] = useState('');
+  const [modelOutputPrice, setModelOutputPrice] = useState('');
+  const [modelRequestPrice, setModelRequestPrice] = useState('');
+  const [modelEnabled, setModelEnabled] = useState(false);
+
+  // Channel modal state
+  const [channelModalOpen, setChannelModalOpen] = useState(false);
+  const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
+  const [channelName, setChannelName] = useState('');
+  const [channelApiKey, setChannelApiKey] = useState('');
+  const [channelBaseUrl, setChannelBaseUrl] = useState('');
+  const [channelPriority, setChannelPriority] = useState('0');
+  const [channelEnabled, setChannelEnabled] = useState(false);
+
+  useEffect(() => {
+    if (provider) {
+      setProvName(provider.name);
+      setProvOpenaiUrl(provider.openai_base_url ?? '');
+      setProvAnthropicUrl(provider.anthropic_base_url ?? '');
+      setProvEnabled(provider.enabled);
+    }
+  }, [provider]);
+
+  if (isLoading) return <div className="text-[#555555]">Loading...</div>;
+  if (!provider) return <div className="text-[#555555]">Provider not found</div>;
+
+  const handleUpdateProvider = async (e: React.FormEvent) => {
+    e.preventDefault();
     await updateMutation.mutateAsync({
       id: provider.id,
       input: {
-        name: values.name,
-        openai_base_url: values.openai_base_url || null,
-        anthropic_base_url: values.anthropic_base_url || null,
-        enabled: values.enabled,
+        name: provName,
+        openai_base_url: provOpenaiUrl || null,
+        anthropic_base_url: provAnthropicUrl || null,
+        enabled: provEnabled,
       },
     });
   };
@@ -54,283 +82,304 @@ export default function ProviderDetail() {
     navigate('/console/providers');
   };
 
+  const resetModelForm = () => {
+    setModelName('');
+    setModelBillingType('token');
+    setModelInputPrice('');
+    setModelOutputPrice('');
+    setModelRequestPrice('');
+    setModelEnabled(false);
+  };
+
   const openAddModel = () => {
     setEditingModel(null);
-    modelForm.resetFields();
+    resetModelForm();
     setModelModalOpen(true);
   };
 
   const openEditModel = (model: Model) => {
     setEditingModel(model);
-    modelForm.setFieldsValue(model);
+    setModelName(model.name);
+    setModelBillingType(model.billing_type);
+    setModelInputPrice(String(model.input_price));
+    setModelOutputPrice(String(model.output_price));
+    setModelRequestPrice(String(model.request_price));
+    setModelEnabled(model.enabled);
     setModelModalOpen(true);
   };
 
-  const handleSaveModel = async (values: any) => {
+  const handleSaveModel = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (editingModel) {
       const updateInput: UpdateModelRequest = {
-        billing_type: values.billing_type,
-        input_price: values.input_price,
-        output_price: values.output_price,
-        request_price: values.request_price,
-        enabled: values.enabled,
+        billing_type: modelBillingType,
+        input_price: Number(modelInputPrice) || 0,
+        output_price: Number(modelOutputPrice) || 0,
+        request_price: Number(modelRequestPrice) || 0,
+        enabled: modelEnabled,
       };
       await updateModelMutation.mutateAsync({ modelName: editingModel.name, input: updateInput });
     } else {
       const input: CreateModelRequest = {
-        name: values.name,
-        billing_type: values.billing_type,
-        input_price: values.input_price ?? 0,
-        output_price: values.output_price ?? 0,
-        request_price: values.request_price ?? 0,
+        name: modelName,
+        billing_type: modelBillingType,
+        input_price: Number(modelInputPrice) || 0,
+        output_price: Number(modelOutputPrice) || 0,
+        request_price: Number(modelRequestPrice) || 0,
       };
       await createModelMutation.mutateAsync(input);
     }
     setModelModalOpen(false);
   };
 
-  const handleDeleteModel = async (modelName: string) => {
-    await deleteModelMutation.mutateAsync(modelName);
+  const resetChannelForm = () => {
+    setChannelName('');
+    setChannelApiKey('');
+    setChannelBaseUrl('');
+    setChannelPriority('0');
+    setChannelEnabled(false);
   };
 
   const openAddChannel = () => {
     setEditingChannel(null);
-    channelForm.resetFields();
+    resetChannelForm();
     setChannelModalOpen(true);
   };
 
   const openEditChannel = (channel: Channel) => {
     setEditingChannel(channel);
-    channelForm.setFieldsValue({
-      name: channel.name,
-      api_key: channel.api_key,
-      base_url: channel.base_url,
-      priority: channel.priority,
-      enabled: channel.enabled,
-    });
+    setChannelName(channel.name);
+    setChannelApiKey(channel.api_key);
+    setChannelBaseUrl(channel.base_url ?? '');
+    setChannelPriority(String(channel.priority));
+    setChannelEnabled(channel.enabled);
     setChannelModalOpen(true);
   };
 
-  const handleSaveChannel = async (values: any) => {
+  const handleSaveChannel = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (editingChannel) {
       await updateChannelMutation.mutateAsync({
         id: editingChannel.id,
         input: {
-          name: values.name,
-          api_key: values.api_key,
-          base_url: values.base_url || null,
-          priority: values.priority,
-          enabled: values.enabled,
+          name: channelName,
+          api_key: channelApiKey,
+          base_url: channelBaseUrl || null,
+          priority: Number(channelPriority),
+          enabled: channelEnabled,
         },
       });
     } else {
       await createChannelMutation.mutateAsync({
-        name: values.name,
-        api_key: values.api_key,
-        base_url: values.base_url || null,
-        priority: values.priority,
+        name: channelName,
+        api_key: channelApiKey,
+        base_url: channelBaseUrl || null,
+        priority: Number(channelPriority),
       });
     }
     setChannelModalOpen(false);
   };
 
-  const handleDeleteChannel = async (channelId: string) => {
-    await deleteChannelMutation.mutateAsync(channelId);
-  };
-
-  const modelColumns = [
-    { title: 'Name', dataIndex: 'name', key: 'name',
-      render: (v: string) => <span className="mono">{v}</span>,
-    },
-    {
-      title: 'Billing', dataIndex: 'billing_type', key: 'billing_type',
-      render: (v: string) => <Tag color={v === 'token' ? '#3b82f6' : '#06d6a0'}>{v}</Tag>,
-    },
-    {
-      title: 'Input ($/1M)', dataIndex: 'input_price', key: 'input_price',
-      render: (v: number) => <span className="mono">{v.toFixed(2)}</span>,
-    },
-    {
-      title: 'Output ($/1M)', dataIndex: 'output_price', key: 'output_price',
-      render: (v: number) => <span className="mono">{v.toFixed(2)}</span>,
-    },
-    {
-      title: 'Status', dataIndex: 'enabled', key: 'enabled',
-      render: (enabled: boolean) => <Tag color={enabled ? '#06d6a0' : '#ef4444'}>{enabled ? 'Active' : 'Disabled'}</Tag>,
-    },
-    {
-      title: 'Actions', key: 'actions',
-      render: (_: unknown, record: Model) => (
-        <Space>
-          <a onClick={() => openEditModel(record)}>Edit</a>
-          <Popconfirm title={`Delete model "${record.name}"?`} onConfirm={() => handleDeleteModel(record.name)}>
-            <a style={{ color: '#ef4444' }}>Delete</a>
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ];
-
-  const channelColumns = [
-    { title: 'Name', dataIndex: 'name', key: 'name' },
-    {
-      title: 'Base URL', dataIndex: 'base_url', key: 'base_url',
-      render: (v: string | null) => v ? <span className="mono">{v}</span> : <span style={{ color: 'var(--text-muted)' }}>Default</span>,
-    },
-    { title: 'Priority', dataIndex: 'priority', key: 'priority',
-      render: (v: number) => <span className="mono">{v}</span>,
-    },
-    {
-      title: 'Status', dataIndex: 'enabled', key: 'enabled',
-      render: (enabled: boolean) => <Tag color={enabled ? '#06d6a0' : '#ef4444'}>{enabled ? 'Active' : 'Disabled'}</Tag>,
-    },
-    {
-      title: 'Actions', key: 'actions',
-      render: (_: unknown, record: Channel) => (
-        <Space>
-          <a onClick={() => openEditChannel(record)}>Edit</a>
-          <Popconfirm title={`Delete channel "${record.name}"?`} onConfirm={() => handleDeleteChannel(record.id)}>
-            <a style={{ color: '#ef4444' }}>Delete</a>
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ];
-
   return (
     <div>
-      <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/console/providers')} style={{ marginBottom: 16 }}>
+      <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/console/providers')} className="mb-4">
         Back to Providers
       </Button>
 
-      <div className="page-header">
-        <h1 className="page-title">Provider: {provider.name}</h1>
+      <div className="mb-6">
+        <h1 className="font-display text-2xl font-bold text-[#ededed]">Provider: {provider.name}</h1>
       </div>
 
-      <Card style={{ marginBottom: 24, maxWidth: 500 }}>
-        <Form
-          form={form}
-          layout="vertical"
-          initialValues={{
-            name: provider.name,
-            openai_base_url: provider.openai_base_url,
-            anthropic_base_url: provider.anthropic_base_url,
-            enabled: provider.enabled,
-          }}
-          onFinish={handleUpdateProvider}
-        >
-          <Form.Item name="name" label="Name" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="openai_base_url" label="OpenAI Base URL">
-            <Input />
-          </Form.Item>
-          <Form.Item name="anthropic_base_url" label="Anthropic Base URL">
-            <Input />
-          </Form.Item>
-          <Form.Item name="enabled" label="Enabled" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>Save</Button>
-              <Popconfirm title="Delete this provider and all its models?" onConfirm={handleDeleteProvider}>
-                <Button danger>Delete Provider</Button>
-              </Popconfirm>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Card>
-
-      <Card
-        title={<h3 className="page-title" style={{ fontSize: 16, margin: 0 }}>Models</h3>}
-        extra={<Button type="primary" icon={<PlusOutlined />} onClick={openAddModel}>Add Model</Button>}
-        style={{ marginBottom: 24 }}
-      >
-        <div className="console-table">
-          <Table dataSource={models ?? []} columns={modelColumns} rowKey="name" pagination={false} />
+      {/* Provider form */}
+      <form onSubmit={handleUpdateProvider} className="mb-8 max-w-lg rounded-xl border border-[#1e1e1e] bg-[#0a0a0a] p-5 space-y-4">
+        <div>
+          <label className="block text-xs font-medium text-[#888888] mb-1.5">Name</label>
+          <input type="text" value={provName} onChange={(e) => setProvName(e.target.value)} required
+            className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] outline-none focus:border-accent/50 transition-colors" />
         </div>
-      </Card>
-
-      <Card
-        title={<h3 className="page-title" style={{ fontSize: 16, margin: 0 }}>Channels</h3>}
-        extra={<Button type="primary" icon={<PlusOutlined />} onClick={openAddChannel}>Add Channel</Button>}
-      >
-        <div className="console-table">
-          <Table dataSource={channels} columns={channelColumns} rowKey="id" pagination={false} />
+        <div>
+          <label className="block text-xs font-medium text-[#888888] mb-1.5">OpenAI Base URL</label>
+          <input type="text" value={provOpenaiUrl} onChange={(e) => setProvOpenaiUrl(e.target.value)}
+            className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors" />
         </div>
-      </Card>
+        <div>
+          <label className="block text-xs font-medium text-[#888888] mb-1.5">Anthropic Base URL</label>
+          <input type="text" value={provAnthropicUrl} onChange={(e) => setProvAnthropicUrl(e.target.value)}
+            className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors" />
+        </div>
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-[#888888]">Enabled</label>
+          <Toggle checked={provEnabled} onChange={setProvEnabled} />
+        </div>
+        <div className="flex gap-2">
+          <Button variant="primary" type="submit" loading={updateMutation.isPending}>Save</Button>
+          <ConfirmDialog title="Delete this provider and all its models?" onConfirm={handleDeleteProvider} okText="Delete">
+            <Button variant="danger">Delete Provider</Button>
+          </ConfirmDialog>
+        </div>
+      </form>
 
-      <Modal
-        title={editingModel ? `Edit Model: ${editingModel.name}` : 'Add Model'}
-        open={modelModalOpen}
-        onCancel={() => setModelModalOpen(false)}
-        footer={null}
-      >
-        <Form form={modelForm} layout="vertical" onFinish={handleSaveModel}>
-          <Form.Item name="name" label="Model Name" rules={[{ required: true }]} hidden={!!editingModel}>
-            <Input placeholder="e.g., gpt-4o" />
-          </Form.Item>
-          <Form.Item name="billing_type" label="Billing Type" rules={[{ required: true }]}>
-            <Select options={[
+      {/* Models */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display text-base font-semibold text-[#ededed]">Models</h2>
+          <Button icon={<Plus className="h-4 w-4" />} onClick={openAddModel}>Add Model</Button>
+        </div>
+        <div className="overflow-x-auto rounded-xl border border-[#1e1e1e]">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#1e1e1e]">
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Name</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Billing</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Input ($/1M)</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Output ($/1M)</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Status</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {models?.map((model) => (
+                <tr key={model.name} className="border-b border-[#1e1e1e]/50 hover:bg-white/[0.02] transition-colors">
+                  <td className="px-4 py-2.5"><span className="mono">{model.name}</span></td>
+                  <td className="px-4 py-2.5"><Badge variant={model.billing_type === 'token' ? 'blue' : 'green'}>{model.billing_type}</Badge></td>
+                  <td className="px-4 py-2.5"><span className="mono">{model.input_price.toFixed(2)}</span></td>
+                  <td className="px-4 py-2.5"><span className="mono">{model.output_price.toFixed(2)}</span></td>
+                  <td className="px-4 py-2.5"><Badge variant={model.enabled ? 'green' : 'red'}>{model.enabled ? 'Active' : 'Disabled'}</Badge></td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex gap-2">
+                      <button onClick={() => openEditModel(model)} className="text-accent hover:text-accent-hover transition-colors text-sm">Edit</button>
+                      <ConfirmDialog title={`Delete model "${model.name}"?`} onConfirm={() => deleteModelMutation.mutateAsync(model.name)} okText="Delete">
+                        <button className="text-danger hover:text-danger/80 transition-colors text-sm">Delete</button>
+                      </ConfirmDialog>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Channels */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display text-base font-semibold text-[#ededed]">Channels</h2>
+          <Button icon={<Plus className="h-4 w-4" />} onClick={openAddChannel}>Add Channel</Button>
+        </div>
+        <div className="overflow-x-auto rounded-xl border border-[#1e1e1e]">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#1e1e1e]">
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Name</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Base URL</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Priority</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Status</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {channels?.map((channel) => (
+                <tr key={channel.id} className="border-b border-[#1e1e1e]/50 hover:bg-white/[0.02] transition-colors">
+                  <td className="px-4 py-2.5">{channel.name}</td>
+                  <td className="px-4 py-2.5">
+                    {channel.base_url ? <span className="mono">{channel.base_url}</span> : <span className="text-[#555555]">Default</span>}
+                  </td>
+                  <td className="px-4 py-2.5"><span className="mono">{channel.priority}</span></td>
+                  <td className="px-4 py-2.5"><Badge variant={channel.enabled ? 'green' : 'red'}>{channel.enabled ? 'Active' : 'Disabled'}</Badge></td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex gap-2">
+                      <button onClick={() => openEditChannel(channel)} className="text-accent hover:text-accent-hover transition-colors text-sm">Edit</button>
+                      <ConfirmDialog title={`Delete channel "${channel.name}"?`} onConfirm={() => deleteChannelMutation.mutateAsync(channel.id)} okText="Delete">
+                        <button className="text-danger hover:text-danger/80 transition-colors text-sm">Delete</button>
+                      </ConfirmDialog>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Model Modal */}
+      <Modal open={modelModalOpen} onClose={() => setModelModalOpen(false)} title={editingModel ? `Edit Model: ${editingModel.name}` : 'Add Model'}>
+        <form onSubmit={handleSaveModel} className="space-y-4">
+          {!editingModel && (
+            <div>
+              <label className="block text-xs font-medium text-[#888888] mb-1.5">Model Name</label>
+              <input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="e.g., gpt-4o" required
+                className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors" />
+            </div>
+          )}
+          <div>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">Billing Type</label>
+            <Select value={modelBillingType} onChange={setModelBillingType} options={[
               { value: 'token', label: 'Token-based' },
               { value: 'request', label: 'Request-based' },
             ]} />
-          </Form.Item>
-          <Space>
-            <Form.Item name="input_price" label="Input Price ($/1M tokens)">
-              <InputNumber min={0} step={0.01} style={{ width: 150 }} />
-            </Form.Item>
-            <Form.Item name="output_price" label="Output Price ($/1M tokens)">
-              <InputNumber min={0} step={0.01} style={{ width: 150 }} />
-            </Form.Item>
-            <Form.Item name="request_price" label="Request Price ($/req)">
-              <InputNumber min={0} step={0.01} style={{ width: 150 }} />
-            </Form.Item>
-          </Space>
+          </div>
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-[#888888] mb-1.5">Input ($/1M)</label>
+              <input type="number" value={modelInputPrice} onChange={(e) => setModelInputPrice(e.target.value)} min={0} step={0.01}
+                className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors" />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-[#888888] mb-1.5">Output ($/1M)</label>
+              <input type="number" value={modelOutputPrice} onChange={(e) => setModelOutputPrice(e.target.value)} min={0} step={0.01}
+                className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors" />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-[#888888] mb-1.5">Request ($/req)</label>
+              <input type="number" value={modelRequestPrice} onChange={(e) => setModelRequestPrice(e.target.value)} min={0} step={0.01}
+                className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors" />
+            </div>
+          </div>
           {editingModel && (
-            <Form.Item name="enabled" label="Enabled" valuePropName="checked">
-              <Switch />
-            </Form.Item>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-[#888888]">Enabled</label>
+              <Toggle checked={modelEnabled} onChange={setModelEnabled} />
+            </div>
           )}
-          <Form.Item>
-            <Button type="primary" htmlType="submit">
-              {editingModel ? 'Update' : 'Create'}
-            </Button>
-          </Form.Item>
-        </Form>
+          <Button variant="primary" type="submit">
+            {editingModel ? 'Update' : 'Create'}
+          </Button>
+        </form>
       </Modal>
 
-      <Modal
-        title={editingChannel ? `Edit Channel: ${editingChannel.name}` : 'Add Channel'}
-        open={channelModalOpen}
-        onCancel={() => setChannelModalOpen(false)}
-        footer={null}
-      >
-        <Form form={channelForm} layout="vertical" onFinish={handleSaveChannel}>
-          <Form.Item name="name" label="Name" rules={[{ required: true }]}>
-            <Input placeholder="e.g., primary" />
-          </Form.Item>
-          <Form.Item name="api_key" label="API Key" rules={[{ required: true }]}>
-            <Input.Password placeholder="Upstream API key" />
-          </Form.Item>
-          <Form.Item name="base_url" label="Base URL">
-            <Input placeholder="Leave empty to use provider default" />
-          </Form.Item>
-          <Form.Item name="priority" label="Priority" initialValue={0}>
-            <InputNumber min={0} style={{ width: '100%' }} />
-          </Form.Item>
+      {/* Channel Modal */}
+      <Modal open={channelModalOpen} onClose={() => setChannelModalOpen(false)} title={editingChannel ? `Edit Channel: ${editingChannel.name}` : 'Add Channel'}>
+        <form onSubmit={handleSaveChannel} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">Name</label>
+            <input type="text" value={channelName} onChange={(e) => setChannelName(e.target.value)} placeholder="e.g., primary" required
+              className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">API Key</label>
+            <input type="password" value={channelApiKey} onChange={(e) => setChannelApiKey(e.target.value)} placeholder="Upstream API key" required
+              className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">Base URL</label>
+            <input type="text" value={channelBaseUrl} onChange={(e) => setChannelBaseUrl(e.target.value)} placeholder="Leave empty to use provider default"
+              className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">Priority</label>
+            <input type="number" value={channelPriority} onChange={(e) => setChannelPriority(e.target.value)} min={0}
+              className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors" />
+          </div>
           {editingChannel && (
-            <Form.Item name="enabled" label="Enabled" valuePropName="checked">
-              <Switch />
-            </Form.Item>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-[#888888]">Enabled</label>
+              <Toggle checked={channelEnabled} onChange={setChannelEnabled} />
+            </div>
           )}
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={createChannelMutation.isPending || updateChannelMutation.isPending}>
-              {editingChannel ? 'Update' : 'Create'}
-            </Button>
-          </Form.Item>
-        </Form>
+          <Button variant="primary" type="submit" loading={createChannelMutation.isPending || updateChannelMutation.isPending}>
+            {editingChannel ? 'Update' : 'Create'}
+          </Button>
+        </form>
       </Modal>
     </div>
   );

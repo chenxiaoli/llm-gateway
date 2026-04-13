@@ -1,7 +1,10 @@
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Form, Input, InputNumber, Switch, Button, Space, Popconfirm } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import { ArrowLeft } from 'lucide-react';
 import { useKey, useUpdateKey, useDeleteKey } from '../hooks/useKeys';
+import { Button } from '../components/ui/Button';
+import { Toggle } from '../components/ui/Toggle';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 export default function KeyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -9,19 +12,33 @@ export default function KeyDetail() {
   const { data: key, isLoading } = useKey(id!);
   const updateMutation = useUpdateKey();
   const deleteMutation = useDeleteKey();
-  const [form] = Form.useForm();
 
-  if (isLoading) return <div>Loading...</div>;
-  if (!key) return <div>Key not found</div>;
+  const [name, setName] = useState('');
+  const [enabled, setEnabled] = useState(false);
+  const [rateLimit, setRateLimit] = useState('');
+  const [budgetMonthly, setBudgetMonthly] = useState('');
 
-  const handleUpdate = async (values: any) => {
+  useEffect(() => {
+    if (key) {
+      setName(key.name);
+      setEnabled(key.enabled);
+      setRateLimit(key.rate_limit != null ? String(key.rate_limit) : '');
+      setBudgetMonthly(key.budget_monthly != null ? String(key.budget_monthly) : '');
+    }
+  }, [key]);
+
+  if (isLoading) return <div className="text-[#555555]">Loading...</div>;
+  if (!key) return <div className="text-[#555555]">Key not found</div>;
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
     await updateMutation.mutateAsync({
       id: key.id,
       input: {
-        name: values.name,
-        rate_limit: values.rate_limit ?? null,
-        budget_monthly: values.budget_monthly ?? null,
-        enabled: values.enabled,
+        name,
+        rate_limit: rateLimit ? Number(rateLimit) : null,
+        budget_monthly: budgetMonthly ? Number(budgetMonthly) : null,
+        enabled,
       },
     });
   };
@@ -33,48 +50,57 @@ export default function KeyDetail() {
 
   return (
     <div>
-      <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/console/keys')} style={{ marginBottom: 16 }}>
+      <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/console/keys')} className="mb-4">
         Back to Keys
       </Button>
 
-      <div className="page-header">
-        <h1 className="page-title">Edit Key: {key.name}</h1>
+      <div className="mb-6">
+        <h1 className="font-display text-2xl font-bold text-[#ededed]">Edit Key: {key.name}</h1>
       </div>
 
-      <Card style={{ maxWidth: 500 }}>
-        <Form
-          form={form}
-          layout="vertical"
-          initialValues={{
-            name: key.name,
-            rate_limit: key.rate_limit,
-            budget_monthly: key.budget_monthly,
-            enabled: key.enabled,
-          }}
-          onFinish={handleUpdate}
-        >
-          <Form.Item name="name" label="Name" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="enabled" label="Enabled" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <Form.Item name="rate_limit" label="Rate Limit (RPM, null = unlimited)">
-            <InputNumber min={1} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="budget_monthly" label="Monthly Budget ($, null = unlimited)">
-            <InputNumber min={0} step={0.01} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={updateMutation.isPending}>Save</Button>
-              <Popconfirm title="Delete this key?" onConfirm={handleDelete}>
-                <Button danger>Delete Key</Button>
-              </Popconfirm>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Card>
+      <form onSubmit={handleUpdate} className="max-w-lg space-y-4">
+        <div>
+          <label className="block text-xs font-medium text-[#888888] mb-1.5">Name</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] outline-none focus:border-accent/50 transition-colors"
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-[#888888]">Enabled</label>
+          <Toggle checked={enabled} onChange={setEnabled} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[#888888] mb-1.5">Rate Limit (RPM, empty = unlimited)</label>
+          <input
+            type="number"
+            value={rateLimit}
+            onChange={(e) => setRateLimit(e.target.value)}
+            min={1}
+            className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[#888888] mb-1.5">Monthly Budget ($, empty = unlimited)</label>
+          <input
+            type="number"
+            value={budgetMonthly}
+            onChange={(e) => setBudgetMonthly(e.target.value)}
+            min={0}
+            step={0.01}
+            className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button variant="primary" type="submit" loading={updateMutation.isPending}>Save</Button>
+          <ConfirmDialog title="Delete this key?" onConfirm={handleDelete} okText="Delete" cancelText="Cancel">
+            <Button variant="danger">Delete Key</Button>
+          </ConfirmDialog>
+        </div>
+      </form>
     </div>
   );
 }

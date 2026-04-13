@@ -1,97 +1,114 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Button, Modal, Form, Input, Space, Tag } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { Plus } from 'lucide-react';
 import { useProviders, useCreateProvider } from '../hooks/useProviders';
+import { Button } from '../components/ui/Button';
+import { Modal } from '../components/ui/Modal';
+import { Badge } from '../components/ui/Badge';
 
 export default function Providers() {
   const { data: providers, isLoading } = useProviders();
   const createMutation = useCreateProvider();
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
-  const [form] = Form.useForm();
+  const [name, setName] = useState('');
+  const [openaiUrl, setOpenaiUrl] = useState('');
+  const [anthropicUrl, setAnthropicUrl] = useState('');
 
-  const handleCreate = async (values: { name: string; openai_base_url?: string; anthropic_base_url?: string }) => {
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
     await createMutation.mutateAsync({
-      name: values.name,
-      openai_base_url: values.openai_base_url || null,
-      anthropic_base_url: values.anthropic_base_url || null,
+      name,
+      openai_base_url: openaiUrl || null,
+      anthropic_base_url: anthropicUrl || null,
     });
-    form.resetFields();
+    setName('');
+    setOpenaiUrl('');
+    setAnthropicUrl('');
     setCreateOpen(false);
   };
 
-  const columns = [
-    {
-      title: 'Name',
-      dataIndex: 'name',
-      key: 'name',
-      render: (name: string, record: { id: string }) => (
-        <a onClick={() => navigate(`/console/providers/${record.id}`)}>{name}</a>
-      ),
-    },
-    {
-      title: 'Protocols',
-      key: 'protocols',
-      render: (_: unknown, record: { openai_base_url: string | null; anthropic_base_url: string | null }) => (
-        <Space>
-          {record.openai_base_url && <Tag color="#3b82f6">OpenAI</Tag>}
-          {record.anthropic_base_url && <Tag color="#a855f7">Anthropic</Tag>}
-        </Space>
-      ),
-    },
-    {
-      title: 'Status',
-      dataIndex: 'enabled',
-      key: 'enabled',
-      render: (enabled: boolean) => (
-        <Tag color={enabled ? '#06d6a0' : '#ef4444'}>{enabled ? 'Active' : 'Disabled'}</Tag>
-      ),
-    },
-    {
-      title: 'Created',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      render: (v: string) => <span className="mono">{new Date(v).toLocaleDateString()}</span>,
-    },
-  ];
-
   return (
-    <>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 className="page-title">Providers</h1>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+    <div>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="font-display text-2xl font-bold text-[#ededed]">Providers</h1>
+        <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>
           Add Provider
         </Button>
       </div>
 
-      <div className="console-table">
-        <Table dataSource={providers} columns={columns} rowKey="id" loading={isLoading} />
-      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12 text-[#555555]">Loading...</div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-[#1e1e1e]">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#1e1e1e]">
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Name</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Protocols</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Status</th>
+                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              {providers?.map((provider) => (
+                <tr key={provider.id} className="border-b border-[#1e1e1e]/50 hover:bg-white/[0.02] transition-colors">
+                  <td className="px-4 py-2.5">
+                    <button onClick={() => navigate(`/console/providers/${provider.id}`)} className="text-accent hover:text-accent-hover transition-colors">
+                      {provider.name}
+                    </button>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex gap-1.5">
+                      {provider.openai_base_url && <Badge variant="blue">OpenAI</Badge>}
+                      {provider.anthropic_base_url && <Badge variant="purple">Anthropic</Badge>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-2.5"><Badge variant={provider.enabled ? 'green' : 'red'}>{provider.enabled ? 'Active' : 'Disabled'}</Badge></td>
+                  <td className="px-4 py-2.5"><span className="mono">{new Date(provider.created_at).toLocaleDateString()}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      <Modal
-        title="Add Provider"
-        open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        footer={null}
-      >
-        <Form form={form} layout="vertical" onFinish={handleCreate}>
-          <Form.Item name="name" label="Name" rules={[{ required: true }]}>
-            <Input placeholder="e.g., OpenAI" />
-          </Form.Item>
-          <Form.Item name="openai_base_url" label="OpenAI Base URL">
-            <Input placeholder="https://api.openai.com/v1" />
-          </Form.Item>
-          <Form.Item name="anthropic_base_url" label="Anthropic Base URL">
-            <Input placeholder="https://api.anthropic.com" />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={createMutation.isPending}>
-              Create
-            </Button>
-          </Form.Item>
-        </Form>
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Add Provider">
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., OpenAI"
+              required
+              className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">OpenAI Base URL</label>
+            <input
+              type="text"
+              value={openaiUrl}
+              onChange={(e) => setOpenaiUrl(e.target.value)}
+              placeholder="https://api.openai.com/v1"
+              className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">Anthropic Base URL</label>
+            <input
+              type="text"
+              value={anthropicUrl}
+              onChange={(e) => setAnthropicUrl(e.target.value)}
+              placeholder="https://api.anthropic.com"
+              className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
+            />
+          </div>
+          <Button variant="primary" loading={createMutation.isPending}>Create</Button>
+        </form>
       </Modal>
-    </>
+    </div>
   );
 }
