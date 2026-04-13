@@ -218,7 +218,7 @@ export default function AppLayout() {
 
         {/* Content */}
         <main className="flex-1 bg-base-200/40 p-6 overflow-y-auto">
-          <div className="mx-auto max-w-[1400px] animate-fade-in-up" key={location.pathname}>
+          <div className="animate-fade-in-up" key={location.pathname}>
             <Outlet />
           </div>
         </main>
