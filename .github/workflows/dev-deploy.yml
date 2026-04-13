@@ -26,6 +26,9 @@ jobs:
       - name: Frontend tests
         run: cd web && npm test
 
+      - name: Build frontend
+        run: cd web && npm run build
+
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
