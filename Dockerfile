@@ -9,6 +9,7 @@ RUN npm run build
 
 # ---- Stage 2: Prepare cargo-chef ----
 FROM rust:1.94-slim AS chef
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 RUN cargo install cargo-chef
 WORKDIR /app
 
