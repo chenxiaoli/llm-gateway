@@ -1,22 +1,35 @@
 import { useState } from 'react';
-import { Switch, Card, Form, Input, Button, Alert } from 'antd';
 import { useSettings, useUpdateSettings } from '../hooks/useSettings';
 import { changePassword } from '../api/auth';
+import { Button } from '../components/ui/Button';
+import { Toggle } from '../components/ui/Toggle';
+import { Alert } from '../components/ui/Alert';
+import { toast } from 'sonner';
 
 export default function Settings() {
   const { data: settings, isLoading } = useSettings();
   const updateMutation = useUpdateSettings();
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordStatus, setPasswordStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [passwordForm] = Form.useForm();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-  const handleChangePassword = async (values: { current_password: string; new_password: string }) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    if (!currentPassword || !newPassword) return;
     setPasswordLoading(true);
     setPasswordStatus(null);
     try {
-      await changePassword(values);
+      await changePassword({ current_password: currentPassword, new_password: newPassword });
       setPasswordStatus({ type: 'success', message: 'Password changed successfully' });
-      passwordForm.resetFields();
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
     } catch {
       setPasswordStatus({ type: 'error', message: 'Failed to change password' });
     } finally {
@@ -26,70 +39,67 @@ export default function Settings() {
 
   return (
     <div>
-      <div className="page-header">
-        <h1 className="page-title">Settings</h1>
+      <div className="mb-6">
+        <h1 className="font-display text-2xl font-bold text-[#ededed]">Settings</h1>
       </div>
-      <Card loading={isLoading} style={{ maxWidth: 400 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ color: 'var(--text-secondary)' }}>Allow Registration</span>
-          <Switch
-            checked={settings?.allow_registration ?? false}
-            onChange={(checked) => updateMutation.mutate({ allow_registration: checked })}
-          />
-        </div>
-      </Card>
 
-      <Card title={<h3 className="page-title" style={{ fontSize: 16, margin: 0 }}>Change Password</h3>} style={{ marginTop: 16, maxWidth: 400 }}>
+      {isLoading ? (
+        <div className="text-[#555555]">Loading...</div>
+      ) : (
+        <div className="max-w-lg rounded-xl border border-[#1e1e1e] bg-[#0a0a0a] p-5 mb-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-[#888888]">Allow Registration</span>
+            <Toggle
+              checked={settings?.allow_registration ?? false}
+              onChange={(checked) => updateMutation.mutate({ allow_registration: checked })}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-lg rounded-xl border border-[#1e1e1e] bg-[#0a0a0a] p-5">
+        <h2 className="font-display text-base font-semibold text-[#ededed] mb-4">Change Password</h2>
+
         {passwordStatus && (
-          <Alert
-            type={passwordStatus.type}
-            message={passwordStatus.message}
-            showIcon
-            closable
-            style={{ marginBottom: 16 }}
-            onClose={() => setPasswordStatus(null)}
-          />
+          <Alert variant={passwordStatus.type === 'success' ? 'success' : 'error'} className="mb-4">
+            {passwordStatus.message}
+          </Alert>
         )}
-        <Form form={passwordForm} onFinish={handleChangePassword} layout="vertical">
-          <Form.Item
-            name="current_password"
-            label="Current Password"
-            rules={[{ required: true, message: 'Please enter your current password' }]}
-          >
-            <Input.Password />
-          </Form.Item>
-          <Form.Item
-            name="new_password"
-            label="New Password"
-            rules={[{ required: true, message: 'Please enter a new password' }]}
-          >
-            <Input.Password />
-          </Form.Item>
-          <Form.Item
-            name="confirm_password"
-            label="Confirm New Password"
-            dependencies={['new_password']}
-            rules={[
-              { required: true, message: 'Please confirm your new password' },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  if (!value || getFieldValue('new_password') === value) {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(new Error('Passwords do not match'));
-                },
-              }),
-            ]}
-          >
-            <Input.Password />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={passwordLoading}>
-              Change Password
-            </Button>
-          </Form.Item>
-        </Form>
-      </Card>
+
+        <form onSubmit={handleChangePassword} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">Current Password</label>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+              className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">New Password</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">Confirm New Password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
+            />
+          </div>
+          <Button variant="primary" loading={passwordLoading}>Change Password</Button>
+        </form>
+      </div>
     </div>
   );
 }

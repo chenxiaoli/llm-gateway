@@ -1,121 +1,136 @@
 import { useState } from 'react';
-import { Typography, DatePicker, Select, Table, Card, Row, Col, Tag, Drawer } from 'antd';
 import { useLogs } from '../hooks/useLogs';
 import { useKeys } from '../hooks/useKeys';
+import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
+import { Drawer } from '../components/ui/Drawer';
 import JsonViewer from '../components/JsonViewer';
-import { Dayjs } from 'dayjs';
 import type { AuditLog } from '../types';
 
-const { RangePicker } = DatePicker;
-const { Title } = Typography;
-
 export default function Logs() {
-  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
-  const [keyFilter, setKeyFilter] = useState<string | undefined>(undefined);
+  const [since, setSince] = useState('');
+  const [until, setUntil] = useState('');
+  const [keyFilter, setKeyFilter] = useState('');
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize] = useState(20);
 
-  const since = dateRange?.[0]?.toISOString();
-  const until = dateRange?.[1]?.toISOString();
-
-  const { data, isLoading } = useLogs({ since, until, key_id: keyFilter }, page, pageSize);
+  const { data, isLoading } = useLogs(
+    { since: since || undefined, until: until || undefined, key_id: keyFilter || undefined },
+    page,
+    pageSize,
+  );
   const { data: keys } = useKeys();
 
-  const columns = [
-    { title: 'Time', dataIndex: 'created_at', key: 'created_at', width: 180,
-      render: (v: string) => <span className="mono">{new Date(v).toLocaleString()}</span>,
-    },
-    { title: 'Model', dataIndex: 'model_name', key: 'model_name', width: 150,
-      render: (v: string) => <span className="mono">{v}</span>,
-    },
-    { title: 'Protocol', dataIndex: 'protocol', key: 'protocol', width: 100,
-      render: (v: string) => <Tag color={v === 'openai' ? '#3b82f6' : '#a855f7'}>{v}</Tag>,
-    },
-    { title: 'Status', dataIndex: 'status_code', key: 'status_code', width: 80,
-      render: (v: number) => <Tag color={v < 400 ? '#06d6a0' : v < 500 ? '#f59e0b' : '#ef4444'}>{v}</Tag>,
-    },
-    { title: 'Latency', dataIndex: 'latency_ms', key: 'latency_ms', width: 100,
-      render: (v: number) => <span className="mono">{v}ms</span>,
-    },
-    { title: 'Input', dataIndex: 'input_tokens', key: 'input_tokens', width: 80,
-      render: (v: number | null) => <span className="mono">{v ?? '-'}</span>,
-    },
-    { title: 'Output', dataIndex: 'output_tokens', key: 'output_tokens', width: 80,
-      render: (v: number | null) => <span className="mono">{v ?? '-'}</span>,
-    },
-    {
-      title: 'Actions', key: 'actions', width: 80,
-      render: (_: unknown, record: AuditLog) => (
-        <a onClick={() => setSelectedLog(record)}>View</a>
-      ),
-    },
-  ];
+  const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
 
   return (
     <div>
-      <div className="page-header">
-        <h1 className="page-title">Audit Logs</h1>
+      <div className="mb-6">
+        <h1 className="font-display text-2xl font-bold text-[#ededed]">Audit Logs</h1>
       </div>
 
-      <Card style={{ marginBottom: 16 }}>
-        <Row gutter={16} align="middle">
-          <Col>
-            <RangePicker
-              onChange={(dates) => setDateRange(dates as [Dayjs | null, Dayjs | null] | null)}
-            />
-          </Col>
-          <Col>
-            <Select
-              placeholder="Filter by API Key"
-              allowClear
-              style={{ width: 200 }}
-              onChange={(v) => setKeyFilter(v)}
-              options={keys?.items?.map(k => ({ value: k.id, label: k.name })) ?? []}
-            />
-          </Col>
-        </Row>
-      </Card>
-
-      <div className="console-table">
-        <Table
-          dataSource={data?.items}
-          columns={columns}
-          rowKey="id"
-          loading={isLoading}
-          size="small"
-          scroll={{ x: 1000 }}
-          pagination={{
-            current: page,
-            pageSize,
-            total: data?.total ?? 0,
-            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
-            showSizeChanger: true,
-            showTotal: (total) => `Total ${total}`,
-          }}
+      {/* Filters */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <input
+          type="date"
+          value={since}
+          onChange={(e) => setSince(e.target.value)}
+          className="h-9 rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] outline-none focus:border-accent/50 transition-colors"
         />
+        <input
+          type="date"
+          value={until}
+          onChange={(e) => setUntil(e.target.value)}
+          className="h-9 rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] outline-none focus:border-accent/50 transition-colors"
+        />
+        <select
+          value={keyFilter}
+          onChange={(e) => setKeyFilter(e.target.value)}
+          className="h-9 rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] outline-none focus:border-accent/50 transition-colors"
+        >
+          <option value="">All API Keys</option>
+          {keys?.items?.map((k) => (
+            <option key={k.id} value={k.id}>{k.name}</option>
+          ))}
+        </select>
       </div>
 
-      <Drawer
-        title="Log Detail"
-        width={700}
-        open={!!selectedLog}
-        onClose={() => setSelectedLog(null)}
-      >
+      {/* Table */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12 text-[#555555]">Loading...</div>
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-xl border border-[#1e1e1e]">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#1e1e1e]">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Time</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Model</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Protocol</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Status</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Latency</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Input</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Output</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data?.items?.map((log) => (
+                  <tr key={log.id} className="border-b border-[#1e1e1e]/50 hover:bg-white/[0.02] transition-colors">
+                    <td className="px-4 py-2.5"><span className="mono text-[13px]">{new Date(log.created_at).toLocaleString()}</span></td>
+                    <td className="px-4 py-2.5"><span className="mono">{log.model_name}</span></td>
+                    <td className="px-4 py-2.5"><Badge variant={log.protocol === 'openai' ? 'blue' : 'purple'}>{log.protocol}</Badge></td>
+                    <td className="px-4 py-2.5"><Badge variant={log.status_code < 400 ? 'green' : log.status_code < 500 ? 'amber' : 'red'}>{log.status_code}</Badge></td>
+                    <td className="px-4 py-2.5"><span className="mono">{log.latency_ms}ms</span></td>
+                    <td className="px-4 py-2.5"><span className="mono">{log.input_tokens ?? '-'}</span></td>
+                    <td className="px-4 py-2.5"><span className="mono">{log.output_tokens ?? '-'}</span></td>
+                    <td className="px-4 py-2.5">
+                      <button onClick={() => setSelectedLog(log)} className="text-accent hover:text-accent-hover transition-colors text-sm">
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between text-sm">
+              <span className="text-[#555555]">Total {data?.total ?? 0}</span>
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
+                <span className="px-2 text-[#888888]">{page} / {totalPages}</span>
+                <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Detail Drawer */}
+      <Drawer open={!!selectedLog} onClose={() => setSelectedLog(null)} title="Log Detail" width={700}>
         {selectedLog && (
-          <div>
-            <p><strong>Time:</strong> <span className="mono">{new Date(selectedLog.created_at).toLocaleString()}</span></p>
-            <p><strong>Model:</strong> <span className="mono">{selectedLog.model_name}</span></p>
-            <p><strong>Protocol:</strong> <Tag color={selectedLog.protocol === 'openai' ? '#3b82f6' : '#a855f7'}>{selectedLog.protocol}</Tag></p>
-            <p><strong>Status:</strong> <Tag color={selectedLog.status_code < 400 ? '#06d6a0' : '#ef4444'}>{selectedLog.status_code}</Tag></p>
-            <p><strong>Latency:</strong> <span className="mono">{selectedLog.latency_ms}ms</span></p>
-            <p><strong>Tokens:</strong> <span className="mono">{selectedLog.input_tokens ?? 0} in / {selectedLog.output_tokens ?? 0} out</span></p>
+          <div className="space-y-3">
+            <div className="flex gap-8 text-sm">
+              <div><span className="text-[#555555]">Time:</span> <span className="mono">{new Date(selectedLog.created_at).toLocaleString()}</span></div>
+              <div><span className="text-[#555555]">Model:</span> <span className="mono">{selectedLog.model_name}</span></div>
+              <div><span className="text-[#555555]">Protocol:</span> <Badge variant={selectedLog.protocol === 'openai' ? 'blue' : 'purple'}>{selectedLog.protocol}</Badge></div>
+              <div><span className="text-[#555555]">Status:</span> <Badge variant={selectedLog.status_code < 400 ? 'green' : 'red'}>{selectedLog.status_code}</Badge></div>
+              <div><span className="text-[#555555]">Latency:</span> <span className="mono">{selectedLog.latency_ms}ms</span></div>
+              <div><span className="text-[#555555]">Tokens:</span> <span className="mono">{selectedLog.input_tokens ?? 0} in / {selectedLog.output_tokens ?? 0} out</span></div>
+            </div>
 
-            <Title level={5} style={{ marginTop: 16, fontFamily: 'var(--font-display)' }}>Request Body</Title>
-            <JsonViewer data={selectedLog.request_body} />
+            <div>
+              <h3 className="font-display text-sm font-semibold text-[#ededed] mt-4 mb-2">Request Body</h3>
+              <JsonViewer data={selectedLog.request_body} />
+            </div>
 
-            <Title level={5} style={{ marginTop: 16, fontFamily: 'var(--font-display)' }}>Response Body</Title>
-            <JsonViewer data={selectedLog.response_body} />
+            <div>
+              <h3 className="font-display text-sm font-semibold text-[#ededed] mt-4 mb-2">Response Body</h3>
+              <JsonViewer data={selectedLog.response_body} />
+            </div>
           </div>
         )}
       </Drawer>
