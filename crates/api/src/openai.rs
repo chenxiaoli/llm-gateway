@@ -135,7 +135,7 @@ pub async fn chat_completions(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     let model_entry = models
         .iter()
-        .find(|m| m.model.name == model_name && m.openai_compatible && m.model.enabled)
+        .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase() && m.openai_compatible && m.model.enabled)
         .ok_or(ApiError::NotFound(format!("Model '{}' not found or not available via OpenAI", model_name)))?;
 
     let provider_id = &model_entry.model.provider_id;
