@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useProvider, useUpdateProvider, useDeleteProvider, useChannels, useCreateChannel, useUpdateChannel, useDeleteChannel } from '../hooks/useProviders';
 import { useModels, useCreateModel, useUpdateModel, useDeleteModel } from '../hooks/useModels';
 import { Button } from '../components/ui/Button';
@@ -121,7 +121,7 @@ export default function ProviderDetail() {
         <div className="flex items-center justify-between mb-3"><h2 className="text-base font-semibold">Models</h2><Button icon={<Plus className="h-4 w-4" />} onClick={openAddModel}>Add Model</Button></div>
         <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
           <table className="table table-sm">
-            <thead><tr className="border-b border-base-300"><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Billing</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Input ($/1M)</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Output ($/1M)</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Actions</th></tr></thead>
+            <thead><tr className="border-b border-base-300"><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Billing</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Input ($/1M)</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Output ($/1M)</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50 w-20">Actions</th></tr></thead>
             <tbody>
               {models?.map((model) => (
                 <tr key={model.name} className="border-b border-base-200 hover">
@@ -131,13 +131,29 @@ export default function ProviderDetail() {
                   <td className="mono">{model.output_price.toFixed(2)}</td>
                   <td><Badge variant={model.enabled ? 'green' : 'red'}>{model.enabled ? 'Active' : 'Disabled'}</Badge></td>
                   <td>
-                    <div className="flex gap-2">
-                      <button onClick={() => openEditModel(model)} className="link link-primary text-sm">Edit</button>
-                      <ConfirmDialog title={`Delete model "${model.name}"?`} onConfirm={() => deleteModelMutation.mutateAsync(model.name)} okText="Delete"><button className="link link-error text-sm">Delete</button></ConfirmDialog>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => openEditModel(model)} className="btn btn-ghost btn-xs btn-circle" aria-label="Edit model">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <ConfirmDialog title={`Delete model "${model.name}"?`} onConfirm={() => deleteModelMutation.mutateAsync(model.name)} okText="Delete">
+                        <button className="btn btn-ghost btn-xs btn-circle text-error hover:text-error" aria-label="Delete model">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </ConfirmDialog>
                     </div>
                   </td>
                 </tr>
               ))}
+              {(!models?.length) && (
+                <tr>
+                  <td colSpan={6} className="text-center py-12">
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="text-base-content/25 text-sm">No models configured</span>
+                      <button onClick={openAddModel} className="link link-primary text-sm">Add your first model</button>
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -147,7 +163,7 @@ export default function ProviderDetail() {
         <div className="flex items-center justify-between mb-3"><h2 className="text-base font-semibold">Channels</h2><Button icon={<Plus className="h-4 w-4" />} onClick={openAddChannel}>Add Channel</Button></div>
         <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
           <table className="table table-sm">
-            <thead><tr className="border-b border-base-300"><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Base URL</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Priority</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Actions</th></tr></thead>
+            <thead><tr className="border-b border-base-300"><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Base URL</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Priority</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50 w-20">Actions</th></tr></thead>
             <tbody>
               {channels?.map((channel) => (
                 <tr key={channel.id} className="border-b border-base-200 hover">
@@ -156,13 +172,29 @@ export default function ProviderDetail() {
                   <td className="mono">{channel.priority}</td>
                   <td><Badge variant={channel.enabled ? 'green' : 'red'}>{channel.enabled ? 'Active' : 'Disabled'}</Badge></td>
                   <td>
-                    <div className="flex gap-2">
-                      <button onClick={() => openEditChannel(channel)} className="link link-primary text-sm">Edit</button>
-                      <ConfirmDialog title={`Delete channel "${channel.name}"?`} onConfirm={() => deleteChannelMutation.mutateAsync(channel.id)} okText="Delete"><button className="link link-error text-sm">Delete</button></ConfirmDialog>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => openEditChannel(channel)} className="btn btn-ghost btn-xs btn-circle" aria-label="Edit channel">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <ConfirmDialog title={`Delete channel "${channel.name}"?`} onConfirm={() => deleteChannelMutation.mutateAsync(channel.id)} okText="Delete">
+                        <button className="btn btn-ghost btn-xs btn-circle text-error hover:text-error" aria-label="Delete channel">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </ConfirmDialog>
                     </div>
                   </td>
                 </tr>
               ))}
+              {(!channels?.length) && (
+                <tr>
+                  <td colSpan={5} className="text-center py-12">
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="text-base-content/25 text-sm">No channels configured</span>
+                      <button onClick={openAddChannel} className="link link-primary text-sm">Add your first channel</button>
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
