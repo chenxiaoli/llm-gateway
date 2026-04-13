@@ -12,36 +12,48 @@ export interface ModalProps {
 
 export function Modal({ open, onClose, title, children, footer, className }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  const isClosingRef = useRef(false);
 
-  // Sync dialog open/close state with React prop
+  // Sync dialog open state with React prop
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
+
+    // Prevent effect from running during our own close operation
+    if (isClosingRef.current) return;
+
     if (open) {
       try {
         dialog.showModal();
       } catch {
-        // Already open — ignore
+        // Already open
       }
     } else if (dialog.open) {
-      dialog.close();
+      // Use requestAnimationFrame to ensure smooth close
+      requestAnimationFrame(() => {
+        if (dialog.open) {
+          dialog.close();
+        }
+      });
     }
   }, [open]);
 
-  // Listen for native close event (backdrop click, Escape key, form submit)
-  // Uses a ref for onClose so the listener stays stable across renders
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const handler = () => onCloseRef.current();
-    dialog.addEventListener('close', handler);
-    return () => dialog.removeEventListener('close', handler);
-  }, []);
-
   return (
-    <dialog ref={dialogRef} className={cn('modal', className)}>
+    <dialog
+      ref={dialogRef}
+      className={cn('modal', className)}
+      onClose={(_e) => {
+        // Prevent double-close: mark as closing before calling onClose
+        isClosingRef.current = true;
+        onClose();
+        // Reset after a frame to allow the effect to settle
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            isClosingRef.current = false;
+          }, 0);
+        });
+      }}
+    >
       <div className="modal-box">
         {title && (
           <div className="flex items-center justify-between mb-5">

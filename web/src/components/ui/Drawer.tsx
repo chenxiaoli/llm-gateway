@@ -10,13 +10,15 @@ export interface DrawerProps {
 
 export function Drawer({ open, onClose, title, children, width = 640 }: DrawerProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  const isClosingRef = useRef(false);
 
-  // Sync dialog open/close state with React prop
+  // Sync dialog open state with React prop
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
+
+    if (isClosingRef.current) return;
+
     if (open) {
       try {
         dialog.showModal();
@@ -24,21 +26,28 @@ export function Drawer({ open, onClose, title, children, width = 640 }: DrawerPr
         // Already open
       }
     } else if (dialog.open) {
-      dialog.close();
+      requestAnimationFrame(() => {
+        if (dialog.open) {
+          dialog.close();
+        }
+      });
     }
   }, [open]);
 
-  // Listen for native close event — stable listener via ref
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    const handler = () => onCloseRef.current();
-    dialog.addEventListener('close', handler);
-    return () => dialog.removeEventListener('close', handler);
-  }, []);
-
   return (
-    <dialog ref={dialogRef} className="modal">
+    <dialog
+      ref={dialogRef}
+      className="modal"
+      onClose={(_e) => {
+        isClosingRef.current = true;
+        onClose();
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            isClosingRef.current = false;
+          }, 0);
+        });
+      }}
+    >
       <div
         className="modal-box max-w-none p-0 flex flex-col"
         style={{ width: `${width}px`, maxWidth: '100vw' }}
