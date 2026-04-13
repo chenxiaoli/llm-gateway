@@ -13,8 +13,18 @@ pub struct PaginatedResponse<T: Serialize> {
 
 #[derive(Debug, Deserialize)]
 pub struct PaginationParams {
+    #[serde(default, deserialize_with = "deserialize_i64_opt")]
     pub page: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_i64_opt")]
     pub page_size: Option<i64>,
+}
+
+fn deserialize_i64_opt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<i64>, D::Error> {
+    let s: Option<String> = Option::deserialize(d)?;
+    match s {
+        None => Ok(None),
+        Some(v) => v.parse::<i64>().map(Some).map_err(serde::de::Error::custom),
+    }
 }
 
 impl PaginationParams {
@@ -195,11 +205,23 @@ pub enum Protocol {
     Anthropic,
 }
 
+fn deserialize_datetime_opt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<DateTime<Utc>>, D::Error> {
+    let s: Option<String> = Option::deserialize(d)?;
+    match s {
+        None => Ok(None),
+        Some(v) => DateTime::parse_from_rfc3339(&v)
+            .map(|dt| Some(dt.with_timezone(&Utc)))
+            .map_err(serde::de::Error::custom),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct UsageFilter {
     pub key_id: Option<String>,
     pub model_name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_datetime_opt")]
     pub since: Option<DateTime<Utc>>,
+    #[serde(default, deserialize_with = "deserialize_datetime_opt")]
     pub until: Option<DateTime<Utc>>,
 }
 
@@ -226,9 +248,13 @@ pub struct AuditLog {
 pub struct LogFilter {
     pub key_id: Option<String>,
     pub model_name: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_datetime_opt")]
     pub since: Option<DateTime<Utc>>,
+    #[serde(default, deserialize_with = "deserialize_datetime_opt")]
     pub until: Option<DateTime<Utc>>,
+    #[serde(default, deserialize_with = "deserialize_i64_opt")]
     pub offset: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_i64_opt")]
     pub limit: Option<i64>,
 }
 
