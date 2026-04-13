@@ -98,4 +98,16 @@ jobs:
               -v /opt/dev/llm-gateway/data:/app/data \
               ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:develop
 
+            sleep 3
+
+            STATUS=$(docker inspect --format='{{.State.Status}}' llm-gateway-dev 2>/dev/null)
+            if [ "$STATUS" != "running" ]; then
+              echo "ERROR: container is '$STATUS', expected 'running'"
+              docker logs llm-gateway-dev 2>&1 | tail -30
+              exit 1
+            fi
+
+            echo "OK: llm-gateway-dev is running"
+            docker logs llm-gateway-dev 2>&1 | tail -5
+
             docker image prune -f
