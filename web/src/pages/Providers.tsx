@@ -58,7 +58,10 @@ export default function Providers() {
                 {providers?.map((provider) => (
                   <tr key={provider.id} className="border-b border-base-200/50 hover:bg-base-200/30 transition-colors">
                     <td>
-                      <button onClick={() => navigate(`/console/providers/${provider.id}`)} className="link link-primary text-sm font-medium">
+                      <button
+                        onClick={() => navigate(`/console/providers/${provider.id}`)}
+                        className="link link-primary text-sm font-medium focus:outline-none focus:rounded-md focus:ring-2 focus:ring-primary/50 focus:ring-offset-1 focus:ring-offset-base-100"
+                      >
                         {provider.name}
                       </button>
                     </td>
@@ -74,8 +77,13 @@ export default function Providers() {
                 ))}
                 {(!providers?.length) && (
                   <tr>
-                    <td colSpan={4} className="text-center py-16 text-base-content/25 text-sm">
-                      No providers configured
+                    <td colSpan={4} className="text-center py-16">
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="text-base-content/25 text-sm">No providers configured</span>
+                        <button onClick={() => setCreateOpen(true)} className="link link-primary text-sm">
+                          Add your first provider
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -88,18 +96,28 @@ export default function Providers() {
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Add Provider">
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="form-control">
-            <label className="label"><span className="label-text font-medium">Name</span></label>
+            <label className="label">
+              <span className="label-text font-medium">Name</span>
+            </label>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., OpenAI" required className="input input-bordered w-full" />
           </div>
           <div className="form-control">
-            <label className="label"><span className="label-text font-medium">OpenAI Base URL</span></label>
+            <label className="label">
+              <span className="label-text font-medium">OpenAI Base URL</span>
+              <span className="label-text-alt">Optional</span>
+            </label>
             <input type="text" value={openaiUrl} onChange={(e) => setOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
           </div>
           <div className="form-control">
-            <label className="label"><span className="label-text font-medium">Anthropic Base URL</span></label>
+            <label className="label">
+              <span className="label-text font-medium">Anthropic Base URL</span>
+              <span className="label-text-alt">Optional</span>
+            </label>
             <input type="text" value={anthropicUrl} onChange={(e) => setAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" />
           </div>
-          <Button variant="primary" loading={createMutation.isPending}>Create</Button>
+          <div className="flex justify-end">
+            <Button variant="primary" loading={createMutation.isPending}>Create</Button>
+          </div>
         </form>
       </Modal>
     </div>
