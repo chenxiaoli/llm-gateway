@@ -8,10 +8,8 @@ describe('Users page', () => {
     renderWithProviders(<Users />, { route: '/console/users' });
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Users' })).toBeInTheDocument();
+      expect(screen.getByRole('table')).toBeInTheDocument();
     }, { timeout: 5000 });
-
-    expect(screen.getByRole('table')).toBeInTheDocument();
   });
 
   it('shows Users title', async () => {
@@ -26,13 +24,11 @@ describe('Users page', () => {
     renderWithProviders(<Users />, { route: '/console/users' });
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Users' })).toBeInTheDocument();
+      expect(screen.getByText('Username')).toBeInTheDocument();
+      expect(screen.getByText('Role')).toBeInTheDocument();
+      expect(screen.getByText('Status')).toBeInTheDocument();
+      expect(screen.getByText('Created')).toBeInTheDocument();
+      expect(screen.getByText('Actions')).toBeInTheDocument();
     }, { timeout: 5000 });
-
-    expect(screen.getByText('Username')).toBeInTheDocument();
-    expect(screen.getByText('Role')).toBeInTheDocument();
-    expect(screen.getByText('Status')).toBeInTheDocument();
-    expect(screen.getByText('Created')).toBeInTheDocument();
-    expect(screen.getByText('Actions')).toBeInTheDocument();
   });
 });

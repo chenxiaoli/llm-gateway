@@ -4,7 +4,6 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Select } from '../components/ui/Select';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
-import type { UserResponse } from '../types';
 
 export default function Users() {
   const [page, setPage] = useState(1);

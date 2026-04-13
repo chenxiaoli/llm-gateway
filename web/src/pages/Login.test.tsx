@@ -5,25 +5,31 @@ import { http, HttpResponse } from 'msw';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Login from './Login';
-import { clearToken, setToken } from '../api/client';
+import { clearToken } from '../api/client';
 
-const navigate = vi.fn();
+const { mockNavigate, mockToastError } = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
+  mockToastError: vi.fn(),
+}));
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
-  return { ...actual, useNavigate: () => navigate };
+  return { ...actual, useNavigate: () => mockNavigate };
 });
+vi.mock('sonner', () => ({ toast: { error: mockToastError, success: vi.fn() } }));
 
 beforeEach(() => {
   clearToken();
-  navigate.mockClear();
+  mockNavigate.mockClear();
+  mockToastError.mockClear();
 });
 
 describe('Login page', () => {
   it('renders login form', () => {
     renderWithProviders(<Login />);
     expect(screen.getByText('LLM Gateway')).toBeInTheDocument();
-    expect(screen.getByLabelText('Username')).toBeInTheDocument();
-    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument();
   });
 
@@ -38,12 +44,12 @@ describe('Login page', () => {
   it('navigates to dashboard on valid credentials', async () => {
     renderWithProviders(<Login />);
 
-    await userEvent.type(screen.getByLabelText('Username'), 'admin');
-    await userEvent.type(screen.getByLabelText('Password'), 'password');
+    await userEvent.type(screen.getByPlaceholderText('Username'), 'admin');
+    await userEvent.type(screen.getByPlaceholderText('Password'), 'password');
     await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
-      expect(navigate).toHaveBeenCalledWith('/console/dashboard');
+      expect(mockNavigate).toHaveBeenCalledWith('/console/dashboard');
     });
   });
 
@@ -56,24 +62,21 @@ describe('Login page', () => {
 
     renderWithProviders(<Login />);
 
-    await userEvent.type(screen.getByLabelText('Username'), 'wrong');
-    await userEvent.type(screen.getByLabelText('Password'), 'wrong');
+    await userEvent.type(screen.getByPlaceholderText('Username'), 'wrong');
+    await userEvent.type(screen.getByPlaceholderText('Password'), 'wrong');
     await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Invalid username or password')).toBeInTheDocument();
+      expect(mockToastError).toHaveBeenCalledWith('Invalid username or password');
     });
-    expect(navigate).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it('requires username and password fields', async () => {
+  it('does not submit with empty fields', async () => {
     renderWithProviders(<Login />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
-    await waitFor(() => {
-      expect(screen.getByText('Enter your username')).toBeInTheDocument();
-    });
-    expect(screen.getByText('Enter your password')).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });

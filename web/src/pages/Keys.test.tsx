@@ -94,10 +94,10 @@ describe('Keys page', () => {
     await userEvent.click(screen.getByRole('button', { name: /Create Key/i }));
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Name')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('e.g., production-app')).toBeInTheDocument();
     }, { timeout: 5000 });
 
-    await userEvent.type(screen.getByLabelText('Name'), 'my-new-key');
+    await userEvent.type(screen.getByPlaceholderText('e.g., production-app'), 'my-new-key');
     const createBtn = await screen.findByRole('button', { name: /^Create$/ });
     await userEvent.click(createBtn);
 

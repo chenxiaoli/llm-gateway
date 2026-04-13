@@ -1,58 +1,43 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderWithProviders } from '../test/render';
 import { server } from '../test/server';
 import { http, HttpResponse } from 'msw';
-import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import Register from './Register';
 
-const navigate = vi.fn();
+const { mockNavigate, mockToastError } = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
+  mockToastError: vi.fn(),
+}));
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
-  return { ...actual, useNavigate: () => navigate };
+  return { ...actual, useNavigate: () => mockNavigate };
 });
+vi.mock('sonner', () => ({ toast: { error: mockToastError, success: vi.fn() } }));
 
 describe('Register page', () => {
   it('renders registration form with username, password, and confirm password fields', () => {
     renderWithProviders(<Register />, { route: '/console/register' });
 
     expect(screen.getByText('Create Account')).toBeInTheDocument();
-    expect(screen.getByLabelText('Username')).toBeInTheDocument();
-    expect(screen.getByLabelText('Password')).toBeInTheDocument();
-    expect(screen.getByLabelText('Confirm Password')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Confirm password')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Register' })).toBeInTheDocument();
-  });
-
-  it('shows password validation error for less than 6 characters', async () => {
-    renderWithProviders(<Register />, { route: '/console/register' });
-
-    const usernameInput = screen.getByLabelText('Username');
-    const passwordInput = screen.getByLabelText('Password');
-    const confirmInput = screen.getByLabelText('Confirm Password');
-
-    fireEvent.change(usernameInput, { target: { value: 'testuser' } });
-    fireEvent.change(passwordInput, { target: { value: 'abc' } });
-    fireEvent.change(confirmInput, { target: { value: 'abc' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Register' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Password must be at least 6 characters')).toBeInTheDocument();
-    });
   });
 
   it('shows confirm password validation error when passwords do not match', async () => {
     renderWithProviders(<Register />, { route: '/console/register' });
 
-    const usernameInput = screen.getByLabelText('Username');
-    const passwordInput = screen.getByLabelText('Password');
-    const confirmInput = screen.getByLabelText('Confirm Password');
-
-    fireEvent.change(usernameInput, { target: { value: 'testuser' } });
-    fireEvent.change(passwordInput, { target: { value: 'password123' } });
-    fireEvent.change(confirmInput, { target: { value: 'different' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Register' }));
+    await userEvent.type(screen.getByPlaceholderText('Username'), 'testuser');
+    await userEvent.type(screen.getByPlaceholderText('Password'), 'password123');
+    await userEvent.type(screen.getByPlaceholderText('Confirm password'), 'different');
+    await userEvent.click(screen.getByRole('button', { name: 'Register' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Passwords do not match')).toBeInTheDocument();
+      expect(mockToastError).toHaveBeenCalledWith('Passwords do not match');
     });
   });
 

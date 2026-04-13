@@ -37,7 +37,7 @@ export default function ProviderDetail() {
   const [modelModalOpen, setModelModalOpen] = useState(false);
   const [editingModel, setEditingModel] = useState<Model | null>(null);
   const [modelName, setModelName] = useState('');
-  const [modelBillingType, setModelBillingType] = useState('token');
+  const [modelBillingType, setModelBillingType] = useState<'token' | 'request'>('token');
   const [modelInputPrice, setModelInputPrice] = useState('');
   const [modelOutputPrice, setModelOutputPrice] = useState('');
   const [modelRequestPrice, setModelRequestPrice] = useState('');
@@ -313,7 +313,7 @@ export default function ProviderDetail() {
           )}
           <div>
             <label className="block text-xs font-medium text-[#888888] mb-1.5">Billing Type</label>
-            <Select value={modelBillingType} onChange={setModelBillingType} options={[
+            <Select value={modelBillingType} onChange={(v) => setModelBillingType(v as 'token' | 'request')} options={[
               { value: 'token', label: 'Token-based' },
               { value: 'request', label: 'Request-based' },
             ]} />

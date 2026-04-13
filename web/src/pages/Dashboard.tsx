@@ -1,4 +1,4 @@
-import { MessageSquare, DollarSign, BarChart3, Zap } from 'lucide-react';
+import { MessageSquare, DollarSign, Zap } from 'lucide-react';
 import { useLogs } from '../hooks/useLogs';
 import { useUsage } from '../hooks/useUsage';
 import { Badge } from '../components/ui/Badge';
@@ -75,7 +75,6 @@ export default function Dashboard() {
               <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Protocol</th>
               <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Status</th>
               <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Tokens</th>
-              <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Cost</th>
               <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Latency</th>
             </tr>
           </thead>
@@ -87,7 +86,6 @@ export default function Dashboard() {
                 <td className="px-4 py-2.5"><Badge variant={log.protocol === 'openai' ? 'blue' : 'purple'}>{log.protocol}</Badge></td>
                 <td className="px-4 py-2.5"><Badge variant={log.status_code < 400 ? 'green' : log.status_code < 500 ? 'amber' : 'red'}>{log.status_code}</Badge></td>
                 <td className="px-4 py-2.5"><span className="mono">{log.input_tokens ?? 0} + {log.output_tokens ?? 0}</span></td>
-                <td className="px-4 py-2.5"><span className="mono">${log.cost.toFixed(6)}</span></td>
                 <td className="px-4 py-2.5"><span className="mono">{log.latency_ms}ms</span></td>
               </tr>
             ))}

@@ -2,7 +2,7 @@ import { render } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { AuthProvider } from '../contexts/AuthContext';
+import { useAuthStore } from '../stores/authStore';
 
 function createTestQueryClient() {
   return new QueryClient({
@@ -24,9 +24,7 @@ export function renderWithProviders(
     return (
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={[route]}>
-          <AuthProvider>
-            {children}
-          </AuthProvider>
+          {children}
         </MemoryRouter>
       </QueryClientProvider>
     );

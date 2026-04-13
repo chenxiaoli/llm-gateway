@@ -38,11 +38,11 @@ describe('Settings page', () => {
     renderWithProviders(<Settings />, { route: '/console/settings' });
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Current Password')).toBeInTheDocument();
+      expect(screen.getByText('Current Password')).toBeInTheDocument();
     }, { timeout: 5000 });
 
-    expect(screen.getByLabelText('New Password')).toBeInTheDocument();
-    expect(screen.getByLabelText('Confirm New Password')).toBeInTheDocument();
+    expect(screen.getByText('New Password')).toBeInTheDocument();
+    expect(screen.getByText('Confirm New Password')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Change Password' })).toBeInTheDocument();
   });
 });
