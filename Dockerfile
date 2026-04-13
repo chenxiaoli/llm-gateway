@@ -1,19 +1,45 @@
-FROM alpine:3.20
+# ---- Stage 1: Build frontend ----
+FROM node:20-alpine AS frontend
 
-RUN apk add --no-cache ca-certificates tzdata libgcc && \
-    addgroup -S gateway && adduser -S gateway -G gateway
+WORKDIR /app/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
 
+# ---- Stage 2: Prepare cargo-chef ----
+FROM rust:1.83-slim AS chef
+RUN cargo install cargo-chef
 WORKDIR /app
 
-COPY llm-gateway .
-COPY config.toml .
+# ---- Stage 3: Plan (generate recipe.json) ----
+FROM chef AS planner
+COPY . .
+COPY --from=frontend /app/web/dist ./web/dist
+RUN cargo chef prepare --recipe-path recipe.json
 
-RUN mkdir -p /app/data && chown -R gateway:gateway /app
+# ---- Stage 4: Build dependencies (cached unless Cargo.toml changes) ----
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
 
-USER gateway
+# ---- Stage 5: Build application ----
+FROM chef AS build
+COPY . .
+COPY --from=frontend /app/web/dist ./web/dist
+COPY --from=builder /app/target /app/target
+RUN cargo build --release
+RUN cp target/release/llm-gateway /app/llm-gateway
+
+# ---- Stage 6: Runtime ----
+FROM gcr.io/distroless/cc-debian12 AS runtime
+
+WORKDIR /app
+COPY --from=build /app/llm-gateway /app/llm-gateway
+COPY config.toml /app/config.toml
+
+USER 1000:1000
 
 EXPOSE 8080
 
-VOLUME ["/app/data"]
-
-CMD ["./llm-gateway"]
+CMD ["/app/llm-gateway"]

@@ -10,7 +10,3 @@ web/test-results/
 web/tsconfig.tsbuildinfo
 docs/
 .github/
-crates/
-Cargo.toml
-Cargo.lock
-web/
