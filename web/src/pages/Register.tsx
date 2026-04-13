@@ -77,7 +77,7 @@ export default function Register() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#666666] mb-1.5">Username</label>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">Username</label>
             <input
               type="text"
               value={username}
@@ -86,14 +86,14 @@ export default function Register() {
               required
               minLength={3}
               disabled={registrationDisabled}
-              className="h-10 w-full rounded-lg px-3 text-sm text-[#ededed] placeholder-[#444444] outline-none transition-all duration-200 disabled:opacity-50"
+              className="h-10 w-full rounded-lg px-3 text-sm text-[#ededed] placeholder-[#666666] outline-none transition-all duration-200 disabled:opacity-50"
               style={{ background: '#0a0a0a', border: '1px solid rgba(38, 38, 38, 0.8)' }}
               onFocus={(e) => { e.target.style.borderColor = 'rgba(6, 214, 160, 0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(6, 214, 160, 0.08)'; }}
               onBlur={(e) => { e.target.style.borderColor = 'rgba(38, 38, 38, 0.8)'; e.target.style.boxShadow = 'none'; }}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#666666] mb-1.5">Password</label>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">Password</label>
             <input
               type="password"
               value={password}
@@ -102,14 +102,14 @@ export default function Register() {
               required
               minLength={6}
               disabled={registrationDisabled}
-              className="h-10 w-full rounded-lg px-3 text-sm text-[#ededed] placeholder-[#444444] outline-none transition-all duration-200 disabled:opacity-50"
+              className="h-10 w-full rounded-lg px-3 text-sm text-[#ededed] placeholder-[#666666] outline-none transition-all duration-200 disabled:opacity-50"
               style={{ background: '#0a0a0a', border: '1px solid rgba(38, 38, 38, 0.8)' }}
               onFocus={(e) => { e.target.style.borderColor = 'rgba(6, 214, 160, 0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(6, 214, 160, 0.08)'; }}
               onBlur={(e) => { e.target.style.borderColor = 'rgba(38, 38, 38, 0.8)'; e.target.style.boxShadow = 'none'; }}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#666666] mb-1.5">Confirm Password</label>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">Confirm Password</label>
             <input
               type="password"
               value={confirm}
@@ -117,7 +117,7 @@ export default function Register() {
               placeholder="Confirm password"
               required
               disabled={registrationDisabled}
-              className="h-10 w-full rounded-lg px-3 text-sm text-[#ededed] placeholder-[#444444] outline-none transition-all duration-200 disabled:opacity-50"
+              className="h-10 w-full rounded-lg px-3 text-sm text-[#ededed] placeholder-[#666666] outline-none transition-all duration-200 disabled:opacity-50"
               style={{ background: '#0a0a0a', border: '1px solid rgba(38, 38, 38, 0.8)' }}
               onFocus={(e) => { e.target.style.borderColor = 'rgba(6, 214, 160, 0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(6, 214, 160, 0.08)'; }}
               onBlur={(e) => { e.target.style.borderColor = 'rgba(38, 38, 38, 0.8)'; e.target.style.boxShadow = 'none'; }}
@@ -130,7 +130,7 @@ export default function Register() {
           </div>
         </form>
 
-        <p className="text-center text-sm text-[#555555]">
+        <p className="text-center text-sm text-[#888888]">
           Already have an account?{' '}
           <Link to="/console/login" className="transition-colors duration-200" style={{ color: '#06d6a0' }}
             onMouseEnter={(e) => { (e.target as HTMLElement).style.color = '#34d399'; }}

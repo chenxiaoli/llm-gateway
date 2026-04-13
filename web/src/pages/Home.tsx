@@ -79,7 +79,7 @@ export default function Home() {
             Observe.
           </span>
         </h1>
-        <p className="mx-auto max-w-[560px] text-base text-[#666666] mb-10 leading-relaxed animate-fade-in-up" style={{ animationDelay: '160ms' }}>
+        <p className="mx-auto max-w-[560px] text-base text-[#888888] mb-10 leading-relaxed animate-fade-in-up" style={{ animationDelay: '160ms' }}>
           A unified API gateway for LLM providers. Manage keys, enforce rate limits,
           track usage, and proxy requests to OpenAI and Anthropic from a single endpoint.
         </p>
@@ -108,7 +108,7 @@ export default function Home() {
         <div className="flex items-center justify-center mb-10 animate-fade-in-up" style={{ animationDelay: '300ms' }}>
           <div className="flex items-center gap-4 w-full max-w-md">
             <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(30, 30, 30, 0.8))' }} />
-            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#444444]">Features</span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#666666]">Features</span>
             <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, rgba(30, 30, 30, 0.8), transparent)' }} />
           </div>
         </div>
@@ -145,7 +145,7 @@ export default function Home() {
                   </div>
                 </div>
                 <h3 className="font-display font-semibold text-[#ededed] mb-2 text-center">{f.title}</h3>
-                <p className="text-sm text-[#555555] leading-relaxed text-center">{f.desc}</p>
+                <p className="text-sm text-[#777777] leading-relaxed text-center">{f.desc}</p>
               </div>
             );
           })}
@@ -157,7 +157,7 @@ export default function Home() {
         <div className="flex items-center justify-center mb-10 animate-fade-in-up" style={{ animationDelay: '700ms' }}>
           <div className="flex items-center gap-4 w-full max-w-md">
             <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, transparent, rgba(30, 30, 30, 0.8))' }} />
-            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#444444]">Quick Start</span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#666666]">Quick Start</span>
             <div className="flex-1 h-px" style={{ background: 'linear-gradient(90deg, rgba(30, 30, 30, 0.8), transparent)' }} />
           </div>
         </div>
@@ -170,8 +170,8 @@ export default function Home() {
           }}
         >
           <div className="font-mono text-sm leading-8">
-            <div className="text-[#444444]"># Create an API key via the management dashboard</div>
-            <div className="text-[#444444]"># Then use it as a drop-in replacement:</div>
+            <div className="text-[#666666]"># Create an API key via the management dashboard</div>
+            <div className="text-[#666666]"># Then use it as a drop-in replacement:</div>
             <div className="h-4" />
             <div className="text-[#ededed]">curl -X POST http://localhost:8080/v1/chat/completions \</div>
             <div className="text-[#ededed]">&nbsp;&nbsp;-H "Authorization: Bearer <span style={{ color: '#06d6a0' }}>your-api-key</span>" \</div>
@@ -182,7 +182,7 @@ export default function Home() {
       </div>
 
       {/* Footer */}
-      <div className="relative py-8 text-center text-sm text-[#333333] font-mono">
+      <div className="relative py-8 text-center text-sm text-[#555555] font-mono">
         LLM Gateway{version ? ` v${version}` : ''} &mdash; Open Source
       </div>
     </div>

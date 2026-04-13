@@ -77,7 +77,7 @@ export default function AppLayout() {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-2 py-3 flex flex-col gap-0.5">
           <div className={cn(
-            'text-[10px] font-semibold uppercase tracking-[0.12em] text-[#444444] px-3 pt-4 pb-1.5 whitespace-nowrap transition-all duration-200',
+            'text-[10px] font-semibold uppercase tracking-[0.12em] text-[#666666] px-3 pt-4 pb-1.5 whitespace-nowrap transition-all duration-200',
             collapsed ? 'opacity-0 h-0 p-0 overflow-hidden' : 'opacity-100',
           )}>
             Console
@@ -92,7 +92,7 @@ export default function AppLayout() {
                   'flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer text-sm font-medium transition-all duration-200 whitespace-nowrap overflow-hidden select-none',
                   active
                     ? 'bg-accent/[0.08] text-accent'
-                    : 'text-[#666666] hover:bg-white/[0.03] hover:text-[#bbbbbb]',
+                    : 'text-[#888888] hover:bg-white/[0.04] hover:text-[#cccccc]',
                   collapsed && 'justify-center px-2',
                   active && !collapsed && 'nav-active',
                 )}
@@ -111,7 +111,7 @@ export default function AppLayout() {
           {isAdmin && (
             <>
               <div className={cn(
-                'text-[10px] font-semibold uppercase tracking-[0.12em] text-[#444444] px-3 pt-5 pb-1.5 whitespace-nowrap transition-all duration-200',
+                'text-[10px] font-semibold uppercase tracking-[0.12em] text-[#666666] px-3 pt-5 pb-1.5 whitespace-nowrap transition-all duration-200',
                 collapsed ? 'opacity-0 h-0 p-0 overflow-hidden' : 'opacity-100',
               )}>
                 Admin
@@ -126,7 +126,7 @@ export default function AppLayout() {
                       'flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer text-sm font-medium transition-all duration-200 whitespace-nowrap overflow-hidden select-none',
                       active
                         ? 'bg-accent/[0.08] text-accent'
-                        : 'text-[#666666] hover:bg-white/[0.03] hover:text-[#bbbbbb]',
+                        : 'text-[#888888] hover:bg-white/[0.04] hover:text-[#cccccc]',
                       collapsed && 'justify-center px-2',
                       active && !collapsed && 'nav-active',
                     )}
@@ -148,12 +148,12 @@ export default function AppLayout() {
         {/* Version + Collapse toggle */}
         <div style={{ borderTop: '1px solid rgba(30, 30, 30, 0.6)' }} className="p-2">
           {!collapsed && version && (
-            <div className="text-[10px] text-[#333333] font-mono px-2 pb-2 truncate">
+            <div className="text-[10px] text-[#555555] font-mono px-2 pb-2 truncate">
               v{version}
             </div>
           )}
           <button
-            className="flex w-full items-center justify-center rounded-lg p-2 text-[#444444] hover:bg-white/[0.03] hover:text-[#666666] transition-colors duration-200"
+            className="flex w-full items-center justify-center rounded-lg p-2 text-[#666666] hover:bg-white/[0.04] hover:text-[#999999] transition-colors duration-200"
             onClick={() => setCollapsed(!collapsed)}
           >
             {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
@@ -177,7 +177,7 @@ export default function AppLayout() {
           {/* Left: Current page breadcrumb */}
           <div className="flex items-center gap-2">
             <div className="pulse-dot h-1.5 w-1.5 rounded-full bg-accent" />
-            <span className="text-[11px] font-mono text-[#555555] uppercase tracking-wider">
+            <span className="text-[11px] font-mono text-[#777777] uppercase tracking-wider">
               {location.pathname.replace('/console/', '').replace(/\//g, ' / ')}
             </span>
           </div>
@@ -199,7 +199,7 @@ export default function AppLayout() {
             </div>
             <div className="h-5 w-px bg-[#1e1e1e]" />
             <button
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] text-[#555555] hover:bg-white/[0.03] hover:text-[#888888] transition-colors duration-200"
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] text-[#777777] hover:bg-white/[0.04] hover:text-[#aaaaaa] transition-colors duration-200"
               onClick={logout}
             >
               <LogOut className="h-3.5 w-3.5" />
@@ -222,7 +222,7 @@ export default function AppLayout() {
 
         {/* Footer */}
         <footer
-          className="px-6 py-3 text-center text-[11px] text-[#333333] font-mono shrink-0"
+          className="px-6 py-3 text-center text-[11px] text-[#555555] font-mono shrink-0"
           style={{ borderTop: '1px solid rgba(30, 30, 30, 0.6)' }}
         >
           LLM Gateway{version ? ` v${version}` : ''}

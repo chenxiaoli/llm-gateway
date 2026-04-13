@@ -56,7 +56,7 @@ export default function Dashboard() {
             System Online
           </div>
         </div>
-        <p className="text-sm text-[#555555]">Real-time overview of your LLM gateway activity</p>
+        <p className="text-sm text-[#777777]">Real-time overview of your LLM gateway activity</p>
       </div>
 
       {/* Live Metrics Bar */}
@@ -66,8 +66,8 @@ export default function Dashboard() {
             <Activity className="h-4 w-4" style={{ color: '#06d6a0' }} />
           </div>
           <div>
-            <div className="text-[11px] font-medium text-[#555555] uppercase tracking-wider">Avg Latency</div>
-            <div className="font-mono text-lg font-bold text-[#ededed]">{avgLatency}<span className="text-xs text-[#555555] ml-1">ms</span></div>
+            <div className="text-[11px] font-medium text-[#777777] uppercase tracking-wider">Avg Latency</div>
+            <div className="font-mono text-lg font-bold text-[#ededed]">{avgLatency}<span className="text-xs text-[#777777] ml-1">ms</span></div>
           </div>
         </div>
         <div className="flex items-center gap-3 rounded-xl p-4" style={{ background: '#0a0a0a', border: '1px solid rgba(30, 30, 30, 0.8)' }}>
@@ -75,8 +75,8 @@ export default function Dashboard() {
             <TrendingUp className="h-4 w-4" style={{ color: '#06d6a0' }} />
           </div>
           <div>
-            <div className="text-[11px] font-medium text-[#555555] uppercase tracking-wider">Success Rate</div>
-            <div className="font-mono text-lg font-bold text-[#ededed]">{successRate}<span className="text-xs text-[#555555] ml-1">%</span></div>
+            <div className="text-[11px] font-medium text-[#777777] uppercase tracking-wider">Success Rate</div>
+            <div className="font-mono text-lg font-bold text-[#ededed]">{successRate}<span className="text-xs text-[#777777] ml-1">%</span></div>
           </div>
         </div>
         <div className="flex items-center gap-3 rounded-xl p-4" style={{ background: '#0a0a0a', border: '1px solid rgba(30, 30, 30, 0.8)' }}>
@@ -84,8 +84,8 @@ export default function Dashboard() {
             <Clock className="h-4 w-4" style={{ color: '#06d6a0' }} />
           </div>
           <div>
-            <div className="text-[11px] font-medium text-[#555555] uppercase tracking-wider">Recent</div>
-            <div className="font-mono text-lg font-bold text-[#ededed]">{recentLogs?.items?.length ?? 0}<span className="text-xs text-[#555555] ml-1">reqs</span></div>
+            <div className="text-[11px] font-medium text-[#777777] uppercase tracking-wider">Recent</div>
+            <div className="font-mono text-lg font-bold text-[#ededed]">{recentLogs?.items?.length ?? 0}<span className="text-xs text-[#777777] ml-1">reqs</span></div>
           </div>
         </div>
       </div>
@@ -105,7 +105,7 @@ export default function Dashboard() {
               }}
             >
               <div className="flex items-center justify-between mb-3">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#666666]">{s.label}</span>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#888888]">{s.label}</span>
                 <div className="flex h-7 w-7 items-center justify-center rounded-md" style={{ background: `${s.color}15` }}>
                   <Icon className="h-3.5 w-3.5" style={{ color: s.color, opacity: 0.8 }} />
                 </div>
@@ -123,7 +123,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <h2 className="font-display text-base font-semibold text-[#ededed]">Recent Requests</h2>
-            <span className="text-[11px] font-mono text-[#444444]">({recentLogs?.items?.length ?? 0})</span>
+            <span className="text-[11px] font-mono text-[#666666]">({recentLogs?.items?.length ?? 0})</span>
           </div>
         </div>
 
@@ -132,12 +132,12 @@ export default function Dashboard() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ background: 'rgba(17, 17, 17, 0.8)', borderBottom: '1px solid rgba(30, 30, 30, 0.8)' }}>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[#555555]">Time</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[#555555]">Model</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[#555555]">Protocol</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[#555555]">Status</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[#555555]">Tokens</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[#555555]">Latency</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[#777777]">Time</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[#777777]">Model</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[#777777]">Protocol</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[#777777]">Status</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[#777777]">Tokens</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-[#777777]">Latency</th>
                 </tr>
               </thead>
               <tbody>
@@ -175,7 +175,7 @@ export default function Dashboard() {
                     <td className="px-4 py-3">
                       <span className="mono text-[13px] text-[#888888]">
                         <span className="text-[#ededed]">{log.input_tokens ?? 0}</span>
-                        <span className="text-[#444444] mx-1">+</span>
+                        <span className="text-[#666666] mx-1">+</span>
                         <span className="text-[#ededed]">{log.output_tokens ?? 0}</span>
                       </span>
                     </td>
@@ -192,8 +192,8 @@ export default function Dashboard() {
                 {(!recentLogs?.items?.length) && (
                   <tr>
                     <td colSpan={6} className="px-4 py-16 text-center">
-                      <div className="text-[#333333] text-sm">No requests yet</div>
-                      <div className="text-[#222222] text-xs mt-1">Requests will appear here as they come in</div>
+                      <div className="text-[#555555] text-sm">No requests yet</div>
+                      <div className="text-[#444444] text-xs mt-1">Requests will appear here as they come in</div>
                     </td>
                   </tr>
                 )}

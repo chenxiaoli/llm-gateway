@@ -3,9 +3,9 @@ import { Loader2 } from 'lucide-react';
 import { cn } from '../../lib/cn';
 
 const variantStyles = {
-  primary: 'bg-accent text-black hover:bg-accent-hover font-medium',
-  secondary: 'border border-[#262626] text-[#ededed] hover:bg-white/[0.04]',
-  ghost: 'bg-transparent text-[#888888] hover:bg-white/[0.04]',
+  primary: 'bg-accent text-black hover:bg-accent-hover font-medium shadow-[0_0_20px_rgba(6,214,160,0.2)]',
+  secondary: 'border border-[#3a3a3a] text-[#e0e0e0] hover:bg-white/[0.06] hover:border-[#4a4a4a]',
+  ghost: 'bg-transparent text-[#999999] hover:bg-white/[0.06] hover:text-[#cccccc]',
   danger: 'border border-danger/50 text-danger hover:bg-danger/10',
 } as const;
 

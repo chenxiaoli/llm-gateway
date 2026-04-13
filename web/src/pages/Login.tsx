@@ -65,28 +65,28 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-[#666666] mb-1.5">Username</label>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">Username</label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Username"
               required
-              className="h-10 w-full rounded-lg px-3 text-sm text-[#ededed] placeholder-[#444444] outline-none transition-all duration-200"
+              className="h-10 w-full rounded-lg px-3 text-sm text-[#ededed] placeholder-[#666666] outline-none transition-all duration-200"
               style={{ background: '#0a0a0a', border: '1px solid rgba(38, 38, 38, 0.8)' }}
               onFocus={(e) => { e.target.style.borderColor = 'rgba(6, 214, 160, 0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(6, 214, 160, 0.08)'; }}
               onBlur={(e) => { e.target.style.borderColor = 'rgba(38, 38, 38, 0.8)'; e.target.style.boxShadow = 'none'; }}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#666666] mb-1.5">Password</label>
+            <label className="block text-xs font-medium text-[#888888] mb-1.5">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Password"
               required
-              className="h-10 w-full rounded-lg px-3 text-sm text-[#ededed] placeholder-[#444444] outline-none transition-all duration-200"
+              className="h-10 w-full rounded-lg px-3 text-sm text-[#ededed] placeholder-[#666666] outline-none transition-all duration-200"
               style={{ background: '#0a0a0a', border: '1px solid rgba(38, 38, 38, 0.8)' }}
               onFocus={(e) => { e.target.style.borderColor = 'rgba(6, 214, 160, 0.4)'; e.target.style.boxShadow = '0 0 0 3px rgba(6, 214, 160, 0.08)'; }}
               onBlur={(e) => { e.target.style.borderColor = 'rgba(38, 38, 38, 0.8)'; e.target.style.boxShadow = 'none'; }}
@@ -100,7 +100,7 @@ export default function Login() {
         </form>
 
         {authConfig?.allow_registration && (
-          <p className="mt-5 text-center text-sm text-[#555555]">
+          <p className="mt-5 text-center text-sm text-[#888888]">
             Don't have an account?{' '}
             <Link to="/console/register" className="transition-colors duration-200" style={{ color: '#06d6a0' }}
               onMouseEnter={(e) => { (e.target as HTMLElement).style.color = '#34d399'; }}
