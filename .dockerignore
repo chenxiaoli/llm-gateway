@@ -8,6 +8,9 @@ data/
 test-results/
 web/test-results/
 web/tsconfig.tsbuildinfo
-*.md
 docs/
 .github/
+crates/
+Cargo.toml
+Cargo.lock
+web/
