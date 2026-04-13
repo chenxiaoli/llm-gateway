@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Typography, DatePicker, Select, Table, Card, Row, Col, Statistic } from 'antd';
+import { DatePicker, Select, Table, Card, Row, Col } from 'antd';
 import { DollarOutlined, MessageOutlined } from '@ant-design/icons';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useUsage } from '../hooks/useUsage';
@@ -7,7 +7,6 @@ import { useKeys } from '../hooks/useKeys';
 import { Dayjs } from 'dayjs';
 
 const { RangePicker } = DatePicker;
-const { Title } = Typography;
 
 export default function Usage() {
   const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
@@ -39,21 +38,25 @@ export default function Usage() {
 
   const columns = [
     { title: 'Time', dataIndex: 'created_at', key: 'created_at',
-      render: (v: string) => new Date(v).toLocaleString(),
+      render: (v: string) => <span className="mono">{new Date(v).toLocaleString()}</span>,
     },
     { title: 'Key ID', dataIndex: 'key_id', key: 'key_id',
-      render: (v: string) => v.substring(0, 8) + '...',
+      render: (v: string) => <span className="mono">{v.substring(0, 8)}...</span>,
     },
-    { title: 'Model', dataIndex: 'model_name', key: 'model_name' },
+    { title: 'Model', dataIndex: 'model_name', key: 'model_name',
+      render: (v: string) => <span className="mono">{v}</span>,
+    },
     { title: 'Protocol', dataIndex: 'protocol', key: 'protocol' },
-    { title: 'Input Tokens', dataIndex: 'input_tokens', key: 'input_tokens', render: (v: number | null) => v ?? '-' },
-    { title: 'Output Tokens', dataIndex: 'output_tokens', key: 'output_tokens', render: (v: number | null) => v ?? '-' },
-    { title: 'Cost', dataIndex: 'cost', key: 'cost', render: (v: number) => `$${v.toFixed(6)}` },
+    { title: 'Input Tokens', dataIndex: 'input_tokens', key: 'input_tokens', render: (v: number | null) => <span className="mono">{v ?? '-'}</span> },
+    { title: 'Output Tokens', dataIndex: 'output_tokens', key: 'output_tokens', render: (v: number | null) => <span className="mono">{v ?? '-'}</span> },
+    { title: 'Cost', dataIndex: 'cost', key: 'cost', render: (v: number) => <span className="mono">${v.toFixed(6)}</span> },
   ];
 
   return (
     <div>
-      <Title level={4}>Usage</Title>
+      <div className="page-header">
+        <h1 className="page-title">Usage</h1>
+      </div>
 
       <Card style={{ marginBottom: 16 }}>
         <Row gutter={16} align="middle">
@@ -74,43 +77,63 @@ export default function Usage() {
         </Row>
       </Card>
 
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}><Card><Statistic title="Total Cost" value={`$${totalCost.toFixed(4)}`} prefix={<DollarOutlined />} /></Card></Col>
-        <Col span={6}><Card><Statistic title="Total Requests" value={totalRequests} prefix={<MessageOutlined />} /></Card></Col>
-        <Col span={6}><Card><Statistic title="Input Tokens" value={totalInputTokens} /></Card></Col>
-        <Col span={6}><Card><Statistic title="Output Tokens" value={totalOutputTokens} /></Card></Col>
-      </Row>
+      <div className="stat-cards-grid">
+        <div className="stat-card" style={{ '--card-accent': '#06d6a0' } as React.CSSProperties}>
+          <div className="stat-card-label">Total Cost</div>
+          <div className="stat-card-value">${totalCost.toFixed(4)}</div>
+          <div className="stat-card-icon"><DollarOutlined /></div>
+        </div>
+        <div className="stat-card" style={{ '--card-accent': '#3b82f6' } as React.CSSProperties}>
+          <div className="stat-card-label">Total Requests</div>
+          <div className="stat-card-value">{totalRequests.toLocaleString()}</div>
+          <div className="stat-card-icon"><MessageOutlined /></div>
+        </div>
+        <div className="stat-card" style={{ '--card-accent': '#f59e0b' } as React.CSSProperties}>
+          <div className="stat-card-label">Input Tokens</div>
+          <div className="stat-card-value">{totalInputTokens.toLocaleString()}</div>
+        </div>
+        <div className="stat-card" style={{ '--card-accent': '#a855f7' } as React.CSSProperties}>
+          <div className="stat-card-label">Output Tokens</div>
+          <div className="stat-card-value">{totalOutputTokens.toLocaleString()}</div>
+        </div>
+      </div>
 
       {chartData.length > 0 && (
-        <Card title="Cost by Model" style={{ marginBottom: 16 }}>
+        <Card title={<h3 className="page-title" style={{ fontSize: 16, margin: 0 }}>Cost by Model</h3>} style={{ marginBottom: 16 }}>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="model" />
-              <YAxis />
-              <Tooltip formatter={(value: number) => `$${value.toFixed(4)}`} />
-              <Bar dataKey="cost" fill="#1890ff" name="Cost ($)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+              <XAxis dataKey="model" tick={{ fill: '#71717a', fontSize: 12 }} />
+              <YAxis tick={{ fill: '#71717a', fontSize: 12 }} />
+              <Tooltip
+                contentStyle={{ background: '#1e1e22', border: '1px solid #3f3f46', borderRadius: 8 }}
+                labelStyle={{ color: '#fafafa' }}
+                formatter={(value: number) => [`$${value.toFixed(4)}`, 'Cost']}
+              />
+              <Bar dataKey="cost" fill="#06d6a0" name="Cost ($)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </Card>
       )}
 
-      <Table
-        dataSource={usageItems}
-        columns={columns}
-        rowKey="id"
-        loading={isLoading}
-        size="small"
-        scroll={{ x: 800 }}
-        pagination={{
-          current: page,
-          pageSize,
-          total: data?.total ?? 0,
-          onChange: (p, ps) => { setPage(p); setPageSize(ps); },
-          showSizeChanger: true,
-          showTotal: (total) => `Total ${total}`,
-        }}
-      />
+      <div className="console-table">
+        <Table
+          dataSource={usageItems}
+          columns={columns}
+          rowKey="id"
+          loading={isLoading}
+          size="small"
+          scroll={{ x: 800 }}
+          pagination={{
+            current: page,
+            pageSize,
+            total: data?.total ?? 0,
+            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
+            showSizeChanger: true,
+            showTotal: (total) => `Total ${total}`,
+          }}
+        />
+      </div>
     </div>
   );
 }

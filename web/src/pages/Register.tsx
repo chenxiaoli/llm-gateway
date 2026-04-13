@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Form, Input, Button, Card, Typography, message, Alert } from 'antd';
+import { Form, Input, Button, Typography, message, Alert } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { getAuthConfig } from '../api/auth';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 export default function Register() {
   const [loading, setLoading] = useState(false);
@@ -33,9 +33,14 @@ export default function Register() {
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-      <Card style={{ width: 400 }}>
-        <Title level={3} style={{ textAlign: 'center' }}>Create Account</Title>
+    <div className="login-page">
+      <div className="login-bg" />
+      <div className="login-grid" />
+      <div className="login-card">
+        <div className="login-logo">
+          <div className="login-logo-icon">GW</div>
+          <span className="login-logo-text">Create Account</span>
+        </div>
         {registrationDisabled && (
           <Alert message="Registration is currently disabled" type="warning" style={{ marginBottom: 16 }} />
         )}
@@ -44,13 +49,13 @@ export default function Register() {
             { required: true, message: 'Enter a username' },
             { min: 3, message: 'Username must be at least 3 characters' },
           ]}>
-            <Input placeholder="Username" disabled={registrationDisabled} />
+            <Input placeholder="Username" size="large" disabled={registrationDisabled} />
           </Form.Item>
           <Form.Item name="password" label="Password" rules={[
             { required: true, message: 'Enter a password' },
             { min: 6, message: 'Password must be at least 6 characters' },
           ]}>
-            <Input.Password placeholder="Password" disabled={registrationDisabled} />
+            <Input.Password placeholder="Password" size="large" disabled={registrationDisabled} />
           </Form.Item>
           <Form.Item name="confirm" label="Confirm Password" dependencies={['password']} rules={[
             { required: true, message: 'Confirm your password' },
@@ -61,18 +66,20 @@ export default function Register() {
               },
             }),
           ]}>
-            <Input.Password placeholder="Confirm password" disabled={registrationDisabled} />
+            <Input.Password placeholder="Confirm password" size="large" disabled={registrationDisabled} />
           </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading} block disabled={registrationDisabled}>
+          <Form.Item style={{ marginBottom: 20 }}>
+            <Button type="primary" htmlType="submit" loading={loading} block size="large" disabled={registrationDisabled}>
               Register
             </Button>
           </Form.Item>
         </Form>
-        <Text style={{ display: 'block', textAlign: 'center' }}>
-          <Link to="/console/login">Already have an account? Login</Link>
-        </Text>
-      </Card>
+        <div style={{ textAlign: 'center' }}>
+          <Text style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
+            Already have an account? <Link to="/console/login" style={{ color: 'var(--accent)' }}>Sign in</Link>
+          </Text>
+        </div>
+      </div>
     </div>
   );
 }

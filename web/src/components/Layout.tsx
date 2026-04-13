@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, theme, Space } from 'antd';
 import {
   DashboardOutlined,
   KeyOutlined,
@@ -8,14 +7,13 @@ import {
   BarChartOutlined,
   FileSearchOutlined,
   LogoutOutlined,
-  UserOutlined,
   SettingOutlined,
   TeamOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../api/client';
-
-const { Header, Sider, Content, Footer } = Layout;
 
 const consoleItems = [
   { key: '/console/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
@@ -36,51 +34,80 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
-  const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken();
+  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     apiClient.get<{ version: string }>('/version').then((r) => setVersion(r.data.version));
   }, []);
 
-  const isAdmin = user?.role === 'admin';
-
-  const menuItems = [
-    { key: 'console', label: 'Console', type: 'group' as const, children: consoleItems },
-    ...(isAdmin ? [{ key: 'admin', label: 'Admin', type: 'group' as const, children: adminItems }] : []),
-  ];
-
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed}>
-        <div style={{ height: 32, margin: 16, textAlign: 'center', color: '#fff', fontSize: collapsed ? 14 : 16, fontWeight: 'bold' }}>
-          {collapsed ? 'GW' : 'LLM Gateway'}
+    <div style={{ minHeight: '100vh' }}>
+      {/* Sidebar */}
+      <aside className={`console-sidebar ${collapsed ? 'collapsed' : ''}`}>
+        <div className="sidebar-logo" onClick={() => navigate('/console/dashboard')}>
+          <div className="sidebar-logo-icon">GW</div>
+          <span className="sidebar-logo-text">LLM Gateway</span>
         </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[location.pathname]}
-          items={menuItems}
-          onClick={({ key }) => navigate(key)}
-        />
-      </Sider>
-      <Layout>
-        <Header style={{ padding: '0 16px', background: colorBgContainer, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
-          <Space size="middle">
-            <span><UserOutlined /> {user?.username}</span>
-            <a onClick={logout} style={{ cursor: 'pointer' }}>
-              <LogoutOutlined /> Logout
-            </a>
-          </Space>
-        </Header>
-        <Content style={{ margin: 16 }}>
-          <div style={{ padding: 24, minHeight: 360, background: colorBgContainer, borderRadius: borderRadiusLG }}>
+
+        <nav className="sidebar-nav">
+          <div className="sidebar-nav-group-label">Console</div>
+          {consoleItems.map((item) => (
+            <div
+              key={item.key}
+              className={`sidebar-nav-item ${location.pathname === item.key ? 'active' : ''}`}
+              onClick={() => navigate(item.key)}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-label">{item.label}</span>
+            </div>
+          ))}
+
+          {isAdmin && (
+            <>
+              <div className="sidebar-nav-group-label">Admin</div>
+              {adminItems.map((item) => (
+                <div
+                  key={item.key}
+                  className={`sidebar-nav-item ${location.pathname === item.key ? 'active' : ''}`}
+                  onClick={() => navigate(item.key)}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-label">{item.label}</span>
+                </div>
+              ))}
+            </>
+          )}
+        </nav>
+
+        <div className="sidebar-footer">
+          <button className="sidebar-collapse-btn" onClick={() => setCollapsed(!collapsed)}>
+            {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          </button>
+        </div>
+      </aside>
+
+      {/* Main content area */}
+      <div className={`console-main ${collapsed ? 'sidebar-collapsed' : ''}`}>
+        <header className="console-header">
+          <div className="header-user">
+            <div className="header-avatar">{user?.username?.charAt(0).toUpperCase()}</div>
+            <span>{user?.username}</span>
+          </div>
+          <button className="header-logout" onClick={logout}>
+            <LogoutOutlined /> Logout
+          </button>
+        </header>
+
+        <main className="console-content">
+          <div className="page-enter">
             <Outlet />
           </div>
-        </Content>
-        <Footer style={{ textAlign: 'center', color: '#999' }}>
+        </main>
+
+        <footer className="console-footer">
           LLM Gateway{version ? ` ${version}` : ''}
-        </Footer>
-      </Layout>
-    </Layout>
+        </footer>
+      </div>
+    </div>
   );
 }

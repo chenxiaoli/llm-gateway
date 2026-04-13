@@ -1,9 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Form, Input, InputNumber, Switch, Button, Space, Typography, Popconfirm } from 'antd';
+import { Card, Form, Input, InputNumber, Switch, Button, Space, Popconfirm } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useKey, useUpdateKey, useDeleteKey } from '../hooks/useKeys';
-
-const { Title } = Typography;
 
 export default function KeyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -39,7 +37,11 @@ export default function KeyDetail() {
         Back to Keys
       </Button>
 
-      <Card title={<Title level={4} style={{ margin: 0 }}>Edit Key: {key.name}</Title>}>
+      <div className="page-header">
+        <h1 className="page-title">Edit Key: {key.name}</h1>
+      </div>
+
+      <Card style={{ maxWidth: 500 }}>
         <Form
           form={form}
           layout="vertical"
@@ -50,7 +52,6 @@ export default function KeyDetail() {
             enabled: key.enabled,
           }}
           onFinish={handleUpdate}
-          style={{ maxWidth: 500 }}
         >
           <Form.Item name="name" label="Name" rules={[{ required: true }]}>
             <Input />

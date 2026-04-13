@@ -24,14 +24,14 @@ describe('Login page', () => {
     expect(screen.getByText('LLM Gateway')).toBeInTheDocument();
     expect(screen.getByLabelText('Username')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Login' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument();
   });
 
   it('shows registration link when allowed', async () => {
     renderWithProviders(<Login />);
 
     await waitFor(() => {
-      expect(screen.getByText('Create an account')).toBeInTheDocument();
+      expect(screen.getByText('Create one')).toBeInTheDocument();
     });
   });
 
@@ -40,7 +40,7 @@ describe('Login page', () => {
 
     await userEvent.type(screen.getByLabelText('Username'), 'admin');
     await userEvent.type(screen.getByLabelText('Password'), 'password');
-    await userEvent.click(screen.getByRole('button', { name: 'Login' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith('/console/dashboard');
@@ -58,7 +58,7 @@ describe('Login page', () => {
 
     await userEvent.type(screen.getByLabelText('Username'), 'wrong');
     await userEvent.type(screen.getByLabelText('Password'), 'wrong');
-    await userEvent.click(screen.getByRole('button', { name: 'Login' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
       expect(screen.getByText('Invalid username or password')).toBeInTheDocument();
@@ -69,7 +69,7 @@ describe('Login page', () => {
   it('requires username and password fields', async () => {
     renderWithProviders(<Login />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Login' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
       expect(screen.getByText('Enter your username')).toBeInTheDocument();

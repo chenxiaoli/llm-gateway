@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Button, Modal, Form, Input, Space, Tag, Typography } from 'antd';
+import { Table, Button, Modal, Form, Input, Space, Tag } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { useProviders, useCreateProvider } from '../hooks/useProviders';
-
-const { Title } = Typography;
 
 export default function Providers() {
   const { data: providers, isLoading } = useProviders();
@@ -37,8 +35,8 @@ export default function Providers() {
       key: 'protocols',
       render: (_: unknown, record: { openai_base_url: string | null; anthropic_base_url: string | null }) => (
         <Space>
-          {record.openai_base_url && <Tag color="blue">OpenAI</Tag>}
-          {record.anthropic_base_url && <Tag color="purple">Anthropic</Tag>}
+          {record.openai_base_url && <Tag color="#3b82f6">OpenAI</Tag>}
+          {record.anthropic_base_url && <Tag color="#a855f7">Anthropic</Tag>}
         </Space>
       ),
     },
@@ -47,27 +45,29 @@ export default function Providers() {
       dataIndex: 'enabled',
       key: 'enabled',
       render: (enabled: boolean) => (
-        <Tag color={enabled ? 'green' : 'red'}>{enabled ? 'Active' : 'Disabled'}</Tag>
+        <Tag color={enabled ? '#06d6a0' : '#ef4444'}>{enabled ? 'Active' : 'Disabled'}</Tag>
       ),
     },
     {
       title: 'Created',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (v: string) => new Date(v).toLocaleDateString(),
+      render: (v: string) => <span className="mono">{new Date(v).toLocaleDateString()}</span>,
     },
   ];
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>Providers</Title>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 className="page-title">Providers</h1>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
           Add Provider
         </Button>
       </div>
 
-      <Table dataSource={providers} columns={columns} rowKey="id" loading={isLoading} />
+      <div className="console-table">
+        <Table dataSource={providers} columns={columns} rowKey="id" loading={isLoading} />
+      </div>
 
       <Modal
         title="Add Provider"

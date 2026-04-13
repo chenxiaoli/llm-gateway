@@ -48,52 +48,54 @@ export default function Keys() {
       dataIndex: 'enabled',
       key: 'enabled',
       render: (enabled: boolean) => (
-        <Tag color={enabled ? 'green' : 'red'}>{enabled ? 'Active' : 'Disabled'}</Tag>
+        <Tag color={enabled ? '#06d6a0' : '#ef4444'}>{enabled ? 'Active' : 'Disabled'}</Tag>
       ),
     },
     {
       title: 'Rate Limit (RPM)',
       dataIndex: 'rate_limit',
       key: 'rate_limit',
-      render: (v: number | null) => v ?? 'Unlimited',
+      render: (v: number | null) => <span className="mono">{v ?? 'Unlimited'}</span>,
     },
     {
       title: 'Monthly Budget',
       dataIndex: 'budget_monthly',
       key: 'budget_monthly',
-      render: (v: number | null) => v != null ? `$${v.toFixed(2)}` : 'Unlimited',
+      render: (v: number | null) => <span className="mono">{v != null ? `$${v.toFixed(2)}` : 'Unlimited'}</span>,
     },
     {
       title: 'Created',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (v: string) => new Date(v).toLocaleDateString(),
+      render: (v: string) => <span className="mono">{new Date(v).toLocaleDateString()}</span>,
     },
   ];
 
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>API Keys</Typography.Title>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 className="page-title">API Keys</h1>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
           Create Key
         </Button>
       </div>
 
-      <Table
-        dataSource={data?.items}
-        columns={columns}
-        rowKey="id"
-        loading={isLoading}
-        pagination={{
-          current: page,
-          pageSize,
-          total: data?.total ?? 0,
-          onChange: (p, ps) => { setPage(p); setPageSize(ps); },
-          showSizeChanger: true,
-          showTotal: (total) => `Total ${total}`,
-        }}
-      />
+      <div className="console-table">
+        <Table
+          dataSource={data?.items}
+          columns={columns}
+          rowKey="id"
+          loading={isLoading}
+          pagination={{
+            current: page,
+            pageSize,
+            total: data?.total ?? 0,
+            onChange: (p, ps) => { setPage(p); setPageSize(ps); },
+            showSizeChanger: true,
+            showTotal: (total) => `Total ${total}`,
+          }}
+        />
+      </div>
 
       <Modal
         title="Create API Key"
@@ -107,7 +109,7 @@ export default function Keys() {
         {createdKey ? (
           <div>
             <Text type="secondary">Save this key now. It won't be shown again.</Text>
-            <Paragraph copyable style={{ marginTop: 8, fontFamily: 'monospace', fontSize: 14 }}>
+            <Paragraph copyable style={{ marginTop: 8, fontFamily: 'var(--font-mono)', fontSize: 14 }}>
               {createdKey}
             </Paragraph>
           </div>

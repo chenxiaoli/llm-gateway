@@ -87,6 +87,6 @@ describe('Register page', () => {
   it('has a link to login page', () => {
     renderWithProviders(<Register />, { route: '/console/register' });
 
-    expect(screen.getByText('Already have an account? Login')).toBeInTheDocument();
+    expect(screen.getByText(/Already have an account/)).toBeInTheDocument();
   });
 });

@@ -1,9 +1,7 @@
 import { useState } from 'react';
-import { Typography, Switch, Card, Form, Input, Button, Alert } from 'antd';
+import { Switch, Card, Form, Input, Button, Alert } from 'antd';
 import { useSettings, useUpdateSettings } from '../hooks/useSettings';
 import { changePassword } from '../api/auth';
-
-const { Title } = Typography;
 
 export default function Settings() {
   const { data: settings, isLoading } = useSettings();
@@ -28,10 +26,12 @@ export default function Settings() {
 
   return (
     <div>
-      <Title level={4}>Settings</Title>
-      <Card loading={isLoading}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: 400 }}>
-          <span>Allow Registration</span>
+      <div className="page-header">
+        <h1 className="page-title">Settings</h1>
+      </div>
+      <Card loading={isLoading} style={{ maxWidth: 400 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: 'var(--text-secondary)' }}>Allow Registration</span>
           <Switch
             checked={settings?.allow_registration ?? false}
             onChange={(checked) => updateMutation.mutate({ allow_registration: checked })}
@@ -39,7 +39,7 @@ export default function Settings() {
         </div>
       </Card>
 
-      <Card title="Change Password" style={{ marginTop: 16, maxWidth: 400 }}>
+      <Card title={<h3 className="page-title" style={{ fontSize: 16, margin: 0 }}>Change Password</h3>} style={{ marginTop: 16, maxWidth: 400 }}>
         {passwordStatus && (
           <Alert
             type={passwordStatus.type}

@@ -2,14 +2,12 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card, Form, Input, Switch, Button, Space, Table, Modal,
-  Popconfirm, Typography, Select, InputNumber, Tag,
+  Popconfirm, Select, InputNumber, Tag,
 } from 'antd';
 import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
 import { useProvider, useUpdateProvider, useDeleteProvider, useChannels, useCreateChannel, useUpdateChannel, useDeleteChannel } from '../hooks/useProviders';
 import { useModels, useCreateModel, useUpdateModel, useDeleteModel } from '../hooks/useModels';
 import type { Model, CreateModelRequest, UpdateModelRequest, Channel } from '../types';
-
-const { Title } = Typography;
 
 export default function ProviderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -141,22 +139,24 @@ export default function ProviderDetail() {
   };
 
   const modelColumns = [
-    { title: 'Name', dataIndex: 'name', key: 'name' },
+    { title: 'Name', dataIndex: 'name', key: 'name',
+      render: (v: string) => <span className="mono">{v}</span>,
+    },
     {
       title: 'Billing', dataIndex: 'billing_type', key: 'billing_type',
-      render: (v: string) => <Tag color={v === 'token' ? 'blue' : 'green'}>{v}</Tag>,
+      render: (v: string) => <Tag color={v === 'token' ? '#3b82f6' : '#06d6a0'}>{v}</Tag>,
     },
     {
-      title: 'Input Price ($/1M)', dataIndex: 'input_price', key: 'input_price',
-      render: (v: number) => v.toFixed(2),
+      title: 'Input ($/1M)', dataIndex: 'input_price', key: 'input_price',
+      render: (v: number) => <span className="mono">{v.toFixed(2)}</span>,
     },
     {
-      title: 'Output Price ($/1M)', dataIndex: 'output_price', key: 'output_price',
-      render: (v: number) => v.toFixed(2),
+      title: 'Output ($/1M)', dataIndex: 'output_price', key: 'output_price',
+      render: (v: number) => <span className="mono">{v.toFixed(2)}</span>,
     },
     {
       title: 'Status', dataIndex: 'enabled', key: 'enabled',
-      render: (enabled: boolean) => <Tag color={enabled ? 'green' : 'red'}>{enabled ? 'Active' : 'Disabled'}</Tag>,
+      render: (enabled: boolean) => <Tag color={enabled ? '#06d6a0' : '#ef4444'}>{enabled ? 'Active' : 'Disabled'}</Tag>,
     },
     {
       title: 'Actions', key: 'actions',
@@ -164,7 +164,7 @@ export default function ProviderDetail() {
         <Space>
           <a onClick={() => openEditModel(record)}>Edit</a>
           <Popconfirm title={`Delete model "${record.name}"?`} onConfirm={() => handleDeleteModel(record.name)}>
-            <a style={{ color: '#ff4d4f' }}>Delete</a>
+            <a style={{ color: '#ef4444' }}>Delete</a>
           </Popconfirm>
         </Space>
       ),
@@ -175,12 +175,14 @@ export default function ProviderDetail() {
     { title: 'Name', dataIndex: 'name', key: 'name' },
     {
       title: 'Base URL', dataIndex: 'base_url', key: 'base_url',
-      render: (v: string | null) => v || <span style={{ color: '#999' }}>Default</span>,
+      render: (v: string | null) => v ? <span className="mono">{v}</span> : <span style={{ color: 'var(--text-muted)' }}>Default</span>,
     },
-    { title: 'Priority', dataIndex: 'priority', key: 'priority' },
+    { title: 'Priority', dataIndex: 'priority', key: 'priority',
+      render: (v: number) => <span className="mono">{v}</span>,
+    },
     {
       title: 'Status', dataIndex: 'enabled', key: 'enabled',
-      render: (enabled: boolean) => <Tag color={enabled ? 'green' : 'red'}>{enabled ? 'Active' : 'Disabled'}</Tag>,
+      render: (enabled: boolean) => <Tag color={enabled ? '#06d6a0' : '#ef4444'}>{enabled ? 'Active' : 'Disabled'}</Tag>,
     },
     {
       title: 'Actions', key: 'actions',
@@ -188,7 +190,7 @@ export default function ProviderDetail() {
         <Space>
           <a onClick={() => openEditChannel(record)}>Edit</a>
           <Popconfirm title={`Delete channel "${record.name}"?`} onConfirm={() => handleDeleteChannel(record.id)}>
-            <a style={{ color: '#ff4d4f' }}>Delete</a>
+            <a style={{ color: '#ef4444' }}>Delete</a>
           </Popconfirm>
         </Space>
       ),
@@ -201,7 +203,11 @@ export default function ProviderDetail() {
         Back to Providers
       </Button>
 
-      <Card title={<Title level={4} style={{ margin: 0 }}>Provider: {provider.name}</Title>} style={{ marginBottom: 16 }}>
+      <div className="page-header">
+        <h1 className="page-title">Provider: {provider.name}</h1>
+      </div>
+
+      <Card style={{ marginBottom: 24, maxWidth: 500 }}>
         <Form
           form={form}
           layout="vertical"
@@ -212,7 +218,6 @@ export default function ProviderDetail() {
             enabled: provider.enabled,
           }}
           onFinish={handleUpdateProvider}
-          style={{ maxWidth: 500 }}
         >
           <Form.Item name="name" label="Name" rules={[{ required: true }]}>
             <Input />
@@ -238,18 +243,22 @@ export default function ProviderDetail() {
       </Card>
 
       <Card
-        title={<Title level={4} style={{ margin: 0 }}>Models</Title>}
+        title={<h3 className="page-title" style={{ fontSize: 16, margin: 0 }}>Models</h3>}
         extra={<Button type="primary" icon={<PlusOutlined />} onClick={openAddModel}>Add Model</Button>}
+        style={{ marginBottom: 24 }}
       >
-        <Table dataSource={models ?? []} columns={modelColumns} rowKey="name" pagination={false} />
+        <div className="console-table">
+          <Table dataSource={models ?? []} columns={modelColumns} rowKey="name" pagination={false} />
+        </div>
       </Card>
 
       <Card
-        title={<Title level={4} style={{ margin: 0 }}>Channels</Title>}
+        title={<h3 className="page-title" style={{ fontSize: 16, margin: 0 }}>Channels</h3>}
         extra={<Button type="primary" icon={<PlusOutlined />} onClick={openAddChannel}>Add Channel</Button>}
-        style={{ marginTop: 16 }}
       >
-        <Table dataSource={channels} columns={channelColumns} rowKey="id" pagination={false} />
+        <div className="console-table">
+          <Table dataSource={channels} columns={channelColumns} rowKey="id" pagination={false} />
+        </div>
       </Card>
 
       <Modal
