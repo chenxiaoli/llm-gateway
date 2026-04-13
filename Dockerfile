@@ -8,7 +8,7 @@ COPY web/ ./
 RUN npm run build
 
 # ---- Stage 2: Prepare cargo-chef ----
-FROM rust:1.88-slim AS chef
+FROM rust:1.94-slim AS chef
 RUN cargo install cargo-chef
 WORKDIR /app
 
