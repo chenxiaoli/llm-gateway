@@ -5,6 +5,8 @@ WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web/ ./
+ARG VITE_COMMIT_SHA=dev
+ENV VITE_COMMIT_SHA=$VITE_COMMIT_SHA
 RUN npm run build
 
 # ---- Stage 2: Prepare cargo-chef ----
