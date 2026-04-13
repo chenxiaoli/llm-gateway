@@ -27,8 +27,8 @@ export default function KeyDetail() {
     }
   }, [key]);
 
-  if (isLoading) return <div className="text-[#555555]">Loading...</div>;
-  if (!key) return <div className="text-[#555555]">Key not found</div>;
+  if (isLoading) return <div className="flex justify-center py-12"><span className="loading loading-spinner loading-lg" /></div>;
+  if (!key) return <div className="text-base-content/40">Key not found</div>;
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,48 +55,48 @@ export default function KeyDetail() {
       </Button>
 
       <div className="mb-6">
-        <h1 className="font-display text-2xl font-bold text-[#ededed]">Edit Key: {key.name}</h1>
+        <h1 className="font-display text-2xl font-bold">Edit Key: {key.name}</h1>
       </div>
 
       <form onSubmit={handleUpdate} className="max-w-lg space-y-4">
-        <div>
-          <label className="block text-xs font-medium text-[#888888] mb-1.5">Name</label>
+        <div className="form-control">
+          <label className="label"><span className="label-text">Name</span></label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] outline-none focus:border-accent/50 transition-colors"
+            className="input input-bordered w-full"
           />
         </div>
         <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-[#888888]">Enabled</label>
+          <label className="label-text">Enabled</label>
           <Toggle checked={enabled} onChange={setEnabled} />
         </div>
-        <div>
-          <label className="block text-xs font-medium text-[#888888] mb-1.5">Rate Limit (RPM, empty = unlimited)</label>
+        <div className="form-control">
+          <label className="label"><span className="label-text">Rate Limit (RPM, empty = unlimited)</span></label>
           <input
             type="number"
             value={rateLimit}
             onChange={(e) => setRateLimit(e.target.value)}
             min={1}
-            className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
+            className="input input-bordered w-full"
           />
         </div>
-        <div>
-          <label className="block text-xs font-medium text-[#888888] mb-1.5">Monthly Budget ($, empty = unlimited)</label>
+        <div className="form-control">
+          <label className="label"><span className="label-text">Monthly Budget ($, empty = unlimited)</span></label>
           <input
             type="number"
             value={budgetMonthly}
             onChange={(e) => setBudgetMonthly(e.target.value)}
             min={0}
             step={0.01}
-            className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
+            className="input input-bordered w-full"
           />
         </div>
         <div className="flex gap-2">
           <Button variant="primary" type="submit" loading={updateMutation.isPending}>Save</Button>
-          <ConfirmDialog title="Delete this key?" onConfirm={handleDelete} okText="Delete" cancelText="Cancel">
+          <ConfirmDialog title="Delete this key?" onConfirm={handleDelete} okText="Delete">
             <Button variant="danger">Delete Key</Button>
           </ConfirmDialog>
         </div>

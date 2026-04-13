@@ -98,7 +98,10 @@ describe('Keys page', () => {
     }, { timeout: 5000 });
 
     await userEvent.type(screen.getByPlaceholderText('e.g., production-app'), 'my-new-key');
-    const createBtn = await screen.findByRole('button', { name: /^Create$/ });
+    // The modal has two btn-primary buttons: "Create Key" (header) and "Create" (form submit)
+    // Get all primary buttons and click the last one (the form submit)
+    const allPrimaryBtns = document.querySelectorAll('button.btn-primary');
+    const createBtn = allPrimaryBtns[allPrimaryBtns.length - 1] as HTMLButtonElement;
     await userEvent.click(createBtn);
 
     await waitFor(() => {

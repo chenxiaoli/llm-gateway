@@ -45,39 +45,39 @@ export default function Keys() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold text-[#ededed]">API Keys</h1>
+        <h1 className="font-display text-2xl font-bold">API Keys</h1>
         <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>
           Create Key
         </Button>
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-12 text-[#555555]">Loading...</div>
+        <div className="flex items-center justify-center py-12"><span className="loading loading-spinner loading-lg" /></div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-xl border border-[#1e1e1e]">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
+            <table className="table table-sm">
               <thead>
-                <tr className="border-b border-[#1e1e1e]">
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Name</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Status</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Rate Limit (RPM)</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Monthly Budget</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Created</th>
+                <tr className="border-b border-base-300">
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Rate Limit (RPM)</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Monthly Budget</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Created</th>
                 </tr>
               </thead>
               <tbody>
                 {data?.items?.map((key) => (
-                  <tr key={key.id} className="border-b border-[#1e1e1e]/50 hover:bg-white/[0.02] transition-colors">
-                    <td className="px-4 py-2.5">
-                      <button onClick={() => navigate(`/console/keys/${key.id}`)} className="text-accent hover:text-accent-hover transition-colors">
+                  <tr key={key.id} className="border-b border-base-200 hover">
+                    <td>
+                      <button onClick={() => navigate(`/console/keys/${key.id}`)} className="link link-primary">
                         {key.name}
                       </button>
                     </td>
-                    <td className="px-4 py-2.5"><Badge variant={key.enabled ? 'green' : 'red'}>{key.enabled ? 'Active' : 'Disabled'}</Badge></td>
-                    <td className="px-4 py-2.5"><span className="mono">{key.rate_limit ?? 'Unlimited'}</span></td>
-                    <td className="px-4 py-2.5"><span className="mono">{key.budget_monthly != null ? `$${key.budget_monthly.toFixed(2)}` : 'Unlimited'}</span></td>
-                    <td className="px-4 py-2.5"><span className="mono">{new Date(key.created_at).toLocaleDateString()}</span></td>
+                    <td><Badge variant={key.enabled ? 'green' : 'red'}>{key.enabled ? 'Active' : 'Disabled'}</Badge></td>
+                    <td className="mono">{key.rate_limit ?? 'Unlimited'}</td>
+                    <td className="mono">{key.budget_monthly != null ? `$${key.budget_monthly.toFixed(2)}` : 'Unlimited'}</td>
+                    <td className="mono">{new Date(key.created_at).toLocaleDateString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -86,10 +86,10 @@ export default function Keys() {
 
           {totalPages > 1 && (
             <div className="mt-4 flex items-center justify-between text-sm">
-              <span className="text-[#555555]">Total {data?.total ?? 0}</span>
-              <div className="flex gap-2">
+              <span className="text-base-content/40">Total {data?.total ?? 0}</span>
+              <div className="join">
                 <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-                <span className="px-2 text-[#888888]">{page} / {totalPages}</span>
+                <span className="px-3 flex items-center text-base-content/60">{page} / {totalPages}</span>
                 <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
               </div>
             </div>
@@ -110,36 +110,36 @@ export default function Keys() {
       >
         {createdKey ? (
           <div>
-            <p className="text-sm text-[#888888]">Save this key now. It won't be shown again.</p>
-            <div className="mt-2 rounded-lg border border-[#1e1e1e] bg-[#0a0a0a] p-3 font-mono text-sm text-[#ededed] break-all">{createdKey}</div>
+            <p className="text-sm text-base-content/60">Save this key now. It won't be shown again.</p>
+            <div className="mt-2 rounded-lg border border-base-300 bg-base-200 p-3 font-mono text-sm break-all">{createdKey}</div>
           </div>
         ) : (
           <form onSubmit={handleCreate} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-[#888888] mb-1.5">Name</label>
+            <div className="form-control">
+              <label className="label"><span className="label-text">Name</span></label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., production-app"
                 required
-                className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
+                className="input input-bordered w-full"
               />
             </div>
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <label className="block text-xs font-medium text-[#888888] mb-1.5">Rate Limit (RPM)</label>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="form-control">
+                <label className="label"><span className="label-text">Rate Limit (RPM)</span></label>
                 <input
                   type="number"
                   value={rateLimit}
                   onChange={(e) => setRateLimit(e.target.value)}
                   placeholder="Unlimited"
                   min={1}
-                  className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
+                  className="input input-bordered w-full"
                 />
               </div>
-              <div className="flex-1">
-                <label className="block text-xs font-medium text-[#888888] mb-1.5">Monthly Budget ($)</label>
+              <div className="form-control">
+                <label className="label"><span className="label-text">Monthly Budget ($)</span></label>
                 <input
                   type="number"
                   value={budget}
@@ -147,7 +147,7 @@ export default function Keys() {
                   placeholder="Unlimited"
                   min={0}
                   step={0.01}
-                  className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
+                  className="input input-bordered w-full"
                 />
               </div>
             </div>

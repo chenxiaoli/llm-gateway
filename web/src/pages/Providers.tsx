@@ -31,41 +31,41 @@ export default function Providers() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold text-[#ededed]">Providers</h1>
+        <h1 className="font-display text-2xl font-bold">Providers</h1>
         <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>
           Add Provider
         </Button>
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-12 text-[#555555]">Loading...</div>
+        <div className="flex items-center justify-center py-12"><span className="loading loading-spinner loading-lg" /></div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[#1e1e1e]">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
+          <table className="table table-sm">
             <thead>
-              <tr className="border-b border-[#1e1e1e]">
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Name</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Protocols</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Status</th>
-                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-[#555555]">Created</th>
+              <tr className="border-b border-base-300">
+                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th>
+                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Protocols</th>
+                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th>
+                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Created</th>
               </tr>
             </thead>
             <tbody>
               {providers?.map((provider) => (
-                <tr key={provider.id} className="border-b border-[#1e1e1e]/50 hover:bg-white/[0.02] transition-colors">
-                  <td className="px-4 py-2.5">
-                    <button onClick={() => navigate(`/console/providers/${provider.id}`)} className="text-accent hover:text-accent-hover transition-colors">
+                <tr key={provider.id} className="border-b border-base-200 hover">
+                  <td>
+                    <button onClick={() => navigate(`/console/providers/${provider.id}`)} className="link link-primary">
                       {provider.name}
                     </button>
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td>
                     <div className="flex gap-1.5">
                       {provider.openai_base_url && <Badge variant="blue">OpenAI</Badge>}
                       {provider.anthropic_base_url && <Badge variant="purple">Anthropic</Badge>}
                     </div>
                   </td>
-                  <td className="px-4 py-2.5"><Badge variant={provider.enabled ? 'green' : 'red'}>{provider.enabled ? 'Active' : 'Disabled'}</Badge></td>
-                  <td className="px-4 py-2.5"><span className="mono">{new Date(provider.created_at).toLocaleDateString()}</span></td>
+                  <td><Badge variant={provider.enabled ? 'green' : 'red'}>{provider.enabled ? 'Active' : 'Disabled'}</Badge></td>
+                  <td className="mono">{new Date(provider.created_at).toLocaleDateString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -75,36 +75,17 @@ export default function Providers() {
 
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Add Provider">
         <form onSubmit={handleCreate} className="space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-[#888888] mb-1.5">Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., OpenAI"
-              required
-              className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
-            />
+          <div className="form-control">
+            <label className="label"><span className="label-text">Name</span></label>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., OpenAI" required className="input input-bordered w-full" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-[#888888] mb-1.5">OpenAI Base URL</label>
-            <input
-              type="text"
-              value={openaiUrl}
-              onChange={(e) => setOpenaiUrl(e.target.value)}
-              placeholder="https://api.openai.com/v1"
-              className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
-            />
+          <div className="form-control">
+            <label className="label"><span className="label-text">OpenAI Base URL</span></label>
+            <input type="text" value={openaiUrl} onChange={(e) => setOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
           </div>
-          <div>
-            <label className="block text-xs font-medium text-[#888888] mb-1.5">Anthropic Base URL</label>
-            <input
-              type="text"
-              value={anthropicUrl}
-              onChange={(e) => setAnthropicUrl(e.target.value)}
-              placeholder="https://api.anthropic.com"
-              className="h-9 w-full rounded-lg border border-[#262626] bg-[#141414] px-3 text-sm text-[#ededed] placeholder-[#555555] outline-none focus:border-accent/50 transition-colors"
-            />
+          <div className="form-control">
+            <label className="label"><span className="label-text">Anthropic Base URL</span></label>
+            <input type="text" value={anthropicUrl} onChange={(e) => setAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" />
           </div>
           <Button variant="primary" loading={createMutation.isPending}>Create</Button>
         </form>

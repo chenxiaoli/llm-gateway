@@ -1,5 +1,4 @@
 import { useEffect, useCallback } from 'react';
-import { X } from 'lucide-react';
 import { cn } from '../../lib/cn';
 
 export interface ModalProps {
@@ -33,39 +32,22 @@ export function Modal({ open, onClose, title, children, footer, className }: Mod
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Panel */}
-      <div
-        className={cn(
-          'relative z-10 w-full max-w-lg rounded-xl border border-[#1e1e1e] bg-[#111111] p-6 animate-fade-in-up',
-          className,
-        )}
-      >
-        {/* Header */}
+    <dialog className={cn('modal modal-open', className)}>
+      <div className="modal-box">
         {title && (
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-[#ededed]">{title}</h2>
-            <button
-              onClick={onClose}
-              className="rounded-lg p-1 text-[#888888] hover:bg-white/[0.04] hover:text-[#ededed] transition-colors cursor-pointer"
-            >
-              <X className="h-4 w-4" />
-            </button>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">{title}</h3>
+            <button className="btn btn-sm btn-circle btn-ghost" onClick={onClose}>✕</button>
           </div>
         )}
 
-        {/* Body */}
-        <div className="text-sm text-[#ededed]">{children}</div>
+        <div className="text-sm">{children}</div>
 
-        {/* Footer */}
-        {footer && <div className="mt-6 flex items-center justify-end gap-3">{footer}</div>}
+        {footer && <div className="modal-action">{footer}</div>}
       </div>
-    </div>
+      <form method="dialog" className="modal-backdrop">
+        <button onClick={onClose}>close</button>
+      </form>
+    </dialog>
   );
 }
