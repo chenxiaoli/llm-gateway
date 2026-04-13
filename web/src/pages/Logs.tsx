@@ -219,13 +219,13 @@ export default function Logs() {
 
             {/* Request body */}
             <div>
-              <h3 className="font-display text-sm font-semibold mb-2 text-base-content/70 uppercase tracking-wider">Request Body</h3>
+              <h3 className="text-sm font-semibold mb-2 text-base-content/70 uppercase tracking-wider">Request Body</h3>
               <JsonViewer data={selectedLog.request_body} />
             </div>
 
             {/* Response body */}
             <div>
-              <h3 className="font-display text-sm font-semibold mb-2 text-base-content/70 uppercase tracking-wider">Response Body</h3>
+              <h3 className="text-sm font-semibold mb-2 text-base-content/70 uppercase tracking-wider">Response Body</h3>
               <JsonViewer data={selectedLog.response_body} />
             </div>
           </div>

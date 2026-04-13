@@ -103,7 +103,7 @@ export default function Dashboard() {
       {/* Recent Requests */}
       <div className="animate-fade-in-up" style={{ animationDelay: '300ms' }}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="font-display text-base font-semibold">Recent Requests</h2>
+          <h2 className="text-base font-semibold">Recent Requests</h2>
           <span className="text-xs font-mono text-base-content/40">({recentLogs?.items?.length ?? 0})</span>
         </div>
 

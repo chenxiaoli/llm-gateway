@@ -6,6 +6,7 @@ import { getAuthConfig } from '../api/auth';
 import { Button } from '../components/ui/Button';
 import { Alert } from '../components/ui/Alert';
 import { toast } from 'sonner';
+import { getErrorMessage } from '../api/client';
 
 export default function Register() {
   const [username, setUsername] = useState('');
@@ -34,8 +35,8 @@ export default function Register() {
     try {
       await register({ username, password });
       navigate('/console/dashboard');
-    } catch {
-      toast.error('Registration failed');
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Registration failed'));
     } finally {
       setLoading(false);
     }

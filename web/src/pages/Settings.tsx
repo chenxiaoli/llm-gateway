@@ -48,7 +48,7 @@ export default function Settings() {
       )}
 
       <div className="max-w-lg bg-base-100 rounded-box p-5 shadow-sm">
-        <h2 className="font-display text-base font-semibold mb-4">Change Password</h2>
+        <h2 className="text-base font-semibold mb-4">Change Password</h2>
 
         {passwordStatus && (
           <Alert variant={passwordStatus.type === 'success' ? 'success' : 'error'} className="mb-4">

@@ -119,3 +119,11 @@ export function getRefreshToken(): string | null {
 export function clearRefreshToken() {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
 }
+
+export function getErrorMessage(err: unknown, fallback: string): string {
+  const error = err as { response?: { data?: { message?: string }; status?: number } };
+  if (error.response?.data?.message) {
+    return error.response.data.message;
+  }
+  return fallback;
+}

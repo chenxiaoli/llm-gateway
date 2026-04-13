@@ -118,7 +118,7 @@ export default function ProviderDetail() {
       </form>
 
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-3"><h2 className="font-display text-base font-semibold">Models</h2><Button icon={<Plus className="h-4 w-4" />} onClick={openAddModel}>Add Model</Button></div>
+        <div className="flex items-center justify-between mb-3"><h2 className="text-base font-semibold">Models</h2><Button icon={<Plus className="h-4 w-4" />} onClick={openAddModel}>Add Model</Button></div>
         <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
           <table className="table table-sm">
             <thead><tr className="border-b border-base-300"><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Billing</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Input ($/1M)</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Output ($/1M)</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Actions</th></tr></thead>
@@ -144,7 +144,7 @@ export default function ProviderDetail() {
       </div>
 
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-3"><h2 className="font-display text-base font-semibold">Channels</h2><Button icon={<Plus className="h-4 w-4" />} onClick={openAddChannel}>Add Channel</Button></div>
+        <div className="flex items-center justify-between mb-3"><h2 className="text-base font-semibold">Channels</h2><Button icon={<Plus className="h-4 w-4" />} onClick={openAddChannel}>Add Channel</Button></div>
         <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
           <table className="table table-sm">
             <thead><tr className="border-b border-base-300"><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Base URL</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Priority</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Actions</th></tr></thead>

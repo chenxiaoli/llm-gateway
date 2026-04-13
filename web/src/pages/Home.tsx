@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Globe, Cloud, KeyRound, Zap, ShieldCheck, LayoutDashboard, Sun, Moon } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { apiClient } from '../api/client';
+import { apiClient, getToken } from '../api/client';
 import { useTheme } from '../hooks/useTheme';
 
 const features = [
@@ -44,7 +44,7 @@ export default function Home() {
               track usage, and proxy requests to OpenAI and Anthropic from a single endpoint.
             </p>
             <div className="flex items-center justify-center gap-4">
-              <Button variant="primary" size="lg" onClick={() => navigate('/console/login')}>
+              <Button variant="primary" size="lg" onClick={() => navigate(getToken() ? '/console/dashboard' : '/console/login')}>
                 Go to Dashboard
               </Button>
               <Button variant="secondary" size="lg" onClick={() => window.open('https://github.com/chenxiaoli/llm-gateway', '_blank')}>
@@ -67,8 +67,8 @@ export default function Home() {
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 mb-2">
                     <Icon className="h-5 w-5 text-primary" />
                   </div>
-                  <h3 className="font-display font-semibold">{f.title}</h3>
-                  <p className="text-sm text-base-content/50 leading-relaxed">{f.desc}</p>
+                  <h3 className="text-[15px] font-semibold tracking-tight text-base-content/90">{f.title}</h3>
+                  <p className="text-[13px] text-base-content/55 leading-relaxed mt-1">{f.desc}</p>
                 </div>
               </div>
             );

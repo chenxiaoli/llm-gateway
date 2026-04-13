@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/authStore';
 import { getAuthConfig } from '../api/auth';
 import { Button } from '../components/ui/Button';
 import { toast } from 'sonner';
+import { getErrorMessage } from '../api/client';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -26,8 +27,8 @@ export default function Login() {
     try {
       await login({ username, password });
       navigate('/console/dashboard');
-    } catch {
-      toast.error('Invalid username or password');
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Invalid username or password'));
     } finally {
       setLoading(false);
     }

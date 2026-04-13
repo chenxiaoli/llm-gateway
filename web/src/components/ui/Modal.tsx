@@ -35,13 +35,13 @@ export function Modal({ open, onClose, title, children, footer, className }: Mod
     <dialog className={cn('modal modal-open', className)}>
       <div className="modal-box">
         {title && (
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-5">
             <h3 className="text-lg font-semibold">{title}</h3>
             <button className="btn btn-sm btn-circle btn-ghost" onClick={onClose}>✕</button>
           </div>
         )}
 
-        <div className="text-sm">{children}</div>
+        <div>{children}</div>
 
         {footer && <div className="modal-action">{footer}</div>}
       </div>

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listProviders, getProvider, createProvider, updateProvider, deleteProvider, listChannels, createChannel as createChannelApi, updateChannel as updateChannelApi, deleteChannel as deleteChannelApi } from '../api/providers';
 import type { CreateProviderRequest, UpdateProviderRequest, CreateChannelRequest, UpdateChannelRequest } from '../types';
 import { toast } from 'sonner';
+import { getErrorMessage } from '../api/client';
 
 export function useProviders() {
   return useQuery({ queryKey: ['providers'], queryFn: listProviders });
@@ -16,7 +17,7 @@ export function useCreateProvider() {
   return useMutation({
     mutationFn: (input: CreateProviderRequest) => createProvider(input),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); toast.success('Provider created'); },
-    onError: () => { toast.error('Failed to create provider'); },
+    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to create provider')); },
   });
 }
 
@@ -29,7 +30,7 @@ export function useUpdateProvider() {
       queryClient.invalidateQueries({ queryKey: ['providers', variables.id] });
       toast.success('Provider updated');
     },
-    onError: () => { toast.error('Failed to update provider'); },
+    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to update provider')); },
   });
 }
 
@@ -38,7 +39,7 @@ export function useDeleteProvider() {
   return useMutation({
     mutationFn: (id: string) => deleteProvider(id),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); toast.success('Provider deleted'); },
-    onError: () => { toast.error('Failed to delete provider'); },
+    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to delete provider')); },
   });
 }
 
@@ -58,7 +59,7 @@ export function useCreateChannel(providerId: string) {
       queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channels'] });
       toast.success('Channel created');
     },
-    onError: () => { toast.error('Failed to create channel'); },
+    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to create channel')); },
   });
 }
 
@@ -70,7 +71,7 @@ export function useUpdateChannel(providerId: string) {
       queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channels'] });
       toast.success('Channel updated');
     },
-    onError: () => { toast.error('Failed to update channel'); },
+    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to update channel')); },
   });
 }
 
@@ -82,6 +83,6 @@ export function useDeleteChannel(providerId: string) {
       queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channels'] });
       toast.success('Channel deleted');
     },
-    onError: () => { toast.error('Failed to delete channel'); },
+    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to delete channel')); },
   });
 }
