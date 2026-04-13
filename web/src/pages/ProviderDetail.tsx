@@ -33,6 +33,9 @@ export default function ProviderDetail() {
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
   const [channelForm] = Form.useForm();
 
+  const { data: channels } = useChannels(id!);
+  const { data: models } = useModels(id!);
+
   if (isLoading) return <div>Loading...</div>;
   if (!provider) return <div>Provider not found</div>;
 
@@ -91,9 +94,6 @@ export default function ProviderDetail() {
   const handleDeleteModel = async (modelName: string) => {
     await deleteModelMutation.mutateAsync(modelName);
   };
-
-  const { data: channels } = useChannels(id!);
-  const { data: models } = useModels(id!);
 
   const openAddChannel = () => {
     setEditingChannel(null);
@@ -174,7 +174,7 @@ export default function ProviderDetail() {
   const channelColumns = [
     { title: 'Name', dataIndex: 'name', key: 'name' },
     {
-      title: 'Base URL', key: 'base_url',
+      title: 'Base URL', dataIndex: 'base_url', key: 'base_url',
       render: (v: string | null) => v || <span style={{ color: '#999' }}>Default</span>,
     },
     { title: 'Priority', dataIndex: 'priority', key: 'priority' },
