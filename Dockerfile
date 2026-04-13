@@ -12,6 +12,8 @@ FROM rust:1.83-alpine AS backend
 
 RUN apk add --no-cache musl-dev pkgconf openssl-dev openssl-libs-static
 
+RUN rustup target add x86_64-unknown-linux-musl
+
 WORKDIR /app
 
 COPY Cargo.toml Cargo.lock ./
