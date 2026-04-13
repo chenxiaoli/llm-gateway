@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Typography, Space, Card, Row, Col, Divider } from 'antd';
 import {
@@ -8,6 +9,7 @@ import {
   DashboardOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
+import { apiClient } from '../api/client';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -46,6 +48,11 @@ const features = [
 
 export default function Home() {
   const navigate = useNavigate();
+  const [version, setVersion] = useState('');
+
+  useEffect(() => {
+    apiClient.get<{ version: string }>('/version').then((r) => setVersion(r.data.version));
+  }, []);
 
   return (
     <div style={{ minHeight: '100vh', background: '#f5f5f5' }}>
@@ -112,7 +119,7 @@ export default function Home() {
 
       {/* Footer */}
       <div style={{ textAlign: 'center', padding: '24px 0', color: '#999' }}>
-        <Text type="secondary">LLM Gateway &mdash; Open Source</Text>
+        <Text type="secondary">LLM Gateway{version ? ` ${version}` : ''} &mdash; Open Source</Text>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Layout, Menu, theme, Space } from 'antd';
 import {
@@ -13,8 +13,9 @@ import {
   TeamOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
+import { apiClient } from '../api/client';
 
-const { Header, Sider, Content } = Layout;
+const { Header, Sider, Content, Footer } = Layout;
 
 const consoleItems = [
   { key: '/console/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
@@ -31,10 +32,15 @@ const adminItems = [
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
+  const [version, setVersion] = useState('');
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
   const { token: { colorBgContainer, borderRadiusLG } } = theme.useToken();
+
+  useEffect(() => {
+    apiClient.get<{ version: string }>('/version').then((r) => setVersion(r.data.version));
+  }, []);
 
   const isAdmin = user?.role === 'admin';
 
@@ -71,6 +77,9 @@ export default function AppLayout() {
             <Outlet />
           </div>
         </Content>
+        <Footer style={{ textAlign: 'center', color: '#999' }}>
+          LLM Gateway{version ? ` ${version}` : ''}
+        </Footer>
       </Layout>
     </Layout>
   );

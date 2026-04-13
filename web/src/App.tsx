@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Spin } from 'antd';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { getToken } from './api/client';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -18,7 +19,10 @@ import Logs from './pages/Logs';
 function RequireAuth() {
   const { user, isLoading } = useAuth();
   if (isLoading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>;
-  if (!user) return <Navigate to="/console/login" replace />;
+  if (!user) {
+    if (getToken()) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" /></div>;
+    return <Navigate to="/console/login" replace />;
+  }
   return <Outlet />;
 }
 

@@ -37,7 +37,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const resp = await apiLogin(input);
     setToken(resp.token);
     setRefreshToken(resp.refresh_token);
-    queryClient.invalidateQueries({ queryKey: ['me'] });
+    const me = await getMe();
+    queryClient.setQueryData(['me'], me);
     return resp;
   };
 
@@ -45,7 +46,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const resp = await apiRegister(input);
     setToken(resp.token);
     setRefreshToken(resp.refresh_token);
-    queryClient.invalidateQueries({ queryKey: ['me'] });
+    const me = await getMe();
+    queryClient.setQueryData(['me'], me);
     return resp;
   };
 
@@ -53,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearToken();
     clearRefreshToken();
     queryClient.clear();
+    window.location.href = '/console/login';
   };
 
   const user: User | undefined = me
