@@ -320,6 +320,7 @@ pub struct AppConfig {
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
+    pub encryption_key: String,
 }
 
 #[derive(Debug, Deserialize)]

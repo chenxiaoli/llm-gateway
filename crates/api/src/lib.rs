@@ -15,4 +15,5 @@ pub struct AppState {
     pub rate_limiter: Arc<RateLimiter>,
     pub audit_logger: Arc<AuditLogger>,
     pub jwt_secret: String,
+    pub encryption_key: [u8; 32],
 }

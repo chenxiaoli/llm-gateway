@@ -3,6 +3,7 @@ use axum::http::HeaderMap;
 use axum::Json;
 use std::sync::Arc;
 
+use llm_gateway_encryption::{decrypt, encrypt};
 use llm_gateway_storage::{Channel, CreateChannel, UpdateChannel};
 
 use crate::error::ApiError;
@@ -42,14 +43,20 @@ pub async fn create_channel(
         .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
 
     let now = chrono::Utc::now();
+    let encrypted_key = encrypt(&input.api_key, &state.encryption_key)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
     let channel = Channel {
         id: uuid::Uuid::new_v4().to_string(),
         provider_id,
         name,
-        api_key: input.api_key,
+        api_key: encrypted_key,
         base_url: input.base_url.filter(|u| !u.is_empty()),
         priority: input.priority.unwrap_or(0),
         enabled: true,
+        rpm_limit: input.rpm_limit,
+        tpm_limit: input.tpm_limit,
+        balance: input.balance,
+        weight: input.weight,
         created_at: now,
         updated_at: now,
     };
@@ -86,12 +93,16 @@ pub async fn get_channel(
 ) -> Result<Json<Channel>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
-    let channel = state
+    let mut channel = state
         .storage
         .get_channel(&id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Channel '{}' not found", id)))?;
+
+    // Decrypt api_key for display
+    channel.api_key = decrypt(&channel.api_key, &state.encryption_key)
+        .unwrap_or_else(|_| channel.api_key);
 
     Ok(Json(channel))
 }
@@ -122,7 +133,8 @@ pub async fn update_channel(
         channel.name = trimmed;
     }
     if let Some(api_key) = input.api_key {
-        channel.api_key = api_key;
+        channel.api_key = encrypt(&api_key, &state.encryption_key)
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
     }
     if let Some(base_url) = input.base_url {
         if let Some(ref url) = base_url {
@@ -141,6 +153,18 @@ pub async fn update_channel(
     }
     if let Some(enabled) = input.enabled {
         channel.enabled = enabled;
+    }
+    if let Some(rpm_limit) = input.rpm_limit {
+        channel.rpm_limit = rpm_limit;
+    }
+    if let Some(tpm_limit) = input.tpm_limit {
+        channel.tpm_limit = tpm_limit;
+    }
+    if let Some(balance) = input.balance {
+        channel.balance = balance;
+    }
+    if let Some(weight) = input.weight {
+        channel.weight = weight;
     }
     channel.updated_at = chrono::Utc::now();
 

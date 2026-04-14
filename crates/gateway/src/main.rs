@@ -9,6 +9,7 @@ use llm_gateway_storage::{AppConfig, Storage};
 use llm_gateway_storage::sqlite::SqliteStorage;
 use rust_embed::{Embed, RustEmbed};
 use std::sync::Arc;
+use std::convert::TryInto;
 
 #[derive(Embed)]
 #[folder = "../../web/dist"]
@@ -46,6 +47,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         rate_limiter,
         audit_logger,
         jwt_secret: config.auth.jwt_secret.clone(),
+        encryption_key: {
+            let key = config.server.encryption_key.as_bytes();
+            let mut bytes = [0u8; 32];
+            bytes.copy_from_slice(key);
+            bytes
+        },
     });
 
     // Build router
