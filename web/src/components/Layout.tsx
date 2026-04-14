@@ -242,8 +242,8 @@ export default function AppLayout() {
         </main>
 
         {/* Footer */}
-        <footer className="shrink-0 border-t border-base-300/60 bg-base-100/50">
-          <div className="flex items-center justify-between px-6 py-2">
+        <footer className="shrink-0 border-t border-base-300/60 bg-base-100/50 w-full">
+          <div className="flex items-center justify-between px-6 py-2 max-w-full">
             <div className="flex items-center gap-3">
               <span className="text-[11px] text-base-content/60 font-mono">
                 LLM Gateway{version ? ` v${version}` : ''}
