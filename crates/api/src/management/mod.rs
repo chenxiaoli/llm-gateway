@@ -7,6 +7,7 @@ pub mod usage;
 pub mod logs;
 pub mod users;
 pub mod settings;
+pub mod channel_models;
 
 use axum::extract::State;
 use axum::routing::{get, patch, post};
@@ -57,6 +58,15 @@ pub fn management_router() -> Router<Arc<AppState>> {
         .route(
             "/api/v1/providers/{id}/sync-models",
             post(models::sync_models),
+        )
+        // ChannelModels (admin)
+        .route(
+            "/api/v1/providers/{provider_id}/channel-models",
+            post(channel_models::create_channel_model).get(channel_models::list_channel_models),
+        )
+        .route(
+            "/api/v1/channel-models/{id}",
+            get(channel_models::get_channel_model).patch(channel_models::update_channel_model).delete(channel_models::delete_channel_model),
         )
         // Usage (authenticated)
         .route("/api/v1/usage", get(usage::get_usage))
