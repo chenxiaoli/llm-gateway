@@ -261,7 +261,16 @@ pub async fn sync_models(
     let mut synced_models: Vec<SyncedModel> = Vec::new();
 
     // Fetch from OpenAI-compatible endpoint
-    if let Some(base_url) = &provider.openai_base_url {
+    let openai_endpoints: serde_json::Value = provider
+        .endpoints
+        .as_ref()
+        .and_then(|e| serde_json::from_str(e).ok())
+        .unwrap_or(serde_json::Value::Null);
+    if let Some(base_url) = openai_endpoints
+        .get("openai")
+        .and_then(|v| v.as_str())
+        .or(provider.base_url.as_deref())
+    {
         let url = format!("{}/models", base_url.trim_end_matches('/'));
         match client
             .get(&url)
@@ -325,7 +334,16 @@ pub async fn sync_models(
     }
 
     // Fetch from Anthropic endpoint
-    if let Some(base_url) = &provider.anthropic_base_url {
+    let anthropic_endpoints: serde_json::Value = provider
+        .endpoints
+        .as_ref()
+        .and_then(|e| serde_json::from_str(e).ok())
+        .unwrap_or(serde_json::Value::Null);
+    if let Some(base_url) = anthropic_endpoints
+        .get("anthropic")
+        .and_then(|v| v.as_str())
+        .or(provider.base_url.as_deref())
+    {
         let url = format!("{}/models", base_url.trim_end_matches('/'));
         match client
             .get(&url)

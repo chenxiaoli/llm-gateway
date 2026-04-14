@@ -427,10 +427,20 @@ pub async fn messages(
 
         let base_url = match channel.base_url.as_deref() {
             Some(url) => url.to_string(),
-            None => provider
-                .anthropic_base_url
-                .clone()
-                .ok_or_else(|| ApiError::Internal(format!("Provider '{}' has no anthropic_base_url", provider_id)))?,
+            None => {
+                // Try to get endpoint from JSON, fall back to base_url
+                let endpoints: serde_json::Value = provider
+                    .endpoints
+                    .as_ref()
+                    .and_then(|e| serde_json::from_str(e).ok())
+                    .unwrap_or(serde_json::Value::Null);
+                endpoints
+                    .get("anthropic")
+                    .and_then(|v| v.as_str())
+                    .or(provider.base_url.as_deref())
+                    .ok_or_else(|| ApiError::Internal(format!("Provider '{}' has no Anthropic endpoint", provider_id)))?
+                    .to_string()
+            }
         };
 
         let anthropic_provider = AnthropicProvider {

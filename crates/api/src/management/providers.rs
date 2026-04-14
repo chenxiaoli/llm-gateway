@@ -20,8 +20,8 @@ pub async fn create_provider(
     let provider = Provider {
         id: uuid::Uuid::new_v4().to_string(),
         name: input.name,
-        openai_base_url: input.openai_base_url,
-        anthropic_base_url: input.anthropic_base_url,
+        base_url: input.base_url,
+        endpoints: input.endpoints,
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -87,11 +87,11 @@ pub async fn update_provider(
     if let Some(name) = input.name {
         provider.name = name;
     }
-    if let Some(openai_base_url) = input.openai_base_url {
-        provider.openai_base_url = openai_base_url;
+    if let Some(base_url) = input.base_url {
+        provider.base_url = base_url;
     }
-    if let Some(anthropic_base_url) = input.anthropic_base_url {
-        provider.anthropic_base_url = anthropic_base_url;
+    if let Some(endpoints) = input.endpoints {
+        provider.endpoints = endpoints;
     }
     if let Some(enabled) = input.enabled {
         provider.enabled = enabled;
