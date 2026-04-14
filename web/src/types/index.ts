@@ -187,10 +187,16 @@ export interface UpdateUserRequest {
 
 export interface SettingsResponse {
   allow_registration: boolean;
+  server_host: string;
+  audit_log_request: boolean;
+  audit_log_response: boolean;
 }
 
 export interface UpdateSettingsRequest {
-  allow_registration: boolean;
+  allow_registration?: boolean;
+  server_host?: string;
+  audit_log_request?: boolean;
+  audit_log_response?: boolean;
 }
 
 export interface Channel {
