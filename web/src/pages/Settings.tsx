@@ -1,12 +1,20 @@
 import { useState } from 'react';
 import { useSettings, useUpdateSettings } from '../hooks/useSettings';
 import { changePassword } from '../api/auth';
+import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider } from '../hooks/useProviders';
 import { Button } from '../components/ui/Button';
 import { Toggle } from '../components/ui/Toggle';
 import { Alert } from '../components/ui/Alert';
+import { Modal } from '../components/ui/Modal';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { toast } from 'sonner';
+import { Plus, Pencil, Trash2 } from 'lucide-react';
+import type { Provider } from '../types';
+
+type Tab = 'general' | 'providers' | 'password';
 
 export default function Settings() {
+  const [activeTab, setActiveTab] = useState<Tab>('general');
   const { data: settings, isLoading } = useSettings();
   const updateMutation = useUpdateSettings();
   const [passwordLoading, setPasswordLoading] = useState(false);
@@ -14,6 +22,18 @@ export default function Settings() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  const { data: providers } = useProviders();
+  const createProviderMutation = useCreateProvider();
+  const updateProviderMutation = useUpdateProvider();
+  const deleteProviderMutation = useDeleteProvider();
+
+  const [providerModalOpen, setProviderModalOpen] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
+  const [provName, setProvName] = useState('');
+  const [provOpenaiUrl, setProvOpenaiUrl] = useState('');
+  const [provAnthropicUrl, setProvAnthropicUrl] = useState('');
+  const [provEnabled, setProvEnabled] = useState(true);
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,65 +52,141 @@ export default function Settings() {
     }
   };
 
+  const openAddProvider = () => { setEditingProvider(null); setProvName(''); setProvOpenaiUrl(''); setProvAnthropicUrl(''); setProvEnabled(true); setProviderModalOpen(true); };
+  const openEditProvider = (p: Provider) => { setEditingProvider(p); setProvName(p.name); setProvOpenaiUrl(p.openai_base_url ?? ''); setProvAnthropicUrl(p.anthropic_base_url ?? ''); setProvEnabled(p.enabled); setProviderModalOpen(true); };
+  const handleSaveProvider = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingProvider) {
+      await updateProviderMutation.mutateAsync({ id: editingProvider.id, input: { name: provName, openai_base_url: provOpenaiUrl || null, anthropic_base_url: provAnthropicUrl || null, enabled: provEnabled } });
+    } else {
+      await createProviderMutation.mutateAsync({ name: provName, openai_base_url: provOpenaiUrl || null, anthropic_base_url: provAnthropicUrl || null });
+    }
+    setProviderModalOpen(false);
+  };
+  const handleDeleteProvider = async (id: string) => { await deleteProviderMutation.mutateAsync(id); };
+
   return (
     <div>
       <div className="mb-6"><h1 className="text-2xl font-bold">Settings</h1></div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12"><span className="loading loading-spinner loading-lg" /></div>
-      ) : (
-        <div className="max-w-lg bg-base-100 rounded-box p-5 shadow-sm mb-6">
-          <div className="flex items-center justify-between py-3 border-b border-base-200">
-            <div>
-              <span className="text-sm text-base-content/70">Allow Registration</span>
-              <p className="text-xs text-base-content/40">Allow new users to register</p>
-            </div>
-            <Toggle checked={settings?.allow_registration ?? false} onChange={(checked) => updateMutation.mutate({ allow_registration: checked })} />
-          </div>
+      <div className="tabs tabs-boxed mb-6">
+        <button className={`tab ${activeTab === 'general' ? 'tab-active' : ''}`} onClick={() => setActiveTab('general')}>General</button>
+        <button className={`tab ${activeTab === 'providers' ? 'tab-active' : ''}`} onClick={() => setActiveTab('providers')}>Providers</button>
+        <button className={`tab ${activeTab === 'password' ? 'tab-active' : ''}`} onClick={() => setActiveTab('password')}>Password</button>
+      </div>
 
-          <div className="flex items-center justify-between py-3 border-b border-base-200">
-            <div>
-              <span className="text-sm text-base-content/70">Log Request Body</span>
-              <p className="text-xs text-base-content/40">Store request body in audit logs</p>
-            </div>
-            <Toggle checked={settings?.audit_log_request ?? true} onChange={(checked) => updateMutation.mutate({ audit_log_request: checked })} />
-          </div>
+      {activeTab === 'general' && (
+        <>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12"><span className="loading loading-spinner loading-lg" /></div>
+          ) : (
+            <div className="max-w-lg bg-base-100 rounded-box p-5 shadow-sm mb-6">
+              <div className="flex items-center justify-between py-3 border-b border-base-200">
+                <div>
+                  <span className="text-sm text-base-content/70">Allow Registration</span>
+                  <p className="text-xs text-base-content/40">Allow new users to register</p>
+                </div>
+                <Toggle checked={settings?.allow_registration ?? false} onChange={(checked) => updateMutation.mutate({ allow_registration: checked })} />
+              </div>
 
-          <div className="flex items-center justify-between py-3">
-            <div>
-              <span className="text-sm text-base-content/70">Log Response Body</span>
-              <p className="text-xs text-base-content/40">Store response body in audit logs</p>
+              <div className="flex items-center justify-between py-3 border-b border-base-200">
+                <div>
+                  <span className="text-sm text-base-content/70">Log Request Body</span>
+                  <p className="text-xs text-base-content/40">Store request body in audit logs</p>
+                </div>
+                <Toggle checked={settings?.audit_log_request ?? true} onChange={(checked) => updateMutation.mutate({ audit_log_request: checked })} />
+              </div>
+
+              <div className="flex items-center justify-between py-3">
+                <div>
+                  <span className="text-sm text-base-content/70">Log Response Body</span>
+                  <p className="text-xs text-base-content/40">Store response body in audit logs</p>
+                </div>
+                <Toggle checked={settings?.audit_log_response ?? true} onChange={(checked) => updateMutation.mutate({ audit_log_response: checked })} />
+              </div>
             </div>
-            <Toggle checked={settings?.audit_log_response ?? true} onChange={(checked) => updateMutation.mutate({ audit_log_response: checked })} />
-          </div>
+          )}
+        </>
+      )}
+
+      {activeTab === 'providers' && (
+        <div className="mb-6 flex justify-end">
+          <Button icon={<Plus className="h-4 w-4" />} onClick={openAddProvider}>Add Provider</Button>
         </div>
       )}
 
-      <div className="max-w-lg bg-base-100 rounded-box p-5 shadow-sm">
-        <h2 className="text-base font-semibold mb-4">Change Password</h2>
+      {activeTab === 'providers' && providers?.map((provider) => (
+        <div key={provider.id} className="max-w-lg bg-base-100 rounded-box p-5 shadow-sm mb-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-semibold">{provider.name}</h3>
+              <p className="text-xs text-base-content/40">{provider.openai_base_url}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => openEditProvider(provider)} className="btn btn-ghost btn-sm btn-circle"><Pencil className="h-4 w-4" /></button>
+              <ConfirmDialog title={`Delete provider "${provider.name}"?`} onConfirm={() => handleDeleteProvider(provider.id)} okText="Delete"><button className="btn btn-ghost btn-sm btn-circle text-error"><Trash2 className="h-4 w-4" /></button></ConfirmDialog>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${provider.enabled ? 'bg-success/10 text-success' : 'bg-base-300/50 text-base-content/40'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${provider.enabled ? 'bg-success' : 'bg-base-content/30'}`} />
+              {provider.enabled ? 'Active' : 'Disabled'}
+            </span>
+          </div>
+        </div>
+      ))}
 
-        {passwordStatus && (
-          <Alert variant={passwordStatus.type === 'success' ? 'success' : 'error'} className="mb-4">
-            {passwordStatus.message}
-          </Alert>
-        )}
+      {activeTab === 'password' && (
+        <div className="max-w-lg bg-base-100 rounded-box p-5 shadow-sm">
+          <h2 className="text-base font-semibold mb-4">Change Password</h2>
 
-        <form onSubmit={handleChangePassword} className="space-y-4">
+          {passwordStatus && (
+            <Alert variant={passwordStatus.type === 'success' ? 'success' : 'error'} className="mb-4">
+              {passwordStatus.message}
+            </Alert>
+          )}
+
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <div className="form-control">
+              <label className="label"><span className="label-text">Current Password</span></label>
+              <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required className="input input-bordered w-full" />
+            </div>
+            <div className="form-control">
+              <label className="label"><span className="label-text">New Password</span></label>
+              <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required className="input input-bordered w-full" />
+            </div>
+            <div className="form-control">
+              <label className="label"><span className="label-text">Confirm New Password</span></label>
+              <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="input input-bordered w-full" />
+            </div>
+            <Button variant="primary" loading={passwordLoading}>Change Password</Button>
+          </form>
+        </div>
+      )}
+
+      <Modal open={providerModalOpen} onClose={() => setProviderModalOpen(false)} title={editingProvider ? 'Edit Provider' : 'Add Provider'}>
+        <form onSubmit={handleSaveProvider} className="space-y-4">
           <div className="form-control">
-            <label className="label"><span className="label-text">Current Password</span></label>
-            <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required className="input input-bordered w-full" />
+            <label className="label"><span className="label-text">Name</span></label>
+            <input type="text" value={provName} onChange={(e) => setProvName(e.target.value)} required className="input input-bordered w-full" />
           </div>
           <div className="form-control">
-            <label className="label"><span className="label-text">New Password</span></label>
-            <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required className="input input-bordered w-full" />
+            <label className="label"><span className="label-text">OpenAI Base URL</span></label>
+            <input type="text" value={provOpenaiUrl} onChange={(e) => setProvOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
           </div>
           <div className="form-control">
-            <label className="label"><span className="label-text">Confirm New Password</span></label>
-            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="input input-bordered w-full" />
+            <label className="label"><span className="label-text">Anthropic Base URL</span></label>
+            <input type="text" value={provAnthropicUrl} onChange={(e) => setProvAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" />
           </div>
-          <Button variant="primary" loading={passwordLoading}>Change Password</Button>
+          {editingProvider && (
+            <div className="flex items-center justify-between">
+              <label className="label-text">Enabled</label>
+              <Toggle checked={provEnabled} onChange={setProvEnabled} />
+            </div>
+          )}
+          <Button variant="primary" type="submit">{editingProvider ? 'Update' : 'Create'}</Button>
         </form>
-      </div>
+      </Modal>
     </div>
   );
 }

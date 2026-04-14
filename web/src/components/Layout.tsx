@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   KeyRound,
   BarChart3,
-  Cloud,
   Globe,
   Cpu,
   Users,
@@ -28,7 +27,6 @@ const consoleItems = [
 ];
 
 const adminItems = [
-  { key: '/console/providers', icon: Cloud, label: 'Providers' },
   { key: '/console/channels', icon: Globe, label: 'Channels' },
   { key: '/console/models', icon: Cpu, label: 'Models' },
   { key: '/console/users', icon: Users, label: 'Users' },
