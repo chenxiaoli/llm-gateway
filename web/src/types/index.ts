@@ -35,8 +35,8 @@ export interface UpdateKeyRequest {
 export interface Provider {
   id: string;
   name: string;
-  openai_base_url: string | null;
-  anthropic_base_url: string | null;
+  base_url: string | null;
+  endpoints: string | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -44,14 +44,14 @@ export interface Provider {
 
 export interface CreateProviderRequest {
   name: string;
-  openai_base_url?: string | null;
-  anthropic_base_url?: string | null;
+  base_url?: string | null;
+  endpoints?: string | null;
 }
 
 export interface UpdateProviderRequest {
   name?: string;
-  openai_base_url?: string | null;
-  anthropic_base_url?: string | null;
+  base_url?: string | null;
+  endpoints?: string | null;
   enabled?: boolean;
 }
 
