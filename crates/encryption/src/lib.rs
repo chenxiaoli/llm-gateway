@@ -6,12 +6,12 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use rand::Rng;
 
 const NONCE_SIZE: usize = 12;
+const MIN_ENCRYPTED_DATA_SIZE: usize = 28; // 12 (nonce) + 16 (GCM auth tag)
 
 #[derive(Debug)]
 pub enum EncryptionError {
     EncryptFailed(String),
     DecryptFailed(String),
-    InvalidKeyLength(usize),
     InvalidFormat,
 }
 
@@ -20,7 +20,6 @@ impl std::fmt::Display for EncryptionError {
         match self {
             EncryptionError::EncryptFailed(msg) => write!(f, "encryption failed: {}", msg),
             EncryptionError::DecryptFailed(msg) => write!(f, "decryption failed: {}", msg),
-            EncryptionError::InvalidKeyLength(len) => write!(f, "invalid key length: expected 32 bytes, got {}", len),
             EncryptionError::InvalidFormat => write!(f, "invalid format: expected base64 encoded nonce(12) || ciphertext"),
         }
     }
@@ -31,10 +30,6 @@ impl std::error::Error for EncryptionError {}
 /// Encrypts plaintext using AES-256-GCM with a random nonce.
 /// Returns base64(nonce || ciphertext).
 pub fn encrypt(plaintext: &str, key: &[u8; 32]) -> Result<String, EncryptionError> {
-    if key.len() != 32 {
-        return Err(EncryptionError::InvalidKeyLength(key.len()));
-    }
-
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|e| EncryptionError::EncryptFailed(e.to_string()))?;
 
@@ -57,15 +52,11 @@ pub fn encrypt(plaintext: &str, key: &[u8; 32]) -> Result<String, EncryptionErro
 /// Decrypts ciphertext using AES-256-GCM.
 /// Input is base64(nonce || ciphertext).
 pub fn decrypt(ciphertext: &str, key: &[u8; 32]) -> Result<String, EncryptionError> {
-    if key.len() != 32 {
-        return Err(EncryptionError::InvalidKeyLength(key.len()));
-    }
-
     let data = BASE64
         .decode(ciphertext)
         .map_err(|_| EncryptionError::InvalidFormat)?;
 
-    if data.len() < NONCE_SIZE {
+    if data.len() < MIN_ENCRYPTED_DATA_SIZE {
         return Err(EncryptionError::InvalidFormat);
     }
 
