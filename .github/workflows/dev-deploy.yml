@@ -86,4 +86,7 @@ jobs:
           username: ${{ secrets.DEV_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           script: |
-            curl -sL https://raw.githubusercontent.com/${{ github.repository }}/develop/.github/run.sh | bash -s
+            cd /opt/dev/llm-gateway
+            docker compose pull
+            docker compose up -d
+            docker compose ps
