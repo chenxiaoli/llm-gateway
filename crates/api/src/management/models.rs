@@ -64,6 +64,7 @@ pub async fn create_model(
         .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
 
     let model = Model {
+        id: input.name.clone(),
         name: input.name,
         provider_id,
         model_type: None,
@@ -231,6 +232,7 @@ pub async fn sync_models(
                             } else {
                                 // Create new model (disabled by default - requires admin review)
                                 let model = Model {
+                                    id: name.clone(),
                                     name: name.clone(),
                                     provider_id: provider_id.clone(),
                                     model_type: model_type.clone(),
@@ -300,6 +302,7 @@ pub async fn sync_models(
                             } else {
                                 // Create new model (disabled by default - requires admin review)
                                 let model = Model {
+                                    id: name.clone(),
                                     name: name.clone(),
                                     provider_id: provider_id.clone(),
                                     model_type: model_type.clone(),
