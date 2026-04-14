@@ -26,11 +26,11 @@ describe('Settings page', () => {
     }, { timeout: 5000 });
   });
 
-  it('renders a switch toggle', async () => {
+  it('renders settings toggles', async () => {
     renderWithProviders(<Settings />, { route: '/console/settings' });
 
     await waitFor(() => {
-      expect(screen.getByRole('switch')).toBeInTheDocument();
+      expect(screen.getAllByRole('switch')).toHaveLength(3);
     }, { timeout: 5000 });
   });
 
