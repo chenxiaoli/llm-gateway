@@ -150,15 +150,23 @@ pub async fn messages(
         return Err(ApiError::NotFound(format!("Provider '{}' is disabled", provider_id)));
     }
 
-    // Get enabled channels for the provider (sorted by priority ASC)
-    let channels = state
-        .storage
-        .list_enabled_channels_by_provider(provider_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    // Get channels that support this model (via channel_models)
+    // If no mapping exists, fall back to all provider channels
+    let channels = match state.storage.get_channels_for_model(&model_name).await {
+        Ok(channels) if !channels.is_empty() => channels,
+        _ => {
+            // Fallback: use all enabled channels for provider
+            state.storage.list_enabled_channels_by_provider(provider_id).await
+                .map_err(|e| ApiError::Internal(e.to_string()))?
+        }
+    };
     if channels.is_empty() {
         return Err(ApiError::Internal(format!("Provider '{}' has no enabled channels", provider_id)));
     }
+
+    // Get channel_models to find upstream_model_name
+    let channel_models = state.storage.get_channel_models_for_model(&model_name).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // 7. Check for streaming
     let is_stream = req_json
@@ -174,6 +182,24 @@ pub async fn messages(
         // Failover loop over channels
         let mut last_error = String::new();
         for channel in &channels {
+            // Get upstream_model_name for this channel
+            let upstream_name = channel_models
+                .iter()
+                .find(|cm| cm.channel_id == channel.id)
+                .map(|cm| cm.upstream_model_name.as_str())
+                .unwrap_or(&model_name);
+
+            // Create modified body with upstream model name
+            let modified_body = if upstream_name != &model_name {
+                let mut req_json_modified = req_json.clone();
+                if let Some(model_obj) = req_json_modified.get_mut("model") {
+                    *model_obj = serde_json::Value::String(upstream_name.to_string());
+                }
+                serde_json::to_string(&req_json_modified).unwrap_or_else(|_| body.clone())
+            } else {
+                body.clone()
+            };
+
             // Decrypt the channel's api_key for the request
             let api_key_value = decrypt(&channel.api_key, &state.encryption_key)
                 .unwrap_or_else(|_| channel.api_key.clone());
@@ -193,7 +219,7 @@ pub async fn messages(
                 .header("x-api-key", &api_key_value)
                 .header("anthropic-version", "2023-06-01")
                 .header("Content-Type", "application/json")
-                .body(body.clone())
+                .body(modified_body)
                 .send()
                 .await
             {
@@ -367,6 +393,24 @@ pub async fn messages(
     // 8. Non-streaming: failover loop over channels
     let mut last_error = String::new();
     for channel in &channels {
+        // Get upstream_model_name for this channel
+        let upstream_name = channel_models
+            .iter()
+            .find(|cm| cm.channel_id == channel.id)
+            .map(|cm| cm.upstream_model_name.as_str())
+            .unwrap_or(&model_name);
+
+        // Create modified body with upstream model name
+        let modified_body = if upstream_name != &model_name {
+            let mut req_json_modified = req_json.clone();
+            if let Some(model_obj) = req_json_modified.get_mut("model") {
+                *model_obj = serde_json::Value::String(upstream_name.to_string());
+            }
+            serde_json::to_string(&req_json_modified).unwrap_or_else(|_| body.clone())
+        } else {
+            body.clone()
+        };
+
         // Decrypt the channel's api_key for the request
         let api_key_value = decrypt(&channel.api_key, &state.encryption_key)
             .unwrap_or_else(|_| channel.api_key.clone());
@@ -387,7 +431,7 @@ pub async fn messages(
 
         let start = Instant::now();
         let proxy_result = match anthropic_provider
-            .proxy_request(&client, "/v1/messages", body.clone(), vec![])
+            .proxy_request(&client, "/v1/messages", modified_body, vec![])
             .await
         {
             Ok(result) => result,
