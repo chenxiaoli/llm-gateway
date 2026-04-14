@@ -25,6 +25,11 @@ export async function deleteProvider(id: string): Promise<void> {
   await apiClient.delete(`/providers/${id}`);
 }
 
+export async function listAllChannels(): Promise<Channel[]> {
+  const { data } = await apiClient.get<Channel[]>('/channels');
+  return data;
+}
+
 export async function listChannels(providerId: string): Promise<Channel[]> {
   const { data } = await apiClient.get<Channel[]>(`/providers/${providerId}/channels`);
   return data;

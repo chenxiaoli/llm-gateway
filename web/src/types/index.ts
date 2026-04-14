@@ -67,6 +67,10 @@ export interface Model {
   created_at: string;
 }
 
+export interface ModelWithProvider extends Model {
+  provider_name: string;
+}
+
 export interface CreateModelRequest {
   name: string;
   billing_type: 'token' | 'request';

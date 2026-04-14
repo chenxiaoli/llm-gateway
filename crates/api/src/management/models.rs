@@ -47,6 +47,21 @@ pub async fn list_models(
     Ok(Json(models))
 }
 
+pub async fn list_all_models(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<llm_gateway_storage::ModelWithProvider>>, ApiError> {
+    require_admin(&headers, &state.jwt_secret)?;
+
+    let models = state
+        .storage
+        .list_models()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(models))
+}
+
 pub async fn create_model(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,

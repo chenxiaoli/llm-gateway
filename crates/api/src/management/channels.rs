@@ -86,6 +86,27 @@ pub async fn list_channels(
     Ok(Json(channels))
 }
 
+pub async fn list_all_channels(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<Channel>>, ApiError> {
+    require_admin(&headers, &state.jwt_secret)?;
+
+    let channels = state
+        .storage
+        .list_channels()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Decrypt api_key for each channel
+    let channels = channels.into_iter().map(|mut c| {
+        c.api_key = decrypt(&c.api_key, &state.encryption_key).unwrap_or_else(|_| c.api_key);
+        c
+    }).collect();
+
+    Ok(Json(channels))
+}
+
 pub async fn get_channel(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,

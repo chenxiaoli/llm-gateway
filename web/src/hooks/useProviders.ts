@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { listProviders, getProvider, createProvider, updateProvider, deleteProvider, listChannels, createChannel as createChannelApi, updateChannel as updateChannelApi, deleteChannel as deleteChannelApi, syncModels, getChannel } from '../api/providers';
+import { listProviders, getProvider, createProvider, updateProvider, deleteProvider, listAllChannels, listChannels, createChannel as createChannelApi, updateChannel as updateChannelApi, deleteChannel as deleteChannelApi, syncModels, getChannel } from '../api/providers';
 import type { CreateProviderRequest, UpdateProviderRequest, CreateChannelRequest, UpdateChannelRequest } from '../types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
@@ -14,6 +14,10 @@ export function useProvider(id: string) {
 
 export function useChannel(id: string) {
   return useQuery({ queryKey: ['channels', id], queryFn: () => getChannel(id), enabled: !!id });
+}
+
+export function useAllChannels() {
+  return useQuery({ queryKey: ['channels'], queryFn: listAllChannels });
 }
 
 export function useCreateProvider() {

@@ -666,6 +666,17 @@ impl crate::Storage for SqliteStorage {
         Ok(row.map(Channel::from))
     }
 
+    async fn list_channels(&self) -> Result<Vec<Channel>, DbErr> {
+        let rows: Vec<SqliteChannelRow> = sqlx::query_as(
+            "SELECT id, provider_id, name, api_key, base_url, priority, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at
+             FROM channels ORDER BY priority ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(Channel::from).collect())
+    }
+
     async fn list_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<SqliteChannelRow> = sqlx::query_as(
             "SELECT id, provider_id, name, api_key, base_url, priority, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at

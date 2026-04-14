@@ -6,6 +6,7 @@ import {
   BarChart3,
   Cloud,
   Globe,
+  Cpu,
   Users,
   Settings,
   FileText,
@@ -29,6 +30,7 @@ const consoleItems = [
 const adminItems = [
   { key: '/console/providers', icon: Cloud, label: 'Providers' },
   { key: '/console/channels', icon: Globe, label: 'Channels' },
+  { key: '/console/models', icon: Cpu, label: 'Models' },
   { key: '/console/users', icon: Users, label: 'Users' },
   { key: '/console/settings', icon: Settings, label: 'Settings' },
   { key: '/console/logs', icon: FileText, label: 'Logs' },
@@ -41,6 +43,7 @@ const routeLabels: Record<string, string> = {
   usage: 'Usage',
   providers: 'Providers',
   channels: 'Channels',
+  models: 'Models',
   users: 'Users',
   settings: 'Settings',
   logs: 'Audit Logs',

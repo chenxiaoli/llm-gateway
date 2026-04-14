@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { listModels, createModel, updateModel, deleteModel } from '../api/models';
+import { listModels, listAllModels, createModel, updateModel, deleteModel } from '../api/models';
 import type { CreateModelRequest, UpdateModelRequest } from '../types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
@@ -10,6 +10,10 @@ export function useModels(providerId: string) {
     queryFn: () => listModels(providerId),
     enabled: !!providerId,
   });
+}
+
+export function useAllModels() {
+  return useQuery({ queryKey: ['models'], queryFn: listAllModels });
 }
 
 export function useCreateModel(providerId: string) {
