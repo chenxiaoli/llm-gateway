@@ -47,6 +47,16 @@ pub trait Storage: Send + Sync {
     async fn list_key_model_rate_limits(&self, key_id: &str) -> Result<Vec<KeyModelRateLimit>, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_key_model_rate_limit(&self, key_id: &str, model_name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+    // Channel Models
+    async fn create_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_channel_model(&self, id: &str) -> Result<Option<ChannelModel>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_channel_models(&self) -> Result<Vec<ChannelModel>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_channel_models_by_channel(&self, channel_id: &str) -> Result<Vec<ChannelModel>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_channel_models_for_model(&self, model_id: &str) -> Result<Vec<ChannelModel>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_channels_for_model(&self, model_id: &str) -> Result<Vec<Channel>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn update_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, Box<dyn std::error::Error + Send + Sync>>;
+    async fn delete_channel_model(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
     // Usage
     async fn record_usage(&self, usage: &UsageRecord) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage(&self, filter: &UsageFilter) -> Result<Vec<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
