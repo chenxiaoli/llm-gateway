@@ -7,6 +7,7 @@ import {
 import { Button } from '../components/ui/Button';
 import { apiClient, getToken } from '../api/client';
 import { useTheme } from '../hooks/useTheme';
+import { useSettings } from '../hooks/useSettings';
 
 const features = [
   { icon: Globe, title: 'Dual Protocol', desc: 'OpenAI and Anthropic compatible endpoints. Drop-in replacement for your existing SDK.' },
@@ -19,61 +20,58 @@ const features = [
 
 type Protocol = 'openai' | 'anthropic';
 
-interface CurlLine {
-  text: string;
-  prefix: string;
-}
+export default function Home() {
+  const navigate = useNavigate();
+  const [version, setVersion] = useState('');
+  const [activeProtocol, setActiveProtocol] = useState<Protocol>('openai');
+  const { theme, toggleTheme } = useTheme();
+  const { data: settings } = useSettings();
 
-const quickStartExamples: Record<Protocol, { title: string; curl: CurlLine[]; sdk: string }> = {
-  openai: {
-    title: 'OpenAI Compatible',
-    curl: [
-      { text: 'curl -X POST http://localhost:8080/v1/chat/completions \\', prefix: '$' },
-      { text: '  -H "Authorization: Bearer sk-xxxx" \\', prefix: '' },
-      { text: '  -H "Content-Type: application/json" \\', prefix: '' },
-      { text: '  -d \'{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}\'', prefix: '' },
-    ],
-    sdk: `
+  const serverHost = settings?.server_host || 'http://localhost:8080';
+
+  const activeExample = activeProtocol === 'openai'
+    ? {
+        title: 'OpenAI Compatible',
+        curl: [
+          { text: `curl -X POST ${serverHost}/v1/chat/completions \\`, prefix: '$' },
+          { text: '  -H "Authorization: Bearer sk-xxxx" \\', prefix: '' },
+          { text: '  -H "Content-Type: application/json" \\', prefix: '' },
+          { text: '  -d \'{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}\'', prefix: '' },
+        ],
+        sdk: `
 // OpenAI SDK
 import OpenAI from 'openai';
 const client = new OpenAI({
   apiKey: 'sk-xxxx',
-  baseURL: 'http://localhost:8080/v1',
+  baseURL: '${serverHost}/v1',
 });
 const chat = await client.chat.completions.create({
   model: 'gpt-4o',
   messages: [{ role: 'user', content: 'Hello' }],
 });`,
-  },
-  anthropic: {
-    title: 'Anthropic Compatible',
-    curl: [
-      { text: 'curl -X POST http://localhost:8080/v1/messages \\', prefix: '$' },
-      { text: '  -H "Authorization: Bearer sk-xxxx" \\', prefix: '' },
-      { text: '  -H "anthropic-version: 2023-06-01" \\', prefix: '' },
-      { text: '  -H "Content-Type: application/json" \\', prefix: '' },
-      { text: '  -d \'{"model": "claude-3-5-sonnet-20241022", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}\'', prefix: '' },
-    ],
-    sdk: `
+      }
+    : {
+        title: 'Anthropic Compatible',
+        curl: [
+          { text: `curl -X POST ${serverHost}/v1/messages \\`, prefix: '$' },
+          { text: '  -H "Authorization: Bearer sk-xxxx" \\', prefix: '' },
+          { text: '  -H "anthropic-version: 2023-06-01" \\', prefix: '' },
+          { text: '  -H "Content-Type: application/json" \\', prefix: '' },
+          { text: '  -d \'{"model": "claude-3-5-sonnet-20241022", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}\'', prefix: '' },
+        ],
+        sdk: `
 // Anthropic SDK
 import Anthropic from '@anthropic-ai/sdk';
 const client = new Anthropic({
   apiKey: 'sk-xxxx',
-  baseURL: 'http://localhost:8080/v1',
+  baseURL: '${serverHost}/v1',
 });
 const message = await client.messages.create({
   model: 'claude-3-5-sonnet-20241022',
   max_tokens: 100,
   messages: [{ role: 'user', content: 'Hello' }],
 });`,
-  },
-};
-
-export default function Home() {
-  const navigate = useNavigate();
-  const [version, setVersion] = useState('');
-  const [activeProtocol, setActiveProtocol] = useState<Protocol>('openai');
-  const { theme, toggleTheme } = useTheme();
+      };
 
   useEffect(() => {
     apiClient.get<{ version: string }>('/version').then((r) => setVersion(r.data.version));
@@ -229,7 +227,7 @@ export default function Home() {
                       : 'text-base-content/40 hover:text-base-content/60 hover:bg-base-100/50'
                   }`}
                 >
-                  {quickStartExamples[p].title}
+                  {p === 'openai' ? 'OpenAI Compatible' : 'Anthropic Compatible'}
                 </button>
               ))}
             </div>
@@ -241,7 +239,7 @@ export default function Home() {
                 <span className="text-[11px] font-mono text-base-content/40">cURL</span>
               </div>
               <div className="font-mono text-[13px] leading-7 mb-6">
-                {quickStartExamples[activeProtocol].curl.map((line, i) => (
+                {activeExample.curl.map((line, i) => (
                   <div key={i}>
                     {line.prefix && <span className="text-primary mr-2">{line.prefix}</span>}
                     {line.text}
@@ -254,7 +252,7 @@ export default function Home() {
                 <span className="text-[11px] font-mono text-base-content/40">SDK</span>
               </div>
               <pre className="font-mono text-[12px] leading-6 text-base-content/60 bg-base-200/30 p-4 rounded-lg overflow-x-auto">
-                <code>{quickStartExamples[activeProtocol].sdk}</code>
+                <code>{activeExample.sdk}</code>
               </pre>
             </div>
           </div>
