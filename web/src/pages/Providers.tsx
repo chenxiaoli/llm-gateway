@@ -17,6 +17,7 @@ export default function Providers() {
   // Create modal state
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
   const [openaiUrl, setOpenaiUrl] = useState('');
   const [anthropicUrl, setAnthropicUrl] = useState('');
 
@@ -24,6 +25,7 @@ export default function Providers() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [editName, setEditName] = useState('');
+  const [editBaseUrl, setEditBaseUrl] = useState('');
   const [editOpenaiUrl, setEditOpenaiUrl] = useState('');
   const [editAnthropicUrl, setEditAnthropicUrl] = useState('');
   const [editEnabled, setEditEnabled] = useState(true);
@@ -34,22 +36,38 @@ export default function Providers() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    const endpoints = JSON.stringify({
+      openai: openaiUrl || null,
+      anthropic: anthropicUrl || null,
+    });
     await createMutation.mutateAsync({
       name,
-      openai_base_url: openaiUrl || null,
-      anthropic_base_url: anthropicUrl || null,
+      base_url: baseUrl || null,
+      endpoints,
     });
     setName('');
+    setBaseUrl('');
     setOpenaiUrl('');
     setAnthropicUrl('');
     setCreateOpen(false);
   };
 
   const handleEdit = (provider: Provider) => {
+    // Parse endpoints JSON to extract individual URLs
+    let openaiUrlStr = '';
+    let anthropicUrlStr = '';
+    if (provider.endpoints) {
+      try {
+        const parsed = JSON.parse(provider.endpoints);
+        openaiUrlStr = parsed.openai || '';
+        anthropicUrlStr = parsed.anthropic || '';
+      } catch {}
+    }
     setEditingProvider(provider);
     setEditName(provider.name);
-    setEditOpenaiUrl(provider.openai_base_url || '');
-    setEditAnthropicUrl(provider.anthropic_base_url || '');
+    setEditBaseUrl(provider.base_url || '');
+    setEditOpenaiUrl(openaiUrlStr);
+    setEditAnthropicUrl(anthropicUrlStr);
     setEditEnabled(provider.enabled);
     setEditOpen(true);
   };
@@ -57,12 +75,16 @@ export default function Providers() {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProvider) return;
+    const endpoints = JSON.stringify({
+      openai: editOpenaiUrl || null,
+      anthropic: editAnthropicUrl || null,
+    });
     await updateMutation.mutateAsync({
       id: editingProvider.id,
       input: {
         name: editName,
-        openai_base_url: editOpenaiUrl || null,
-        anthropic_base_url: editAnthropicUrl || null,
+        base_url: editBaseUrl || null,
+        endpoints,
         enabled: editEnabled,
       },
     });
@@ -122,8 +144,23 @@ export default function Providers() {
                     </td>
                     <td>
                       <div className="flex gap-1.5">
-                        {provider.openai_base_url && <Badge variant="blue">OpenAI</Badge>}
-                        {provider.anthropic_base_url && <Badge variant="purple">Anthropic</Badge>}
+                        {(() => {
+                          let hasOpenai = false;
+                          let hasAnthropic = false;
+                          if (provider.endpoints) {
+                            try {
+                              const parsed = JSON.parse(provider.endpoints);
+                              hasOpenai = !!parsed.openai;
+                              hasAnthropic = !!parsed.anthropic;
+                            } catch {}
+                          }
+                          return (
+                            <>
+                              {hasOpenai && <Badge variant="blue">OpenAI</Badge>}
+                              {hasAnthropic && <Badge variant="purple">Anthropic</Badge>}
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                     <td><Badge variant={provider.enabled ? 'green' : 'red'}>{provider.enabled ? 'Active' : 'Disabled'}</Badge></td>
@@ -176,14 +213,21 @@ export default function Providers() {
           </div>
           <div className="form-control">
             <label className="label">
-              <span className="label-text font-medium">OpenAI Base URL</span>
+              <span className="label-text font-medium">Base URL (Fallback)</span>
+              <span className="label-text-alt">Optional</span>
+            </label>
+            <input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
+          </div>
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text font-medium">OpenAI Endpoint</span>
               <span className="label-text-alt">Optional</span>
             </label>
             <input type="text" value={openaiUrl} onChange={(e) => setOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
           </div>
           <div className="form-control">
             <label className="label">
-              <span className="label-text font-medium">Anthropic Base URL</span>
+              <span className="label-text font-medium">Anthropic Endpoint</span>
               <span className="label-text-alt">Optional</span>
             </label>
             <input type="text" value={anthropicUrl} onChange={(e) => setAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" />
@@ -205,14 +249,21 @@ export default function Providers() {
           </div>
           <div className="form-control">
             <label className="label">
-              <span className="label-text font-medium">OpenAI Base URL</span>
+              <span className="label-text font-medium">Base URL (Fallback)</span>
+              <span className="label-text-alt">Optional</span>
+            </label>
+            <input type="text" value={editBaseUrl} onChange={(e) => setEditBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
+          </div>
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text font-medium">OpenAI Endpoint</span>
               <span className="label-text-alt">Optional</span>
             </label>
             <input type="text" value={editOpenaiUrl} onChange={(e) => setEditOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
           </div>
           <div className="form-control">
             <label className="label">
-              <span className="label-text font-medium">Anthropic Base URL</span>
+              <span className="label-text font-medium">Anthropic Endpoint</span>
               <span className="label-text-alt">Optional</span>
             </label>
             <input type="text" value={editAnthropicUrl} onChange={(e) => setEditAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" />

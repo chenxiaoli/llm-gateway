@@ -29,6 +29,7 @@ export default function ProviderDetail() {
   const { data: models } = useModels(id!);
 
   const [provName, setProvName] = useState('');
+  const [provBaseUrl, setProvBaseUrl] = useState('');
   const [provOpenaiUrl, setProvOpenaiUrl] = useState('');
   const [provAnthropicUrl, setProvAnthropicUrl] = useState('');
   const [provEnabled, setProvEnabled] = useState(false);
@@ -55,8 +56,19 @@ export default function ProviderDetail() {
   useEffect(() => {
     if (provider) {
       setProvName(provider.name);
-      setProvOpenaiUrl(provider.openai_base_url ?? '');
-      setProvAnthropicUrl(provider.anthropic_base_url ?? '');
+      // Parse endpoints JSON
+      let openaiUrl = '';
+      let anthropicUrl = '';
+      if (provider.endpoints) {
+        try {
+          const parsed = JSON.parse(provider.endpoints);
+          openaiUrl = parsed.openai || '';
+          anthropicUrl = parsed.anthropic || '';
+        } catch {}
+      }
+      setProvBaseUrl(provider.base_url ?? '');
+      setProvOpenaiUrl(openaiUrl);
+      setProvAnthropicUrl(anthropicUrl);
       setProvEnabled(provider.enabled);
     }
   }, [provider]);
@@ -66,7 +78,11 @@ export default function ProviderDetail() {
 
   const handleUpdateProvider = async (e: React.FormEvent) => {
     e.preventDefault();
-    await updateMutation.mutateAsync({ id: provider.id, input: { name: provName, openai_base_url: provOpenaiUrl || null, anthropic_base_url: provAnthropicUrl || null, enabled: provEnabled } });
+    const endpoints = JSON.stringify({
+      openai: provOpenaiUrl || null,
+      anthropic: provAnthropicUrl || null
+    });
+    await updateMutation.mutateAsync({ id: provider.id, input: { name: provName, base_url: provBaseUrl || null, endpoints, enabled: provEnabled } });
   };
 
   const handleDeleteProvider = async () => {
@@ -111,8 +127,9 @@ export default function ProviderDetail() {
 
       <form onSubmit={handleUpdateProvider} className="mb-8 max-w-lg bg-base-100 rounded-box p-5 shadow-sm space-y-4">
         <div className="form-control"><label className="label"><span className="label-text">Name</span></label><input type="text" value={provName} onChange={(e) => setProvName(e.target.value)} required className="input input-bordered w-full" /></div>
-        <div className="form-control"><label className="label"><span className="label-text">OpenAI Base URL</span></label><input type="text" value={provOpenaiUrl} onChange={(e) => setProvOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" /></div>
-        <div className="form-control"><label className="label"><span className="label-text">Anthropic Base URL</span></label><input type="text" value={provAnthropicUrl} onChange={(e) => setProvAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" /></div>
+        <div className="form-control"><label className="label"><span className="label-text">Base URL (Fallback)</span></label><input type="text" value={provBaseUrl} onChange={(e) => setProvBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" /></div>
+        <div className="form-control"><label className="label"><span className="label-text">OpenAI Endpoint</span></label><input type="text" value={provOpenaiUrl} onChange={(e) => setProvOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" /></div>
+        <div className="form-control"><label className="label"><span className="label-text">Anthropic Endpoint</span></label><input type="text" value={provAnthropicUrl} onChange={(e) => setProvAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" /></div>
         <div className="flex items-center justify-between"><label className="label-text">Enabled</label><Toggle checked={provEnabled} onChange={setProvEnabled} /></div>
         <div className="flex gap-2">
           <Button variant="primary" type="submit" loading={updateMutation.isPending}>Save</Button>

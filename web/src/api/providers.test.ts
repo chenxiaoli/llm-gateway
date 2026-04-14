@@ -8,8 +8,8 @@ import type { Provider, ChannelModel } from '../types';
 const mockProvider: Provider = {
   id: 'prov-1',
   name: 'openai',
-  openai_base_url: 'https://api.openai.com',
-  anthropic_base_url: null,
+  base_url: 'https://api.openai.com',
+  endpoints: '{"openai":"https://api.openai.com","anthropic":null}',
   enabled: true,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
@@ -41,7 +41,7 @@ describe('providers API', () => {
     const providers = await listProviders();
     expect(providers).toHaveLength(1);
     expect(providers[0].name).toBe('openai');
-    expect(providers[0].openai_base_url).toBe('https://api.openai.com');
+    expect(providers[0].base_url).toBe('https://api.openai.com');
   });
 
   it('createProvider sends POST and returns provider', async () => {
@@ -53,18 +53,19 @@ describe('providers API', () => {
           ...mockProvider,
           id: 'prov-2',
           name: 'anthropic',
-          anthropic_base_url: 'https://api.anthropic.com',
-          openai_base_url: null,
+          base_url: 'https://api.anthropic.com',
+          endpoints: '{"openai":null,"anthropic":"https://api.anthropic.com"}',
         });
       }),
     );
 
     const result = await createProvider({
       name: 'anthropic',
-      anthropic_base_url: 'https://api.anthropic.com',
+      base_url: 'https://api.anthropic.com',
+      endpoints: '{"openai":null,"anthropic":"https://api.anthropic.com"}',
     });
     expect(result.name).toBe('anthropic');
-    expect(result.anthropic_base_url).toBe('https://api.anthropic.com');
+    expect(result.base_url).toBe('https://api.anthropic.com');
   });
 
   it('updateProvider sends PATCH', async () => {
