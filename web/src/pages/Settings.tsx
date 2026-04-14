@@ -40,9 +40,28 @@ export default function Settings() {
         <div className="flex items-center justify-center py-12"><span className="loading loading-spinner loading-lg" /></div>
       ) : (
         <div className="max-w-lg bg-base-100 rounded-box p-5 shadow-sm mb-6">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-base-content/70">Allow Registration</span>
+          <div className="flex items-center justify-between py-3 border-b border-base-200">
+            <div>
+              <span className="text-sm text-base-content/70">Allow Registration</span>
+              <p className="text-xs text-base-content/40">Allow new users to register</p>
+            </div>
             <Toggle checked={settings?.allow_registration ?? false} onChange={(checked) => updateMutation.mutate({ allow_registration: checked })} />
+          </div>
+
+          <div className="flex items-center justify-between py-3 border-b border-base-200">
+            <div>
+              <span className="text-sm text-base-content/70">Log Request Body</span>
+              <p className="text-xs text-base-content/40">Store request body in audit logs</p>
+            </div>
+            <Toggle checked={settings?.audit_log_request ?? true} onChange={(checked) => updateMutation.mutate({ audit_log_request: checked })} />
+          </div>
+
+          <div className="flex items-center justify-between py-3">
+            <div>
+              <span className="text-sm text-base-content/70">Log Response Body</span>
+              <p className="text-xs text-base-content/40">Store response body in audit logs</p>
+            </div>
+            <Toggle checked={settings?.audit_log_response ?? true} onChange={(checked) => updateMutation.mutate({ audit_log_response: checked })} />
           </div>
         </div>
       )}
