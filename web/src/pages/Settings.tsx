@@ -31,6 +31,7 @@ export default function Settings() {
   const [providerModalOpen, setProviderModalOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [provName, setProvName] = useState('');
+  const [provBaseUrl, setProvBaseUrl] = useState('');
   const [provOpenaiUrl, setProvOpenaiUrl] = useState('');
   const [provAnthropicUrl, setProvAnthropicUrl] = useState('');
   const [provEnabled, setProvEnabled] = useState(true);
@@ -52,14 +53,36 @@ export default function Settings() {
     }
   };
 
-  const openAddProvider = () => { setEditingProvider(null); setProvName(''); setProvOpenaiUrl(''); setProvAnthropicUrl(''); setProvEnabled(true); setProviderModalOpen(true); };
-  const openEditProvider = (p: Provider) => { setEditingProvider(p); setProvName(p.name); setProvOpenaiUrl(p.openai_base_url ?? ''); setProvAnthropicUrl(p.anthropic_base_url ?? ''); setProvEnabled(p.enabled); setProviderModalOpen(true); };
+  const openAddProvider = () => { setEditingProvider(null); setProvName(''); setProvBaseUrl(''); setProvOpenaiUrl(''); setProvAnthropicUrl(''); setProvEnabled(true); setProviderModalOpen(true); };
+  const openEditProvider = (p: Provider) => {
+    let openaiUrl = '';
+    let anthropicUrl = '';
+    if (p.endpoints) {
+      try {
+        const parsed = JSON.parse(p.endpoints);
+        openaiUrl = parsed.openai || '';
+        anthropicUrl = parsed.anthropic || '';
+      } catch {}
+    }
+    setEditingProvider(p);
+    setProvName(p.name);
+    setProvBaseUrl(p.base_url ?? '');
+    setProvOpenaiUrl(openaiUrl);
+    setProvAnthropicUrl(anthropicUrl);
+    setProvEnabled(p.enabled);
+    setProviderModalOpen(true);
+  };
   const handleSaveProvider = async (e: React.FormEvent) => {
     e.preventDefault();
+    const endpoints = JSON.stringify({
+      openai: provOpenaiUrl || null,
+      anthropic: provAnthropicUrl || null
+    });
+
     if (editingProvider) {
-      await updateProviderMutation.mutateAsync({ id: editingProvider.id, input: { name: provName, openai_base_url: provOpenaiUrl || null, anthropic_base_url: provAnthropicUrl || null, enabled: provEnabled } });
+      await updateProviderMutation.mutateAsync({ id: editingProvider.id, input: { name: provName, base_url: provBaseUrl || null, endpoints, enabled: provEnabled } });
     } else {
-      await createProviderMutation.mutateAsync({ name: provName, openai_base_url: provOpenaiUrl || null, anthropic_base_url: provAnthropicUrl || null });
+      await createProviderMutation.mutateAsync({ name: provName, base_url: provBaseUrl || null, endpoints });
     }
     setProviderModalOpen(false);
   };
@@ -120,7 +143,7 @@ export default function Settings() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold">{provider.name}</h3>
-              <p className="text-xs text-base-content/40">{provider.openai_base_url}</p>
+              <p className="text-xs text-base-content/40">{provider.base_url}</p>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={() => openEditProvider(provider)} className="btn btn-ghost btn-sm btn-circle"><Pencil className="h-4 w-4" /></button>
@@ -171,11 +194,15 @@ export default function Settings() {
             <input type="text" value={provName} onChange={(e) => setProvName(e.target.value)} required className="input input-bordered w-full" />
           </div>
           <div className="form-control">
-            <label className="label"><span className="label-text">OpenAI Base URL</span></label>
+            <label className="label"><span className="label-text">Base URL (Fallback)</span></label>
+            <input type="text" value={provBaseUrl} onChange={(e) => setProvBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
+          </div>
+          <div className="form-control">
+            <label className="label"><span className="label-text">OpenAI Endpoint</span></label>
             <input type="text" value={provOpenaiUrl} onChange={(e) => setProvOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
           </div>
           <div className="form-control">
-            <label className="label"><span className="label-text">Anthropic Base URL</span></label>
+            <label className="label"><span className="label-text">Anthropic Endpoint</span></label>
             <input type="text" value={provAnthropicUrl} onChange={(e) => setProvAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" />
           </div>
           {editingProvider && (
