@@ -8,6 +8,7 @@ use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
 use llm_gateway_storage::sqlite::SqliteStorage;
 use rust_embed::Embed;
+use sha2::Digest;
 use std::sync::Arc;
 
 #[derive(Embed)]
@@ -47,9 +48,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         audit_logger,
         jwt_secret: config.auth.jwt_secret.clone(),
         encryption_key: {
+            use sha2::Sha256;
             let key = config.server.encryption_key.as_bytes();
+            // Derive exactly 32 bytes using SHA256
+            let mut hasher = Sha256::new();
+            hasher.update(key);
+            let result = hasher.finalize();
             let mut bytes = [0u8; 32];
-            bytes.copy_from_slice(key);
+            bytes.copy_from_slice(&result);
             bytes
         },
     });

@@ -1159,6 +1159,7 @@ dependencies = [
  "mime_guess",
  "rust-embed",
  "serde",
+ "sha2",
  "tokio",
  "toml",
  "tower",
