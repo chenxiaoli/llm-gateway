@@ -204,12 +204,22 @@ pub async fn messages(
             let api_key_value = decrypt(&channel.api_key, &state.encryption_key)
                 .unwrap_or_else(|_| channel.api_key.clone());
 
-            let base_url = match channel.base_url.as_deref() {
-                Some(url) => url.to_string(),
-                None => provider
-                    .anthropic_base_url
-                    .clone()
-                    .ok_or_else(|| ApiError::Internal(format!("Provider '{}' has no anthropic_base_url", provider_id)))?,
+            // Get base_url: first try channel, then provider's endpoints JSON, then fallback to provider base_url
+            let base_url = if let Some(url) = channel.base_url.as_deref() {
+                url.to_string()
+            } else {
+                // Parse provider endpoints JSON to find Anthropic endpoint
+                let endpoints: serde_json::Value = provider
+                    .endpoints
+                    .as_ref()
+                    .and_then(|e| serde_json::from_str(e).ok())
+                    .unwrap_or(serde_json::Value::Null);
+                endpoints
+                    .get("anthropic")
+                    .and_then(|v| v.as_str())
+                    .or(provider.base_url.as_deref())
+                    .ok_or_else(|| ApiError::Internal(format!("Provider '{}' has no Anthropic endpoint", provider_id)))?
+                    .to_string()
             };
 
             // Build upstream request — Anthropic uses x-api-key and anthropic-version headers
