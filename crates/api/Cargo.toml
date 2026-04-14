@@ -11,6 +11,7 @@ llm-gateway-provider = { path = "../provider" }
 llm-gateway-billing = { path = "../billing" }
 llm-gateway-audit = { path = "../audit" }
 llm-gateway-ratelimit = { path = "../ratelimit" }
+llm-gateway-encryption = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }

@@ -9,6 +9,7 @@ members = [
     "crates/billing",
     "crates/audit",
     "crates/storage",
+    "crates/encryption",
 ]
 
 [workspace.dependencies]
@@ -29,3 +30,4 @@ thiserror = "2"
 async-trait = "0.1"
 tower = "0.5"
 hyper = "1"
+llm-gateway-encryption = { path = "crates/encryption" }
