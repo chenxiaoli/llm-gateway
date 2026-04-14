@@ -179,8 +179,8 @@ export default function AppLayout() {
       {/* ── Main content ── */}
       <div className={`flex min-h-screen flex-col transition-all duration-300 ${collapsed ? 'ml-[68px]' : 'ml-[232px]'}`}>
         {/* Header */}
-        <header className="sticky top-0 z-50 shrink-0 bg-base-100/80 backdrop-blur-md border-b border-base-300/60">
-          <div className="flex h-12 items-center justify-between px-2 gap-3">
+        <header className="sticky top-0 z-50 shrink-0 bg-base-100/80 backdrop-blur-md border-b border-base-300/60 w-full">
+          <div className="flex h-12 items-center justify-between px-6 gap-3 max-w-full">
             {/* Left: Breadcrumb */}
             <nav className="flex items-center gap-1.5 text-xs min-w-0">
               <button
