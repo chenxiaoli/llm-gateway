@@ -5,9 +5,30 @@ pub struct AuditLogger {
     storage: Arc<dyn Storage>,
 }
 
+pub struct SettingSnapshot {
+    pub audit_log_request: bool,
+    pub audit_log_response: bool,
+}
+
 impl AuditLogger {
     pub fn new(storage: Arc<dyn Storage>) -> Self {
         Self { storage }
+    }
+
+    pub async fn get_settings(&self) -> SettingSnapshot {
+        let audit_req = self.storage.get_setting("audit_log_request").await.ok()
+            .flatten()
+            .map(|v| v == "true")
+            .unwrap_or(true);
+        let audit_res = self.storage.get_setting("audit_log_response").await.ok()
+            .flatten()
+            .map(|v| v == "true")
+            .unwrap_or(true);
+
+        SettingSnapshot {
+            audit_log_request: audit_req,
+            audit_log_response: audit_res,
+        }
     }
 
     pub async fn log_request(
@@ -23,6 +44,17 @@ impl AuditLogger {
         input_tokens: Option<i64>,
         output_tokens: Option<i64>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let settings = self.get_settings().await;
+        let request_body = if settings.audit_log_request {
+            request_body
+        } else {
+            "{}"
+        };
+        let response_body = if settings.audit_log_response {
+            response_body
+        } else {
+            "{}"
+        };
         let log = AuditLog {
             id: uuid::Uuid::new_v4().to_string(),
             key_id: key_id.to_string(),
