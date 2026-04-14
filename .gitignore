@@ -1,3 +1,7 @@
 /target
 .claude/
 .worktrees/
+.vite/
+data/
+node_modules/
+test-results/
