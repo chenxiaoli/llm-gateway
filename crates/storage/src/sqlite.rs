@@ -144,6 +144,7 @@ impl From<SqliteProviderRow> for Provider {
 
 #[derive(FromRow)]
 struct SqliteModelRow {
+    id: String,
     name: String,
     provider_id: String,
     model_type: Option<String>,
@@ -158,6 +159,7 @@ struct SqliteModelRow {
 impl From<SqliteModelRow> for Model {
     fn from(r: SqliteModelRow) -> Self {
         Model {
+            id: r.id,
             name: r.name,
             provider_id: r.provider_id,
             model_type: r.model_type,
@@ -173,6 +175,7 @@ impl From<SqliteModelRow> for Model {
 
 #[derive(FromRow)]
 struct SqliteModelWithProviderRow {
+    id: String,
     name: String,
     provider_id: String,
     model_type: Option<String>,
@@ -191,6 +194,7 @@ impl From<SqliteModelWithProviderRow> for ModelWithProvider {
     fn from(r: SqliteModelWithProviderRow) -> Self {
         ModelWithProvider {
             model: Model {
+                id: r.id,
                 name: r.name,
                 provider_id: r.provider_id,
                 model_type: r.model_type,
@@ -334,6 +338,33 @@ impl From<SqliteUserRow> for User {
             role: r.role,
             enabled: r.enabled != 0,
             refresh_token: r.refresh_token,
+            created_at: parse_rfc3339(&r.created_at),
+            updated_at: parse_rfc3339(&r.updated_at),
+        }
+    }
+}
+
+#[derive(FromRow)]
+struct SqliteChannelModelRow {
+    id: String,
+    channel_id: String,
+    model_id: String,
+    upstream_model_name: String,
+    priority_override: Option<i32>,
+    enabled: i64,
+    created_at: String,
+    updated_at: String,
+}
+
+impl From<SqliteChannelModelRow> for ChannelModel {
+    fn from(r: SqliteChannelModelRow) -> Self {
+        ChannelModel {
+            id: r.id,
+            channel_id: r.channel_id,
+            model_id: r.model_id,
+            upstream_model_name: r.upstream_model_name,
+            priority_override: r.priority_override,
+            enabled: r.enabled != 0,
             created_at: parse_rfc3339(&r.created_at),
             updated_at: parse_rfc3339(&r.updated_at),
         }
@@ -693,9 +724,10 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "INSERT INTO models (name, provider_id, model_type, billing_type, input_price, output_price, request_price, enabled, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO models (id, name, provider_id, model_type, billing_type, input_price, output_price, request_price, enabled, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
+        .bind(&model.id)
         .bind(&model.name)
         .bind(&model.provider_id)
         .bind(&model.model_type)
@@ -713,7 +745,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_model(&self, name: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<SqliteModelRow> = sqlx::query_as(
-            "SELECT name, provider_id, model_type, billing_type, input_price, output_price, request_price, enabled, created_at
+            "SELECT id, name, provider_id, model_type, billing_type, input_price, output_price, request_price, enabled, created_at
              FROM models WHERE name = ?",
         )
         .bind(name)
@@ -725,7 +757,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_model_by_provider(&self, provider_id: &str, name: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<SqliteModelRow> = sqlx::query_as(
-            "SELECT name, provider_id, model_type, billing_type, input_price, output_price, request_price, enabled, created_at
+            "SELECT id, name, provider_id, model_type, billing_type, input_price, output_price, request_price, enabled, created_at
              FROM models WHERE provider_id = ? AND name = ?",
         )
         .bind(provider_id)
@@ -738,7 +770,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_models(&self) -> Result<Vec<ModelWithProvider>, DbErr> {
         let rows: Vec<SqliteModelWithProviderRow> = sqlx::query_as(
-            "SELECT m.name, m.provider_id, m.model_type, m.billing_type, m.input_price, m.output_price, m.request_price,
+            "SELECT m.id, m.name, m.provider_id, m.model_type, m.billing_type, m.input_price, m.output_price, m.request_price,
                     m.enabled, m.created_at, p.name as provider_name, p.openai_base_url, p.anthropic_base_url
              FROM models m
              JOIN providers p ON m.provider_id = p.id
@@ -752,7 +784,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_models_by_provider(&self, provider_id: &str) -> Result<Vec<Model>, DbErr> {
         let rows: Vec<SqliteModelRow> = sqlx::query_as(
-            "SELECT name, provider_id, model_type, billing_type, input_price, output_price, request_price, enabled, created_at
+            "SELECT id, name, provider_id, model_type, billing_type, input_price, output_price, request_price, enabled, created_at
              FROM models WHERE provider_id = ? ORDER BY name",
         )
         .bind(provider_id)
@@ -1218,6 +1250,114 @@ impl crate::Storage for SqliteStorage {
 
     async fn delete_user(&self, id: &str) -> Result<(), DbErr> {
         sqlx::query("DELETE FROM users WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    // ---- Channel Models ----
+
+    async fn create_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, DbErr> {
+        sqlx::query(
+            "INSERT INTO channel_models (id, channel_id, model_id, upstream_model_name, priority_override, enabled, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&cm.id)
+        .bind(&cm.channel_id)
+        .bind(&cm.model_id)
+        .bind(&cm.upstream_model_name)
+        .bind(cm.priority_override)
+        .bind(cm.enabled as i64)
+        .bind(cm.created_at.to_rfc3339())
+        .bind(cm.updated_at.to_rfc3339())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(cm.clone())
+    }
+
+    async fn get_channel_model(&self, id: &str) -> Result<Option<ChannelModel>, DbErr> {
+        let row: Option<SqliteChannelModelRow> = sqlx::query_as(
+            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, enabled, created_at, updated_at
+             FROM channel_models WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(ChannelModel::from))
+    }
+
+    async fn list_channel_models(&self) -> Result<Vec<ChannelModel>, DbErr> {
+        let rows: Vec<SqliteChannelModelRow> = sqlx::query_as(
+            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, enabled, created_at, updated_at
+             FROM channel_models",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(ChannelModel::from).collect())
+    }
+
+    async fn list_channel_models_by_channel(&self, channel_id: &str) -> Result<Vec<ChannelModel>, DbErr> {
+        let rows: Vec<SqliteChannelModelRow> = sqlx::query_as(
+            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, enabled, created_at, updated_at
+             FROM channel_models WHERE channel_id = ?",
+        )
+        .bind(channel_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(ChannelModel::from).collect())
+    }
+
+    async fn get_channel_models_for_model(&self, model_id: &str) -> Result<Vec<ChannelModel>, DbErr> {
+        let rows: Vec<SqliteChannelModelRow> = sqlx::query_as(
+            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, enabled, created_at, updated_at
+             FROM channel_models WHERE model_id = ?",
+        )
+        .bind(model_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(ChannelModel::from).collect())
+    }
+
+    async fn get_channels_for_model(&self, model_id: &str) -> Result<Vec<Channel>, DbErr> {
+        let rows: Vec<SqliteChannelRow> = sqlx::query_as(
+            "SELECT c.id, c.provider_id, c.name, c.api_key, c.base_url, c.priority, c.enabled, c.rpm_limit, c.tpm_limit, c.balance, c.weight, c.created_at, c.updated_at
+             FROM channels c
+             JOIN channel_models cm ON c.id = cm.channel_id
+             WHERE cm.model_id = ? AND c.enabled = 1",
+        )
+        .bind(model_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(Channel::from).collect())
+    }
+
+    async fn update_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, DbErr> {
+        sqlx::query(
+            "UPDATE channel_models SET channel_id = ?, model_id = ?, upstream_model_name = ?,
+             priority_override = ?, enabled = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(&cm.channel_id)
+        .bind(&cm.model_id)
+        .bind(&cm.upstream_model_name)
+        .bind(cm.priority_override)
+        .bind(cm.enabled as i64)
+        .bind(cm.updated_at.to_rfc3339())
+        .bind(&cm.id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(cm.clone())
+    }
+
+    async fn delete_channel_model(&self, id: &str) -> Result<(), DbErr> {
+        sqlx::query("DELETE FROM channel_models WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
             .await?;
