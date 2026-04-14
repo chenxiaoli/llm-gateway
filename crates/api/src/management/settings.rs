@@ -10,7 +10,7 @@ use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct UpdateSettingsRequest {
-    pub allow_registration: bool,
+    pub allow_registration: Option<bool>,
     pub server_host: Option<String>,
     pub audit_log_request: Option<bool>,
     pub audit_log_response: Option<bool>,
@@ -50,7 +50,7 @@ pub async fn update_settings(
 ) -> Result<Json<SettingsResponse>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
-    if let Some(ar) = Some(input.allow_registration) {
+    if let Some(ar) = input.allow_registration {
         state.storage.set_setting("allow_registration", if ar { "true" } else { "false" })
             .await.map_err(|e| ApiError::Internal(e.to_string()))?;
     }
