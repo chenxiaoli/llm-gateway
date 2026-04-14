@@ -9,9 +9,10 @@ use std::time::Instant;
 
 use llm_gateway_auth::hash_api_key;
 use llm_gateway_billing::calculate_cost;
+use llm_gateway_encryption::decrypt;
 use llm_gateway_provider::anthropic::AnthropicProvider;
 use llm_gateway_provider::Provider;
-use llm_gateway_storage::{ApiKey, Protocol, UsageRecord};
+use llm_gateway_storage::{ApiKey, Channel, Protocol, UsageRecord};
 
 use crate::error::ApiError;
 use crate::extractors::extract_bearer_token;
@@ -91,8 +92,8 @@ pub async fn messages(
         .ok_or(ApiError::BadRequest("Missing 'model' field".to_string()))?
         .to_string();
 
-    // 4. Check rate limits
-    let (rpm_limit, tpm_limit) = get_rate_limits(&state, &api_key, &model_name).await;
+    // 4. Check rate limits (global key level)
+    let (rpm_limit, tpm_limit) = get_rate_limits(&state, &api_key, &model_name, None).await;
 
     let allowed = state
         .rate_limiter
@@ -173,6 +174,10 @@ pub async fn messages(
         // Failover loop over channels
         let mut last_error = String::new();
         for channel in &channels {
+            // Decrypt the channel's api_key for the request
+            let api_key_value = decrypt(&channel.api_key, &state.encryption_key)
+                .unwrap_or_else(|_| channel.api_key.clone());
+
             let base_url = match channel.base_url.as_deref() {
                 Some(url) => url.to_string(),
                 None => provider
@@ -185,7 +190,7 @@ pub async fn messages(
             let url = format!("{}/v1/messages", base_url);
             let upstream_resp = match client
                 .post(&url)
-                .header("x-api-key", &channel.api_key)
+                .header("x-api-key", &api_key_value)
                 .header("anthropic-version", "2023-06-01")
                 .header("Content-Type", "application/json")
                 .body(body.clone())
@@ -362,6 +367,10 @@ pub async fn messages(
     // 8. Non-streaming: failover loop over channels
     let mut last_error = String::new();
     for channel in &channels {
+        // Decrypt the channel's api_key for the request
+        let api_key_value = decrypt(&channel.api_key, &state.encryption_key)
+            .unwrap_or_else(|_| channel.api_key.clone());
+
         let base_url = match channel.base_url.as_deref() {
             Some(url) => url.to_string(),
             None => provider
@@ -373,7 +382,7 @@ pub async fn messages(
         let anthropic_provider = AnthropicProvider {
             name: provider.name.clone(),
             base_url,
-            api_key: channel.api_key.clone(),
+            api_key: api_key_value.clone(),
         };
 
         let start = Instant::now();
@@ -509,11 +518,20 @@ pub async fn list_models(
 }
 
 /// Helper to determine rate limits for a key/model pair.
+/// Checks channel-level limits first, then falls back to key-level limits.
 async fn get_rate_limits(
     state: &Arc<AppState>,
     api_key: &ApiKey,
     model_name: &str,
+    channel: Option<&Channel>,
 ) -> (Option<i64>, Option<i64>) {
+    // 1. Check channel-level limits first
+    if let Some(ch) = channel {
+        if ch.rpm_limit.is_some() || ch.tpm_limit.is_some() {
+            return (ch.rpm_limit, ch.tpm_limit);
+        }
+    }
+    // 2. Fall back to key-level limits
     if let Ok(Some(limit)) = state.storage.get_key_model_rate_limit(&api_key.id, model_name).await {
         (Some(limit.rpm), Some(limit.tpm))
     } else {
