@@ -121,8 +121,8 @@ impl From<SqliteKeyRow> for ApiKey {
 struct SqliteProviderRow {
     id: String,
     name: String,
-    openai_base_url: Option<String>,
-    anthropic_base_url: Option<String>,
+    base_url: Option<String>,
+    endpoints: Option<String>,
     enabled: i64,
     created_at: String,
     updated_at: String,
@@ -133,8 +133,8 @@ impl From<SqliteProviderRow> for Provider {
         Provider {
             id: r.id,
             name: r.name,
-            openai_base_url: r.openai_base_url,
-            anthropic_base_url: r.anthropic_base_url,
+            base_url: r.base_url,
+            endpoints: r.endpoints,
             enabled: r.enabled != 0,
             created_at: parse_rfc3339(&r.created_at),
             updated_at: parse_rfc3339(&r.updated_at),
@@ -186,12 +186,22 @@ struct SqliteModelWithProviderRow {
     enabled: i64,
     created_at: String,
     provider_name: String,
-    openai_base_url: Option<String>,
-    anthropic_base_url: Option<String>,
+    base_url: Option<String>,
+    endpoints: Option<String>,
 }
 
 impl From<SqliteModelWithProviderRow> for ModelWithProvider {
     fn from(r: SqliteModelWithProviderRow) -> Self {
+        // Parse endpoints JSON to determine compatibility
+        let openai_compatible = r.endpoints.as_ref()
+            .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
+            .map(|v| v.get("openai").is_some())
+            .unwrap_or(r.base_url.is_some());
+        let anthropic_compatible = r.endpoints.as_ref()
+            .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
+            .map(|v| v.get("anthropic").is_some())
+            .unwrap_or(false);
+
         ModelWithProvider {
             model: Model {
                 id: r.id,
@@ -206,8 +216,8 @@ impl From<SqliteModelWithProviderRow> for ModelWithProvider {
                 created_at: parse_rfc3339(&r.created_at),
             },
             provider_name: r.provider_name,
-            openai_compatible: r.openai_base_url.is_some(),
-            anthropic_compatible: r.anthropic_base_url.is_some(),
+            openai_compatible,
+            anthropic_compatible,
         }
     }
 }
@@ -564,13 +574,13 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
         sqlx::query(
-            "INSERT INTO providers (id, name, openai_base_url, anthropic_base_url, enabled, created_at, updated_at)
+            "INSERT INTO providers (id, name, base_url, endpoints, enabled, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&provider.id)
         .bind(&provider.name)
-        .bind(&provider.openai_base_url)
-        .bind(&provider.anthropic_base_url)
+        .bind(&provider.base_url)
+        .bind(&provider.endpoints)
         .bind(provider.enabled as i64)
         .bind(provider.created_at.to_rfc3339())
         .bind(provider.updated_at.to_rfc3339())
@@ -582,7 +592,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_provider(&self, id: &str) -> Result<Option<Provider>, DbErr> {
         let row: Option<SqliteProviderRow> = sqlx::query_as(
-            "SELECT id, name, openai_base_url, anthropic_base_url, enabled, created_at, updated_at
+            "SELECT id, name, base_url, endpoints, enabled, created_at, updated_at
              FROM providers WHERE id = ?",
         )
         .bind(id)
@@ -594,7 +604,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_providers(&self) -> Result<Vec<Provider>, DbErr> {
         let rows: Vec<SqliteProviderRow> = sqlx::query_as(
-            "SELECT id, name, openai_base_url, anthropic_base_url, enabled, created_at, updated_at
+            "SELECT id, name, base_url, endpoints, enabled, created_at, updated_at
              FROM providers",
         )
         .fetch_all(&self.pool)
@@ -605,12 +615,12 @@ impl crate::Storage for SqliteStorage {
 
     async fn update_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
         sqlx::query(
-            "UPDATE providers SET name = ?, openai_base_url = ?, anthropic_base_url = ?,
+            "UPDATE providers SET name = ?, base_url = ?, endpoints = ?,
              enabled = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&provider.name)
-        .bind(&provider.openai_base_url)
-        .bind(&provider.anthropic_base_url)
+        .bind(&provider.base_url)
+        .bind(&provider.endpoints)
         .bind(provider.enabled as i64)
         .bind(provider.updated_at.to_rfc3339())
         .bind(&provider.id)
@@ -782,7 +792,7 @@ impl crate::Storage for SqliteStorage {
     async fn list_models(&self) -> Result<Vec<ModelWithProvider>, DbErr> {
         let rows: Vec<SqliteModelWithProviderRow> = sqlx::query_as(
             "SELECT m.id, m.name, m.provider_id, m.model_type, m.billing_type, m.input_price, m.output_price, m.request_price,
-                    m.enabled, m.created_at, p.name as provider_name, p.openai_base_url, p.anthropic_base_url
+                    m.enabled, m.created_at, p.name as provider_name, p.base_url, p.endpoints
              FROM models m
              JOIN providers p ON m.provider_id = p.id
              WHERE m.enabled = 1 AND p.enabled = 1",

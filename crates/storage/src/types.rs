@@ -71,8 +71,8 @@ pub struct UpdateApiKey {
 pub struct Provider {
     pub id: String,
     pub name: String,
-    pub openai_base_url: Option<String>,
-    pub anthropic_base_url: Option<String>,
+    pub base_url: Option<String>,           // NEW: single fallback URL
+    pub endpoints: Option<String>,          // NEW: JSON {"openai": "...", "anthropic": "..."}
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -81,15 +81,15 @@ pub struct Provider {
 #[derive(Debug, Deserialize)]
 pub struct CreateProvider {
     pub name: String,
-    pub openai_base_url: Option<String>,
-    pub anthropic_base_url: Option<String>,
+    pub base_url: Option<String>,
+    pub endpoints: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateProvider {
     pub name: Option<String>,
-    pub openai_base_url: Option<Option<String>>,
-    pub anthropic_base_url: Option<Option<String>>,
+    pub base_url: Option<Option<String>>,
+    pub endpoints: Option<Option<String>>,
     pub enabled: Option<bool>,
 }
 
