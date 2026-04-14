@@ -43,9 +43,9 @@ pub trait Storage: Send + Sync {
 
     // Key-Model Rate Limits
     async fn set_key_model_rate_limit(&self, limit: &KeyModelRateLimit) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-    async fn get_key_model_rate_limit(&self, key_id: &str, model_name: &str) -> Result<Option<KeyModelRateLimit>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_key_model_rate_limit(&self, key_id: &str, model_id: &str) -> Result<Option<KeyModelRateLimit>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_key_model_rate_limits(&self, key_id: &str) -> Result<Vec<KeyModelRateLimit>, Box<dyn std::error::Error + Send + Sync>>;
-    async fn delete_key_model_rate_limit(&self, key_id: &str, model_name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn delete_key_model_rate_limit(&self, key_id: &str, model_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     // Channel Models
     async fn create_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, Box<dyn std::error::Error + Send + Sync>>;

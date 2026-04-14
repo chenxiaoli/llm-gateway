@@ -220,7 +220,7 @@ pub struct UpdateChannelModel {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyModelRateLimit {
     pub key_id: String,
-    pub model_name: String,
+    pub model_id: String,
     pub rpm: i64,
     pub tpm: i64,
 }

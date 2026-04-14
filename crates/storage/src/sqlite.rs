@@ -824,12 +824,12 @@ impl crate::Storage for SqliteStorage {
 
     async fn set_key_model_rate_limit(&self, limit: &KeyModelRateLimit) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO key_model_rate_limits (key_id, model_name, rpm, tpm)
+            "INSERT INTO key_model_rate_limits (key_id, model_id, rpm, tpm)
              VALUES (?, ?, ?, ?)
-             ON CONFLICT(key_id, model_name) DO UPDATE SET rpm = ?, tpm = ?",
+             ON CONFLICT(key_id, model_id) DO UPDATE SET rpm = ?, tpm = ?",
         )
         .bind(&limit.key_id)
-        .bind(&limit.model_name)
+        .bind(&limit.model_id)
         .bind(limit.rpm)
         .bind(limit.tpm)
         .bind(limit.rpm)
@@ -842,20 +842,20 @@ impl crate::Storage for SqliteStorage {
     async fn get_key_model_rate_limit(
         &self,
         key_id: &str,
-        model_name: &str,
+        model_id: &str,
     ) -> Result<Option<KeyModelRateLimit>, DbErr> {
         let row: Option<(String, String, i64, i64)> = sqlx::query_as(
-            "SELECT key_id, model_name, rpm, tpm FROM key_model_rate_limits
-             WHERE key_id = ? AND model_name = ?",
+            "SELECT key_id, model_id, rpm, tpm FROM key_model_rate_limits
+             WHERE key_id = ? AND model_id = ?",
         )
         .bind(key_id)
-        .bind(model_name)
+        .bind(model_id)
         .fetch_optional(&self.pool)
         .await?;
 
         Ok(row.map(|r| KeyModelRateLimit {
             key_id: r.0,
-            model_name: r.1,
+            model_id: r.1,
             rpm: r.2,
             tpm: r.3,
         }))
@@ -863,7 +863,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_key_model_rate_limits(&self, key_id: &str) -> Result<Vec<KeyModelRateLimit>, DbErr> {
         let rows: Vec<(String, String, i64, i64)> = sqlx::query_as(
-            "SELECT key_id, model_name, rpm, tpm FROM key_model_rate_limits WHERE key_id = ?",
+            "SELECT key_id, model_id, rpm, tpm FROM key_model_rate_limits WHERE key_id = ?",
         )
         .bind(key_id)
         .fetch_all(&self.pool)
@@ -873,19 +873,19 @@ impl crate::Storage for SqliteStorage {
             .into_iter()
             .map(|r| KeyModelRateLimit {
                 key_id: r.0,
-                model_name: r.1,
+                model_id: r.1,
                 rpm: r.2,
                 tpm: r.3,
             })
             .collect())
     }
 
-    async fn delete_key_model_rate_limit(&self, key_id: &str, model_name: &str) -> Result<(), DbErr> {
+    async fn delete_key_model_rate_limit(&self, key_id: &str, model_id: &str) -> Result<(), DbErr> {
         sqlx::query(
-            "DELETE FROM key_model_rate_limits WHERE key_id = ? AND model_name = ?",
+            "DELETE FROM key_model_rate_limits WHERE key_id = ? AND model_id = ?",
         )
         .bind(key_id)
-        .bind(model_name)
+        .bind(model_id)
         .execute(&self.pool)
         .await?;
         Ok(())
