@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Pencil, Trash2, RotateCcw, Network } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Trash2, RotateCcw } from 'lucide-react';
 import { useProvider, useUpdateProvider, useDeleteProvider, useChannels, useCreateChannel, useUpdateChannel, useDeleteChannel, useSyncModels } from '../hooks/useProviders';
 import { useModels, useCreateModel, useUpdateModel, useDeleteModel } from '../hooks/useModels';
-import { listChannelModels, createChannelModel, updateChannelModel, deleteChannelModel } from '../api/providers';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
 import { Toggle } from '../components/ui/Toggle';
 import { Select } from '../components/ui/Select';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
-import type { Model, CreateModelRequest, UpdateModelRequest, Channel, ChannelModel, CreateChannelModelRequest, UpdateChannelModelRequest } from '../types';
+import type { Model, CreateModelRequest, UpdateModelRequest, Channel } from '../types';
 
 export default function ProviderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -51,27 +50,7 @@ export default function ProviderDetail() {
   const [channelPriority, setChannelPriority] = useState('0');
   const [channelEnabled, setChannelEnabled] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<'models' | 'channels' | 'channel-models'>('models');
-  const [channelModels, setChannelModels] = useState<ChannelModel[]>([]);
-  const [channelModelsLoading, setChannelModelsLoading] = useState(false);
-  const [channelModelModalOpen, setChannelModelModalOpen] = useState(false);
-  const [editingChannelModel, setEditingChannelModel] = useState<ChannelModel | null>(null);
-  const [cmChannelId, setCmChannelId] = useState('');
-  const [cmModelId, setCmModelId] = useState('');
-  const [cmUpstreamName, setCmUpstreamName] = useState('');
-  const [cmPriorityOverride, setCmPriorityOverride] = useState('');
-  const [cmEnabled, setCmEnabled] = useState(true);
-
-  // Fetch channel models
-  useEffect(() => {
-    if (activeTab === 'channel-models' && id) {
-      setChannelModelsLoading(true);
-      listChannelModels(id!)
-        .then(setChannelModels)
-        .catch(console.error)
-        .finally(() => setChannelModelsLoading(false));
-    }
-  }, [activeTab, id]);
+  const [activeTab, setActiveTab] = useState<'models' | 'channels'>('models');
 
   useEffect(() => {
     if (provider) {
@@ -125,40 +104,6 @@ export default function ProviderDetail() {
     setChannelModalOpen(false);
   };
 
-  // Channel Model helpers
-  const getChannelName = (cid: string) => channels?.find(c => c.id === cid)?.name ?? cid;
-  const getModelName = (mid: string) => models?.find(m => m.id === mid)?.name ?? mid;
-
-  const resetChannelModelForm = () => { setCmChannelId(''); setCmModelId(''); setCmUpstreamName(''); setCmPriorityOverride(''); setCmEnabled(true); };
-  const openAddChannelModel = () => { setEditingChannelModel(null); resetChannelModelForm(); setChannelModelModalOpen(true); };
-  const openEditChannelModel = (cm: ChannelModel) => { setEditingChannelModel(cm); setCmChannelId(cm.channel_id); setCmModelId(cm.model_id); setCmUpstreamName(cm.upstream_model_name); setCmPriorityOverride(cm.priority_override?.toString() ?? ''); setCmEnabled(cm.enabled); setChannelModelModalOpen(true); };
-
-  const handleSaveChannelModel = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const input: CreateChannelModelRequest = {
-      channel_id: cmChannelId,
-      model_id: cmModelId,
-      upstream_model_name: cmUpstreamName,
-      priority_override: cmPriorityOverride ? Number(cmPriorityOverride) : null,
-    };
-    if (editingChannelModel) {
-      const updateInput: UpdateChannelModelRequest = { upstream_model_name: cmUpstreamName, priority_override: cmPriorityOverride ? Number(cmPriorityOverride) : null, enabled: cmEnabled };
-      await updateChannelModel(editingChannelModel.id, updateInput);
-    } else {
-      await createChannelModel(id!, input);
-    }
-    setChannelModelModalOpen(false);
-    // Refresh list
-    const refreshed = await listChannelModels(id!);
-    setChannelModels(refreshed);
-  };
-
-  const handleDeleteChannelModel = async (cmId: string) => {
-    await deleteChannelModel(cmId);
-    const refreshed = await listChannelModels(id!);
-    setChannelModels(refreshed);
-  };
-
   return (
     <div>
       <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/console/providers')} className="mb-4">Back to Providers</Button>
@@ -179,7 +124,6 @@ export default function ProviderDetail() {
       <div className="tabs tabs-boxed mb-6">
         <button className={`tab ${activeTab === 'models' ? 'tab-active' : ''}`} onClick={() => setActiveTab('models')}>Models</button>
         <button className={`tab ${activeTab === 'channels' ? 'tab-active' : ''}`} onClick={() => setActiveTab('channels')}>Channels</button>
-        <button className={`tab ${activeTab === 'channel-models' ? 'tab-active' : ''}`} onClick={() => setActiveTab('channel-models')}><Network className="h-4 w-4 mr-1" />Channel Models</button>
       </div>
 
       {/* Models Tab */}
@@ -271,55 +215,6 @@ export default function ProviderDetail() {
         </div>
       )}
 
-      {/* Channel Models Tab */}
-      {activeTab === 'channel-models' && (
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-3"><h2 className="text-base font-semibold">Channel Models</h2><Button icon={<Plus className="h-4 w-4" />} onClick={openAddChannelModel} disabled={!channels?.length || !models?.length}>Add Mapping</Button></div>
-          {channelModelsLoading ? (
-            <div className="flex justify-center py-12"><span className="loading loading-spinner loading-lg" /></div>
-          ) : (
-            <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
-              <table className="table table-sm">
-                <thead><tr className="border-b border-base-300"><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Channel</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Model</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Upstream Name</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Priority Override</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50 w-20">Actions</th></tr></thead>
-                <tbody>
-                  {channelModels?.map((cm) => (
-                    <tr key={cm.id} className="border-b border-base-200 hover">
-                      <td>{getChannelName(cm.channel_id)}</td>
-                      <td className="mono">{getModelName(cm.model_id)}</td>
-                      <td className="mono">{cm.upstream_model_name}</td>
-                      <td className="mono">{cm.priority_override ?? '-'}</td>
-                      <td><Badge variant={cm.enabled ? 'green' : 'red'}>{cm.enabled ? 'Active' : 'Disabled'}</Badge></td>
-                      <td>
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => openEditChannelModel(cm)} className="btn btn-ghost btn-xs btn-circle" aria-label="Edit channel model">
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <ConfirmDialog title="Delete this channel model mapping?" onConfirm={() => handleDeleteChannelModel(cm.id)} okText="Delete">
-                            <button className="btn btn-ghost btn-xs btn-circle text-error hover:text-error" aria-label="Delete channel model">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          </ConfirmDialog>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {(!channelModels?.length) && (
-                    <tr>
-                      <td colSpan={6} className="text-center py-12">
-                        <div className="flex flex-col items-center gap-2">
-                          <span className="text-base-content/25 text-sm">No channel-model mappings</span>
-                          {(channels?.length && models?.length) ? <button onClick={openAddChannelModel} className="link link-primary text-sm">Create your first mapping</button> : <span className="text-xs text-base-content/40">Add channels and models first</span>}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
       <Modal open={modelModalOpen} onClose={() => setModelModalOpen(false)} title={editingModel ? `Edit Model: ${editingModel.name}` : 'Add Model'}>
         <form onSubmit={handleSaveModel} className="space-y-4">
           {!editingModel && (<div className="form-control"><label className="label"><span className="label-text">Model Name</span></label><input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="e.g., gpt-4o" required className="input input-bordered w-full" /></div>)}
@@ -342,23 +237,6 @@ export default function ProviderDetail() {
           <div className="form-control"><label className="label"><span className="label-text">Priority</span></label><input type="number" value={channelPriority} onChange={(e) => setChannelPriority(e.target.value)} min={0} className="input input-bordered w-full" /></div>
           {editingChannel && (<div className="flex items-center justify-between"><label className="label-text">Enabled</label><Toggle checked={channelEnabled} onChange={setChannelEnabled} /></div>)}
           <Button variant="primary" type="submit" loading={createChannelMutation.isPending || updateChannelMutation.isPending}>{editingChannel ? 'Update' : 'Create'}</Button>
-        </form>
-      </Modal>
-
-      <Modal open={channelModelModalOpen} onClose={() => setChannelModelModalOpen(false)} title={editingChannelModel ? 'Edit Channel Model' : 'Add Channel Model'}>
-        <form onSubmit={handleSaveChannelModel} className="space-y-4">
-          <div className="form-control">
-            <label className="label"><span className="label-text">Channel</span></label>
-            <Select value={cmChannelId} onChange={(v) => setCmChannelId(v)} options={channels?.map(c => ({ value: c.id, label: c.name })) ?? []} placeholder="Select channel" />
-          </div>
-          <div className="form-control">
-            <label className="label"><span className="label-text">Model</span></label>
-            <Select value={cmModelId} onChange={(v) => setCmModelId(v)} options={models?.map(m => ({ value: m.id, label: m.name })) ?? []} placeholder="Select model" />
-          </div>
-          <div className="form-control"><label className="label"><span className="label-text">Upstream Model Name</span></label><input type="text" value={cmUpstreamName} onChange={(e) => setCmUpstreamName(e.target.value)} placeholder="e.g., gpt-4o-deployment" required className="input input-bordered w-full" /></div>
-          <div className="form-control"><label className="label"><span className="label-text">Priority Override (optional)</span></label><input type="number" value={cmPriorityOverride} onChange={(e) => setCmPriorityOverride(e.target.value)} placeholder="Leave empty to use channel priority" className="input input-bordered w-full" /></div>
-          {editingChannelModel && (<div className="flex items-center justify-between"><label className="label-text">Enabled</label><Toggle checked={cmEnabled} onChange={setCmEnabled} /></div>)}
-          <Button variant="primary" type="submit">{editingChannelModel ? 'Update' : 'Create'}</Button>
         </form>
       </Modal>
     </div>
