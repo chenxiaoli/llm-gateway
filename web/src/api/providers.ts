@@ -40,6 +40,11 @@ export async function updateChannel(id: string, input: UpdateChannelRequest): Pr
   return data;
 }
 
+export async function getChannel(id: string): Promise<Channel> {
+  const { data } = await apiClient.get<Channel>(`/channels/${id}`);
+  return data;
+}
+
 export async function deleteChannel(id: string): Promise<void> {
   await apiClient.delete(`/channels/${id}`);
 }
