@@ -245,13 +245,13 @@ export default function AppLayout() {
         <footer className="shrink-0 border-t border-base-300/60 bg-base-100/50">
           <div className="flex items-center justify-between px-6 py-2">
             <div className="flex items-center gap-3">
-              <span className="text-[11px] text-base-content/15 font-mono">
+              <span className="text-[11px] text-base-content/60 font-mono">
                 LLM Gateway{version ? ` v${version}` : ''}
               </span>
-              <span className="text-[11px] text-base-content/10 font-mono">•</span>
-              <span className="text-[11px] text-base-content/10 font-mono">{import.meta.env.VITE_COMMIT_SHA?.slice(0, 7) || 'dev'}</span>
+              <span className="text-[11px] text-base-content/40 font-mono">•</span>
+              <span className="text-[11px] text-base-content/40 font-mono">{import.meta.env.VITE_COMMIT_SHA?.slice(0, 7) || 'dev'}</span>
             </div>
-            <span className="text-[11px] text-base-content/10 font-mono hidden sm:inline">
+            <span className="text-[11px] text-base-content/40 font-mono hidden sm:inline">
               {user?.role === 'admin' ? 'admin' : 'user'}
             </span>
           </div>

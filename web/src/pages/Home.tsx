@@ -202,8 +202,8 @@ export default function Home() {
 
         {/* ── Footer ── */}
         <div className="h-px bg-gradient-to-r from-transparent via-base-content/10 to-transparent" />
-        <div className="py-8 text-center text-xs text-base-content/20 font-mono tracking-wide">
-          LLM Gateway{version ? ` v${version}` : ''} &mdash; Open Source
+        <div className="py-8 text-center text-xs text-base-content/50 font-mono tracking-wide">
+          LLM Gateway{version ? ` v${version}` : ''} — Open Source
         </div>
       </div>
     </div>
