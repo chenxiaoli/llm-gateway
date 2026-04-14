@@ -216,7 +216,7 @@ export default function AppLayout() {
 
               <div className="flex items-center gap-2 text-sm">
                 <div className="avatar placeholder">
-                  <div className="bg-primary/15 text-primary w-7 rounded-md">
+                  <div className="bg-primary/15 text-primary w-7 rounded-md flex items-center justify-center">
                     <span className="text-xs font-semibold">{user?.username?.charAt(0).toUpperCase()}</span>
                   </div>
                 </div>
