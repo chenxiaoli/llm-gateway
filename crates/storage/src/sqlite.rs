@@ -285,6 +285,10 @@ struct SqliteChannelRow {
     base_url: Option<String>,
     priority: i32,
     enabled: i64,
+    rpm_limit: Option<i64>,     // NEW
+    tpm_limit: Option<i64>,     // NEW
+    balance: Option<f64>,       // NEW
+    weight: Option<i32>,        // NEW
     created_at: String,
     updated_at: String,
 }
@@ -299,6 +303,10 @@ impl From<SqliteChannelRow> for Channel {
             base_url: r.base_url,
             priority: r.priority,
             enabled: r.enabled != 0,
+            rpm_limit: r.rpm_limit,
+            tpm_limit: r.tpm_limit,
+            balance: r.balance,
+            weight: r.weight,
             created_at: parse_rfc3339(&r.created_at),
             updated_at: parse_rfc3339(&r.updated_at),
         }
@@ -593,7 +601,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_channel(&self, channel: &Channel) -> Result<Channel, DbErr> {
         sqlx::query(
-            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, enabled, created_at, updated_at)
+            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&channel.id)
@@ -603,6 +611,10 @@ impl crate::Storage for SqliteStorage {
         .bind(&channel.base_url)
         .bind(channel.priority)
         .bind(channel.enabled as i64)
+        .bind(channel.rpm_limit)
+        .bind(channel.tpm_limit)
+        .bind(channel.balance)
+        .bind(channel.weight.unwrap_or(100))
         .bind(channel.created_at.to_rfc3339())
         .bind(channel.updated_at.to_rfc3339())
         .execute(&self.pool)
@@ -613,7 +625,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_channel(&self, id: &str) -> Result<Option<Channel>, DbErr> {
         let row: Option<SqliteChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, enabled, created_at, updated_at
+            "SELECT id, provider_id, name, api_key, base_url, priority, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at
              FROM channels WHERE id = ?",
         )
         .bind(id)
@@ -625,7 +637,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<SqliteChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, enabled, created_at, updated_at
+            "SELECT id, provider_id, name, api_key, base_url, priority, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at
              FROM channels WHERE provider_id = ? ORDER BY priority ASC",
         )
         .bind(provider_id)
@@ -637,7 +649,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_enabled_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<SqliteChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, enabled, created_at, updated_at
+            "SELECT id, provider_id, name, api_key, base_url, priority, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at
              FROM channels WHERE provider_id = ? AND enabled = 1 ORDER BY priority ASC",
         )
         .bind(provider_id)
@@ -650,13 +662,17 @@ impl crate::Storage for SqliteStorage {
     async fn update_channel(&self, channel: &Channel) -> Result<Channel, DbErr> {
         sqlx::query(
             "UPDATE channels SET name = ?, api_key = ?, base_url = ?, priority = ?,
-             enabled = ?, updated_at = ? WHERE id = ?",
+             enabled = ?, rpm_limit = ?, tpm_limit = ?, balance = ?, weight = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&channel.name)
         .bind(&channel.api_key)
         .bind(&channel.base_url)
         .bind(channel.priority)
         .bind(channel.enabled as i64)
+        .bind(channel.rpm_limit)
+        .bind(channel.tpm_limit)
+        .bind(channel.balance)
+        .bind(channel.weight)
         .bind(channel.updated_at.to_rfc3339())
         .bind(&channel.id)
         .execute(&self.pool)
