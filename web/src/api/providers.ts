@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { Provider, CreateProviderRequest, UpdateProviderRequest, Channel, CreateChannelRequest, UpdateChannelRequest, SyncModelsResponse } from '../types';
+import type { Provider, CreateProviderRequest, UpdateProviderRequest, Channel, CreateChannelRequest, UpdateChannelRequest, SyncModelsResponse, ChannelModel, CreateChannelModelRequest, UpdateChannelModelRequest } from '../types';
 
 export async function listProviders(): Promise<Provider[]> {
   const { data } = await apiClient.get<Provider[]>('/providers');
@@ -47,4 +47,30 @@ export async function deleteChannel(id: string): Promise<void> {
 export async function syncModels(providerId: string): Promise<SyncModelsResponse> {
   const { data } = await apiClient.post<SyncModelsResponse>(`/providers/${providerId}/sync-models`, {});
   return data;
+}
+
+// --- Channel Models ---
+
+export async function listChannelModels(providerId: string): Promise<ChannelModel[]> {
+  const { data } = await apiClient.get<ChannelModel[]>(`/providers/${providerId}/channel-models`);
+  return data;
+}
+
+export async function createChannelModel(providerId: string, input: CreateChannelModelRequest): Promise<ChannelModel> {
+  const { data } = await apiClient.post<ChannelModel>(`/providers/${providerId}/channel-models`, input);
+  return data;
+}
+
+export async function getChannelModel(id: string): Promise<ChannelModel> {
+  const { data } = await apiClient.get<ChannelModel>(`/channel-models/${id}`);
+  return data;
+}
+
+export async function updateChannelModel(id: string, input: UpdateChannelModelRequest): Promise<ChannelModel> {
+  const { data } = await apiClient.patch<ChannelModel>(`/channel-models/${id}`, input);
+  return data;
+}
+
+export async function deleteChannelModel(id: string): Promise<void> {
+  await apiClient.delete(`/channel-models/${id}`);
 }

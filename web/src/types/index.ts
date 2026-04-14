@@ -56,6 +56,7 @@ export interface UpdateProviderRequest {
 }
 
 export interface Model {
+  id: string;
   name: string;
   provider_id: string;
   billing_type: 'token' | 'request';
@@ -216,6 +217,32 @@ export interface UpdateChannelRequest {
   api_key?: string;
   base_url?: string | null;
   priority?: number;
+  enabled?: boolean;
+}
+
+// --- Channel Models ---
+
+export interface ChannelModel {
+  id: string;
+  channel_id: string;
+  model_id: string;
+  upstream_model_name: string;
+  priority_override: number | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateChannelModelRequest {
+  channel_id: string;
+  model_id: string;
+  upstream_model_name: string;
+  priority_override?: number | null;
+}
+
+export interface UpdateChannelModelRequest {
+  upstream_model_name?: string;
+  priority_override?: number | null;
   enabled?: boolean;
 }
 
