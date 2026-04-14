@@ -25,13 +25,13 @@ The new design:
 CREATE TABLE channel_models (
     id                  TEXT PRIMARY KEY,
     channel_id          TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-    model_name          TEXT NOT NULL REFERENCES models(name) ON DELETE CASCADE,
+    model_id            TEXT NOT NULL REFERENCES models(id) ON DELETE CASCADE,
     upstream_model_name TEXT NOT NULL,  -- actual name sent to upstream (e.g., "my-gpt4o-deploy")
     priority_override   INTEGER,          -- NULL = use channel.priority, otherwise override
     enabled             BOOLEAN NOT NULL DEFAULT 1,
     created_at          TEXT NOT NULL,
     updated_at          TEXT NOT NULL,
-    UNIQUE(channel_id, model_name)
+    UNIQUE(channel_id, model_id)
 );
 
 CREATE INDEX idx_channel_models_model ON channel_models(model_name);
@@ -45,7 +45,7 @@ CREATE INDEX idx_channel_models_channel ON channel_models(channel_id);
 pub struct ChannelModel {
     pub id: String,
     pub channel_id: String,
-    pub model_name: String,
+    pub model_id: String,
     pub upstream_model_name: String,
     pub priority_override: Option<i32>,
     pub enabled: bool,
@@ -56,7 +56,7 @@ pub struct ChannelModel {
 #[derive(Debug, Deserialize)]
 pub struct CreateChannelModel {
     pub channel_id: String,
-    pub model_name: String,
+    pub model_id: String,
     pub upstream_model_name: String,
     pub priority_override: Option<i32>,
 }
@@ -78,7 +78,7 @@ pub struct UpdateChannelModel {
 
 2. Query channel_models:
    SELECT * FROM channel_models 
-   WHERE model_name = "gpt-4o" AND enabled = true
+   WHERE model_id = (SELECT id FROM models WHERE name = "gpt-4o") AND enabled = true
 
 3. Get channel_ids from results
 
@@ -124,7 +124,7 @@ let channels = if channel_ids.is_empty() {
 POST /management/providers/{provider_id}/channel-models
 {
     "channel_id": "uuid",
-    "model_name": "gpt-4o",
+    "model_id": "uuid",
     "upstream_model_name": "my-gpt4o-deploy",
     "priority_override": 5  // optional
 }
@@ -207,19 +207,59 @@ Fields:
 
 ## Migration
 
+### Step 1: Add id to models table
+
+```sql
+ALTER TABLE models ADD COLUMN id TEXT PRIMARY KEY;
+
+-- Backfill id from name for existing rows
+UPDATE models SET id = name WHERE id IS NULL;
+
+-- Make id not nullable for new inserts
+PRAGMA foreign_keys = OFF;
+CREATE TABLE models_new (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    provider_id TEXT NOT NULL REFERENCES providers(id),
+    billing_type TEXT NOT NULL CHECK(billing_type IN ('token', 'request')),
+    input_price REAL NOT NULL DEFAULT 0,
+    output_price REAL NOT NULL DEFAULT 0,
+    request_price REAL NOT NULL DEFAULT 0,
+    model_type  TEXT,
+    enabled     BOOLEAN NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL
+);
+INSERT INTO models_new SELECT id, name, provider_id, billing_type, input_price, output_price, request_price, model_type, enabled, created_at FROM models;
+DROP TABLE models;
+ALTER TABLE models_new RENAME TO models;
+PRAGMA foreign_keys = ON;
+```
+
+### Step 2: Update foreign key references
+
+```sql
+-- Update key_model_rate_limits
+ALTER TABLE key_model_rate_limits DROP FOREIGN KEY key_model_rate_limits_ibfk_1;
+ALTER TABLE key_model_rate_limits CHANGE model_name model_id TEXT REFERENCES models(id);
+
+-- Update channel_models (new table)
+```
+
+### Step 3: Create channel_models
+
 ```sql
 CREATE TABLE channel_models (
     id                  TEXT PRIMARY KEY,
     channel_id          TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-    model_name          TEXT NOT NULL,
+    model_id            TEXT NOT NULL REFERENCES models(id) ON DELETE CASCADE,
     upstream_model_name TEXT NOT NULL,
     priority_override   INTEGER,
     enabled             INTEGER NOT NULL DEFAULT 1,
     created_at          TEXT NOT NULL,
     updated_at          TEXT NOT NULL,
-    UNIQUE(channel_id, model_name)
+    UNIQUE(channel_id, model_id)
 );
 
-CREATE INDEX idx_channel_models_model ON channel_models(model_name);
+CREATE INDEX idx_channel_models_model ON channel_models(model_id);
 CREATE INDEX idx_channel_models_channel ON channel_models(channel_id);
 ```
