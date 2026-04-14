@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Pencil, Trash2 } from 'lucide-react';
-import { useProvider, useUpdateProvider, useDeleteProvider, useChannels, useCreateChannel, useUpdateChannel, useDeleteChannel } from '../hooks/useProviders';
+import { ArrowLeft, Plus, Pencil, Trash2, RotateCcw } from 'lucide-react';
+import { useProvider, useUpdateProvider, useDeleteProvider, useChannels, useCreateChannel, useUpdateChannel, useDeleteChannel, useSyncModels } from '../hooks/useProviders';
 import { useModels, useCreateModel, useUpdateModel, useDeleteModel } from '../hooks/useModels';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
@@ -23,6 +23,7 @@ export default function ProviderDetail() {
   const createChannelMutation = useCreateChannel(id!);
   const updateChannelMutation = useUpdateChannel(id!);
   const deleteChannelMutation = useDeleteChannel(id!);
+  const syncModelsMutation = useSyncModels(id!);
 
   const { data: channels } = useChannels(id!);
   const { data: models } = useModels(id!);
@@ -118,7 +119,7 @@ export default function ProviderDetail() {
       </form>
 
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-3"><h2 className="text-base font-semibold">Models</h2><Button icon={<Plus className="h-4 w-4" />} onClick={openAddModel}>Add Model</Button></div>
+        <div className="flex items-center justify-between mb-3"><h2 className="text-base font-semibold">Models</h2><div className="flex gap-2"><Button variant="ghost" icon={<RotateCcw className="h-4 w-4" />} onClick={() => syncModelsMutation.mutate()} loading={syncModelsMutation.isPending}>Sync Models</Button><Button icon={<Plus className="h-4 w-4" />} onClick={openAddModel}>Add Model</Button></div></div>
         <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
           <table className="table table-sm">
             <thead><tr className="border-b border-base-300"><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Billing</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Input ($/1M)</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Output ($/1M)</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50 w-20">Actions</th></tr></thead>

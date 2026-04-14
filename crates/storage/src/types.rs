@@ -131,6 +131,7 @@ pub struct UpdateChannel {
 pub struct Model {
     pub name: String,
     pub provider_id: String,
+    pub model_type: Option<String>,
     pub billing_type: BillingType,
     pub input_price: f64,     // per 1M tokens
     pub output_price: f64,    // per 1M tokens

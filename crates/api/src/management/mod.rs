@@ -54,6 +54,10 @@ pub fn management_router() -> Router<Arc<AppState>> {
             "/api/v1/providers/{id}/models/{model_name}",
             patch(models::update_model).delete(models::delete_model),
         )
+        .route(
+            "/api/v1/providers/{id}/sync-models",
+            post(models::sync_models),
+        )
         // Usage (authenticated)
         .route("/api/v1/usage", get(usage::get_usage))
         // Logs (admin)

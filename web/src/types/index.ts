@@ -225,3 +225,15 @@ export interface PaginatedResponse<T> {
   page: number;
   page_size: number;
 }
+
+export interface SyncedModel {
+  name: string;
+  model_type: string | null;
+  created: boolean;
+}
+
+export interface SyncModelsResponse {
+  new: number;
+  updated: number;
+  models: SyncedModel[];
+}

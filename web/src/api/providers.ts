@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { Provider, CreateProviderRequest, UpdateProviderRequest, Channel, CreateChannelRequest, UpdateChannelRequest } from '../types';
+import type { Provider, CreateProviderRequest, UpdateProviderRequest, Channel, CreateChannelRequest, UpdateChannelRequest, SyncModelsResponse } from '../types';
 
 export async function listProviders(): Promise<Provider[]> {
   const { data } = await apiClient.get<Provider[]>('/providers');
@@ -42,4 +42,9 @@ export async function updateChannel(id: string, input: UpdateChannelRequest): Pr
 
 export async function deleteChannel(id: string): Promise<void> {
   await apiClient.delete(`/channels/${id}`);
+}
+
+export async function syncModels(providerId: string): Promise<SyncModelsResponse> {
+  const { data } = await apiClient.post<SyncModelsResponse>(`/providers/${providerId}/sync-models`, {});
+  return data;
 }

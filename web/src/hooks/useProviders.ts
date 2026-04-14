@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { listProviders, getProvider, createProvider, updateProvider, deleteProvider, listChannels, createChannel as createChannelApi, updateChannel as updateChannelApi, deleteChannel as deleteChannelApi } from '../api/providers';
+import { listProviders, getProvider, createProvider, updateProvider, deleteProvider, listChannels, createChannel as createChannelApi, updateChannel as updateChannelApi, deleteChannel as deleteChannelApi, syncModels } from '../api/providers';
 import type { CreateProviderRequest, UpdateProviderRequest, CreateChannelRequest, UpdateChannelRequest } from '../types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
@@ -84,5 +84,17 @@ export function useDeleteChannel(providerId: string) {
       toast.success('Channel deleted');
     },
     onError: (err) => { toast.error(getErrorMessage(err, 'Failed to delete channel')); },
+  });
+}
+
+export function useSyncModels(providerId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => syncModels(providerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'models'] });
+      toast.success('Models synced');
+    },
+    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to sync models')); },
   });
 }
