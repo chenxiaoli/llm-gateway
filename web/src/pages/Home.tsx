@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Globe, Cloud, KeyRound, Zap, ShieldCheck,
-  LayoutDashboard, Sun, Moon, ArrowRight,
+  LayoutDashboard, Sun, Moon, ArrowRight, Terminal,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { apiClient, getToken } from '../api/client';
@@ -17,19 +17,62 @@ const features = [
   { icon: LayoutDashboard, title: 'Web Dashboard', desc: 'Management UI for keys, providers, models, usage analytics, and logs.' },
 ];
 
-const quickStartLines = [
-  { text: '# Create an API key via the management dashboard', dim: true },
-  { text: '# Then use it as a drop-in replacement:', dim: true },
-  { text: '', dim: false },
-  { text: 'curl -X POST http://localhost:8080/v1/chat/completions \\', dim: false, prefix: '$' },
-  { text: '  -H "Authorization: Bearer your-api-key" \\', dim: false },
-  { text: '  -H "Content-Type: application/json" \\', dim: false },
-  { text: "  -d '{\"model\": \"gpt-4\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}]}'", dim: false },
-];
+type Protocol = 'openai' | 'anthropic';
+
+interface CurlLine {
+  text: string;
+  prefix: string;
+}
+
+const quickStartExamples: Record<Protocol, { title: string; curl: CurlLine[]; sdk: string }> = {
+  openai: {
+    title: 'OpenAI Compatible',
+    curl: [
+      { text: 'curl -X POST http://localhost:8080/v1/chat/completions \\', prefix: '$' },
+      { text: '  -H "Authorization: Bearer sk-xxxx" \\', prefix: '' },
+      { text: '  -H "Content-Type: application/json" \\', prefix: '' },
+      { text: '  -d \'{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}\'', prefix: '' },
+    ],
+    sdk: `
+// OpenAI SDK
+import OpenAI from 'openai';
+const client = new OpenAI({
+  apiKey: 'sk-xxxx',
+  baseURL: 'http://localhost:8080/v1',
+});
+const chat = await client.chat.completions.create({
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Hello' }],
+});`,
+  },
+  anthropic: {
+    title: 'Anthropic Compatible',
+    curl: [
+      { text: 'curl -X POST http://localhost:8080/v1/messages \\', prefix: '$' },
+      { text: '  -H "Authorization: Bearer sk-xxxx" \\', prefix: '' },
+      { text: '  -H "anthropic-version: 2023-06-01" \\', prefix: '' },
+      { text: '  -H "Content-Type: application/json" \\', prefix: '' },
+      { text: '  -d \'{"model": "claude-3-5-sonnet-20241022", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}\'', prefix: '' },
+    ],
+    sdk: `
+// Anthropic SDK
+import Anthropic from '@anthropic-ai/sdk';
+const client = new Anthropic({
+  apiKey: 'sk-xxxx',
+  baseURL: 'http://localhost:8080/v1',
+});
+const message = await client.messages.create({
+  model: 'claude-3-5-sonnet-20241022',
+  max_tokens: 100,
+  messages: [{ role: 'user', content: 'Hello' }],
+});`,
+  },
+};
 
 export default function Home() {
   const navigate = useNavigate();
   const [version, setVersion] = useState('');
+  const [activeProtocol, setActiveProtocol] = useState<Protocol>('openai');
   const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
@@ -174,30 +217,51 @@ export default function Home() {
           </h2>
 
           <div className="rounded-xl border border-base-300/50 bg-base-100/30 overflow-hidden shadow-lg shadow-black/5">
-            {/* Terminal header */}
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-base-300/50 bg-base-200/40">
-              <div className="flex gap-2">
-                <div className="h-3 w-3 rounded-full bg-error/30" />
-                <div className="h-3 w-3 rounded-full bg-warning/30" />
-                <div className="h-3 w-3 rounded-full bg-success/30" />
-              </div>
-              <span className="text-[11px] font-mono text-base-content/15 ml-2">terminal</span>
+            {/* Protocol tabs */}
+            <div className="flex items-center gap-1 px-2 py-2 border-b border-base-300/50 bg-base-200/40">
+              {(['openai', 'anthropic'] as Protocol[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setActiveProtocol(p)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    activeProtocol === p
+                      ? 'bg-base-100 text-base-content shadow-sm'
+                      : 'text-base-content/40 hover:text-base-content/60 hover:bg-base-100/50'
+                  }`}
+                >
+                  {quickStartExamples[p].title}
+                </button>
+              ))}
             </div>
 
             {/* Terminal body */}
-            <div className="px-5 py-5 font-mono text-[13px] leading-7">
-              {quickStartLines.map((line, i) => (
-                <div key={i} className={line.dim ? 'text-base-content/25' : ''}>
-                  {line.prefix && <span className="text-primary mr-2">{line.prefix}</span>}
-                  {line.text.includes('your-api-key') ? (
-                    line.text.replace('your-api-key', '<span className="text-primary">your-api-key</span>')
-                  ) : (
-                    line.text || '\u00A0'
-                  )}
-                </div>
-              ))}
+            <div className="p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Terminal className="h-4 w-4 text-base-content/30" />
+                <span className="text-[11px] font-mono text-base-content/40">cURL</span>
+              </div>
+              <div className="font-mono text-[13px] leading-7 mb-6">
+                {quickStartExamples[activeProtocol].curl.map((line, i) => (
+                  <div key={i}>
+                    {line.prefix && <span className="text-primary mr-2">{line.prefix}</span>}
+                    {line.text}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2 mb-4">
+                <Terminal className="h-4 w-4 text-base-content/30" />
+                <span className="text-[11px] font-mono text-base-content/40">SDK</span>
+              </div>
+              <pre className="font-mono text-[12px] leading-6 text-base-content/60 bg-base-200/30 p-4 rounded-lg overflow-x-auto">
+                <code>{quickStartExamples[activeProtocol].sdk}</code>
+              </pre>
             </div>
           </div>
+
+          <p className="mt-6 text-center text-sm text-base-content/40">
+            Create an API key in the dashboard, then use it as a drop-in replacement
+          </p>
         </div>
 
         {/* ── Footer ── */}
