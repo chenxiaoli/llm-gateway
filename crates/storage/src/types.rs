@@ -186,6 +186,35 @@ pub struct ModelWithProvider {
     pub anthropic_compatible: bool,
 }
 
+// --- Channel Models (Junction Table) ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChannelModel {
+    pub id: String,
+    pub channel_id: String,
+    pub model_id: String,
+    pub upstream_model_name: String,
+    pub priority_override: Option<i32>,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateChannelModel {
+    pub channel_id: String,
+    pub model_id: String,
+    pub upstream_model_name: String,
+    pub priority_override: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateChannelModel {
+    pub upstream_model_name: Option<String>,
+    pub priority_override: Option<Option<i32>>,  // None=keep, Some(None)=clear
+    pub enabled: Option<bool>,
+}
+
 // --- Key-Model Rate Limits ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
