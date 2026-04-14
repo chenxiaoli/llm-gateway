@@ -79,6 +79,16 @@ export interface CreateModelRequest {
   request_price?: number;
 }
 
+export interface CreateGlobalModelRequest {
+  provider_id: string;
+  name: string;
+  billing_type: 'token' | 'request';
+  input_price?: number;
+  output_price?: number;
+  request_price?: number;
+  enabled?: boolean;
+}
+
 export interface UpdateModelRequest {
   billing_type?: 'token' | 'request';
   input_price?: number;

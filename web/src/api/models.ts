@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { Model, ModelWithProvider, CreateModelRequest, UpdateModelRequest } from '../types';
+import type { Model, ModelWithProvider, CreateModelRequest, CreateGlobalModelRequest, UpdateModelRequest } from '../types';
 
 export async function listModels(providerId: string): Promise<Model[]> {
   const { data } = await apiClient.get<Model[]>(`/providers/${providerId}/models`);
@@ -13,6 +13,11 @@ export async function listAllModels(): Promise<ModelWithProvider[]> {
 
 export async function createModel(providerId: string, input: CreateModelRequest): Promise<Model> {
   const { data } = await apiClient.post<Model>(`/providers/${providerId}/models`, input);
+  return data;
+}
+
+export async function createGlobalModel(input: CreateGlobalModelRequest): Promise<Model> {
+  const { data } = await apiClient.post<Model>('/models', input);
   return data;
 }
 

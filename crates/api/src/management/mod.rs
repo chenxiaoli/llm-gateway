@@ -53,7 +53,7 @@ pub fn management_router() -> Router<Arc<AppState>> {
         )
         .route(
             "/api/v1/models",
-            get(models::list_all_models),
+            get(models::list_all_models).post(models::create_model_global),
         )
         .route(
             "/api/v1/providers/{id}/models",

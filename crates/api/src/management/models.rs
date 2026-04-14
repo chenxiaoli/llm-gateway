@@ -62,6 +62,54 @@ pub async fn list_all_models(
     Ok(Json(models))
 }
 
+#[derive(serde::Deserialize)]
+pub struct CreateModelRequest {
+    pub provider_id: String,
+    pub name: String,
+    pub billing_type: llm_gateway_storage::BillingType,
+    pub input_price: Option<f64>,
+    pub output_price: Option<f64>,
+    pub request_price: Option<f64>,
+    pub enabled: Option<bool>,
+}
+
+pub async fn create_model_global(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(input): Json<CreateModelRequest>,
+) -> Result<Json<Model>, ApiError> {
+    require_admin(&headers, &state.jwt_secret)?;
+
+    // Verify provider exists
+    let _provider = state
+        .storage
+        .get_provider(&input.provider_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound(format!("Provider '{}' not found", input.provider_id)))?;
+
+    let model = Model {
+        id: input.name.clone(),
+        name: input.name,
+        provider_id: input.provider_id,
+        model_type: None,
+        billing_type: input.billing_type,
+        input_price: input.input_price.unwrap_or(0.0),
+        output_price: input.output_price.unwrap_or(0.0),
+        request_price: input.request_price.unwrap_or(0.0),
+        enabled: input.enabled.unwrap_or(true),
+        created_at: chrono::Utc::now(),
+    };
+
+    let created = state
+        .storage
+        .create_model(&model)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(created))
+}
+
 pub async fn create_model(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,

@@ -185,7 +185,7 @@ export default function ProviderDetail() {
       {/* Models Tab */}
       {activeTab === 'models' && (
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-3"><h2 className="text-base font-semibold">Models</h2><div className="flex gap-2"><Button variant="ghost" icon={<RotateCcw className="h-4 w-4" />} onClick={() => syncModelsMutation.mutate()} loading={syncModelsMutation.isPending}>Sync Models</Button><Button icon={<Plus className="h-4 w-4" />} onClick={openAddModel}>Add Model</Button></div></div>
+          <div className="flex items-center justify-between mb-3"><h2 className="text-base font-semibold">Models</h2><Button variant="ghost" icon={<RotateCcw className="h-4 w-4" />} onClick={() => syncModelsMutation.mutate()} loading={syncModelsMutation.isPending}>Sync Models</Button></div>
           <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
             <table className="table table-sm">
               <thead><tr className="border-b border-base-300"><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Billing</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Input ($/1M)</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Output ($/1M)</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50 w-20">Actions</th></tr></thead>
