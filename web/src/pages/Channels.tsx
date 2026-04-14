@@ -1,6 +1,5 @@
 import { useProviders } from '../hooks/useProviders';
 import { Link } from 'react-router-dom';
-import { Plus } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
 export default function Channels() {
@@ -22,8 +21,8 @@ export default function Channels() {
           <p className="text-sm text-base-content/40 mt-1">Manage provider failover endpoints</p>
         </div>
         <Link to="/console/providers">
-          <Button variant="primary" size="sm" icon={<Plus className="h-4 w-4" />}>
-            Add Provider
+          <Button variant="secondary" size="sm">
+            Manage Providers
           </Button>
         </Link>
       </div>
