@@ -103,6 +103,10 @@ pub struct Channel {
     pub api_key: String,
     pub base_url: Option<String>,
     pub priority: i32,
+    pub rpm_limit: Option<i64>,     // NEW: requests per minute
+    pub tpm_limit: Option<i64>,     // NEW: tokens per minute
+    pub balance: Option<f64>,       // NEW: remaining quota in USD
+    pub weight: Option<i32>,        // NEW: routing weight (default 100)
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -114,6 +118,10 @@ pub struct CreateChannel {
     pub api_key: String,
     pub base_url: Option<String>,
     pub priority: Option<i32>,
+    pub rpm_limit: Option<i64>,    // NEW
+    pub tpm_limit: Option<i64>,    // NEW
+    pub balance: Option<f64>,      // NEW
+    pub weight: Option<i32>,       // NEW
 }
 
 #[derive(Debug, Deserialize)]
@@ -123,6 +131,10 @@ pub struct UpdateChannel {
     pub base_url: Option<Option<String>>,
     pub priority: Option<i32>,
     pub enabled: Option<bool>,
+    pub rpm_limit: Option<Option<i64>>,  // NEW: None=keep, Some(None)=clear
+    pub tpm_limit: Option<Option<i64>>,  // NEW
+    pub balance: Option<Option<f64>>,    // NEW
+    pub weight: Option<Option<i32>>,     // NEW
 }
 
 // --- Models ---
