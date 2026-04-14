@@ -7,9 +7,8 @@ use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
 use llm_gateway_storage::sqlite::SqliteStorage;
-use rust_embed::{Embed, RustEmbed};
+use rust_embed::Embed;
 use std::sync::Arc;
-use std::convert::TryInto;
 
 #[derive(Embed)]
 #[folder = "../../web/dist"]
