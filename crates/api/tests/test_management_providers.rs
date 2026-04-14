@@ -278,7 +278,12 @@ async fn test_create_and_list_channels() {
             )
             .await
             .unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
+        let status = resp.status();
+        if !status.is_success() {
+            let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+            eprintln!("Channel create error ({}): {:?}", status, String::from_utf8_lossy(&body));
+        }
+        assert_eq!(status, StatusCode::OK, "Failed to create channel {}", name);
     }
 
     let list_resp = app

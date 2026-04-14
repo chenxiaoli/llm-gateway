@@ -633,7 +633,7 @@ impl crate::Storage for SqliteStorage {
     async fn create_channel(&self, channel: &Channel) -> Result<Channel, DbErr> {
         sqlx::query(
             "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&channel.id)
         .bind(&channel.provider_id)
