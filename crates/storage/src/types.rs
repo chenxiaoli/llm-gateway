@@ -141,7 +141,8 @@ pub struct UpdateChannel {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Model {
-    pub name: String,
+    pub id: String,           // primary key
+    pub name: String,          // display name
     pub provider_id: String,
     pub model_type: Option<String>,
     pub billing_type: BillingType,
