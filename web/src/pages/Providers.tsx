@@ -4,6 +4,8 @@ import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider } from '../hooks/useProviders';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
+import { Drawer } from '../components/ui/Drawer';
+import { EndpointsEditor } from '../components/ui/EndpointsEditor';
 import { Badge } from '../components/ui/Badge';
 import type { Provider } from '../types';
 
@@ -18,16 +20,14 @@ export default function Providers() {
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
-  const [openaiUrl, setOpenaiUrl] = useState('');
-  const [anthropicUrl, setAnthropicUrl] = useState('');
+  const [createEndpoints, setCreateEndpoints] = useState<Record<string, string>>({});
 
   // Edit modal state
   const [editOpen, setEditOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [editName, setEditName] = useState('');
   const [editBaseUrl, setEditBaseUrl] = useState('');
-  const [editOpenaiUrl, setEditOpenaiUrl] = useState('');
-  const [editAnthropicUrl, setEditAnthropicUrl] = useState('');
+  const [editEndpoints, setEditEndpoints] = useState<Record<string, string>>({});
   const [editEnabled, setEditEnabled] = useState(true);
 
   // Delete modal state
@@ -36,38 +36,32 @@ export default function Providers() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const endpoints = JSON.stringify({
-      openai: openaiUrl || null,
-      anthropic: anthropicUrl || null,
+    const endpoints: Record<string, string | null> = {};
+    Object.entries(createEndpoints).forEach(([key, value]) => {
+      endpoints[key] = value || null;
     });
     await createMutation.mutateAsync({
       name,
       base_url: baseUrl || null,
-      endpoints,
+      endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null,
     });
     setName('');
     setBaseUrl('');
-    setOpenaiUrl('');
-    setAnthropicUrl('');
+    setCreateEndpoints({});
     setCreateOpen(false);
   };
 
   const handleEdit = (provider: Provider) => {
-    // Parse endpoints JSON to extract individual URLs
-    let openaiUrlStr = '';
-    let anthropicUrlStr = '';
+    let parsedEndpoints: Record<string, string> = {};
     if (provider.endpoints) {
       try {
-        const parsed = JSON.parse(provider.endpoints);
-        openaiUrlStr = parsed.openai || '';
-        anthropicUrlStr = parsed.anthropic || '';
+        parsedEndpoints = JSON.parse(provider.endpoints);
       } catch {}
     }
     setEditingProvider(provider);
     setEditName(provider.name);
     setEditBaseUrl(provider.base_url || '');
-    setEditOpenaiUrl(openaiUrlStr);
-    setEditAnthropicUrl(anthropicUrlStr);
+    setEditEndpoints(parsedEndpoints);
     setEditEnabled(provider.enabled);
     setEditOpen(true);
   };
@@ -75,16 +69,16 @@ export default function Providers() {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProvider) return;
-    const endpoints = JSON.stringify({
-      openai: editOpenaiUrl || null,
-      anthropic: editAnthropicUrl || null,
+    const endpoints: Record<string, string | null> = {};
+    Object.entries(editEndpoints).forEach(([key, value]) => {
+      endpoints[key] = value || null;
     });
     await updateMutation.mutateAsync({
       id: editingProvider.id,
       input: {
         name: editName,
         base_url: editBaseUrl || null,
-        endpoints,
+        endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null,
         enabled: editEnabled,
       },
     });
@@ -203,7 +197,7 @@ export default function Providers() {
         </div>
       )}
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Add Provider">
+      <Drawer open={createOpen} onClose={() => setCreateOpen(false)} title="Add Provider">
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="form-control">
             <label className="label">
@@ -220,26 +214,21 @@ export default function Providers() {
           </div>
           <div className="form-control">
             <label className="label">
-              <span className="label-text font-medium">OpenAI Endpoint</span>
-              <span className="label-text-alt">Optional</span>
+              <span className="label-text font-medium">Endpoints</span>
             </label>
-            <input type="text" value={openaiUrl} onChange={(e) => setOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
+            <EndpointsEditor
+              value={createEndpoints}
+              onChange={setCreateEndpoints}
+            />
           </div>
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">Anthropic Endpoint</span>
-              <span className="label-text-alt">Optional</span>
-            </label>
-            <input type="text" value={anthropicUrl} onChange={(e) => setAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" />
-          </div>
-          <div className="flex justify-end">
+          <div className="flex justify-end pt-4">
             <Button variant="primary" loading={createMutation.isPending}>Create</Button>
           </div>
         </form>
-      </Modal>
+      </Drawer>
 
-      {/* Edit Modal */}
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Provider">
+      {/* Edit Drawer */}
+      <Drawer open={editOpen} onClose={() => setEditOpen(false)} title="Edit Provider">
         <form onSubmit={handleUpdate} className="space-y-4">
           <div className="form-control">
             <label className="label">
@@ -256,17 +245,12 @@ export default function Providers() {
           </div>
           <div className="form-control">
             <label className="label">
-              <span className="label-text font-medium">OpenAI Endpoint</span>
-              <span className="label-text-alt">Optional</span>
+              <span className="label-text font-medium">Endpoints</span>
             </label>
-            <input type="text" value={editOpenaiUrl} onChange={(e) => setEditOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
-          </div>
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">Anthropic Endpoint</span>
-              <span className="label-text-alt">Optional</span>
-            </label>
-            <input type="text" value={editAnthropicUrl} onChange={(e) => setEditAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" />
+            <EndpointsEditor
+              value={editEndpoints}
+              onChange={setEditEndpoints}
+            />
           </div>
           <div className="form-control">
             <label className="label cursor-pointer justify-start gap-3">
@@ -279,11 +263,11 @@ export default function Providers() {
               <span className="label-text font-medium">Enabled</span>
             </label>
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-4">
             <Button variant="primary" loading={updateMutation.isPending}>Save Changes</Button>
           </div>
         </form>
-      </Modal>
+      </Drawer>
 
       {/* Delete Confirmation Modal */}
       <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Provider">
