@@ -92,7 +92,7 @@ jobs:
           username: ${{ secrets.DEV_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           source: deploy/develop/docker-compose.yml
-          target: /opt/dev/llm-gateway/docker-compose.yml
+          target: /opt/dev/llm-gateway/
 
       - name: Deploy to dev host
         uses: appleboy/ssh-action@v1
