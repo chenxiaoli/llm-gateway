@@ -6,6 +6,7 @@ const variantMap = {
   secondary: 'btn-secondary',
   ghost: 'btn-ghost',
   danger: 'btn-error',
+  outline: 'btn-outline',
 } as const;
 
 const sizeMap = {
