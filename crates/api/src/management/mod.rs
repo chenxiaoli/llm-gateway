@@ -33,69 +33,69 @@ pub fn management_router() -> Router<Arc<AppState>> {
         )
         // Providers (admin)
         .route(
-            "/api/v1/providers",
+            "/api/v1/admin/providers",
             post(providers::create_provider).get(providers::list_providers),
         )
         .route(
-            "/api/v1/providers/{id}",
+            "/api/v1/admin/providers/{id}",
             get(providers::get_provider).patch(providers::update_provider).delete(providers::delete_provider),
         )
         .route(
-            "/api/v1/providers/{id}/channels",
+            "/api/v1/admin/providers/{id}/channels",
             post(channels::create_channel).get(channels::list_channels),
         )
         .route(
-            "/api/v1/channels",
+            "/api/v1/admin/channels",
             get(channels::list_all_channels),
         )
         .route(
-            "/api/v1/channels/{id}",
+            "/api/v1/admin/channels/{id}",
             get(channels::get_channel).patch(channels::update_channel).delete(channels::delete_channel),
         )
         .route(
-            "/api/v1/models",
+            "/api/v1/admin/models",
             get(models::list_all_models).post(models::create_model_global),
         )
         .route(
-            "/api/v1/providers/{id}/models",
+            "/api/v1/admin/providers/{id}/models",
             get(models::list_models).post(models::create_model),
         )
         .route(
-            "/api/v1/providers/{id}/models/{model_name}",
+            "/api/v1/admin/providers/{id}/models/{model_name}",
             patch(models::update_model).delete(models::delete_model),
         )
         .route(
-            "/api/v1/providers/{id}/sync-models",
+            "/api/v1/admin/providers/{id}/sync-models",
             post(models::sync_models),
         )
         // ChannelModels (admin)
         .route(
-            "/api/v1/providers/{provider_id}/channel-models",
+            "/api/v1/admin/providers/{provider_id}/channel-models",
             post(channel_models::create_channel_model).get(channel_models::list_channel_models),
         )
         .route(
-            "/api/v1/channel-models/{id}",
+            "/api/v1/admin/channel-models/{id}",
             get(channel_models::get_channel_model).patch(channel_models::update_channel_model).delete(channel_models::delete_channel_model),
         )
         // Usage (authenticated)
         .route("/api/v1/usage", get(usage::get_usage))
         // Logs (admin)
-        .route("/api/v1/logs", get(logs::get_logs))
+        .route("/api/v1/admin/logs", get(logs::get_logs))
         // Users (admin)
-        .route("/api/v1/users", get(users::list_users))
+        .route("/api/v1/admin/users", get(users::list_users))
         .route(
-            "/api/v1/users/{id}",
+            "/api/v1/admin/users/{id}",
             patch(users::update_user).delete(users::delete_user),
         )
         // Settings (admin)
-        .route("/api/v1/settings", get(settings::get_settings).patch(settings::update_settings))
+        .route("/api/v1/admin/settings", get(settings::get_settings).patch(settings::update_settings))
         // Pricing Policies (admin)
         .route(
-            "/api/v1/pricing-policies",
+            "/api/v1/admin/pricing-policies",
             post(pricing_policies::create).get(pricing_policies::list),
         )
         .route(
-            "/api/v1/pricing-policies/{id}",
+            "/api/v1/admin/pricing-policies/{id}",
             get(pricing_policies::get).patch(pricing_policies::update).delete(pricing_policies::delete),
         )
         // Version (public)
