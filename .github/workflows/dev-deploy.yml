@@ -85,15 +85,6 @@ jobs:
             deploy/develop/docker-compose.yml
           sparse-checkout-cone-mode: false
 
-      - name: Copy docker-compose.yml to dev server
-        uses: appleboy/scp-action@v1
-        with:
-          host: ${{ secrets.DEV_HOST }}
-          username: ${{ secrets.DEV_USER }}
-          key: ${{ secrets.DEV_SSH_KEY }}
-          source: deploy/develop/docker-compose.yml
-          target: /opt/dev/llm-gateway/docker-compose.yml
-
       - name: Deploy to dev host
         uses: appleboy/ssh-action@v1
         with:
@@ -101,7 +92,19 @@ jobs:
           username: ${{ secrets.DEV_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           script: |
-            cd /opt/dev/llm-gateway
-            docker compose pull
-            docker compose up -d
-            docker compose ps
+            mkdir -p /opt/dev/llm-gateway
+            # Copy docker-compose.yml content via cat
+            cat > /opt/dev/llm-gateway/docker-compose.yml << 'COMPOSE_EOF'
+services:
+  gateway:
+    image: ghcr.io/${IMAGE_NAME:-chenxiaoli/llm-gateway}:develop
+    restart: unless-stopped
+    ports:
+      - "3080:8080"
+    volumes:
+      - /opt/dev/llm-gateway/config.toml:/app/config.toml:ro
+      - /opt/dev/llm-gateway/data:/app/data
+COMPOSE_EOF
+            docker compose -f /opt/dev/llm-gateway/docker-compose.yml pull
+            docker compose -f /opt/dev/llm-gateway/docker-compose.yml up -d
+            docker compose -f /opt/dev/llm-gateway/docker-compose.yml ps
