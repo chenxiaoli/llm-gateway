@@ -8,7 +8,7 @@ use crate::types::{Model, Provider};
 pub const SEED_PROVIDERS: &[(&str, &str, bool, bool)] = &[
     ("OpenAI", "https://api.openai.com/v1", true, false),
     ("Anthropic", "https://api.anthropic.com", false, true),
-    ("MiniMax", "https://api.minimax.chat/v1", true, false),
+    ("MiniMax", "https://api.minimaxi.com/v1", true, false),
     ("GLM", "https://open.bigmodel.cn/api/paas/v4", true, false),
 ];
 
@@ -38,15 +38,22 @@ pub const SEED_MODELS: &[(&str, &str, &str, f64, f64)] = &[
 pub fn get_seed_providers() -> Vec<Provider> {
     SEED_PROVIDERS
         .iter()
-        .map(|(name, base_url, _, _)| Provider {
-            id: Uuid::new_v4().to_string(),
-            name: name.to_string(),
-            base_url: Some(base_url.to_string()),
-            // Store compatibility info in endpoints JSON
-            endpoints: None,
-            enabled: true,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+        .map(|(name, base_url, _, _)| {
+            // MiniMax has separate endpoints for OpenAI and Anthropic protocols
+            let endpoints = if *name == "MiniMax" {
+                Some(r#"{"openai":"https://api.minimaxi.com/v1","anthropic":"https://api.minimaxi.com/anthropic"}"#.to_string())
+            } else {
+                None
+            };
+            Provider {
+                id: Uuid::new_v4().to_string(),
+                name: name.to_string(),
+                base_url: Some(base_url.to_string()),
+                endpoints,
+                enabled: true,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            }
         })
         .collect()
 }
