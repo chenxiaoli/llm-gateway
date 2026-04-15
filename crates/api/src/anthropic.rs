@@ -6,6 +6,7 @@ use futures::stream::StreamExt;
 use std::sync::Arc;
 use serde_json::{json, Value};
 use std::time::Instant;
+use tracing::debug;
 
 use llm_gateway_auth::hash_api_key;
 use llm_gateway_billing::{PricingCalculator, Usage};
@@ -316,6 +317,7 @@ pub async fn messages(
                                 for line in event_text.lines() {
                                     if let Some(data) = line.strip_prefix("data: ") {
                                         if data.trim() == "[DONE]" {
+                                            debug!("Anthropic stream [DONE] detected for model {}", model_name);
                                             // Stream finished — spawn audit + billing
                                             let latency_ms = start.elapsed().as_millis() as i64;
                                             tokio::spawn(async move {
@@ -414,6 +416,7 @@ pub async fn messages(
                                     return None;
                                 }
                                 None => {
+                                    debug!("Anthropic stream ended (None) for model {}, buffer: {}", model_name, buffer.len());
                                     tokio::spawn(record_stream_usage(
                                         storage.clone(), audit_logger.clone(),
                                         key_id.clone(), body.clone(), buffer.clone(), model_name.clone(),
