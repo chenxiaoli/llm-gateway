@@ -85,24 +85,6 @@ jobs:
             deploy/develop/docker-compose.yml
           sparse-checkout-cone-mode: false
 
-      - name: Ensure target directory exists
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.DEV_HOST }}
-          username: ${{ secrets.DEV_USER }}
-          key: ${{ secrets.DEV_SSH_KEY }}
-          script: |
-            mkdir -p /opt/dev/llm-gateway/deploy/develop
-
-      - name: Copy docker-compose.yml to dev server
-        uses: appleboy/scp-action@v1
-        with:
-          host: ${{ secrets.DEV_HOST }}
-          username: ${{ secrets.DEV_USER }}
-          key: ${{ secrets.DEV_SSH_KEY }}
-          source: deploy/develop/docker-compose.yml
-          target: /opt/dev/llm-gateway/deploy/develop/
-
       - name: Deploy to dev host
         uses: appleboy/ssh-action@v1
         with:
@@ -110,10 +92,19 @@ jobs:
           username: ${{ secrets.DEV_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           script: |
+            # Copy docker-compose.yml directly via SSH
+            cat > /opt/dev/llm-gateway/docker-compose.yml << 'EOF'
+services:
+  gateway:
+    image: ghcr.io/${IMAGE_NAME:-chenxiaoli/llm-gateway}:develop
+    restart: unless-stopped
+    ports:
+      - "3080:8080"
+    volumes:
+      - /opt/dev/llm-gateway/config.toml:/app/config.toml:ro
+      - /opt/dev/llm-gateway/data:/app/data
+EOF
             cd /opt/dev/llm-gateway
-            # Move docker-compose.yml to correct location
-            mv deploy/develop/docker-compose.yml . 2>/dev/null || true
-            rm -rf deploy 2>/dev/null || true
             docker compose pull
             docker compose up -d
             docker compose ps
