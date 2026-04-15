@@ -57,7 +57,7 @@ export function EndpointsEditor({ value, onChange }: EndpointsEditorProps) {
       {entries.length === 0 ? (
         <div className="text-center py-6 text-base-content/50">
           <p className="text-sm mb-3">No endpoints configured</p>
-          <Button variant="outline" size="sm" icon={<Plus className="h-4 w-4" />} onClick={handleAdd}>
+          <Button variant="outline" size="sm" icon={<Plus className="h-4 w-4" />} onClick={(e) => { e.stopPropagation(); handleAdd(); }} type="button">
             Add Endpoint
           </Button>
         </div>
@@ -87,7 +87,7 @@ export function EndpointsEditor({ value, onChange }: EndpointsEditorProps) {
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm btn-circle text-error hover:text-error"
-                  onClick={() => handleRemove(key)}
+                  onClick={(e) => { e.stopPropagation(); handleRemove(key); }}
                   aria-label="Remove endpoint"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -95,7 +95,7 @@ export function EndpointsEditor({ value, onChange }: EndpointsEditorProps) {
               </div>
             ))}
           </div>
-          <Button variant="outline" size="sm" icon={<Plus className="h-4 w-4" />} onClick={handleAdd}>
+          <Button variant="outline" size="sm" icon={<Plus className="h-4 w-4" />} onClick={(e) => { e.stopPropagation(); handleAdd(); }} type="button">
             Add Endpoint
           </Button>
         </>

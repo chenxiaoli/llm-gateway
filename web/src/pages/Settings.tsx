@@ -183,7 +183,11 @@ export default function Settings() {
         </div>
       )}
 
-      <Drawer open={providerModalOpen} onClose={() => setProviderModalOpen(false)} title={editingProvider ? 'Edit Provider' : 'Add Provider'}>
+      <Drawer
+        open={providerModalOpen}
+        onClose={() => setProviderModalOpen(false)}
+        title={editingProvider ? 'Edit Provider' : 'Add Provider'}
+      >
         <form onSubmit={handleSaveProvider} className="space-y-4">
           <div className="form-control">
             <label className="label"><span className="label-text">Name</span></label>
