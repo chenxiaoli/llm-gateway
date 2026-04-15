@@ -60,6 +60,7 @@ export interface Model {
   name: string;
   provider_id: string;
   billing_type: 'token' | 'request';
+  pricing_policy_id?: string | null;
   input_price: number;
   output_price: number;
   request_price: number;

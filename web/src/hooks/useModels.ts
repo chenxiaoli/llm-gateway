@@ -44,6 +44,16 @@ export function useUpdateModel(providerId: string) {
   });
 }
 
+export function useUpdateGlobalModel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ providerId, modelName, input }: { providerId: string; modelName: string; input: UpdateModelRequest }) =>
+      updateModel(providerId, modelName, input),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['models'] }); toast.success('Model updated'); },
+    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to update model')); },
+  });
+}
+
 export function useDeleteModel(providerId: string) {
   const queryClient = useQueryClient();
   return useMutation({
