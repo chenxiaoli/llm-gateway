@@ -8,6 +8,7 @@ pub mod logs;
 pub mod users;
 pub mod settings;
 pub mod channel_models;
+pub mod pricing_policies;
 
 use axum::extract::State;
 use axum::routing::{get, patch, post};
@@ -88,6 +89,15 @@ pub fn management_router() -> Router<Arc<AppState>> {
         )
         // Settings (admin)
         .route("/api/v1/settings", get(settings::get_settings).patch(settings::update_settings))
+        // Pricing Policies (admin)
+        .route(
+            "/api/v1/pricing-policies",
+            post(pricing_policies::create).get(pricing_policies::list),
+        )
+        .route(
+            "/api/v1/pricing-policies/{id}",
+            get(pricing_policies::get).delete(pricing_policies::delete),
+        )
         // Version (public)
         .route("/api/v1/version", get(version))
 }
