@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use std::time::Instant;
 
 use llm_gateway_auth::hash_api_key;
-use llm_gateway_billing::calculate_cost;
+use llm_gateway_billing::{PricingCalculator, Usage};
 use llm_gateway_encryption::decrypt;
 use llm_gateway_provider::anthropic::AnthropicProvider;
 use llm_gateway_provider::Provider;
@@ -32,17 +32,34 @@ async fn record_stream_usage(
     response_desc: &str,
     status_code: i32,
     latency_ms: i64,
-    billing_type: llm_gateway_storage::BillingType,
+    pricing_policy_id: Option<String>,
     model_input_price: f64,
     model_output_price: f64,
     model_request_price: f64,
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
 ) {
-    let cost = llm_gateway_billing::calculate_cost(
-        &billing_type, input_tokens, output_tokens,
-        model_input_price, model_output_price, model_request_price,
-    );
+    // Use PricingCalculator
+    let usage = Usage::from_tokens(input_tokens, output_tokens, 1);
+    let calculator = PricingCalculator;
+
+    // Get policy from storage or fallback to legacy pricing
+    let cost = if let Some(policy_id) = &pricing_policy_id {
+        match storage.get_pricing_policy(policy_id).await {
+            Ok(Some(policy)) => calculator.calculate_cost(&policy, &usage),
+            _ => 0.0,
+        }
+    } else {
+        // Fallback to legacy pricing if no policy (backwards compat)
+        llm_gateway_billing::calculate_cost(
+            &llm_gateway_storage::BillingType::Token, // default to token
+            input_tokens,
+            output_tokens,
+            model_input_price,
+            model_output_price,
+            model_request_price,
+        ).cost
+    };
     let usage = UsageRecord {
         id: uuid::Uuid::new_v4().to_string(),
         key_id,
@@ -52,7 +69,7 @@ async fn record_stream_usage(
         protocol: protocol.clone(),
         input_tokens,
         output_tokens,
-        cost: cost.cost,
+        cost,
         created_at: chrono::Utc::now(),
     };
     let _ = storage.record_usage(&usage).await;
@@ -265,7 +282,7 @@ pub async fn messages(
             let provider_id = provider.id.clone();
             let channel_id = channel.id.clone();
             let model_name_clone = model_name.clone();
-            let billing_type = model_entry.model.billing_type.clone();
+            let pricing_policy_id = model_entry.model.pricing_policy_id.clone();
             let model_input_price = model_entry.model.input_price;
             let model_output_price = model_entry.model.output_price;
             let model_request_price = model_entry.model.request_price;
@@ -279,8 +296,11 @@ pub async fn messages(
                     let provider_id = provider_id.clone();
                     let channel_id = channel_id.clone();
                     let model_name = model_name_clone.clone();
-                    let billing_type = billing_type.clone();
+                    let pricing_policy_id = pricing_policy_id.clone();
                     let start = start;
+                    let model_input_price = model_input_price;
+                    let model_output_price = model_output_price;
+                    let model_request_price = model_request_price;
                     async move {
                         loop {
                             // Try to extract a complete SSE event from buffer
@@ -296,14 +316,31 @@ pub async fn messages(
                                             // Stream finished — spawn audit + billing
                                             let latency_ms = start.elapsed().as_millis() as i64;
                                             tokio::spawn(async move {
-                                                let cost = calculate_cost(
-                                                    &billing_type,
-                                                    input_tokens,
-                                                    output_tokens,
-                                                    model_input_price,
-                                                    model_output_price,
-                                                    model_request_price,
+                                                // Use PricingCalculator
+                                                let usage = Usage::from_tokens(
+                                                    Some(input_tokens.unwrap_or(0)),
+                                                    Some(output_tokens.unwrap_or(0)),
+                                                    1,
                                                 );
+                                                let calculator = PricingCalculator;
+
+                                                // Get policy from storage or fallback to legacy pricing
+                                                let cost = if let Some(policy_id) = &pricing_policy_id {
+                                                    match storage.get_pricing_policy(policy_id).await {
+                                                        Ok(Some(policy)) => calculator.calculate_cost(&policy, &usage),
+                                                        _ => 0.0,
+                                                    }
+                                                } else {
+                                                    // Fallback to legacy pricing if no policy (backwards compat)
+                                                    llm_gateway_billing::calculate_cost(
+                                                        &llm_gateway_storage::BillingType::Token, // default to token
+                                                        input_tokens,
+                                                        output_tokens,
+                                                        model_input_price,
+                                                        model_output_price,
+                                                        model_request_price,
+                                                    ).cost
+                                                };
                                                 let usage = UsageRecord {
                                                     id: uuid::Uuid::new_v4().to_string(),
                                                     key_id: key_id.clone(),
@@ -313,7 +350,7 @@ pub async fn messages(
                                                     protocol: Protocol::Anthropic,
                                                     input_tokens,
                                                     output_tokens,
-                                                    cost: cost.cost,
+                                                    cost,
                                                     created_at: chrono::Utc::now(),
                                                 };
                                                 let _ = storage.record_usage(&usage).await;
@@ -367,7 +404,7 @@ pub async fn messages(
                                         provider_id.clone(), channel_id.clone(),
                                         Protocol::Anthropic, "[stream truncated]", 0,
                                         start.elapsed().as_millis() as i64,
-                                        billing_type.clone(),
+                                        pricing_policy_id.clone(),
                                         model_input_price, model_output_price, model_request_price,
                                         input_tokens, output_tokens,
                                     ));
@@ -380,7 +417,7 @@ pub async fn messages(
                                         provider_id.clone(), channel_id.clone(),
                                         Protocol::Anthropic, "[stream incomplete]", 0,
                                         start.elapsed().as_millis() as i64,
-                                        billing_type.clone(),
+                                        pricing_policy_id.clone(),
                                         model_input_price, model_output_price, model_request_price,
                                         input_tokens, output_tokens,
                                     ));
@@ -483,21 +520,37 @@ pub async fn messages(
         let response_body = proxy_result.response_body.clone();
         let input_tokens = proxy_result.input_tokens;
         let output_tokens = proxy_result.output_tokens;
-        let billing_type = model_entry.model.billing_type.clone();
+        let pricing_policy_id = model_entry.model.pricing_policy_id.clone();
         let model_input_price = model_entry.model.input_price;
         let model_output_price = model_entry.model.output_price;
         let model_request_price = model_entry.model.request_price;
 
         tokio::spawn(async move {
-            // Calculate cost
-            let cost = calculate_cost(
-                &billing_type,
-                input_tokens,
-                output_tokens,
-                model_input_price,
-                model_output_price,
-                model_request_price,
+            // Use PricingCalculator
+            let usage = Usage::from_tokens(
+                Some(input_tokens.unwrap_or(0)),
+                Some(output_tokens.unwrap_or(0)),
+                1,
             );
+            let calculator = PricingCalculator;
+
+            // Get policy from storage or fallback to legacy pricing
+            let cost = if let Some(policy_id) = &pricing_policy_id {
+                match storage.get_pricing_policy(policy_id).await {
+                    Ok(Some(policy)) => calculator.calculate_cost(&policy, &usage),
+                    _ => 0.0,
+                }
+            } else {
+                // Fallback to legacy pricing if no policy (backwards compat)
+                llm_gateway_billing::calculate_cost(
+                    &llm_gateway_storage::BillingType::Token, // default to token
+                    input_tokens,
+                    output_tokens,
+                    model_input_price,
+                    model_output_price,
+                    model_request_price,
+                ).cost
+            };
 
             // Record usage
             let usage = UsageRecord {
@@ -509,7 +562,7 @@ pub async fn messages(
                 protocol: Protocol::Anthropic,
                 input_tokens,
                 output_tokens,
-                cost: cost.cost,
+                cost,
                 created_at: chrono::Utc::now(),
             };
             let _ = storage.record_usage(&usage).await;
