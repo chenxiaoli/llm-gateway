@@ -96,7 +96,7 @@ pub fn management_router() -> Router<Arc<AppState>> {
         )
         .route(
             "/api/v1/pricing-policies/{id}",
-            get(pricing_policies::get).delete(pricing_policies::delete),
+            get(pricing_policies::get).patch(pricing_policies::update).delete(pricing_policies::delete),
         )
         // Version (public)
         .route("/api/v1/version", get(version))
