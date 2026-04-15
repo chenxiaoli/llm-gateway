@@ -145,7 +145,7 @@ pub struct Model {
     pub name: String,          // display name
     pub provider_id: String,
     pub model_type: Option<String>,
-    pub billing_type: BillingType,
+    pub pricing_policy_id: Option<String>,  // nullable FK to pricing_policies
     pub input_price: f64,     // per 1M tokens
     pub output_price: f64,    // per 1M tokens
     pub request_price: f64,   // per request
@@ -153,6 +153,7 @@ pub struct Model {
     pub created_at: DateTime<Utc>,
 }
 
+// Deprecated: kept for migration compatibility only
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum BillingType {
@@ -212,7 +213,7 @@ impl Usage {
 #[derive(Debug, Deserialize)]
 pub struct CreateModel {
     pub name: String,
-    pub billing_type: BillingType,
+    pub pricing_policy_id: Option<String>,  // NEW
     pub input_price: Option<f64>,
     pub output_price: Option<f64>,
     pub request_price: Option<f64>,
@@ -220,7 +221,7 @@ pub struct CreateModel {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateModel {
-    pub billing_type: Option<BillingType>,
+    pub pricing_policy_id: Option<Option<String>>,  // None=keep, Some(None)=clear
     pub input_price: Option<f64>,
     pub output_price: Option<f64>,
     pub request_price: Option<f64>,
