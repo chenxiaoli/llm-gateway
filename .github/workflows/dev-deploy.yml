@@ -87,6 +87,8 @@ jobs:
           key: ${{ secrets.DEV_SSH_KEY }}
           script: |
             cd /opt/dev/llm-gateway
+            # Ship docker-compose.yml from repo
+            git pull origin develop
             docker compose pull
             docker compose up -d
             docker compose ps
