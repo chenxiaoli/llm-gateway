@@ -79,12 +79,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     steps:
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            deploy/develop/docker-compose.yml
-          sparse-checkout-cone-mode: false
-
       - name: Deploy to dev host
         uses: appleboy/ssh-action@v1
         with:
