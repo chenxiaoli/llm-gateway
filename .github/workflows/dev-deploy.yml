@@ -79,6 +79,21 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            deploy/develop/docker-compose.yml
+          sparse-checkout-cone-mode: false
+
+      - name: Copy docker-compose.yml to dev server
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          source: deploy/develop/docker-compose.yml
+          target: /opt/dev/llm-gateway/docker-compose.yml
+
       - name: Deploy to dev host
         uses: appleboy/ssh-action@v1
         with:
@@ -87,8 +102,6 @@ jobs:
           key: ${{ secrets.DEV_SSH_KEY }}
           script: |
             cd /opt/dev/llm-gateway
-            # Copy docker-compose.yml from repo
-            scp ${{ secrets.DEV_USER }}@${{ secrets.DEV_HOST }}:/opt/dev/llm-gateway/deploy/develop/docker-compose.yml . || true
             docker compose pull
             docker compose up -d
             docker compose ps
