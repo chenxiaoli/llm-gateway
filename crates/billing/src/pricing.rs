@@ -191,4 +191,15 @@ mod tests {
         // total = 2500.01
         assert!((cost - 2500.01).abs() < 0.001);
     }
+
+    #[test]
+    fn test_per_character() {
+        let calc = PricingCalculator;
+        let policy = make_policy("per_character", json!({"input_per_1k": 0.001, "output_per_1k": 0.004}));
+        let usage = Usage { input_tokens: 0, output_tokens: 0, input_chars: Some(1_000_000), output_chars: Some(500_000), request_count: 1 };
+        let cost = calc.calculate_cost(&policy, &usage);
+        // 1M input chars * 0.001/1k = 1.0
+        // 500k output chars * 0.004/1k = 2.0
+        assert!((cost - 3.0).abs() < 0.001);
+    }
 }
