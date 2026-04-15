@@ -101,6 +101,7 @@ jobs:
           username: ${{ secrets.DEV_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           script: |
+            mkdir -p /opt/dev/llm-gateway
             cd /opt/dev/llm-gateway
             docker compose pull
             docker compose up -d
