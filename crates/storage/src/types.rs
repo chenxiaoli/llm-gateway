@@ -152,6 +152,7 @@ pub struct Model {
     pub provider_id: String,
     pub model_type: Option<String>,
     pub pricing_policy_id: Option<String>,  // nullable FK to pricing_policies
+    pub billing_type: String,
     pub input_price: f64,     // per 1M tokens
     pub output_price: f64,    // per 1M tokens
     pub request_price: f64,   // per request
@@ -220,6 +221,7 @@ impl Usage {
 pub struct CreateModel {
     pub name: String,
     pub pricing_policy_id: Option<String>,  // NEW
+    pub billing_type: Option<String>,
     pub input_price: Option<f64>,
     pub output_price: Option<f64>,
     pub request_price: Option<f64>,
@@ -228,6 +230,7 @@ pub struct CreateModel {
 #[derive(Debug, Deserialize)]
 pub struct UpdateModel {
     pub pricing_policy_id: Option<Option<String>>,  // None=keep, Some(None)=clear
+    pub billing_type: Option<Option<String>>,  // None=keep, Some(None)=clear
     pub input_price: Option<f64>,
     pub output_price: Option<f64>,
     pub request_price: Option<f64>,
