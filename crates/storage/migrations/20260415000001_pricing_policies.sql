@@ -41,12 +41,16 @@ SELECT
 FROM models WHERE billing_type IS NOT NULL;
 
 -- Step 6: Link models to their policies
-UPDATE models SET pricing_policy_id = 'policy-' || id WHERE pricing_policy_id IS NULL;
+UPDATE models SET pricing_policy_id = 'policy-' || id WHERE pricing_policy_id IS NULL AND billing_type IS NOT NULL;
 
 -- Step 7: Remove billing_type from models (SQLite requires recreate)
+PRAGMA foreign_keys = OFF;
+
 CREATE TABLE models_new AS SELECT
     id, name, provider_id, model_type, pricing_policy_id,
     input_price, output_price, request_price, enabled, created_at
 FROM models;
 DROP TABLE models;
 ALTER TABLE models_new RENAME TO models;
+
+PRAGMA foreign_keys = ON;
