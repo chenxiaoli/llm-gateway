@@ -199,6 +199,7 @@ struct PgAuditRow {
     provider_id: String,
     channel_id: Option<String>,
     protocol: String,
+    stream: bool,
     request_body: String,
     response_body: String,
     status_code: i32,
@@ -217,6 +218,7 @@ impl From<PgAuditRow> for AuditLog {
             provider_id: r.provider_id,
             channel_id: r.channel_id,
             protocol: parse_protocol(&r.protocol),
+            stream: r.stream,
             request_body: r.request_body,
             response_body: r.response_body,
             status_code: r.status_code,
@@ -927,9 +929,9 @@ impl crate::Storage for PostgresStorage {
 
     async fn insert_log(&self, log: &AuditLog) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO audit_logs (id, key_id, model_name, provider_id, channel_id, protocol, request_body, response_body,
+            "INSERT INTO audit_logs (id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
         )
         .bind(&log.id)
         .bind(&log.key_id)
@@ -937,6 +939,7 @@ impl crate::Storage for PostgresStorage {
         .bind(&log.provider_id)
         .bind(&log.channel_id)
         .bind(protocol_str(&log.protocol))
+        .bind(log.stream)
         .bind(&log.request_body)
         .bind(&log.response_body)
         .bind(log.status_code)
@@ -951,7 +954,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn query_logs(&self, filter: &LogFilter) -> Result<Vec<AuditLog>, DbErr> {
         let mut sql = String::from(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, request_body, response_body,
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at
              FROM audit_logs WHERE 1=1",
         );

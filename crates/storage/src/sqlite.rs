@@ -266,6 +266,7 @@ struct SqliteAuditRow {
     provider_id: String,
     channel_id: Option<String>,
     protocol: String,
+    stream: bool,
     request_body: String,
     response_body: String,
     status_code: i32,
@@ -284,6 +285,7 @@ impl From<SqliteAuditRow> for AuditLog {
             provider_id: r.provider_id,
             channel_id: r.channel_id,
             protocol: parse_protocol(&r.protocol),
+            stream: r.stream,
             request_body: r.request_body,
             response_body: r.response_body,
             status_code: r.status_code,
@@ -1082,6 +1084,7 @@ impl crate::Storage for SqliteStorage {
         .bind(&log.provider_id)
         .bind(&log.channel_id)
         .bind(protocol_str(&log.protocol))
+        .bind(log.stream)
         .bind(&log.request_body)
         .bind(&log.response_body)
         .bind(log.status_code)
@@ -1096,7 +1099,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn query_logs(&self, filter: &LogFilter) -> Result<Vec<AuditLog>, DbErr> {
         let mut sql = String::from(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, request_body, response_body,
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at
              FROM audit_logs WHERE 1=1",
         );

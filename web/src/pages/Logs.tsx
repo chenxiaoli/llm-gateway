@@ -117,6 +117,7 @@ export default function Logs() {
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Time</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Model</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Protocol</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Stream</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Latency</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Input</th>
@@ -127,7 +128,7 @@ export default function Logs() {
               <tbody>
                 {data?.items?.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-base-content/30">
+                    <td colSpan={9} className="text-center py-12 text-base-content/30">
                       <Search className="h-8 w-8 mx-auto mb-2 opacity-40" />
                       <div>No logs found</div>
                       {hasFilters && <div className="text-xs mt-1">Try adjusting your filters</div>}
@@ -139,6 +140,7 @@ export default function Logs() {
                     <td className="mono text-[13px] text-base-content/60">{new Date(log.created_at).toLocaleString()}</td>
                     <td className="mono font-medium">{log.model_name}</td>
                     <td><Badge variant={log.protocol === 'openai' ? 'blue' : 'purple'}>{log.protocol}</Badge></td>
+                    <td>{log.stream ? <Badge variant="blue">stream</Badge> : <span className="text-base-content/30">-</span>}</td>
                     <td><Badge variant={log.status_code < 400 ? 'green' : log.status_code < 500 ? 'amber' : 'red'}>{log.status_code}</Badge></td>
                     <td className="mono text-base-content/60">{log.latency_ms}ms</td>
                     <td className="mono text-base-content/60">{log.input_tokens ?? '-'}</td>
@@ -202,6 +204,10 @@ export default function Logs() {
               <div className="bg-base-200/60 rounded-lg p-3">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Protocol</div>
                 <Badge variant={selectedLog.protocol === 'openai' ? 'blue' : 'purple'}>{selectedLog.protocol}</Badge>
+              </div>
+              <div className="bg-base-200/60 rounded-lg p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Stream</div>
+                {selectedLog.stream ? <Badge variant="blue">stream</Badge> : <span className="text-base-content/30">-</span>}
               </div>
               <div className="bg-base-200/60 rounded-lg p-3">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Status</div>

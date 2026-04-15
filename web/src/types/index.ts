@@ -125,6 +125,7 @@ export interface AuditLog {
   provider_id: string;
   channel_id: string | null;
   protocol: 'openai' | 'anthropic';
+  stream: boolean;
   request_body: string;
   response_body: string;
   status_code: number;

@@ -355,6 +355,7 @@ pub struct AuditLog {
     pub provider_id: String,
     pub channel_id: Option<String>,
     pub protocol: Protocol,
+    pub stream: bool,
     pub request_body: String,
     pub response_body: String,
     pub status_code: i32,

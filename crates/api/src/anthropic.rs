@@ -78,7 +78,7 @@ async fn record_stream_usage(
     let _ = storage.record_usage(&usage).await;
     let _ = audit_logger.log_request(
         &usage.key_id, &usage.model_name, &usage.provider_id,
-        protocol, &body, &response_body, status_code,
+        protocol, is_stream, &body, &response_body, status_code,
         latency_ms, usage.input_tokens, usage.output_tokens,
     ).await;
 }
@@ -365,6 +365,7 @@ pub async fn messages(
                                                         &model_name,
                                                         &provider_id,
                                                         Protocol::Anthropic,
+                                                        true,
                                                         &body,
                                                         &buffer,
                                                         200,
@@ -580,6 +581,7 @@ pub async fn messages(
                     &model_name_clone,
                     &provider_id,
                     Protocol::Anthropic,
+                    false,
                     &body,
                     &response_body,
                     status_code as i32,
