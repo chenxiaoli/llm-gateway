@@ -1,4 +1,5 @@
 use crate::types::*;
+use crate::seed;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{FromRow, SqlitePool};
 use std::str::FromStr;
@@ -1564,6 +1565,35 @@ impl crate::Storage for SqliteStorage {
             .bind(id)
             .execute(&self.pool)
             .await?;
+        Ok(())
+    }
+
+    // ---- Seed Data ----
+
+    async fn seed_data(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // Check if providers already exist (idempotent)
+        let existing = self.list_providers().await?;
+        if !existing.is_empty() {
+            return Ok(());
+        }
+
+        // Get seed providers and insert them
+        let seed_providers = seed::get_seed_providers();
+        let mut inserted_providers = Vec::new();
+        for provider in &seed_providers {
+            let inserted = self.create_provider(provider).await?;
+            inserted_providers.push(inserted);
+        }
+
+        // Build provider ID map and get seed models
+        let provider_ids = seed::build_provider_id_map(&inserted_providers);
+        let seed_models = seed::get_seed_models(&provider_ids);
+
+        // Insert seed models
+        for model in &seed_models {
+            self.create_model(model).await?;
+        }
+
         Ok(())
     }
 }

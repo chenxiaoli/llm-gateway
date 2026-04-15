@@ -98,4 +98,7 @@ pub trait Storage: Send + Sync {
     // Settings
     async fn get_setting(&self, key: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
     async fn set_setting(&self, key: &str, value: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    // Seed data
+    async fn seed_data(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }
