@@ -103,6 +103,8 @@ pub struct Channel {
     pub api_key: String,
     pub base_url: Option<String>,
     pub priority: i32,
+    pub pricing_policy_id: Option<String>,  // NEW
+    pub markup_ratio: f64,                  // NEW, default 1.0
     pub rpm_limit: Option<i64>,     // NEW: requests per minute
     pub tpm_limit: Option<i64>,     // NEW: tokens per minute
     pub balance: Option<f64>,       // NEW: remaining quota in USD
@@ -118,6 +120,8 @@ pub struct CreateChannel {
     pub api_key: String,
     pub base_url: Option<String>,
     pub priority: Option<i32>,
+    pub pricing_policy_id: Option<String>,  // NEW
+    pub markup_ratio: Option<f64>,          // NEW
     pub rpm_limit: Option<i64>,    // NEW
     pub tpm_limit: Option<i64>,    // NEW
     pub balance: Option<f64>,      // NEW
@@ -130,6 +134,8 @@ pub struct UpdateChannel {
     pub api_key: Option<String>,
     pub base_url: Option<Option<String>>,
     pub priority: Option<i32>,
+    pub pricing_policy_id: Option<Option<String>>,  // NEW
+    pub markup_ratio: Option<f64>,                  // NEW
     pub enabled: Option<bool>,
     pub rpm_limit: Option<Option<i64>>,  // NEW: None=keep, Some(None)=clear
     pub tpm_limit: Option<Option<i64>>,  // NEW
@@ -145,7 +151,7 @@ pub struct Model {
     pub name: String,          // display name
     pub provider_id: String,
     pub model_type: Option<String>,
-    pub billing_type: BillingType,
+    pub pricing_policy_id: Option<String>,  // nullable FK to pricing_policies
     pub input_price: f64,     // per 1M tokens
     pub output_price: f64,    // per 1M tokens
     pub request_price: f64,   // per request
@@ -153,6 +159,7 @@ pub struct Model {
     pub created_at: DateTime<Utc>,
 }
 
+// Deprecated: kept for migration compatibility only
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum BillingType {
@@ -160,10 +167,59 @@ pub enum BillingType {
     Request,
 }
 
+// --- Pricing Policies ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PricingPolicy {
+    pub id: String,
+    pub name: String,
+    pub billing_type: String,        // "per_token", "per_request", "per_character", "tiered_token", "hybrid"
+    pub config: serde_json::Value,   // billing-type-specific config
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreatePricingPolicy {
+    pub name: String,
+    pub billing_type: String,
+    pub config: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdatePricingPolicy {
+    pub name: Option<String>,
+    pub billing_type: Option<String>,
+    pub config: Option<serde_json::Value>,
+}
+
+// --- Usage for pricing calculation ---
+
+#[derive(Debug, Clone, Copy)]
+pub struct Usage {
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub input_chars: Option<i64>,
+    pub output_chars: Option<i64>,
+    pub request_count: i64,
+}
+
+impl Usage {
+    pub fn from_tokens(input: Option<i64>, output: Option<i64>, requests: i64) -> Self {
+        Usage {
+            input_tokens: input.unwrap_or(0),
+            output_tokens: output.unwrap_or(0),
+            input_chars: None,
+            output_chars: None,
+            request_count: requests,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateModel {
     pub name: String,
-    pub billing_type: BillingType,
+    pub pricing_policy_id: Option<String>,  // NEW
     pub input_price: Option<f64>,
     pub output_price: Option<f64>,
     pub request_price: Option<f64>,
@@ -171,7 +227,7 @@ pub struct CreateModel {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateModel {
-    pub billing_type: Option<BillingType>,
+    pub pricing_policy_id: Option<Option<String>>,  // None=keep, Some(None)=clear
     pub input_price: Option<f64>,
     pub output_price: Option<f64>,
     pub request_price: Option<f64>,
@@ -195,6 +251,8 @@ pub struct ChannelModel {
     pub model_id: String,
     pub upstream_model_name: String,
     pub priority_override: Option<i32>,
+    pub cost_policy_id: Option<String>,   // NEW: for upstream cost
+    pub markup_ratio: f64,                  // NEW, default 1.0
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -206,12 +264,16 @@ pub struct CreateChannelModel {
     pub model_id: String,
     pub upstream_model_name: String,
     pub priority_override: Option<i32>,
+    pub cost_policy_id: Option<String>,   // NEW
+    pub markup_ratio: Option<f64>,         // NEW
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateChannelModel {
     pub upstream_model_name: Option<String>,
     pub priority_override: Option<Option<i32>>,  // None=keep, Some(None)=clear
+    pub cost_policy_id: Option<Option<String>>,  // NEW
+    pub markup_ratio: Option<f64>,                // NEW
     pub enabled: Option<bool>,
 }
 

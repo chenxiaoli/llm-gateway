@@ -4,7 +4,7 @@ use axum::Json;
 use serde::Serialize;
 use std::sync::Arc;
 
-use llm_gateway_storage::{CreateModel as StorageCreateModel, Model, UpdateModel as StorageUpdateModel, BillingType};
+use llm_gateway_storage::{CreateModel as StorageCreateModel, Model, UpdateModel as StorageUpdateModel};
 
 use crate::error::ApiError;
 use crate::extractors::require_admin;
@@ -66,7 +66,7 @@ pub async fn list_all_models(
 pub struct CreateModelRequest {
     pub provider_id: String,
     pub name: String,
-    pub billing_type: llm_gateway_storage::BillingType,
+    pub pricing_policy_id: Option<String>,
     pub input_price: Option<f64>,
     pub output_price: Option<f64>,
     pub request_price: Option<f64>,
@@ -93,7 +93,7 @@ pub async fn create_model_global(
         name: input.name,
         provider_id: input.provider_id,
         model_type: None,
-        billing_type: input.billing_type,
+        pricing_policy_id: input.pricing_policy_id,
         input_price: input.input_price.unwrap_or(0.0),
         output_price: input.output_price.unwrap_or(0.0),
         request_price: input.request_price.unwrap_or(0.0),
@@ -131,7 +131,7 @@ pub async fn create_model(
         name: input.name,
         provider_id,
         model_type: None,
-        billing_type: input.billing_type,
+        pricing_policy_id: input.pricing_policy_id,
         input_price: input.input_price.unwrap_or(0.0),
         output_price: input.output_price.unwrap_or(0.0),
         request_price: input.request_price.unwrap_or(0.0),
@@ -172,8 +172,8 @@ pub async fn update_model(
     }
 
     // Apply partial updates
-    if let Some(billing_type) = input.billing_type {
-        model.billing_type = billing_type;
+    if let Some(pricing_policy_id) = input.pricing_policy_id {
+        model.pricing_policy_id = pricing_policy_id;
     }
     if let Some(input_price) = input.input_price {
         model.input_price = input_price;
@@ -308,7 +308,7 @@ pub async fn sync_models(
                                     name: name.clone(),
                                     provider_id: provider_id.clone(),
                                     model_type: model_type.clone(),
-                                    billing_type: BillingType::Token,
+                                    pricing_policy_id: None,
                                     input_price: 0.0,
                                     output_price: 0.0,
                                     request_price: 0.0,
@@ -387,7 +387,7 @@ pub async fn sync_models(
                                     name: name.clone(),
                                     provider_id: provider_id.clone(),
                                     model_type: model_type.clone(),
-                                    billing_type: BillingType::Token,
+                                    pricing_policy_id: None,
                                     input_price: 0.0,
                                     output_price: 0.0,
                                     request_price: 0.0,

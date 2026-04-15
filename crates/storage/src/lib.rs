@@ -24,6 +24,13 @@ pub trait Storage: Send + Sync {
     async fn update_provider(&self, provider: &Provider) -> Result<Provider, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_provider(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+    // Pricing Policies
+    async fn create_pricing_policy(&self, policy: &PricingPolicy) -> Result<PricingPolicy, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_pricing_policy(&self, id: &str) -> Result<Option<PricingPolicy>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_pricing_policies(&self) -> Result<Vec<PricingPolicy>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn update_pricing_policy(&self, policy: &PricingPolicy) -> Result<PricingPolicy, Box<dyn std::error::Error + Send + Sync>>;
+    async fn delete_pricing_policy(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
     // Channels
     async fn create_channel(&self, channel: &Channel) -> Result<Channel, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_channel(&self, id: &str) -> Result<Option<Channel>, Box<dyn std::error::Error + Send + Sync>>;
