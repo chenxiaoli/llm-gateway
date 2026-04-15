@@ -160,6 +160,48 @@ pub enum BillingType {
     Request,
 }
 
+// --- Pricing Policies ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PricingPolicy {
+    pub id: String,
+    pub name: String,
+    pub billing_type: String,        // "per_token", "per_request", "per_character", "tiered_token", "hybrid"
+    pub config: serde_json::Value,   // billing-type-specific config
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreatePricingPolicy {
+    pub name: String,
+    pub billing_type: String,
+    pub config: serde_json::Value,
+}
+
+// --- Usage for pricing calculation ---
+
+#[derive(Debug, Clone, Copy)]
+pub struct Usage {
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub input_chars: Option<i64>,
+    pub output_chars: Option<i64>,
+    pub request_count: i64,
+}
+
+impl Usage {
+    pub fn from_tokens(input: Option<i64>, output: Option<i64>, requests: i64) -> Self {
+        Usage {
+            input_tokens: input.unwrap_or(0),
+            output_tokens: output.unwrap_or(0),
+            input_chars: None,
+            output_chars: None,
+            request_count: requests,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateModel {
     pub name: String,
