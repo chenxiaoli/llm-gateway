@@ -1,6 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { cn } from '../../lib/cn';
 
 export interface DrawerProps {
   open: boolean;
@@ -11,38 +10,60 @@ export interface DrawerProps {
 }
 
 export function Drawer({ open, onClose, title, children, width = 480 }: DrawerProps) {
+  const [phase, setPhase] = useState<'closed' | 'entering' | 'open' | 'exiting'>('closed');
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && open) onClose();
+      if (e.key === 'Escape' && phase === 'open') onClose();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
+  }, [phase, onClose]);
 
   useEffect(() => {
-    document.body.style.overflow = open ? 'hidden' : '';
+    document.body.style.overflow = phase === 'open' || phase === 'entering' ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
+  }, [phase]);
+
+  useEffect(() => {
+    if (open) {
+      setPhase('entering');
+      const timer = setTimeout(() => setPhase('open'), 280);
+      return () => clearTimeout(timer);
+    } else if (phase !== 'closed') {
+      setPhase('exiting');
+      const timer = setTimeout(() => setPhase('closed'), 280);
+      return () => clearTimeout(timer);
+    }
   }, [open]);
 
-  if (!open) return null;
+  if (phase === 'closed') return null;
 
   return createPortal(
     <div
       onClick={onClose}
-      className="fixed inset-0 z-[110]"
+      className={`fixed inset-0 z-[110] ${
+        phase === 'entering'
+          ? 'drawer-backdrop-enter'
+          : phase === 'exiting'
+          ? 'drawer-backdrop-exit'
+          : ''
+      }`}
       style={{ background: 'rgba(0, 0, 0, 0.5)' }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={cn(
-          'absolute right-0 top-0 bottom-0 flex flex-col',
-          'bg-base-100 border-base-300 border-l',
-        )}
+        className={`absolute right-0 top-0 bottom-0 flex flex-col bg-base-100 border-base-300 border-l ${
+          phase === 'entering'
+            ? 'drawer-panel-enter'
+            : phase === 'exiting'
+            ? 'drawer-panel-exit'
+            : ''
+        }`}
         style={{
           width: `${width}px`,
           maxWidth: '100vw',
           boxShadow: '-8px 0 32px rgba(0, 0, 0, 0.4)',
-          animation: 'slideInRight 0.25s cubic-bezier(0.32, 0.72, 0, 1) forwards',
         }}
       >
         <div className="flex items-center justify-between px-6 py-5 shrink-0 border-b border-base-300">
@@ -63,12 +84,6 @@ export function Drawer({ open, onClose, title, children, width = 480 }: DrawerPr
           {children}
         </div>
       </div>
-      <style>{`
-        @keyframes slideInRight {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
-        }
-      `}</style>
     </div>,
     document.body,
   );
