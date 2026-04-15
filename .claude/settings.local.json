@@ -143,7 +143,9 @@
       "Bash(mkdir -p deploy/develop)",
       "Bash(cargo search:*)",
       "Bash(cargo info:*)",
-      "Bash(cargo tree:*)"
+      "Bash(cargo tree:*)",
+      "Bash(cargo run:*)",
+      "Bash(awk '{print $NF}')"
     ]
   }
 }

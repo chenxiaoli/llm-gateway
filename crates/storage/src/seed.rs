@@ -26,8 +26,8 @@ pub const SEED_MODELS: &[(&str, &str, &str, f64, f64)] = &[
     ("Anthropic", "claude-3-5-sonnet", "per_token", 1.50, 7.50),
     ("Anthropic", "claude-3-haiku", "per_token", 0.20, 1.00),
     // MiniMax models
-    ("MiniMax", "abab6.5g-chat", "per_token", 1.00, 10.00),
-    ("MiniMax", "abab6.5s-chat", "per_token", 0.50, 5.00),
+    ("MiniMax", "MiniMax-M2.7", "per_token", 2.1, 8.4),
+    ("MiniMax", "MiniMax-M2.7-highspeed", "per_token", 4.2, 16.8),
     // GLM models
     ("GLM", "glm-4", "per_token", 1.00, 10.00),
     ("GLM", "glm-4-flash", "per_token", 0.10, 0.10),
