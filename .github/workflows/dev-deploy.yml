@@ -87,7 +87,7 @@ jobs:
           key: ${{ secrets.DEV_SSH_KEY }}
           script: |
             # Copy docker-compose.yml directly via SSH
-            cat > /opt/dev/llm-gateway/docker-compose.yml << 'EOF'
+            cat > /opt/dev/llm-gateway/docker-compose.yml << 'DOCKERCOMPOSE'
 services:
   gateway:
     image: ghcr.io/${IMAGE_NAME:-chenxiaoli/llm-gateway}:develop
@@ -97,7 +97,7 @@ services:
     volumes:
       - /opt/dev/llm-gateway/config.toml:/app/config.toml:ro
       - /opt/dev/llm-gateway/data:/app/data
-EOF
+DOCKERCOMPOSE
             cd /opt/dev/llm-gateway
             docker compose pull
             docker compose up -d
