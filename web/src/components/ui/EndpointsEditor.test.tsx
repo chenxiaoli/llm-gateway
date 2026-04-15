@@ -37,4 +37,11 @@ describe('EndpointsEditor', () => {
     fireEvent.change(input, { target: { value: 'https://new.url.com' } });
     expect(mockOnChange).toHaveBeenCalledWith({ openai: 'https://new.url.com' });
   });
+
+  it('updates key when protocol dropdown changes', () => {
+    render(<EndpointsEditor value={{ openai: 'https://api.openai.com/v1' }} onChange={mockOnChange} />);
+    const select = screen.getByRole('combobox');
+    fireEvent.change(select, { target: { value: 'anthropic' } });
+    expect(mockOnChange).toHaveBeenCalledWith({ anthropic: 'https://api.openai.com/v1' });
+  });
 });

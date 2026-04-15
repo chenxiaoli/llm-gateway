@@ -18,7 +18,17 @@ export function EndpointsEditor({ value, onChange }: EndpointsEditorProps) {
   const entries = Object.entries(value);
 
   const handleAdd = () => {
-    const newValue = { ...value, openai: '' };
+    const newValue = { ...value };
+    // Find first protocol that doesn't already exist
+    for (const opt of PROTOCOL_OPTIONS) {
+      if (!newValue[opt.value]) {
+        newValue[opt.value] = '';
+        onChange(newValue);
+        return;
+      }
+    }
+    // All protocols exist, add custom
+    newValue['custom'] = '';
     onChange(newValue);
   };
 
@@ -66,7 +76,6 @@ export function EndpointsEditor({ value, onChange }: EndpointsEditorProps) {
                       {opt.label}
                     </option>
                   ))}
-                  <option value="custom">Custom</option>
                 </select>
                 <input
                   type="text"
