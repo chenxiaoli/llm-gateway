@@ -1219,7 +1219,9 @@ dependencies = [
 name = "llm-gateway-billing"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "llm-gateway-storage",
+ "serde_json",
 ]
 
 [[package]]
