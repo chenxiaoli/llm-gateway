@@ -74,7 +74,6 @@ pub fn get_seed_models(provider_ids: &[(String, String)]) -> Vec<Model> {
                 request_price: 0.0,
                 enabled: true,
                 created_at: Utc::now(),
-                updated_at: Utc::now(),
             })
         })
         .collect()

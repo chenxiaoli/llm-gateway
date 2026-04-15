@@ -103,7 +103,6 @@ pub async fn create_model_global(
         request_price: input.request_price.unwrap_or(0.0),
         enabled: input.enabled.unwrap_or(true),
         created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
     };
 
     let created = state
