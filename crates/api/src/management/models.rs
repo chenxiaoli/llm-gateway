@@ -144,7 +144,6 @@ pub async fn create_model(
         request_price: input.request_price.unwrap_or(0.0),
         enabled: true,
         created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
     };
 
     let created = state
@@ -326,7 +325,6 @@ pub async fn sync_models(
                                     request_price: 0.0,
                                     enabled: false,
                                     created_at: chrono::Utc::now(),
-                                    updated_at: chrono::Utc::now(),
                                 };
                                 let _ = state.storage.create_model(&model).await.map_err(|e| ApiError::Internal(e.to_string()));
                                 new_count += 1;
@@ -407,7 +405,6 @@ pub async fn sync_models(
                                     request_price: 0.0,
                                     enabled: false,
                                     created_at: chrono::Utc::now(),
-                                    updated_at: chrono::Utc::now(),
                                 };
                                 let _ = state.storage.create_model(&model).await.map_err(|e| ApiError::Internal(e.to_string()));
                                 new_count += 1;
