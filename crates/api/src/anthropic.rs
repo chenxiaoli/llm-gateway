@@ -26,6 +26,7 @@ async fn record_stream_usage(
     audit_logger: Arc<llm_gateway_audit::AuditLogger>,
     key_id: String,
     body: String,
+    response_body: String,
     model_name: String,
     provider_id: String,
     channel_id: String,
@@ -76,7 +77,7 @@ async fn record_stream_usage(
     let _ = storage.record_usage(&usage).await;
     let _ = audit_logger.log_request(
         &usage.key_id, &usage.model_name, &usage.provider_id,
-        protocol, &body, response_desc, status_code,
+        protocol, &body, &response_body, status_code,
         latency_ms, usage.input_tokens, usage.output_tokens,
     ).await;
 }
@@ -363,7 +364,7 @@ pub async fn messages(
                                                         &provider_id,
                                                         Protocol::Anthropic,
                                                         &body,
-                                                        "[stream]",
+                                                        &buffer,
                                                         200,
                                                         latency_ms,
                                                         input_tokens,
@@ -402,7 +403,7 @@ pub async fn messages(
                                 Some(Err(_)) => {
                                     tokio::spawn(record_stream_usage(
                                         storage.clone(), audit_logger.clone(),
-                                        key_id.clone(), body.clone(), model_name.clone(),
+                                        key_id.clone(), body.clone(), buffer.clone(), model_name.clone(),
                                         provider_id.clone(), channel_id.clone(),
                                         Protocol::Anthropic, "[stream truncated]", 0,
                                         start.elapsed().as_millis() as i64,
@@ -415,7 +416,7 @@ pub async fn messages(
                                 None => {
                                     tokio::spawn(record_stream_usage(
                                         storage.clone(), audit_logger.clone(),
-                                        key_id.clone(), body.clone(), model_name.clone(),
+                                        key_id.clone(), body.clone(), buffer.clone(), model_name.clone(),
                                         provider_id.clone(), channel_id.clone(),
                                         Protocol::Anthropic, "[stream incomplete]", 200,
                                         start.elapsed().as_millis() as i64,
