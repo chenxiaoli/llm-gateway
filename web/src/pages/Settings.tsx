@@ -5,7 +5,8 @@ import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider }
 import { Button } from '../components/ui/Button';
 import { Toggle } from '../components/ui/Toggle';
 import { Alert } from '../components/ui/Alert';
-import { Modal } from '../components/ui/Modal';
+import { Drawer } from '../components/ui/Drawer';
+import { EndpointsEditor } from '../components/ui/EndpointsEditor';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
@@ -32,8 +33,7 @@ export default function Settings() {
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [provName, setProvName] = useState('');
   const [provBaseUrl, setProvBaseUrl] = useState('');
-  const [provOpenaiUrl, setProvOpenaiUrl] = useState('');
-  const [provAnthropicUrl, setProvAnthropicUrl] = useState('');
+  const [provEndpoints, setProvEndpoints] = useState<Record<string, string>>({});
   const [provEnabled, setProvEnabled] = useState(true);
 
   const handleChangePassword = async (e: React.FormEvent) => {
@@ -53,36 +53,32 @@ export default function Settings() {
     }
   };
 
-  const openAddProvider = () => { setEditingProvider(null); setProvName(''); setProvBaseUrl(''); setProvOpenaiUrl(''); setProvAnthropicUrl(''); setProvEnabled(true); setProviderModalOpen(true); };
+  const openAddProvider = () => { setEditingProvider(null); setProvName(''); setProvBaseUrl(''); setProvEndpoints({}); setProvEnabled(true); setProviderModalOpen(true); };
   const openEditProvider = (p: Provider) => {
-    let openaiUrl = '';
-    let anthropicUrl = '';
+    let parsedEndpoints: Record<string, string> = {};
     if (p.endpoints) {
       try {
-        const parsed = JSON.parse(p.endpoints);
-        openaiUrl = parsed.openai || '';
-        anthropicUrl = parsed.anthropic || '';
+        parsedEndpoints = JSON.parse(p.endpoints);
       } catch {}
     }
     setEditingProvider(p);
     setProvName(p.name);
     setProvBaseUrl(p.base_url ?? '');
-    setProvOpenaiUrl(openaiUrl);
-    setProvAnthropicUrl(anthropicUrl);
+    setProvEndpoints(parsedEndpoints);
     setProvEnabled(p.enabled);
     setProviderModalOpen(true);
   };
   const handleSaveProvider = async (e: React.FormEvent) => {
     e.preventDefault();
-    const endpoints = JSON.stringify({
-      openai: provOpenaiUrl || null,
-      anthropic: provAnthropicUrl || null
+    const endpoints: Record<string, string | null> = {};
+    Object.entries(provEndpoints).forEach(([key, value]) => {
+      endpoints[key] = value || null;
     });
 
     if (editingProvider) {
-      await updateProviderMutation.mutateAsync({ id: editingProvider.id, input: { name: provName, base_url: provBaseUrl || null, endpoints, enabled: provEnabled } });
+      await updateProviderMutation.mutateAsync({ id: editingProvider.id, input: { name: provName, base_url: provBaseUrl || null, endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null, enabled: provEnabled } });
     } else {
-      await createProviderMutation.mutateAsync({ name: provName, base_url: provBaseUrl || null, endpoints });
+      await createProviderMutation.mutateAsync({ name: provName, base_url: provBaseUrl || null, endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null });
     }
     setProviderModalOpen(false);
   };
@@ -187,7 +183,7 @@ export default function Settings() {
         </div>
       )}
 
-      <Modal open={providerModalOpen} onClose={() => setProviderModalOpen(false)} title={editingProvider ? 'Edit Provider' : 'Add Provider'}>
+      <Drawer open={providerModalOpen} onClose={() => setProviderModalOpen(false)} title={editingProvider ? 'Edit Provider' : 'Add Provider'}>
         <form onSubmit={handleSaveProvider} className="space-y-4">
           <div className="form-control">
             <label className="label"><span className="label-text">Name</span></label>
@@ -198,12 +194,8 @@ export default function Settings() {
             <input type="text" value={provBaseUrl} onChange={(e) => setProvBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
           </div>
           <div className="form-control">
-            <label className="label"><span className="label-text">OpenAI Endpoint</span></label>
-            <input type="text" value={provOpenaiUrl} onChange={(e) => setProvOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
-          </div>
-          <div className="form-control">
-            <label className="label"><span className="label-text">Anthropic Endpoint</span></label>
-            <input type="text" value={provAnthropicUrl} onChange={(e) => setProvAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" />
+            <label className="label"><span className="label-text">Endpoints</span></label>
+            <EndpointsEditor value={provEndpoints} onChange={setProvEndpoints} />
           </div>
           {editingProvider && (
             <div className="flex items-center justify-between">
@@ -213,7 +205,7 @@ export default function Settings() {
           )}
           <Button variant="primary" type="submit">{editingProvider ? 'Update' : 'Create'}</Button>
         </form>
-      </Modal>
+      </Drawer>
     </div>
   );
 }
