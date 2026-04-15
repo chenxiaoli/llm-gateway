@@ -251,6 +251,8 @@ pub struct ChannelModel {
     pub model_id: String,
     pub upstream_model_name: String,
     pub priority_override: Option<i32>,
+    pub cost_policy_id: Option<String>,   // NEW: for upstream cost
+    pub markup_ratio: f64,                  // NEW, default 1.0
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -262,12 +264,16 @@ pub struct CreateChannelModel {
     pub model_id: String,
     pub upstream_model_name: String,
     pub priority_override: Option<i32>,
+    pub cost_policy_id: Option<String>,   // NEW
+    pub markup_ratio: Option<f64>,         // NEW
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateChannelModel {
     pub upstream_model_name: Option<String>,
     pub priority_override: Option<Option<i32>>,  // None=keep, Some(None)=clear
+    pub cost_policy_id: Option<Option<String>>,  // NEW
+    pub markup_ratio: Option<f64>,                // NEW
     pub enabled: Option<bool>,
 }
 
