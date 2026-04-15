@@ -155,6 +155,7 @@ struct SqliteModelRow {
     request_price: f64,
     enabled: i64,
     created_at: String,
+    updated_at: String,
 }
 
 impl From<SqliteModelRow> for Model {
@@ -171,6 +172,7 @@ impl From<SqliteModelRow> for Model {
             request_price: r.request_price,
             enabled: r.enabled != 0,
             created_at: parse_rfc3339(&r.created_at),
+            updated_at: parse_rfc3339(&r.updated_at),
         }
     }
 }
@@ -188,6 +190,7 @@ struct SqliteModelWithProviderRow {
     request_price: f64,
     enabled: i64,
     created_at: String,
+    updated_at: String,
     provider_name: String,
     base_url: Option<String>,
     endpoints: Option<String>,
@@ -218,6 +221,7 @@ impl From<SqliteModelWithProviderRow> for ModelWithProvider {
                 request_price: r.request_price,
                 enabled: r.enabled != 0,
                 created_at: parse_rfc3339(&r.created_at),
+                updated_at: parse_rfc3339(&r.updated_at),
             },
             provider_name: r.provider_name,
             openai_compatible,

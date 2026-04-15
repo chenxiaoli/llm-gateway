@@ -158,6 +158,7 @@ pub struct Model {
     pub request_price: f64,   // per request
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 // Deprecated: kept for migration compatibility only
