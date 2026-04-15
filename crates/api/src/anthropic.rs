@@ -25,6 +25,7 @@ async fn record_stream_usage(
     storage: Arc<dyn llm_gateway_storage::Storage>,
     audit_logger: Arc<llm_gateway_audit::AuditLogger>,
     key_id: String,
+    body: String,
     model_name: String,
     provider_id: String,
     channel_id: String,
@@ -293,6 +294,7 @@ pub async fn messages(
                     let storage = storage_clone.clone();
                     let audit_logger = audit_logger_clone.clone();
                     let key_id = key_id.clone();
+                    let body = body.clone();
                     let provider_id = provider_id.clone();
                     let channel_id = channel_id.clone();
                     let model_name = model_name_clone.clone();
@@ -400,7 +402,7 @@ pub async fn messages(
                                 Some(Err(_)) => {
                                     tokio::spawn(record_stream_usage(
                                         storage.clone(), audit_logger.clone(),
-                                        key_id.clone(), model_name.clone(),
+                                        key_id.clone(), body.clone(), model_name.clone(),
                                         provider_id.clone(), channel_id.clone(),
                                         Protocol::Anthropic, "[stream truncated]", 0,
                                         start.elapsed().as_millis() as i64,
@@ -413,7 +415,7 @@ pub async fn messages(
                                 None => {
                                     tokio::spawn(record_stream_usage(
                                         storage.clone(), audit_logger.clone(),
-                                        key_id.clone(), model_name.clone(),
+                                        key_id.clone(), body.clone(), model_name.clone(),
                                         provider_id.clone(), channel_id.clone(),
                                         Protocol::Anthropic, "[stream incomplete]", 0,
                                         start.elapsed().as_millis() as i64,

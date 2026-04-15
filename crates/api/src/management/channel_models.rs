@@ -111,17 +111,17 @@ pub async fn update_channel_model(
     if let Some(priority) = input.priority_override {
         cm.priority_override = priority;
     }
-    if let Some(billing_type) = input.billing_type {
-        cm.billing_type = billing_type;
+    if let Some(Some(billing_type)) = input.billing_type {
+        cm.billing_type = Some(billing_type);
     }
     if let Some(input_price) = input.input_price {
-        cm.input_price = input_price;
+        cm.input_price = Some(input_price);
     }
     if let Some(output_price) = input.output_price {
-        cm.output_price = output_price;
+        cm.output_price = Some(output_price);
     }
     if let Some(request_price) = input.request_price {
-        cm.request_price = request_price;
+        cm.request_price = Some(request_price);
     }
     if let Some(enabled) = input.enabled {
         cm.enabled = enabled;

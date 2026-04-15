@@ -140,7 +140,10 @@
       "Read(//deploy/**)",
       "Bash(mkdir -p /deploy/develop)",
       "Bash(ls -la deploy/)",
-      "Bash(mkdir -p deploy/develop)"
+      "Bash(mkdir -p deploy/develop)",
+      "Bash(cargo search:*)",
+      "Bash(cargo info:*)",
+      "Bash(cargo tree:*)"
     ]
   }
 }
