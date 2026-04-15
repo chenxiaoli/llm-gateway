@@ -38,6 +38,8 @@ pub async fn create_channel_model(
         model_id: input.model_id,
         upstream_model_name: input.upstream_model_name,
         priority_override: input.priority_override,
+        cost_policy_id: input.cost_policy_id,
+        markup_ratio: input.markup_ratio.unwrap_or(1.0),
         enabled: true,
         created_at: now,
         updated_at: now,
