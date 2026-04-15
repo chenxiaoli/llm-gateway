@@ -40,6 +40,10 @@ pub async fn create_channel_model(
         priority_override: input.priority_override,
         cost_policy_id: input.cost_policy_id,
         markup_ratio: input.markup_ratio.unwrap_or(1.0),
+        billing_type: input.billing_type,
+        input_price: input.input_price,
+        output_price: input.output_price,
+        request_price: input.request_price,
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -106,6 +110,18 @@ pub async fn update_channel_model(
     }
     if let Some(priority) = input.priority_override {
         cm.priority_override = priority;
+    }
+    if let Some(billing_type) = input.billing_type {
+        cm.billing_type = billing_type;
+    }
+    if let Some(input_price) = input.input_price {
+        cm.input_price = input_price;
+    }
+    if let Some(output_price) = input.output_price {
+        cm.output_price = output_price;
+    }
+    if let Some(request_price) = input.request_price {
+        cm.request_price = request_price;
     }
     if let Some(enabled) = input.enabled {
         cm.enabled = enabled;
