@@ -32,6 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .unwrap_or("./data/gateway.db");
     let storage = SqliteStorage::new(db_path).await?;
     storage.run_migrations().await?;
+    storage.seed_data().await?;
 
     let storage: Arc<dyn Storage> = Arc::new(storage);
 
