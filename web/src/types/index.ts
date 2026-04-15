@@ -249,6 +249,10 @@ export interface ChannelModel {
   model_id: string;
   upstream_model_name: string;
   priority_override: number | null;
+  billing_type?: string | null;
+  input_price?: number | null;
+  output_price?: number | null;
+  request_price?: number | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -259,6 +263,10 @@ export interface CreateChannelModelRequest {
   model_id: string;
   upstream_model_name: string;
   priority_override?: number | null;
+  billing_type?: string | null;
+  input_price?: number | null;
+  output_price?: number | null;
+  request_price?: number | null;
 }
 
 export interface UpdateChannelModelRequest {

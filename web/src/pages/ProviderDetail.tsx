@@ -11,6 +11,15 @@ import { Select } from '../components/ui/Select';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import type { Model, CreateModelRequest, UpdateModelRequest, Channel } from '../types';
 
+// Billing types for model forms
+const BILLING_TYPES = [
+  { value: 'per_token', label: 'Per Token' },
+  { value: 'per_request', label: 'Per Request' },
+  { value: 'per_character', label: 'Per Character' },
+  { value: 'tiered_token', label: 'Tiered Token' },
+  { value: 'hybrid', label: 'Hybrid' },
+] as const;
+
 export default function ProviderDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -235,7 +244,7 @@ export default function ProviderDetail() {
       <Modal open={modelModalOpen} onClose={() => setModelModalOpen(false)} title={editingModel ? `Edit Model: ${editingModel.name}` : 'Add Model'}>
         <form onSubmit={handleSaveModel} className="space-y-4">
           {!editingModel && (<div className="form-control"><label className="label"><span className="label-text">Model Name</span></label><input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="e.g., gpt-4o" required className="input input-bordered w-full" /></div>)}
-          <div className="form-control"><label className="label"><span className="label-text">Billing Type</span></label><Select value={modelBillingType} onChange={(v) => setModelBillingType(v as string)} options={[{ value: 'per_token', label: 'Per Token' }, { value: 'per_request', label: 'Per Request' }, { value: 'per_character', label: 'Per Character' }, { value: 'tiered_token', label: 'Tiered Token' }, { value: 'hybrid', label: 'Hybrid' }]} /></div>
+          <div className="form-control"><label className="label"><span className="label-text">Billing Type</span></label><Select value={modelBillingType} onChange={(v) => setModelBillingType(v as string)} options={BILLING_TYPES} /></div>
           <div className="grid grid-cols-3 gap-4">
             <div className="form-control"><label className="label"><span className="label-text">Input ($/1M)</span></label><input type="number" value={modelInputPrice} onChange={(e) => setModelInputPrice(e.target.value)} min={0} step={0.01} className="input input-bordered w-full" /></div>
             <div className="form-control"><label className="label"><span className="label-text">Output ($/1M)</span></label><input type="number" value={modelOutputPrice} onChange={(e) => setModelOutputPrice(e.target.value)} min={0} step={0.01} className="input input-bordered w-full" /></div>
