@@ -246,11 +246,21 @@ export default function AppLayout() {
         <footer className={`fixed bottom-0 z-40 shrink-0 border-t border-base-300/60 bg-base-100/50 h-8 ${collapsed ? 'left-[68px]' : 'left-[232px]'} right-0`}>
           <div className="flex items-center justify-between px-6 py-2 w-full h-full">
             <div className="flex items-center gap-3">
-              <span className="text-[11px] text-base-content/60 font-mono">
-                LLM Gateway{version ? ` v${version}` : ''}
-              </span>
-              <span className="text-[11px] text-base-content/40 font-mono">•</span>
-              <span className="text-[11px] text-base-content/40 font-mono">{import.meta.env.VITE_COMMIT_SHA?.slice(0, 7) || 'dev'}</span>
+              {import.meta.env.VITE_DEV_MODE ? (
+                <>
+                  <span className="text-[11px] text-base-content/60 font-mono">dev</span>
+                  <span className="text-[11px] text-base-content/40 font-mono">•</span>
+                  <span className="text-[11px] text-base-content/40 font-mono">{import.meta.env.VITE_COMMIT_SHA?.slice(0, 7) || 'local'}</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-[11px] text-base-content/60 font-mono">
+                    LLM Gateway{version ? ` v${version}` : ''}
+                  </span>
+                  <span className="text-[11px] text-base-content/40 font-mono">•</span>
+                  <span className="text-[11px] text-base-content/40 font-mono">{import.meta.env.VITE_COMMIT_SHA?.slice(0, 7) || ''}</span>
+                </>
+              )}
             </div>
             <span className="text-[11px] text-base-content/40 font-mono hidden sm:inline">
               {user?.role === 'admin' ? 'admin' : 'user'}
