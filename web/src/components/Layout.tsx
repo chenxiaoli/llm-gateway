@@ -180,8 +180,8 @@ export default function AppLayout() {
       {/* ── Main content ── */}
       <div className={`flex min-h-screen flex-col transition-all duration-300 ${collapsed ? 'ml-[68px]' : 'ml-[232px]'}`}>
         {/* Header */}
-        <header className="sticky top-0 z-50 shrink-0 bg-base-100/80 backdrop-blur-md border-b border-base-300/60 w-full">
-          <div className="flex h-12 items-center justify-between px-6 gap-3 max-w-full">
+        <header className={`fixed top-0 z-40 shrink-0 bg-base-100/80 backdrop-blur-md border-b border-base-300/60 h-12 ${collapsed ? 'left-[68px]' : 'left-[232px]'} right-0`}>
+          <div className="flex h-12 items-center justify-between px-6 gap-3 w-full">
             {/* Left: Breadcrumb */}
             <nav className="flex items-center gap-1.5 text-xs min-w-0">
               <button
@@ -236,15 +236,15 @@ export default function AppLayout() {
         </header>
 
         {/* Content */}
-        <main className="flex-1 p-6 overflow-y-auto">
+        <main className="flex-1 p-6 overflow-y-auto pt-12 pb-8">
           <div className="animate-fade-in-up" key={location.pathname}>
             <Outlet />
           </div>
         </main>
 
         {/* Footer */}
-        <footer className="shrink-0 border-t border-base-300/60 bg-base-100/50 w-full">
-          <div className="flex items-center justify-between px-6 py-2 max-w-full">
+        <footer className={`fixed bottom-0 z-40 shrink-0 border-t border-base-300/60 bg-base-100/50 h-8 ${collapsed ? 'left-[68px]' : 'left-[232px]'} right-0`}>
+          <div className="flex items-center justify-between px-6 py-2 w-full h-full">
             <div className="flex items-center gap-3">
               <span className="text-[11px] text-base-content/60 font-mono">
                 LLM Gateway{version ? ` v${version}` : ''}
