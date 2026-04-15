@@ -256,6 +256,10 @@ pub struct ChannelModel {
     pub priority_override: Option<i32>,
     pub cost_policy_id: Option<String>,   // NEW: for upstream cost
     pub markup_ratio: f64,                  // NEW, default 1.0
+    pub billing_type: Option<String>,       // NEW: billing_type
+    pub input_price: Option<f64>,            // NEW: input_price
+    pub output_price: Option<f64>,          // NEW: output_price
+    pub request_price: Option<f64>,         // NEW: request_price
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -269,6 +273,10 @@ pub struct CreateChannelModel {
     pub priority_override: Option<i32>,
     pub cost_policy_id: Option<String>,   // NEW
     pub markup_ratio: Option<f64>,         // NEW
+    pub billing_type: Option<String>,       // NEW: billing_type
+    pub input_price: Option<f64>,          // NEW: input_price
+    pub output_price: Option<f64>,         // NEW: output_price
+    pub request_price: Option<f64>,        // NEW: request_price
 }
 
 #[derive(Debug, Deserialize)]
@@ -277,6 +285,10 @@ pub struct UpdateChannelModel {
     pub priority_override: Option<Option<i32>>,  // None=keep, Some(None)=clear
     pub cost_policy_id: Option<Option<String>>,  // NEW
     pub markup_ratio: Option<f64>,                // NEW
+    pub billing_type: Option<Option<String>>,     // NEW: None=keep, Some(None)=clear
+    pub input_price: Option<f64>,                // NEW
+    pub output_price: Option<f64>,               // NEW
+    pub request_price: Option<f64>,              // NEW
     pub enabled: Option<bool>,
 }
 
