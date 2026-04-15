@@ -1,4 +1,5 @@
 pub mod types;
+pub mod seed;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
 #[cfg(feature = "postgres")]
