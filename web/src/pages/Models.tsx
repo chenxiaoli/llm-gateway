@@ -1,12 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAllModels, useCreateGlobalModel, useUpdateGlobalModel } from '../hooks/useModels';
 import { useProviders } from '../hooks/useProviders';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
+import { Badge } from '../components/ui/Badge';
 import { Globe, Plus, Cpu, Activity, Pencil, Sparkles } from 'lucide-react';
 import type { CreateGlobalModelRequest, ModelWithProvider } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// Billing types
+const BILLING_TYPES = [
+  { value: 'per_token', label: 'Per Token', desc: 'Per-token pricing for input & output' },
+  { value: 'per_request', label: 'Per Request', desc: 'Flat fee per API call' },
+  { value: 'per_character', label: 'Per Character', desc: 'Pricing per character' },
+  { value: 'tiered_token', label: 'Tiered Token', desc: 'Volume-based token pricing' },
+  { value: 'hybrid', label: 'Hybrid', desc: 'Combined token + request' },
+] as const;
+
+export type BillingType = typeof BILLING_TYPES[number]['value'];
 
 // ── Model Card ───────────────────────────────────────────────────────────────
 interface ModelCardProps {
@@ -60,7 +72,7 @@ function ModelCard({ model, providerName, index, onEdit }: ModelCardProps) {
           <div className="grid grid-cols-3 gap-2 mb-4">
             <div className="rounded-lg bg-base-200/40 px-3 py-2">
               <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Billing</div>
-              <div className="text-[12px] font-semibold text-base-content/80 capitalize">{model.billing_type}</div>
+              <Badge variant="blue">{model.billing_type}</Badge>
             </div>
             <div className="rounded-lg bg-base-200/40 px-3 py-2">
               <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Input</div>
@@ -77,7 +89,7 @@ function ModelCard({ model, providerName, index, onEdit }: ModelCardProps) {
           </div>
 
           {/* Request price (if applicable) */}
-          {model.billing_type === 'request' && model.request_price != null && (
+          {(model.billing_type === 'per_request' || model.billing_type === 'hybrid') && model.request_price != null && (
             <div className="rounded-lg bg-base-200/40 px-3 py-2 mb-4">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold">Per Request</span>
@@ -161,10 +173,6 @@ function EmptyState({ hasProviders, onAddClick }: { hasProviders: boolean; onAdd
 }
 
 // ── Add Model Modal ──────────────────────────────────────────────────────────
-const BILLING_OPTIONS = [
-  { value: 'token', label: 'Token-based', desc: 'Per-token pricing for input & output' },
-  { value: 'request', label: 'Per-request', desc: 'Flat fee per API call' },
-] as const;
 
 function AddModelModal({
   open,
@@ -181,13 +189,13 @@ function AddModelModal({
 }) {
   const [providerId, setProviderId] = useState('');
   const [name, setName] = useState('');
-  const [billingType, setBillingType] = useState<'token' | 'request'>('token');
+  const [billingType, setBillingType] = useState<string>('per_token');
   const [inputPrice, setInputPrice] = useState('');
   const [outputPrice, setOutputPrice] = useState('');
   const [requestPrice, setRequestPrice] = useState('');
 
   const reset = () => {
-    setProviderId(''); setName(''); setBillingType('token');
+    setProviderId(''); setName(''); setBillingType('per_token');
     setInputPrice(''); setOutputPrice(''); setRequestPrice('');
   };
 
@@ -243,35 +251,25 @@ function AddModelModal({
 
         {/* Billing type */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Billing Model</label>
-          <div className="grid grid-cols-2 gap-2">
-            {BILLING_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setBillingType(opt.value)}
-                className={`relative rounded-lg border px-3 py-2.5 text-left transition-all duration-150 ${
-                  billingType === opt.value
-                    ? 'border-accent/50 bg-accent/5 text-accent'
-                    : 'border-base-300 bg-base-200/30 text-base-content/60 hover:border-base-300/80'
-                }`}
-              >
-                <div className="text-[12px] font-semibold">{opt.label}</div>
-                <div className="text-[10px] mt-0.5 opacity-60">{opt.desc}</div>
-                {billingType === opt.value && (
-                  <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-accent" />
-                )}
-              </button>
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Billing Type</label>
+          <select
+            value={billingType}
+            onChange={(e) => setBillingType(e.target.value)}
+            required
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+          >
+            {BILLING_TYPES.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label} - {opt.desc}</option>
             ))}
-          </div>
+          </select>
         </div>
 
         {/* Pricing */}
         <div className="space-y-1.5">
           <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">
-            {billingType === 'token' ? 'Token Pricing (per 1M tokens)' : 'Request Pricing'}
+            {billingType === 'per_request' || billingType === 'hybrid' ? 'Request Pricing' : 'Token Pricing (per 1M tokens)'}
           </label>
-          {billingType === 'token' ? (
+          {(billingType === 'per_token' || billingType === 'tiered_token') && (
             <div className="grid grid-cols-2 gap-2">
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
@@ -298,7 +296,8 @@ function AddModelModal({
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">Out</span>
               </div>
             </div>
-          ) : (
+          )}
+          {(billingType === 'per_request' || billingType === 'hybrid') && (
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
               <input
@@ -310,6 +309,19 @@ function AddModelModal({
                 className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
               />
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">/req</span>
+            </div>
+          )}
+          {billingType === 'per_character' && (
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
+              <input
+                type="number"
+                step="0.0001"
+                value={inputPrice}
+                onChange={(e) => setInputPrice(e.target.value)}
+                placeholder="Price per character"
+                className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+              />
             </div>
           )}
           <p className="text-[10px] text-base-content/25">
@@ -332,10 +344,6 @@ function AddModelModal({
 }
 
 // ── Edit Model Modal ─────────────────────────────────────────────────────────
-const BILLING_OPTIONS_EDIT = [
-  { value: 'token', label: 'Token-based', desc: 'Per-token pricing for input & output' },
-  { value: 'request', label: 'Per-request', desc: 'Flat fee per API call' },
-] as const;
 
 function EditModelModal({
   model,
@@ -347,25 +355,25 @@ function EditModelModal({
   model: ModelWithProvider | null;
   open: boolean;
   onClose: () => void;
-  onSave: (data: { billing_type: 'token' | 'request'; input_price?: number; output_price?: number; request_price?: number; enabled: boolean }) => Promise<void>;
+  onSave: (data: { billing_type: string; input_price?: number; output_price?: number; request_price?: number; enabled: boolean }) => Promise<void>;
   isPending: boolean;
 }) {
-  const [billingType, setBillingType] = useState<'token' | 'request'>('token');
+  const [billingType, setBillingType] = useState<string>('per_token');
   const [inputPrice, setInputPrice] = useState('');
   const [outputPrice, setOutputPrice] = useState('');
   const [requestPrice, setRequestPrice] = useState('');
   const [enabled, setEnabled] = useState(false);
 
   // Sync state when model changes
-  useState(() => {
+  useEffect(() => {
     if (model) {
-      setBillingType(model.billing_type);
+      setBillingType(model.billing_type || 'per_token');
       setInputPrice(model.input_price != null ? String(model.input_price) : '');
       setOutputPrice(model.output_price != null ? String(model.output_price) : '');
       setRequestPrice(model.request_price != null ? String(model.request_price) : '');
       setEnabled(model.enabled);
     }
-  });
+  }, [model]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -399,35 +407,25 @@ function EditModelModal({
 
         {/* Billing type */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Billing Model</label>
-          <div className="grid grid-cols-2 gap-2">
-            {BILLING_OPTIONS_EDIT.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setBillingType(opt.value)}
-                className={`relative rounded-lg border px-3 py-2.5 text-left transition-all duration-150 cursor-pointer ${
-                  billingType === opt.value
-                    ? 'border-accent/50 bg-accent/5 text-accent'
-                    : 'border-base-300 bg-base-200/30 text-base-content/60 hover:border-base-300/80'
-                }`}
-              >
-                <div className="text-[12px] font-semibold">{opt.label}</div>
-                <div className="text-[10px] mt-0.5 opacity-60">{opt.desc}</div>
-                {billingType === opt.value && (
-                  <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-accent" />
-                )}
-              </button>
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Billing Type</label>
+          <select
+            value={billingType}
+            onChange={(e) => setBillingType(e.target.value)}
+            required
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+          >
+            {BILLING_TYPES.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label} - {opt.desc}</option>
             ))}
-          </div>
+          </select>
         </div>
 
         {/* Pricing */}
         <div className="space-y-1.5">
           <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">
-            {billingType === 'token' ? 'Token Pricing (per 1M tokens)' : 'Request Pricing'}
+            {billingType === 'per_request' || billingType === 'hybrid' ? 'Request Pricing' : 'Token Pricing (per 1M tokens)'}
           </label>
-          {billingType === 'token' ? (
+          {(billingType === 'per_token' || billingType === 'tiered_token') && (
             <div className="grid grid-cols-2 gap-2">
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
@@ -454,7 +452,8 @@ function EditModelModal({
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">Out</span>
               </div>
             </div>
-          ) : (
+          )}
+          {(billingType === 'per_request' || billingType === 'hybrid') && (
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
               <input

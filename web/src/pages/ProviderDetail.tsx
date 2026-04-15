@@ -37,7 +37,7 @@ export default function ProviderDetail() {
   const [modelModalOpen, setModelModalOpen] = useState(false);
   const [editingModel, setEditingModel] = useState<Model | null>(null);
   const [modelName, setModelName] = useState('');
-  const [modelBillingType, setModelBillingType] = useState<'token' | 'request'>('token');
+  const [modelBillingType, setModelBillingType] = useState<string>('per_token');
   const [modelInputPrice, setModelInputPrice] = useState('');
   const [modelOutputPrice, setModelOutputPrice] = useState('');
   const [modelRequestPrice, setModelRequestPrice] = useState('');
@@ -90,7 +90,7 @@ export default function ProviderDetail() {
     navigate('/console/providers');
   };
 
-  const resetModelForm = () => { setModelName(''); setModelBillingType('token'); setModelInputPrice(''); setModelOutputPrice(''); setModelRequestPrice(''); setModelEnabled(false); };
+  const resetModelForm = () => { setModelName(''); setModelBillingType('per_token'); setModelInputPrice(''); setModelOutputPrice(''); setModelRequestPrice(''); setModelEnabled(false); };
   const openAddModel = () => { setEditingModel(null); resetModelForm(); setModelModalOpen(true); };
   const openEditModel = (model: Model) => { setEditingModel(model); setModelName(model.name); setModelBillingType(model.billing_type); setModelInputPrice(String(model.input_price)); setModelOutputPrice(String(model.output_price)); setModelRequestPrice(String(model.request_price)); setModelEnabled(model.enabled); setModelModalOpen(true); };
 
@@ -235,7 +235,7 @@ export default function ProviderDetail() {
       <Modal open={modelModalOpen} onClose={() => setModelModalOpen(false)} title={editingModel ? `Edit Model: ${editingModel.name}` : 'Add Model'}>
         <form onSubmit={handleSaveModel} className="space-y-4">
           {!editingModel && (<div className="form-control"><label className="label"><span className="label-text">Model Name</span></label><input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="e.g., gpt-4o" required className="input input-bordered w-full" /></div>)}
-          <div className="form-control"><label className="label"><span className="label-text">Billing Type</span></label><Select value={modelBillingType} onChange={(v) => setModelBillingType(v as 'token' | 'request')} options={[{ value: 'token', label: 'Token-based' }, { value: 'request', label: 'Request-based' }]} /></div>
+          <div className="form-control"><label className="label"><span className="label-text">Billing Type</span></label><Select value={modelBillingType} onChange={(v) => setModelBillingType(v as string)} options={[{ value: 'per_token', label: 'Per Token' }, { value: 'per_request', label: 'Per Request' }, { value: 'per_character', label: 'Per Character' }, { value: 'tiered_token', label: 'Tiered Token' }, { value: 'hybrid', label: 'Hybrid' }]} /></div>
           <div className="grid grid-cols-3 gap-4">
             <div className="form-control"><label className="label"><span className="label-text">Input ($/1M)</span></label><input type="number" value={modelInputPrice} onChange={(e) => setModelInputPrice(e.target.value)} min={0} step={0.01} className="input input-bordered w-full" /></div>
             <div className="form-control"><label className="label"><span className="label-text">Output ($/1M)</span></label><input type="number" value={modelOutputPrice} onChange={(e) => setModelOutputPrice(e.target.value)} min={0} step={0.01} className="input input-bordered w-full" /></div>

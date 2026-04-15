@@ -59,7 +59,7 @@ export interface Model {
   id: string;
   name: string;
   provider_id: string;
-  billing_type: 'token' | 'request';
+  billing_type: string;
   pricing_policy_id?: string | null;
   input_price: number;
   output_price: number;
@@ -74,7 +74,7 @@ export interface ModelWithProvider extends Model {
 
 export interface CreateModelRequest {
   name: string;
-  billing_type: 'token' | 'request';
+  billing_type: string;
   input_price?: number;
   output_price?: number;
   request_price?: number;
@@ -83,7 +83,7 @@ export interface CreateModelRequest {
 export interface CreateGlobalModelRequest {
   provider_id: string;
   name: string;
-  billing_type: 'token' | 'request';
+  billing_type: string;
   input_price?: number;
   output_price?: number;
   request_price?: number;
@@ -91,7 +91,7 @@ export interface CreateGlobalModelRequest {
 }
 
 export interface UpdateModelRequest {
-  billing_type?: 'token' | 'request';
+  billing_type?: string;
   input_price?: number;
   output_price?: number;
   request_price?: number;
