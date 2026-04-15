@@ -179,6 +179,13 @@ pub struct CreatePricingPolicy {
     pub config: serde_json::Value,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdatePricingPolicy {
+    pub name: Option<String>,
+    pub billing_type: Option<String>,
+    pub config: Option<serde_json::Value>,
+}
+
 // --- Usage for pricing calculation ---
 
 #[derive(Debug, Clone, Copy)]
