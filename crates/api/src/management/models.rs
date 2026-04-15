@@ -67,6 +67,7 @@ pub struct CreateModelRequest {
     pub provider_id: String,
     pub name: String,
     pub pricing_policy_id: Option<String>,
+    pub billing_type: Option<String>,
     pub input_price: Option<f64>,
     pub output_price: Option<f64>,
     pub request_price: Option<f64>,
@@ -88,12 +89,15 @@ pub async fn create_model_global(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Provider '{}' not found", input.provider_id)))?;
 
+    let billing_type = input.billing_type.clone().unwrap_or_else(|| "per_token".to_string());
+
     let model = Model {
         id: input.name.clone(),
         name: input.name,
         provider_id: input.provider_id,
         model_type: None,
         pricing_policy_id: input.pricing_policy_id,
+        billing_type,
         input_price: input.input_price.unwrap_or(0.0),
         output_price: input.output_price.unwrap_or(0.0),
         request_price: input.request_price.unwrap_or(0.0),
@@ -126,12 +130,15 @@ pub async fn create_model(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
 
+    let billing_type = input.billing_type.clone().unwrap_or_else(|| "per_token".to_string());
+
     let model = Model {
         id: input.name.clone(),
         name: input.name,
         provider_id,
         model_type: None,
         pricing_policy_id: input.pricing_policy_id,
+        billing_type,
         input_price: input.input_price.unwrap_or(0.0),
         output_price: input.output_price.unwrap_or(0.0),
         request_price: input.request_price.unwrap_or(0.0),
@@ -174,6 +181,9 @@ pub async fn update_model(
     // Apply partial updates
     if let Some(pricing_policy_id) = input.pricing_policy_id {
         model.pricing_policy_id = pricing_policy_id;
+    }
+    if let Some(billing_type) = input.billing_type {
+        model.billing_type = billing_type.unwrap_or_else(|| "per_token".to_string());
     }
     if let Some(input_price) = input.input_price {
         model.input_price = input_price;
@@ -309,6 +319,7 @@ pub async fn sync_models(
                                     provider_id: provider_id.clone(),
                                     model_type: model_type.clone(),
                                     pricing_policy_id: None,
+                                    billing_type: "per_token".to_string(),
                                     input_price: 0.0,
                                     output_price: 0.0,
                                     request_price: 0.0,
@@ -388,6 +399,7 @@ pub async fn sync_models(
                                     provider_id: provider_id.clone(),
                                     model_type: model_type.clone(),
                                     pricing_policy_id: None,
+                                    billing_type: "per_token".to_string(),
                                     input_price: 0.0,
                                     output_price: 0.0,
                                     request_price: 0.0,
