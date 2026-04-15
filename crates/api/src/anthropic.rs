@@ -417,7 +417,7 @@ pub async fn messages(
                                         storage.clone(), audit_logger.clone(),
                                         key_id.clone(), body.clone(), model_name.clone(),
                                         provider_id.clone(), channel_id.clone(),
-                                        Protocol::Anthropic, "[stream incomplete]", 0,
+                                        Protocol::Anthropic, "[stream incomplete]", 200,
                                         start.elapsed().as_millis() as i64,
                                         pricing_policy_id.clone(),
                                         model_input_price, model_output_price, model_request_price,
