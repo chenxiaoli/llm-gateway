@@ -103,6 +103,8 @@ pub struct Channel {
     pub api_key: String,
     pub base_url: Option<String>,
     pub priority: i32,
+    pub pricing_policy_id: Option<String>,  // NEW
+    pub markup_ratio: f64,                  // NEW, default 1.0
     pub rpm_limit: Option<i64>,     // NEW: requests per minute
     pub tpm_limit: Option<i64>,     // NEW: tokens per minute
     pub balance: Option<f64>,       // NEW: remaining quota in USD
@@ -118,6 +120,8 @@ pub struct CreateChannel {
     pub api_key: String,
     pub base_url: Option<String>,
     pub priority: Option<i32>,
+    pub pricing_policy_id: Option<String>,  // NEW
+    pub markup_ratio: Option<f64>,          // NEW
     pub rpm_limit: Option<i64>,    // NEW
     pub tpm_limit: Option<i64>,    // NEW
     pub balance: Option<f64>,      // NEW
@@ -130,6 +134,8 @@ pub struct UpdateChannel {
     pub api_key: Option<String>,
     pub base_url: Option<Option<String>>,
     pub priority: Option<i32>,
+    pub pricing_policy_id: Option<Option<String>>,  // NEW
+    pub markup_ratio: Option<f64>,                  // NEW
     pub enabled: Option<bool>,
     pub rpm_limit: Option<Option<i64>>,  // NEW: None=keep, Some(None)=clear
     pub tpm_limit: Option<Option<i64>>,  // NEW
