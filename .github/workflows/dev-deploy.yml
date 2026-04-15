@@ -71,8 +71,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: VITE_COMMIT_SHA=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,key=build-${{ github.sha }}
+          cache-to: type=gha,key=build-${{ github.sha }},mode=max
 
   deploy:
     needs: build-image
