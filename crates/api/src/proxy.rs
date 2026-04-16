@@ -207,21 +207,22 @@ pub async fn proxy(
             let body_clone = body.clone();
 
             // Spawn async task to log audit for streaming request (response logged as "[streaming]")
-            tokio::spawn(async move {
-                let _ = audit_logger.log_request(
-                    &key_id,
-                    &model_name,
-                    &provider_id,
-                    proto,
-                    true,  // is_stream = true
-                    &body_clone,
-                    "[streaming]",
-                    200,
-                    latency_ms,
-                    None,
-                    None,
-                ).await;
-            });
+            let audit_result = audit_logger.log_request(
+                &key_id,
+                &model_name,
+                &provider_id,
+                proto,
+                true,  // is_stream = true
+                &body_clone,
+                "[streaming]",
+                200,
+                latency_ms,
+                None,
+                None,
+            ).await;
+            if let Err(e) = audit_result {
+                tracing::warn!("Failed to log audit for streaming request: {}", e);
+            }
 
             // Simply forward the stream without processing
             let stream = byte_stream.map_ok(|bytes| bytes);
