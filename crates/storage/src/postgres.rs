@@ -1331,6 +1331,39 @@ impl crate::Storage for PostgresStorage {
         Ok(())
     }
 
+    // ---- Seed Data ----
+
+    async fn seed_data(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        use crate::seed;
+
+        // Check if providers already exist (idempotent)
+        let existing = self.list_providers().await?;
+        if existing.is_empty() {
+            // Get seed providers and insert them
+            let seed_providers = seed::get_seed_providers();
+            let mut inserted_providers = Vec::new();
+            for provider in seed_providers {
+                let inserted = self.create_provider(&provider).await?;
+                inserted_providers.push(inserted);
+            }
+
+            // Build provider ID map and get seed models
+            let provider_ids = seed::build_provider_id_map(&inserted_providers);
+            let seed_models = seed::get_seed_models(&provider_ids);
+
+            // Insert seed models
+            for model in seed_models {
+                self.create_model(&model).await?;
+            }
+        }
+
+        // Seed default settings for audit logs (idempotent - uses ON CONFLICT)
+        self.set_setting("audit_log_request", "true").await?;
+        self.set_setting("audit_log_response", "true").await?;
+
+        Ok(())
+    }
+
     // ---- Pricing Policies ----
 
     async fn create_pricing_policy(&self, policy: &PricingPolicy) -> Result<PricingPolicy, DbErr> {

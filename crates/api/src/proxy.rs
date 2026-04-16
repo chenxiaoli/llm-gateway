@@ -1,8 +1,11 @@
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
+use axum::response::sse::{Event, KeepAlive, Sse};
+use futures::stream::StreamExt;
 use std::sync::Arc;
 use std::time::Instant;
+use tracing::debug;
 
 use llm_gateway_auth::hash_api_key;
 use llm_gateway_encryption::decrypt;
@@ -189,6 +192,251 @@ pub async fn proxy(
             return Ok((StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY), error_body).into_response());
         }
 
+        // === Handle streaming vs non-streaming ===
+        let start = Instant::now();
+
+        if is_stream {
+            // === Streaming: forward SSE with token tracking ===
+            let byte_stream = resp.bytes_stream();
+
+            // Clone all needed data for the stream handler
+            let storage = state.storage.clone();
+            let audit_logger = state.audit_logger.clone();
+            let key_id = api_key.id.clone();
+            let provider_id = provider.id.clone();
+            let model_name = model_name.clone();
+            let channel_id = channel.id.clone();
+            let pricing_policy_id = model_entry.model.pricing_policy_id.clone();
+            let model_input_price = model_entry.model.input_price;
+            let model_output_price = model_entry.model.output_price;
+            let model_request_price = model_entry.model.request_price;
+            let proto = match protocol {
+                ProxyProtocol::OpenAI => Protocol::Openai,
+                ProxyProtocol::Anthropic => Protocol::Anthropic,
+            };
+            let body = body.clone();
+
+            let event_stream = futures::stream::unfold(
+                (byte_stream, String::new(), None as Option<i64>, None as Option<i64>),
+                move |(mut byte_stream, mut buffer, mut input_tokens, mut output_tokens)| {
+                    let storage = storage.clone();
+                    let audit_logger = audit_logger.clone();
+                    let key_id = key_id.clone();
+                    let provider_id = provider_id.clone();
+                    let model_name = model_name.clone();
+                    let channel_id = channel_id.clone();
+                    let pricing_policy_id = pricing_policy_id.clone();
+                    let model_input_price = model_input_price;
+                    let model_output_price = model_output_price;
+                    let model_request_price = model_request_price;
+                    let proto = proto.clone();
+                    let body = body.clone();
+
+                    async move {
+                        loop {
+                            // Try to extract a complete SSE event from buffer
+                            while let Some(pos) = buffer.find("\n\n") {
+                                let event_text = buffer[..pos].to_string();
+                                buffer = buffer[pos + 2..].to_string();
+
+                                // Parse "data: ..." lines
+                                let mut event_data = String::new();
+                                for line in event_text.lines() {
+                                    if let Some(data) = line.strip_prefix("data: ") {
+                                        if data.trim() == "[DONE]" {
+                                            // Stream finished — spawn audit + billing
+                                            let latency_ms = start.elapsed().as_millis() as i64;
+                                            debug!("Stream [DONE] detected for model {}", model_name);
+
+                                            tokio::spawn(async move {
+                                                use llm_gateway_billing::{PricingCalculator, Usage};
+
+                                                let usage = Usage::from_tokens(
+                                                    Some(input_tokens.unwrap_or(0)),
+                                                    Some(output_tokens.unwrap_or(0)),
+                                                    1,
+                                                );
+                                                let calculator = PricingCalculator;
+
+                                                let cost = if let Some(pid) = &pricing_policy_id {
+                                                    match storage.get_pricing_policy(pid).await {
+                                                        Ok(Some(policy)) => calculator.calculate_cost(&policy, &usage),
+                                                        _ => 0.0,
+                                                    }
+                                                } else {
+                                                    llm_gateway_billing::calculate_cost(
+                                                        &llm_gateway_storage::BillingType::Token,
+                                                        input_tokens,
+                                                        output_tokens,
+                                                        model_input_price,
+                                                        model_output_price,
+                                                        model_request_price,
+                                                    ).cost
+                                                };
+
+                                                let record = llm_gateway_storage::UsageRecord {
+                                                    id: uuid::Uuid::new_v4().to_string(),
+                                                    key_id: key_id.clone(),
+                                                    model_name: model_name.clone(),
+                                                    provider_id: provider_id.clone(),
+                                                    channel_id: Some(channel_id.clone()),
+                                                    protocol: proto.clone(),
+                                                    input_tokens,
+                                                    output_tokens,
+                                                    cost,
+                                                    created_at: chrono::Utc::now(),
+                                                };
+                                                let _ = storage.record_usage(&record).await;
+                                                let _ = audit_logger.log_request(
+                                                    &key_id,
+                                                    &model_name,
+                                                    &provider_id,
+                                                    proto,
+                                                    true,
+                                                    &body,
+                                                    &buffer,
+                                                    200,
+                                                    latency_ms,
+                                                    input_tokens,
+                                                    output_tokens,
+                                                ).await;
+                                            });
+                                            return None;
+                                        }
+
+                                        // Try to extract usage from this event
+                                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) {
+                                            if let Some(usage) = v.get("usage") {
+                                                // Try Anthropic style first (input_tokens/output_tokens)
+                                                if let Some(in_tok) = usage.get("input_tokens").and_then(|t| t.as_i64()) {
+                                                    input_tokens = Some(in_tok);
+                                                }
+                                                if let Some(out_tok) = usage.get("output_tokens").and_then(|t| t.as_i64()) {
+                                                    output_tokens = Some(out_tok);
+                                                }
+                                                // Also check if we need to update (they might be None)
+                                                if input_tokens.is_none() {
+                                                    if let Some(in_tok) = usage.get("prompt_tokens").and_then(|t| t.as_i64()) {
+                                                        input_tokens = Some(in_tok);
+                                                    }
+                                                }
+                                                if output_tokens.is_none() {
+                                                    if let Some(out_tok) = usage.get("completion_tokens").and_then(|t| t.as_i64()) {
+                                                        output_tokens = Some(out_tok);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        event_data = data.to_string();
+                                    }
+                                }
+
+                                if !event_data.is_empty() {
+                                    let event = Event::default().data(event_data);
+                                    return Some((Ok::<_, std::convert::Infallible>(event), (byte_stream, buffer, input_tokens, output_tokens)));
+                                }
+                            }
+
+                            // Read more bytes from upstream
+                            match byte_stream.next().await {
+                                Some(Ok(bytes)) => {
+                                    buffer.push_str(&String::from_utf8_lossy(&bytes));
+                                }
+                                Some(Err(_)) => {
+                                    // Stream error, record what we have
+                                    let latency_ms = start.elapsed().as_millis() as i64;
+                                    tokio::spawn(async move {
+                                        use llm_gateway_billing::{PricingCalculator, Usage};
+                                        let usage = Usage::from_tokens(Some(input_tokens.unwrap_or(0)), Some(output_tokens.unwrap_or(0)), 1);
+                                        let calculator = PricingCalculator;
+                                        let cost = if let Some(pid) = &pricing_policy_id {
+                                            match storage.get_pricing_policy(pid).await {
+                                                Ok(Some(policy)) => calculator.calculate_cost(&policy, &usage),
+                                                _ => 0.0,
+                                            }
+                                        } else {
+                                            llm_gateway_billing::calculate_cost(
+                                                &llm_gateway_storage::BillingType::Token,
+                                                input_tokens,
+                                                output_tokens,
+                                                model_input_price,
+                                                model_output_price,
+                                                model_request_price,
+                                            ).cost
+                                        };
+                                        let record = llm_gateway_storage::UsageRecord {
+                                            id: uuid::Uuid::new_v4().to_string(),
+                                            key_id: key_id.clone(),
+                                            model_name: model_name.clone(),
+                                            provider_id: provider_id.clone(),
+                                            channel_id: Some(channel_id.clone()),
+                                            protocol: proto.clone(),
+                                            input_tokens,
+                                            output_tokens,
+                                            cost,
+                                            created_at: chrono::Utc::now(),
+                                        };
+                                        let _ = storage.record_usage(&record).await;
+                                        let _ = audit_logger.log_request(
+                                            &key_id, &model_name, &provider_id, proto, true,
+                                            &body, "[stream error]", 500, latency_ms, input_tokens, output_tokens,
+                                        ).await;
+                                    });
+                                    return None;
+                                }
+                                None => {
+                                    // Stream ended normally
+                                    let latency_ms = start.elapsed().as_millis() as i64;
+                                    tokio::spawn(async move {
+                                        use llm_gateway_billing::{PricingCalculator, Usage};
+                                        let usage = Usage::from_tokens(Some(input_tokens.unwrap_or(0)), Some(output_tokens.unwrap_or(0)), 1);
+                                        let calculator = PricingCalculator;
+                                        let cost = if let Some(pid) = &pricing_policy_id {
+                                            match storage.get_pricing_policy(pid).await {
+                                                Ok(Some(policy)) => calculator.calculate_cost(&policy, &usage),
+                                                _ => 0.0,
+                                            }
+                                        } else {
+                                            llm_gateway_billing::calculate_cost(
+                                                &llm_gateway_storage::BillingType::Token,
+                                                input_tokens,
+                                                output_tokens,
+                                                model_input_price,
+                                                model_output_price,
+                                                model_request_price,
+                                            ).cost
+                                        };
+                                        let record = llm_gateway_storage::UsageRecord {
+                                            id: uuid::Uuid::new_v4().to_string(),
+                                            key_id: key_id.clone(),
+                                            model_name: model_name.clone(),
+                                            provider_id: provider_id.clone(),
+                                            channel_id: Some(channel_id.clone()),
+                                            protocol: proto.clone(),
+                                            input_tokens,
+                                            output_tokens,
+                                            cost,
+                                            created_at: chrono::Utc::now(),
+                                        };
+                                        let _ = storage.record_usage(&record).await;
+                                        let _ = audit_logger.log_request(
+                                            &key_id, &model_name, &provider_id, proto, true,
+                                            &body, &buffer, 200, latency_ms, input_tokens, output_tokens,
+                                        ).await;
+                                    });
+                                    return None;
+                                }
+                            }
+                        }
+                    }
+                },
+            );
+
+            let sse = Sse::new(event_stream).keep_alive(KeepAlive::default());
+            return Ok(sse.into_response());
+        }
+
+        // Non-streaming: original behavior
         let response_body = resp.text().await.unwrap_or_default();
 
         // === Spawn async workers ===
@@ -215,21 +463,9 @@ pub async fn proxy(
         tokio::spawn(async move {
             use llm_gateway_billing::{PricingCalculator, Usage};
 
-            // === Read audit settings ===
-            let audit_log_request = storage.get_setting("audit_log_request").await
-                .ok()
-                .flatten()
-                .map(|v| v == "true")
-                .unwrap_or(true);
-            let audit_log_response = storage.get_setting("audit_log_response").await
-                .ok()
-                .flatten()
-                .map(|v| v == "true")
-                .unwrap_or(true);
-
-            // Use empty string if not logging
-            let request_body = if audit_log_request { body_for_worker } else { String::new() };
-            let response_body = if audit_log_response { response_for_worker } else { String::new() };
+            // Note: audit_logger.log_request already checks settings internally
+            let request_body = body_for_worker;
+            let response_body = response_for_worker;
 
             let usage = Usage::from_tokens(input_tokens, output_tokens, 1);
             let calculator = PricingCalculator;
