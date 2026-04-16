@@ -144,11 +144,17 @@ pub async fn proxy(
         };
 
         let path = match protocol {
-            ProxyProtocol::OpenAI => "/v1/chat/completions",
-            ProxyProtocol::Anthropic => "/v1/messages",
+            ProxyProtocol::OpenAI => "chat/completions",
+            ProxyProtocol::Anthropic => "messages",
         };
 
-        let url = format!("{}{}", base_url, path);
+        // If base_url already has full path (from endpoints), use as-is
+        // Otherwise append the path (from channel.base_url or provider.base_url)
+        let url = if base_url.contains(&path) {
+            base_url.clone()
+        } else {
+            format!("{}/{}", base_url.trim_end_matches('/'), path)
+        };
         let mut req = client.post(&url);
 
         match protocol {
