@@ -156,7 +156,8 @@
       "Bash(~/.cargo/bin/cargo tree:*)",
       "Bash(where cargo:*)",
       "Bash(export PATH=\"/home/node/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH\")",
-      "Bash(export RUSTUP_TOOLCHAIN=stable-x86_64-unknown-linux-gnu)"
+      "Bash(export RUSTUP_TOOLCHAIN=stable-x86_64-unknown-linux-gnu)",
+      "Bash(export PATH=\"/home/node/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH\" cargo check --package llm-gateway-api 2)"
     ]
   }
 }
