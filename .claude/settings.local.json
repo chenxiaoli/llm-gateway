@@ -154,7 +154,9 @@
       "Bash(~/.cargo/bin/cargo search:*)",
       "Bash(~/.cargo/bin/cargo sqlx:*)",
       "Bash(~/.cargo/bin/cargo tree:*)",
-      "Bash(where cargo:*)"
+      "Bash(where cargo:*)",
+      "Bash(export PATH=\"/home/node/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH\")",
+      "Bash(export RUSTUP_TOOLCHAIN=stable-x86_64-unknown-linux-gnu)"
     ]
   }
 }

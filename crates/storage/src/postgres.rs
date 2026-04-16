@@ -554,7 +554,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_provider(&self, id: &str) -> Result<Option<Provider>, DbErr> {
         let row: Option<PgProviderRow> = sqlx::query_as(
-            "SELECT id, name, base_url, endpoints, enabled, created_at, updated_at
+            "SELECT id, name, slug, base_url, endpoints, enabled, created_at, updated_at
              FROM providers WHERE id = $1",
         )
         .bind(id)
