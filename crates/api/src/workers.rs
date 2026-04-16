@@ -10,8 +10,10 @@ use crate::AuditTask;
 /// Background worker: listens to audit channel and logs to database
 /// Does NOT block proxy response - fire-and-forget via MPSC channel
 pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, mut rx: mpsc::Receiver<AuditTask>) {
+    tracing::info!("[AUDIT-WORKER] Starting audit worker");
     let audit_logger = Arc::new(AuditLogger::new(storage));
     while let Some(task) = rx.recv().await {
+        tracing::debug!("[AUDIT-WORKER] Received task: key_id={}, model={}, stream={}", task.key_id, task.model_name, task.stream);
         let _ = audit_worker(
             audit_logger.clone(),
             task.key_id,
@@ -26,7 +28,9 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
             task.input_tokens,
             task.output_tokens,
         ).await;
+        tracing::debug!("[AUDIT-WORKER] Task completed");
     }
+    tracing::info!("[AUDIT-WORKER] Worker exiting, channel closed");
 }
 
 /// Async worker: calculates usage and writes to usage_records
@@ -98,7 +102,8 @@ pub async fn audit_worker(
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
 ) {
-    let _ = audit_logger.log_request(
+    tracing::debug!("[AUDIT-WORKER] Calling log_request: key_id={}, stream={}", key_id, stream);
+    let result = audit_logger.log_request(
         &key_id,
         &model_name,
         &provider_id,
@@ -111,4 +116,8 @@ pub async fn audit_worker(
         input_tokens,
         output_tokens,
     ).await;
+    match result {
+        Ok(()) => tracing::debug!("[AUDIT-WORKER] log_request success"),
+        Err(e) => tracing::warn!("[AUDIT-WORKER] log_request failed: {}", e),
+    }
 }

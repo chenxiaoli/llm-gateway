@@ -215,7 +215,10 @@ pub async fn proxy(
                 input_tokens: None,
                 output_tokens: None,
             };
-            let _ = state.audit_tx.send(audit_task).await;
+            match state.audit_tx.send(audit_task).await {
+                Ok(()) => tracing::debug!("[PROXY] Sent audit task to channel"),
+                Err(e) => tracing::warn!("[PROXY] Failed to send audit task: channel full or closed"),
+            }
 
             // Simply forward the stream without processing
             let stream = byte_stream.map_ok(|bytes| bytes);
