@@ -9,7 +9,7 @@ import { Drawer } from '../components/ui/Drawer';
 import { EndpointsEditor } from '../components/ui/EndpointsEditor';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Upload } from 'lucide-react';
 import type { Provider } from '../types';
 
 type Tab = 'general' | 'providers' | 'password';
@@ -129,7 +129,38 @@ export default function Settings() {
       )}
 
       {activeTab === 'providers' && (
-        <div className="mb-6 flex justify-end">
+        <div className="mb-6 flex gap-2 justify-end">
+          <Button variant="secondary" icon={<Upload className="h-4 w-4" />} onClick={() => document.getElementById('import-providers')?.click()}>Import</Button>
+          <input
+            id="import-providers"
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+                if (!data.providers || !Array.isArray(data.providers)) {
+                  toast.error('Invalid format: missing providers array');
+                  return;
+                }
+                for (const p of data.providers) {
+                  if (!p.name) continue;
+                  await createProviderMutation.mutateAsync({
+                    name: p.name,
+                    base_url: p.base_url || null,
+                    endpoints: p.endpoints ? JSON.stringify(p.endpoints) : null,
+                  });
+                }
+                toast.success(`Imported ${data.providers.length} providers`);
+              } catch (err) {
+                toast.error(`Failed to import: ${err instanceof Error ? err.message : 'Invalid JSON'}`);
+              }
+              e.target.value = '';
+            }}
+          />
           <Button icon={<Plus className="h-4 w-4" />} onClick={openAddProvider}>Add Provider</Button>
         </div>
       )}

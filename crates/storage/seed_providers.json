@@ -1,0 +1,56 @@
+{
+  "providers": [
+    {
+      "name": "OpenAI",
+      "base_url": "https://api.openai.com/v1",
+      "enabled": true
+    },
+    {
+      "name": "Anthropic",
+      "base_url": "https://api.anthropic.com",
+      "enabled": true
+    },
+    {
+      "name": "MiniMax",
+      "base_url": "https://api.minimaxi.com/v1",
+      "endpoints": {
+        "openai": "https://api.minimaxi.com/v1",
+        "anthropic": "https://api.minimaxi.com/anthropic"
+      },
+      "enabled": true
+    },
+    {
+      "name": "GLM",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "enabled": true
+    },
+    {
+      "name": "Alibaba",
+      "base_url": "https://coding.dashscope.aliyuncs.com/v1",
+      "endpoints": {
+        "openai": "https://coding.dashscope.aliyuncs.com/v1",
+        "anthropic": "https://coding.dashscope.aliyuncs.com/apps/anthropic"
+      },
+      "enabled": true
+    }
+  ],
+  "models": [
+    { "provider": "OpenAI", "name": "gpt-4o", "billing_type": "per_token", "input_price": 2.5, "output_price": 10.0 },
+    { "provider": "OpenAI", "name": "gpt-4o-mini", "billing_type": "per_token", "input_price": 0.075, "output_price": 0.30 },
+    { "provider": "OpenAI", "name": "gpt-4-turbo", "billing_type": "per_token", "input_price": 5.0, "output_price": 15.0 },
+    { "provider": "OpenAI", "name": "gpt-3.5-turbo", "billing_type": "per_token", "input_price": 0.5, "output_price": 1.5 },
+    { "provider": "Anthropic", "name": "claude-4-opus-20250514", "billing_type": "per_token", "input_price": 15.0, "output_price": 75.0 },
+    { "provider": "Anthropic", "name": "claude-sonnet-4-20250514", "billing_type": "per_token", "input_price": 3.0, "output_price": 15.0 },
+    { "provider": "Anthropic", "name": "claude-3-5-sonnet", "billing_type": "per_token", "input_price": 1.5, "output_price": 7.5 },
+    { "provider": "Anthropic", "name": "claude-3-haiku", "billing_type": "per_token", "input_price": 0.2, "output_price": 1.0 },
+    { "provider": "MiniMax", "name": "MiniMax-M2.7", "billing_type": "per_token", "input_price": 2.1, "output_price": 8.4 },
+    { "provider": "MiniMax", "name": "MiniMax-M2.7-highspeed", "billing_type": "per_token", "input_price": 4.2, "output_price": 16.8 },
+    { "provider": "GLM", "name": "glm-4", "billing_type": "per_token", "input_price": 1.0, "output_price": 10.0 },
+    { "provider": "GLM", "name": "glm-4-flash", "billing_type": "per_token", "input_price": 0.1, "output_price": 0.1 },
+    { "provider": "GLM", "name": "glm-4-plus", "billing_type": "per_token", "input_price": 5.0, "output_price": 50.0 },
+    { "provider": "Alibaba", "name": "glm-5.1", "billing_type": "per_token", "input_price": 2.0, "output_price": 12.0 },
+    { "provider": "Alibaba", "name": "qwen3.6-plus", "billing_type": "per_token", "input_price": 2.0, "output_price": 12.0 },
+    { "provider": "Alibaba", "name": "kimi-k2.5", "billing_type": "per_token", "input_price": 2.0, "output_price": 12.0 },
+    { "provider": "Alibaba", "name": "MiniMax-M2.5", "billing_type": "per_token", "input_price": 2.0, "output_price": 12.0 }
+  ]
+}
