@@ -151,7 +151,9 @@
       "Bash(awk NR>=1075 && NR<=1095:*)",
       "Bash(awk NR>=1143 && NR>=1143+80p:*)",
       "Bash(/workspace/.cargo/bin/sqlite3 /workspace/data/gateway.db \".quit\")",
-      "Bash(~/.cargo/bin/cargo search:*)"
+      "Bash(~/.cargo/bin/cargo search:*)",
+      "Bash(~/.cargo/bin/cargo sqlx:*)",
+      "Bash(~/.cargo/bin/cargo tree:*)"
     ]
   }
 }
