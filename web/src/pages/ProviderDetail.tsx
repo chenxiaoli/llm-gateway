@@ -124,7 +124,7 @@ export default function ProviderDetail() {
     if (editingChannel) {
       await updateChannelMutation.mutateAsync({ id: editingChannel.id, input: { name: channelName, api_key: channelApiKey, base_url: channelBaseUrl || null, priority: Number(channelPriority), enabled: channelEnabled } });
     } else {
-      await createChannelMutation.mutateAsync({ name: channelName, api_key: channelApiKey, base_url: channelBaseUrl || null, priority: Number(channelPriority) });
+      await createChannelMutation.mutateAsync({ provider_id: provider.id, name: channelName, api_key: channelApiKey, base_url: channelBaseUrl || null, priority: Number(channelPriority) });
     }
     setChannelModalOpen(false);
   };
@@ -244,7 +244,7 @@ export default function ProviderDetail() {
       <Modal open={modelModalOpen} onClose={() => setModelModalOpen(false)} title={editingModel ? `Edit Model: ${editingModel.name}` : 'Add Model'}>
         <form onSubmit={handleSaveModel} className="space-y-4">
           {!editingModel && (<div className="form-control"><label className="label"><span className="label-text">Model Name</span></label><input type="text" value={modelName} onChange={(e) => setModelName(e.target.value)} placeholder="e.g., gpt-4o" required className="input input-bordered w-full" /></div>)}
-          <div className="form-control"><label className="label"><span className="label-text">Billing Type</span></label><Select value={modelBillingType} onChange={(v) => setModelBillingType(v as string)} options={BILLING_TYPES} /></div>
+          <div className="form-control"><label className="label"><span className="label-text">Billing Type</span></label><Select value={modelBillingType} onChange={(v) => setModelBillingType(v as string)} options={[...BILLING_TYPES]} /></div>
           <div className="grid grid-cols-3 gap-4">
             <div className="form-control"><label className="label"><span className="label-text">Input ($/1M)</span></label><input type="number" value={modelInputPrice} onChange={(e) => setModelInputPrice(e.target.value)} min={0} step={0.01} className="input input-bordered w-full" /></div>
             <div className="form-control"><label className="label"><span className="label-text">Output ($/1M)</span></label><input type="number" value={modelOutputPrice} onChange={(e) => setModelOutputPrice(e.target.value)} min={0} step={0.01} className="input input-bordered w-full" /></div>
