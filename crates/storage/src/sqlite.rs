@@ -575,11 +575,12 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
         sqlx::query(
-            "INSERT INTO providers (id, name, base_url, endpoints, enabled, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO providers (id, name, slug, base_url, endpoints, enabled, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&provider.id)
         .bind(&provider.name)
+        .bind(&provider.slug)
         .bind(&provider.base_url)
         .bind(&provider.endpoints)
         .bind(provider.enabled as i64)
@@ -616,10 +617,11 @@ impl crate::Storage for SqliteStorage {
 
     async fn update_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
         sqlx::query(
-            "UPDATE providers SET name = ?, base_url = ?, endpoints = ?,
+            "UPDATE providers SET name = ?, slug = ?, base_url = ?, endpoints = ?,
              enabled = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&provider.name)
+        .bind(&provider.slug)
         .bind(&provider.base_url)
         .bind(&provider.endpoints)
         .bind(provider.enabled as i64)

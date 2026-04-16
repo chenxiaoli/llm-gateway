@@ -535,11 +535,12 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
         sqlx::query(
-            "INSERT INTO providers (id, name, base_url, endpoints, enabled, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            "INSERT INTO providers (id, name, slug, base_url, endpoints, enabled, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(&provider.id)
         .bind(&provider.name)
+        .bind(&provider.slug)
         .bind(&provider.base_url)
         .bind(&provider.endpoints)
         .bind(provider.enabled)
@@ -576,10 +577,11 @@ impl crate::Storage for PostgresStorage {
 
     async fn update_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
         sqlx::query(
-            "UPDATE providers SET name = $1, base_url = $2, endpoints = $3,
-             enabled = $4, updated_at = $5 WHERE id = $6",
+            "UPDATE providers SET name = $1, slug = $2, base_url = $3, endpoints = $4,
+             enabled = $5, updated_at = $6 WHERE id = $7",
         )
         .bind(&provider.name)
+        .bind(&provider.slug)
         .bind(&provider.base_url)
         .bind(&provider.endpoints)
         .bind(provider.enabled)
