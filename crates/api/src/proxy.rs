@@ -143,18 +143,8 @@ pub async fn proxy(
                 .ok_or_else(|| ApiError::Internal(format!("No base_url for channel {} (check provider endpoints)", channel.name)))?
         };
 
-        let path = match protocol {
-            ProxyProtocol::OpenAI => "chat/completions",
-            ProxyProtocol::Anthropic => "messages",
-        };
-
-        // If base_url already has full path (from endpoints), use as-is
-        // Otherwise append the path (from channel.base_url or provider.base_url)
-        let url = if base_url.contains(&path) {
-            base_url.clone()
-        } else {
-            format!("{}/{}", base_url.trim_end_matches('/'), path)
-        };
+        // base_url from endpoints is already complete
+        let url = base_url.clone();
         let mut req = client.post(&url);
 
         match protocol {
