@@ -13,21 +13,22 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_DEV_MODE': JSON.stringify(mode === 'development'),
     },
     server: {
-    port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
+      port: 5173,
+      proxy: {
+        '/api': {
+          target: 'http://localhost:8080',
+          changeOrigin: true,
+        },
       },
     },
-  },
-  build: {
-    outDir: 'dist',
-  },
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
-  },
+    build: {
+      outDir: 'dist',
+    },
+    test: {
+      globals: true,
+      environment: 'jsdom',
+      setupFiles: ['./src/test/setup.ts'],
+      include: ['src/**/*.test.{ts,tsx}'],
+    },
+  };
 });
