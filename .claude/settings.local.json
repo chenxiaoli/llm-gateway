@@ -153,7 +153,8 @@
       "Bash(/workspace/.cargo/bin/sqlite3 /workspace/data/gateway.db \".quit\")",
       "Bash(~/.cargo/bin/cargo search:*)",
       "Bash(~/.cargo/bin/cargo sqlx:*)",
-      "Bash(~/.cargo/bin/cargo tree:*)"
+      "Bash(~/.cargo/bin/cargo tree:*)",
+      "Bash(where cargo:*)"
     ]
   }
 }

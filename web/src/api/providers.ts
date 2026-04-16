@@ -40,8 +40,8 @@ export async function listChannels(providerId: string): Promise<Channel[]> {
   return data;
 }
 
-export async function createChannel(providerId: string, input: CreateChannelRequest): Promise<Channel> {
-  const { data } = await adminApiClient.post<Channel>(`/providers/${providerId}/channels`, input);
+export async function createChannel(input: CreateChannelRequest): Promise<Channel> {
+  const { data } = await adminApiClient.post<Channel>('/channels', input);
   return data;
 }
 

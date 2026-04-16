@@ -62,9 +62,10 @@ export function useChannels(providerId: string) {
 export function useCreateChannel(providerId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateChannelRequest) => createChannelApi(providerId, input),
+    mutationFn: (input: CreateChannelRequest) => createChannelApi({ ...input, provider_id: providerId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channels'] });
+      queryClient.invalidateQueries({ queryKey: ['channels'] });
       toast.success('Channel created');
     },
     onError: (err) => { toast.error(getErrorMessage(err, 'Failed to create channel')); },

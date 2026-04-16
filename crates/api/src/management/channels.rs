@@ -1,4 +1,4 @@
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::Json;
 use std::sync::Arc;
@@ -13,11 +13,11 @@ use crate::AppState;
 pub async fn create_channel(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path(provider_id): Path<String>,
     Json(input): Json<CreateChannel>,
 ) -> Result<Json<Channel>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
+    let provider_id = input.provider_id.clone();
     let name = input.name.trim().to_string();
     if name.is_empty() {
         return Err(ApiError::BadRequest("Channel name must not be empty".to_string()));

@@ -228,6 +228,7 @@ export interface Channel {
 }
 
 export interface CreateChannelRequest {
+  provider_id: string;
   name: string;
   api_key: string;
   base_url?: string | null;

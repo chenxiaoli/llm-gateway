@@ -45,12 +45,13 @@ function AddChannelDrawer({
     setIsPending(true);
     try {
       const input: CreateChannelRequest = {
+        provider_id: providerId,
         name,
         api_key: apiKey,
         base_url: baseUrl || null,
         priority: priority ? parseInt(priority) : 1,
       };
-      await createChannel(providerId, input);
+      await createChannel(input);
       queryClient.invalidateQueries({ queryKey: ['channels'] });
       toast.success('Channel created');
       handleClose();

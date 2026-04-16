@@ -118,6 +118,7 @@ pub struct Channel {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateChannel {
+    pub provider_id: String,
     pub name: String,
     pub api_key: String,
     pub base_url: Option<String>,
