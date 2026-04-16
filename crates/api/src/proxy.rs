@@ -433,7 +433,14 @@ pub async fn proxy(
             );
 
             let sse = Sse::new(event_stream).keep_alive(KeepAlive::default());
-            return Ok(sse.into_response());
+            let mut response = sse.into_response();
+
+            // Set proper content-type for SSE
+            response.headers_mut().insert(
+                axum::http::header::CONTENT_TYPE,
+                "text/event-stream; charset=utf-8".parse().unwrap(),
+            );
+            return Ok(response);
         }
 
         // Non-streaming: original behavior
