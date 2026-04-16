@@ -194,6 +194,22 @@ pub async fn proxy(
         tokio::spawn(async move {
             use llm_gateway_billing::{PricingCalculator, Usage};
 
+            // === Read audit settings ===
+            let audit_log_request = storage.get_setting("audit_log_request").await
+                .ok()
+                .flatten()
+                .map(|v| v == "true")
+                .unwrap_or(true);
+            let audit_log_response = storage.get_setting("audit_log_response").await
+                .ok()
+                .flatten()
+                .map(|v| v == "true")
+                .unwrap_or(true);
+
+            // Use empty string if not logging
+            let request_body = if audit_log_request { body_for_worker } else { String::new() };
+            let response_body = if audit_log_response { response_for_worker } else { String::new() };
+
             let usage = Usage::from_tokens(input_tokens, output_tokens, 1);
             let calculator = PricingCalculator;
 
@@ -232,10 +248,10 @@ pub async fn proxy(
                 &key_id,
                 &model_name,
                 &provider_id,
-                proto, // moves here
+                proto_for_audit,
                 is_stream,
-                &body_for_worker,
-                &response_for_worker,
+                &request_body,
+                &response_body,
                 200,
                 latency_ms,
                 input_tokens,
