@@ -1,7 +1,33 @@
+use llm_gateway_audit::AuditLogger;
 use llm_gateway_billing::{PricingCalculator, Usage};
 use llm_gateway_storage::{Protocol, UsageRecord};
 use std::sync::Arc;
+use tokio::sync::mpsc;
 use tracing::debug;
+
+use crate::AuditTask;
+
+/// Background worker: listens to audit channel and logs to database
+/// Does NOT block proxy response - fire-and-forget via MPSC channel
+pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, mut rx: mpsc::Receiver<AuditTask>) {
+    let audit_logger = Arc::new(AuditLogger::new(storage));
+    while let Some(task) = rx.recv().await {
+        let _ = audit_worker(
+            audit_logger.clone(),
+            task.key_id,
+            task.model_name,
+            task.provider_id,
+            task.protocol,
+            task.stream,
+            task.request_body,
+            task.response_body,
+            task.status_code,
+            task.latency_ms,
+            task.input_tokens,
+            task.output_tokens,
+        ).await;
+    }
+}
 
 /// Async worker: calculates usage and writes to usage_records
 /// Runs independently - does NOT block proxy response
@@ -59,7 +85,7 @@ pub async fn usage_worker(
 /// Async worker: logs audit record
 /// Runs independently - does NOT block proxy response
 pub async fn audit_worker(
-    audit_logger: Arc<llm_gateway_audit::AuditLogger>,
+    audit_logger: Arc<AuditLogger>,
     key_id: String,
     model_name: String,
     provider_id: String,

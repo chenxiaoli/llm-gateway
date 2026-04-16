@@ -11,6 +11,7 @@ use llm_gateway_storage::Protocol;
 use crate::error::ApiError;
 use crate::extractors::extract_bearer_token;
 use crate::AppState;
+use crate::AuditTask;
 
 /// Protocol for determining which adapter to use
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -195,34 +196,26 @@ pub async fn proxy(
             use futures::TryStreamExt;
             let byte_stream = resp.bytes_stream();
 
-            // Clone data for async audit logging
-            let audit_logger = state.audit_logger.clone();
-            let key_id = api_key.id.clone();
-            let provider_id = provider.id.clone();
-            let model_name = model_name.clone();
             let proto = match protocol {
                 ProxyProtocol::OpenAI => Protocol::Openai,
                 ProxyProtocol::Anthropic => Protocol::Anthropic,
             };
-            let body_clone = body.clone();
 
-            // Spawn async task to log audit for streaming request (response logged as "[streaming]")
-            let audit_result = audit_logger.log_request(
-                &key_id,
-                &model_name,
-                &provider_id,
-                proto,
-                true,  // is_stream = true
-                &body_clone,
-                "[streaming]",
-                200,
+            // Send audit task via MPSC channel (non-blocking)
+            let audit_task = AuditTask {
+                key_id: api_key.id.clone(),
+                model_name: model_name.clone(),
+                provider_id: provider.id.clone(),
+                protocol: proto,
+                stream: true,
+                request_body: body.clone(),
+                response_body: "[streaming]".to_string(),
+                status_code: 200,
                 latency_ms,
-                None,
-                None,
-            ).await;
-            if let Err(e) = audit_result {
-                tracing::warn!("Failed to log audit for streaming request: {}", e);
-            }
+                input_tokens: None,
+                output_tokens: None,
+            };
+            let _ = state.audit_tx.send(audit_task).await;
 
             // Simply forward the stream without processing
             let stream = byte_stream.map_ok(|bytes| bytes);

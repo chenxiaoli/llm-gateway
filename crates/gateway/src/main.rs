@@ -42,6 +42,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Init audit logger
     let audit_logger = Arc::new(AuditLogger::new(storage.clone()));
 
+    // Create MPSC channel for async audit logging
+    let (audit_tx, audit_rx) = tokio::sync::mpsc::channel::<llm_gateway_api::AuditTask>(100);
+    // Spawn background audit worker
+    tokio::spawn(llm_gateway_api::workers::start_audit_worker(storage.clone(), audit_rx));
+
     // App state
     let state = Arc::new(AppState {
         storage,
@@ -59,6 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             bytes.copy_from_slice(&result);
             bytes
         },
+        audit_tx,
     });
 
     // Build router
