@@ -121,8 +121,27 @@ pub async fn proxy(
         let api_key_value = decrypt(&channel.api_key, &state.encryption_key)
             .unwrap_or_else(|_| channel.api_key.clone());
 
-        let base_url = channel.base_url.clone().or_else(|| provider.base_url.clone())
-            .ok_or_else(|| ApiError::Internal(format!("No base_url for channel {}", channel.name)))?;
+        // Get base_url: channel → provider endpoints JSON → provider base_url
+        let base_url = if let Some(url) = channel.base_url.as_deref() {
+            url.to_string()
+        } else {
+            // Try provider endpoints JSON
+            let endpoints: serde_json::Value = provider
+                .endpoints
+                .as_ref()
+                .and_then(|e| serde_json::from_str(e).ok())
+                .unwrap_or(serde_json::Value::Null);
+            let key = match protocol {
+                ProxyProtocol::OpenAI => "openai",
+                ProxyProtocol::Anthropic => "anthropic",
+            };
+            endpoints
+                .get(key)
+                .and_then(|v| v.as_str())
+                .or(provider.base_url.as_deref())
+                .map(|s| s.to_string())
+                .ok_or_else(|| ApiError::Internal(format!("No base_url for channel {} (check provider endpoints)", channel.name)))?
+        };
 
         let path = match protocol {
             ProxyProtocol::OpenAI => "/v1/chat/completions",
