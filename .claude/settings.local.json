@@ -145,7 +145,8 @@
       "Bash(cargo info:*)",
       "Bash(cargo tree:*)",
       "Bash(cargo run:*)",
-      "Bash(awk '{print $NF}')"
+      "Bash(awk '{print $NF}')",
+      "Bash(netstat -tlnp)"
     ]
   }
 }

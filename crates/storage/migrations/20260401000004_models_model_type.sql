@@ -1,1 +1,0 @@
-ALTER TABLE models ADD COLUMN model_type VARCHAR(100);
