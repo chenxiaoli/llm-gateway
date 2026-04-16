@@ -132,14 +132,20 @@ struct PgModelWithProviderRow {
 impl From<PgModelWithProviderRow> for ModelWithProvider {
     fn from(r: PgModelWithProviderRow) -> Self {
         // Parse endpoints JSON to determine compatibility
+        // If provider name is "Anthropic", it's natively compatible with Anthropic API
+        // If provider name is "OpenAI", it's natively compatible with OpenAI API
+        let provider_name_lower = r.provider_name.to_lowercase();
+        let is_native_anthropic = provider_name_lower == "anthropic";
+        let is_native_openai = provider_name_lower == "openai";
+
         let openai_compatible = r.endpoints.as_ref()
             .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
             .map(|v| v.get("openai").is_some())
-            .unwrap_or(r.base_url.is_some());
+            .unwrap_or(r.base_url.is_some() || is_native_openai);
         let anthropic_compatible = r.endpoints.as_ref()
             .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
             .map(|v| v.get("anthropic").is_some())
-            .unwrap_or(false);
+            .unwrap_or(is_native_anthropic);
 
         ModelWithProvider {
             model: Model {

@@ -33,56 +33,6 @@ impl SqliteStorage {
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
     }
-
-    /// Copy entries from old `schema_migrations` table into `_sqlx_migrations`
-    /// so sqlx's migrator knows the old migrations have already been applied.
-    async fn migrate_old_tracking(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let has_old: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_migrations')",
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        if !has_old {
-            return Ok(());
-        }
-
-        let new_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM _sqlx_migrations",
-        )
-        .fetch_one(&self.pool)
-        .await?;
-
-        if new_count > 0 {
-            return Ok(());
-        }
-
-        let old_entries: Vec<(String,)> = sqlx::query_as(
-            "SELECT version FROM schema_migrations ORDER BY version",
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let version_map: &[(&str, i64)] = &[
-            ("001_init", 20260401000000),
-            ("002_users", 20260401000001),
-            ("003_refresh_tokens", 20260401000002),
-            ("004_channels", 20260401000003),
-        ];
-
-        for (old_version,) in &old_entries {
-            if let Some(&(_, ts)) = version_map.iter().find(|(v, _)| *v == old_version.as_str()) {
-                sqlx::query(
-                    "INSERT OR IGNORE INTO _sqlx_migrations (version, description, installed_on, success, checksum, execution_time) VALUES (?, '', datetime('now'), 1, 0, 0)",
-                )
-                .bind(ts)
-                .execute(&self.pool)
-                .await?;
-            }
-        }
-
-        Ok(())
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -199,14 +149,20 @@ struct SqliteModelWithProviderRow {
 impl From<SqliteModelWithProviderRow> for ModelWithProvider {
     fn from(r: SqliteModelWithProviderRow) -> Self {
         // Parse endpoints JSON to determine compatibility
+        // If provider name is "Anthropic", it's natively compatible with Anthropic API
+        // If provider name is "OpenAI", it's natively compatible with OpenAI API
+        let provider_name_lower = r.provider_name.to_lowercase();
+        let is_native_anthropic = provider_name_lower == "anthropic";
+        let is_native_openai = provider_name_lower == "openai";
+
         let openai_compatible = r.endpoints.as_ref()
             .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
             .map(|v| v.get("openai").is_some())
-            .unwrap_or(r.base_url.is_some());
+            .unwrap_or(r.base_url.is_some() || is_native_openai);
         let anthropic_compatible = r.endpoints.as_ref()
             .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
             .map(|v| v.get("anthropic").is_some())
-            .unwrap_or(false);
+            .unwrap_or(is_native_anthropic);
 
         ModelWithProvider {
             model: Model {
@@ -480,9 +436,6 @@ impl crate::Storage for SqliteStorage {
     // ---- Migrations ----
 
     async fn run_migrations(&self) -> Result<(), DbErr> {
-        // Migrate tracking data from old hand-rolled system to sqlx format
-        self.migrate_old_tracking().await?;
-
         // sqlx::migrate!() embeds migration files at compile time — no disk access at runtime.
         let migrator = sqlx::migrate!("./migrations");
         migrator.run(&self.pool).await.map_err(|e: sqlx::migrate::MigrateError| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
