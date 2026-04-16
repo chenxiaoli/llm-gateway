@@ -9,6 +9,7 @@ pub mod users;
 pub mod settings;
 pub mod channel_models;
 pub mod pricing_policies;
+pub mod seed;
 
 use axum::extract::State;
 use axum::routing::{get, patch, post};
@@ -89,6 +90,8 @@ pub fn management_router() -> Router<Arc<AppState>> {
         )
         // Settings (admin)
         .route("/api/v1/admin/settings", get(settings::get_settings).patch(settings::update_settings))
+        // Seed data (reads static JSON)
+        .route("/api/v1/admin/seed", get(seed::get_seed_data))
         // Pricing Policies (admin)
         .route(
             "/api/v1/admin/pricing-policies",

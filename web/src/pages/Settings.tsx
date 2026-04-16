@@ -2,14 +2,17 @@ import { useState } from 'react';
 import { useSettings, useUpdateSettings } from '../hooks/useSettings';
 import { changePassword } from '../api/auth';
 import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider } from '../hooks/useProviders';
+import { getSeedData, createProvider } from '../api/providers';
 import { Button } from '../components/ui/Button';
 import { Toggle } from '../components/ui/Toggle';
 import { Alert } from '../components/ui/Alert';
 import { Drawer } from '../components/ui/Drawer';
+import { Modal } from '../components/ui/Modal';
 import { EndpointsEditor } from '../components/ui/EndpointsEditor';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { Checkbox } from '../components/ui/Checkbox';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Upload } from 'lucide-react';
+import { Plus, Pencil, Trash2, Upload, Check } from 'lucide-react';
 import type { Provider } from '../types';
 
 type Tab = 'general' | 'providers' | 'password';
@@ -30,11 +33,44 @@ export default function Settings() {
   const deleteProviderMutation = useDeleteProvider();
 
   const [providerModalOpen, setProviderModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [seedData, setSeedData] = useState<{ providers: Array<{ name: string; base_url?: string; endpoints?: Record<string, string>; enabled?: boolean; selected?: boolean }>; models: Array<{ provider: string; name: string; billing_type?: string; input_price?: number; output_price?: number; selected?: boolean }> } | null>(null);
+  const [seedLoading, setSeedLoading] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [provName, setProvName] = useState('');
   const [provBaseUrl, setProvBaseUrl] = useState('');
   const [provEndpoints, setProvEndpoints] = useState<Record<string, string>>({});
   const [provEnabled, setProvEnabled] = useState(true);
+
+  const openImportModal = async () => {
+    setSeedLoading(true);
+    setImportModalOpen(true);
+    try {
+      const data = await getSeedData();
+      // Initialize selected state
+      setSeedData({
+        providers: data.providers.map(p => ({ ...p, selected: true })),
+        models: data.models.map(m => ({ ...m, selected: true }))
+      });
+    } catch (err) {
+      toast.error('Failed to load seed data');
+    }
+    setSeedLoading(false);
+  };
+
+  const handleImportSeed = async () => {
+    if (!seedData) return;
+    // Import selected providers
+    for (const p of seedData.providers.filter(p => p.selected)) {
+      await createProviderMutation.mutateAsync({
+        name: p.name,
+        base_url: p.base_url || null,
+        endpoints: p.endpoints ? JSON.stringify(p.endpoints) : null,
+      });
+    }
+    toast.success('Import completed');
+    setImportModalOpen(false);
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,40 +166,40 @@ export default function Settings() {
 
       {activeTab === 'providers' && (
         <div className="mb-6 flex gap-2 justify-end">
-          <Button variant="secondary" icon={<Upload className="h-4 w-4" />} onClick={() => document.getElementById('import-providers')?.click()}>Import</Button>
-          <input
-            id="import-providers"
-            type="file"
-            accept=".json"
-            className="hidden"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              try {
-                const text = await file.text();
-                const data = JSON.parse(text);
-                if (!data.providers || !Array.isArray(data.providers)) {
-                  toast.error('Invalid format: missing providers array');
-                  return;
-                }
-                for (const p of data.providers) {
-                  if (!p.name) continue;
-                  await createProviderMutation.mutateAsync({
-                    name: p.name,
-                    base_url: p.base_url || null,
-                    endpoints: p.endpoints ? JSON.stringify(p.endpoints) : null,
-                  });
-                }
-                toast.success(`Imported ${data.providers.length} providers`);
-              } catch (err) {
-                toast.error(`Failed to import: ${err instanceof Error ? err.message : 'Invalid JSON'}`);
-              }
-              e.target.value = '';
-            }}
-          />
+          <Button variant="secondary" icon={<Upload className="h-4 w-4" />} onClick={openImportModal}>Import</Button>
           <Button icon={<Plus className="h-4 w-4" />} onClick={openAddProvider}>Add Provider</Button>
         </div>
       )}
+
+      {/* Import Modal */}
+      <Modal open={importModalOpen} onClose={() => setImportModalOpen(false)} title="Import Providers">
+        {seedLoading ? (
+          <div className="p-4">Loading...</div>
+        ) : seedData ? (
+          <div className="space-y-4">
+            <div className="max-h-60 overflow-y-auto space-y-2">
+              <h4 className="font-medium">Providers ({seedData.providers.filter(p => p.selected).length} selected)</h4>
+              {seedData.providers.map(p => (
+                <label key={p.name} className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={p.selected} onChange={(e) => {
+                    setSeedData({
+                      ...seedData,
+                      providers: seedData.providers.map(np => np.name === p.name ? { ...np, selected: e.target.checked } : np)
+                    });
+                  }} />
+                  <span>{p.name}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="secondary" onClick={() => setImportModalOpen(false)}>Cancel</Button>
+              <Button variant="primary" onClick={handleImportSeed}>Import Selected</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-4">No seed data available</div>
+        )}
+      </Modal>
 
       {activeTab === 'providers' && providers?.map((provider) => (
         <div key={provider.id} className="max-w-lg bg-base-100 rounded-box p-5 shadow-sm mb-4">

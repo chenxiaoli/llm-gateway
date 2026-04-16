@@ -6,6 +6,7 @@ pub mod sqlite;
 pub mod postgres;
 
 pub use types::*;
+pub use seed::{SeedData, SeedProvider, SeedModel, get_available_providers, get_available_models};
 
 #[async_trait::async_trait]
 pub trait Storage: Send + Sync {

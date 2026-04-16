@@ -1,41 +1,57 @@
 use chrono::Utc;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::types::{Model, Provider};
 
-/// Seed data format from JSON
-#[derive(Debug, Deserialize)]
-struct SeedData {
-    providers: Vec<SeedProvider>,
-    models: Vec<SeedModel>,
+/// Seed data format from JSON (public for API)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SeedData {
+    pub providers: Vec<SeedProvider>,
+    pub models: Vec<SeedModel>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SeedProvider {
-    name: String,
-    base_url: Option<String>,
+pub struct SeedProvider {
+    pub name: String,
+    pub base_url: Option<String>,
     #[serde(default)]
-    endpoints: Option<HashMap<String, String>>,
-    enabled: Option<bool>,
+    pub endpoints: Option<HashMap<String, String>>,
+    pub enabled: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SeedModel {
-    provider: String,
-    name: String,
+pub struct SeedModel {
+    pub provider: String,
+    pub name: String,
     #[serde(default)]
-    billing_type: Option<String>,
+    pub billing_type: Option<String>,
     #[serde(default)]
-    input_price: Option<f64>,
+    pub input_price: Option<f64>,
     #[serde(default)]
-    output_price: Option<f64>,
+    pub output_price: Option<f64>,
 }
 
 const SEED_JSON: &str = include_str!("../seed_providers.json");
+
+/// Load seed JSON data from file
+pub fn load_seed_data() -> Result<SeedData, String> {
+    serde_json::from_str(SEED_JSON).map_err(|e| e.to_string())
+}
+
+/// Get available seed providers (for selection UI)
+pub fn get_available_providers() -> Vec<SeedProvider> {
+    load_seed_data().map(|d| d.providers).unwrap_or_default()
+}
+
+/// Get available seed models
+pub fn get_available_models() -> Vec<SeedModel> {
+    load_seed_data().map(|d| d.models).unwrap_or_default()
+}
 
 /// Load seed providers from JSON
 pub fn get_seed_providers() -> Vec<Provider> {

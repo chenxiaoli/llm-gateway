@@ -1,6 +1,11 @@
 import { adminApiClient } from './client';
 import type { Provider, CreateProviderRequest, UpdateProviderRequest, Channel, CreateChannelRequest, UpdateChannelRequest, SyncModelsResponse, ChannelModel, CreateChannelModelRequest, UpdateChannelModelRequest } from '../types';
 
+export async function getSeedData(): Promise<{ providers: Array<{ name: string; base_url?: string; endpoints?: Record<string, string>; enabled?: boolean }>; models: Array<{ provider: string; name: string; billing_type?: string; input_price?: number; output_price?: number }> }> {
+  const { data } = await adminApiClient.get('/seed');
+  return data;
+}
+
 export async function listProviders(): Promise<Provider[]> {
   const { data } = await adminApiClient.get<Provider[]>('/providers');
   return data;
