@@ -10,6 +10,7 @@ pub const SEED_PROVIDERS: &[(&str, &str, bool, bool)] = &[
     ("Anthropic", "https://api.anthropic.com", false, true),
     ("MiniMax", "https://api.minimaxi.com/v1", true, false),
     ("GLM", "https://open.bigmodel.cn/api/paas/v4", true, false),
+    ("Alibaba", "https://coding.dashscope.aliyuncs.com/v1", true, true),
 ];
 
 /// Seed data for flagship models
@@ -32,6 +33,11 @@ pub const SEED_MODELS: &[(&str, &str, &str, f64, f64)] = &[
     ("GLM", "glm-4", "per_token", 1.00, 10.00),
     ("GLM", "glm-4-flash", "per_token", 0.10, 0.10),
     ("GLM", "glm-4-plus", "per_token", 5.00, 50.00),
+    // Alibaba models
+    ("Alibaba", "glm-5.1", "per_token", 2.00, 12.00),
+    ("Alibaba", "qwen3.6-plus", "per_token", 2.00, 12.00),
+    ("Alibaba", "kimi-k2.5", "per_token", 2.00, 12.00),
+    ("Alibaba", "MiniMax-M2.5", "per_token", 2.00, 12.00),
 ];
 
 /// Generate seed providers with generated UUIDs and timestamps
@@ -39,9 +45,9 @@ pub fn get_seed_providers() -> Vec<Provider> {
     SEED_PROVIDERS
         .iter()
         .map(|(name, base_url, _, _)| {
-            // MiniMax has separate endpoints for OpenAI and Anthropic protocols
-            let endpoints = if *name == "MiniMax" {
-                Some(r#"{"openai":"https://api.minimaxi.com/v1","anthropic":"https://api.minimaxi.com/anthropic"}"#.to_string())
+            // Alibaba has separate endpoints for OpenAI and Anthropic protocols
+            let endpoints = if *name == "MiniMax" || *name == "Alibaba" {
+                Some(r#"{"openai":"https://coding.dashscope.aliyuncs.com/v1","anthropic":"https://coding.dashscope.aliyuncs.com/apps/anthropic"}"#.to_string())
             } else {
                 None
             };
