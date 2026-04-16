@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSettings, useUpdateSettings } from '../hooks/useSettings';
 import { changePassword } from '../api/auth';
 import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider } from '../hooks/useProviders';
+import { useModels, useCreateModel, useCreateGlobalModel } from '../hooks/useModels';
 import { getSeedData, createProvider } from '../api/providers';
 import { Button } from '../components/ui/Button';
 import { Toggle } from '../components/ui/Toggle';
@@ -29,6 +30,7 @@ export default function Settings() {
 
   const { data: providers } = useProviders();
   const createProviderMutation = useCreateProvider();
+  const createModelMutation = useCreateGlobalModel();
   const updateProviderMutation = useUpdateProvider();
   const deleteProviderMutation = useDeleteProvider();
 
@@ -60,13 +62,28 @@ export default function Settings() {
 
   const handleImportSeed = async () => {
     if (!seedData) return;
-    // Import selected providers
+    const providerMap: Record<string, string> = {};
+    // Import selected providers first
     for (const p of seedData.providers.filter(p => p.selected)) {
-      await createProviderMutation.mutateAsync({
+      const created = await createProviderMutation.mutateAsync({
         name: p.name,
         base_url: p.base_url || null,
         endpoints: p.endpoints ? JSON.stringify(p.endpoints) : null,
       });
+      providerMap[p.name] = created.id;
+    }
+    // Import selected models
+    for (const m of seedData.models.filter(m => m.selected)) {
+      const providerId = providerMap[m.provider];
+      if (providerId) {
+        await createModelMutation.mutateAsync({
+          provider_id: providerId,
+          name: m.name,
+          billing_type: m.billing_type || 'per_token',
+          input_price: m.input_price,
+          output_price: m.output_price,
+        });
+      }
     }
     toast.success('Import completed');
     setImportModalOpen(false);
@@ -172,12 +189,12 @@ export default function Settings() {
       )}
 
       {/* Import Modal */}
-      <Modal open={importModalOpen} onClose={() => setImportModalOpen(false)} title="Import Providers">
+      <Modal open={importModalOpen} onClose={() => setImportModalOpen(false)} title="Import Providers & Models">
         {seedLoading ? (
           <div className="p-4">Loading...</div>
         ) : seedData ? (
-          <div className="space-y-4">
-            <div className="max-h-60 overflow-y-auto space-y-2">
+          <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+            <div className="space-y-2">
               <h4 className="font-medium">Providers ({seedData.providers.filter(p => p.selected).length} selected)</h4>
               {seedData.providers.map(p => (
                 <label key={p.name} className="flex items-center gap-2 cursor-pointer">
@@ -191,7 +208,22 @@ export default function Settings() {
                 </label>
               ))}
             </div>
-            <div className="flex gap-2 justify-end">
+            <div className="space-y-2">
+              <h4 className="font-medium">Models ({seedData.models.filter(m => m.selected).length} selected)</h4>
+              {seedData.models.map((m, i) => (
+                <label key={`${m.provider}-${m.name}-${i}`} className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={m.selected} onChange={(e) => {
+                    setSeedData({
+                      ...seedData,
+                      models: seedData.models.map((nm, ni) => ni === i ? { ...nm, selected: e.target.checked } : nm)
+                    });
+                  }} />
+                  <span>{m.name}</span>
+                  <span className="text-xs text-base-content/40">({m.provider})</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2 justify-end pt-2 border-t">
               <Button variant="secondary" onClick={() => setImportModalOpen(false)}>Cancel</Button>
               <Button variant="primary" onClick={handleImportSeed}>Import Selected</Button>
             </div>

@@ -55,6 +55,7 @@ impl From<PgKeyRow> for ApiKey {
 struct PgProviderRow {
     id: String,
     name: String,
+    slug: String,
     base_url: Option<String>,
     endpoints: Option<String>,
     enabled: bool,
@@ -67,6 +68,7 @@ impl From<PgProviderRow> for Provider {
         Provider {
             id: r.id,
             name: r.name,
+            slug: r.slug,
             base_url: r.base_url,
             endpoints: r.endpoints,
             enabled: r.enabled,
@@ -557,7 +559,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_providers(&self) -> Result<Vec<Provider>, DbErr> {
         let rows: Vec<PgProviderRow> = sqlx::query_as(
-            "SELECT id, name, base_url, endpoints, enabled, created_at, updated_at
+            "SELECT id, name, slug, base_url, endpoints, enabled, created_at, updated_at
              FROM providers",
         )
         .fetch_all(&self.pool)

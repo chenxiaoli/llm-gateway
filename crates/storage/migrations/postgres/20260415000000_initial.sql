@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE TABLE IF NOT EXISTS providers (
     id                 TEXT PRIMARY KEY,
     name               TEXT NOT NULL,
+    slug               TEXT NOT NULL UNIQUE,
     base_url           TEXT,
     endpoints          TEXT,
     enabled            BOOLEAN NOT NULL DEFAULT true,

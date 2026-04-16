@@ -67,9 +67,18 @@ pub fn get_seed_providers() -> Vec<Provider> {
         .into_iter()
         .map(|p| {
             let endpoints = p.endpoints.as_ref().map(|e| serde_json::to_string(e).ok()).flatten();
+            let slug = p.name.to_lowercase()
+                .chars()
+                .map(|c| if c.is_alphanumeric() { c } else { '-' })
+                .collect::<String>()
+                .split('-')
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+                .join("-");
             Provider {
                 id: Uuid::new_v4().to_string(),
                 name: p.name.clone(),
+                slug,
                 base_url: p.base_url,
                 endpoints,
                 enabled: p.enabled.unwrap_or(true),

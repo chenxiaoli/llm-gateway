@@ -9,6 +9,18 @@ use crate::error::ApiError;
 use crate::extractors::require_admin;
 use crate::AppState;
 
+/// Generate slug from provider name
+fn make_slug(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
 pub async fn create_provider(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -17,9 +29,11 @@ pub async fn create_provider(
     require_admin(&headers, &state.jwt_secret)?;
 
     let now = chrono::Utc::now();
+    let slug = input.slug.unwrap_or_else(|| make_slug(&input.name));
     let provider = Provider {
         id: uuid::Uuid::new_v4().to_string(),
         name: input.name,
+        slug,
         base_url: input.base_url,
         endpoints: input.endpoints,
         enabled: true,
