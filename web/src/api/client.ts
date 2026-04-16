@@ -4,6 +4,7 @@ import type { RefreshResponse } from '../types';
 const TOKEN_KEY = 'llm_gateway_admin_token';
 const REFRESH_TOKEN_KEY = 'llm_gateway_refresh_token';
 
+// Main API client for user-level and public endpoints
 export const apiClient = axios.create({
   baseURL: '/api/v1',
   headers: {
@@ -11,7 +12,16 @@ export const apiClient = axios.create({
   },
 });
 
-apiClient.interceptors.request.use((config) => {
+// Admin API client for admin endpoints (/api/v1/admin/*)
+export const adminApiClient = axios.create({
+  baseURL: '/api/v1/admin',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Copy interceptors to admin client
+adminApiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -36,65 +46,69 @@ function processQueue(error: unknown, token: string | null = null) {
   failedQueue = [];
 }
 
-apiClient.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
+function setupInterceptors(client: typeof apiClient) {
+  client.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      const originalRequest = error.config;
 
-    // Skip refresh endpoint itself to avoid loops
-    if (originalRequest.url?.includes('/auth/refresh')) {
-      return Promise.reject(error);
-    }
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-      if (!refreshToken) {
-        clearToken();
-        clearRefreshToken();
-        window.dispatchEvent(new Event('auth:expired'));
+      if (originalRequest.url?.includes('/auth/refresh')) {
         return Promise.reject(error);
       }
 
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({
-            resolve: (token: string) => {
-              originalRequest.headers.Authorization = `Bearer ${token}`;
-              resolve(apiClient(originalRequest));
-            },
-            reject,
+      if (error.response?.status === 401 && !originalRequest._retry) {
+        const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+        if (!refreshToken) {
+          clearToken();
+          clearRefreshToken();
+          window.dispatchEvent(new Event('auth:expired'));
+          return Promise.reject(error);
+        }
+
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            failedQueue.push({
+              resolve: (token: string) => {
+                originalRequest.headers.Authorization = `Bearer ${token}`;
+                resolve(client(originalRequest));
+              },
+              reject,
+            });
           });
-        });
+        }
+
+        originalRequest._retry = true;
+        isRefreshing = true;
+
+        try {
+          const { data } = await apiClient.post<RefreshResponse>('/auth/refresh', {
+            refresh_token: refreshToken,
+          });
+
+          setToken(data.token);
+          setRefreshToken(data.refresh_token);
+          processQueue(null, data.token);
+
+          originalRequest.headers.Authorization = `Bearer ${data.token}`;
+          return client(originalRequest);
+        } catch (refreshError) {
+          processQueue(refreshError, null);
+          clearToken();
+          clearRefreshToken();
+          window.dispatchEvent(new Event('auth:expired'));
+          return Promise.reject(refreshError);
+        } finally {
+          isRefreshing = false;
+        }
       }
 
-      originalRequest._retry = true;
-      isRefreshing = true;
+      return Promise.reject(error);
+    },
+  );
+}
 
-      try {
-        const { data } = await apiClient.post<RefreshResponse>('/auth/refresh', {
-          refresh_token: refreshToken,
-        });
-
-        setToken(data.token);
-        setRefreshToken(data.refresh_token);
-        processQueue(null, data.token);
-
-        originalRequest.headers.Authorization = `Bearer ${data.token}`;
-        return apiClient(originalRequest);
-      } catch (refreshError) {
-        processQueue(refreshError, null);
-        clearToken();
-        clearRefreshToken();
-        window.dispatchEvent(new Event('auth:expired'));
-        return Promise.reject(refreshError);
-      } finally {
-        isRefreshing = false;
-      }
-    }
-
-    return Promise.reject(error);
-  },
-);
+setupInterceptors(apiClient);
+setupInterceptors(adminApiClient);
 
 export function setToken(token: string) {
   localStorage.setItem(TOKEN_KEY, token);
@@ -118,4 +132,12 @@ export function getRefreshToken(): string | null {
 
 export function clearRefreshToken() {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+export function getErrorMessage(err: unknown, fallback: string): string {
+  const error = err as { response?: { data?: { message?: string }; status?: number } };
+  if (error.response?.data?.message) {
+    return error.response.data.message;
+  }
+  return fallback;
 }

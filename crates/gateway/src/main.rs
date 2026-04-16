@@ -7,7 +7,8 @@ use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
 use llm_gateway_storage::sqlite::SqliteStorage;
-use rust_embed::{Embed, RustEmbed};
+use rust_embed::Embed;
+use sha2::Digest;
 use std::sync::Arc;
 
 #[derive(Embed)]
@@ -31,6 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .unwrap_or("./data/gateway.db");
     let storage = SqliteStorage::new(db_path).await?;
     storage.run_migrations().await?;
+    storage.seed_data().await?;
 
     let storage: Arc<dyn Storage> = Arc::new(storage);
 
@@ -40,21 +42,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Init audit logger
     let audit_logger = Arc::new(AuditLogger::new(storage.clone()));
 
+    // Create MPSC channel for async audit logging
+    let (audit_tx, audit_rx) = tokio::sync::mpsc::channel::<llm_gateway_api::AuditTask>(100);
+    // Spawn background audit worker
+    tokio::spawn(llm_gateway_api::workers::start_audit_worker(storage.clone(), audit_rx));
+
     // App state
     let state = Arc::new(AppState {
         storage,
         rate_limiter,
         audit_logger,
         jwt_secret: config.auth.jwt_secret.clone(),
+        encryption_key: {
+            use sha2::Sha256;
+            let key = config.server.encryption_key.as_bytes();
+            // Derive exactly 32 bytes using SHA256
+            let mut hasher = Sha256::new();
+            hasher.update(key);
+            let result = hasher.finalize();
+            let mut bytes = [0u8; 32];
+            bytes.copy_from_slice(&result);
+            bytes
+        },
+        audit_tx,
     });
 
     // Build router
     let app = axum::Router::new()
-        // OpenAI compatible endpoints
-        .route("/v1/chat/completions", post(api::openai::chat_completions))
+        // OpenAI compatible endpoints (now unified through proxy)
+        .route("/v1/chat/completions", post(api::proxy::proxy_with_protocol))
         .route("/v1/models", get(api::openai::list_models))
         // Anthropic compatible endpoints
-        .route("/v1/messages", post(api::anthropic::messages))
+        .route("/v1/messages", post(api::proxy::messages))
         // Management API
         .merge(api::management::management_router())
         // Frontend static files (fallback for SPA)

@@ -37,7 +37,7 @@ export default function Usage() {
 
   return (
     <div>
-      <div className="mb-6"><h1 className="font-display text-2xl font-bold">Usage</h1></div>
+      <div className="mb-6"><h1 className="text-2xl font-bold">Usage</h1></div>
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -72,7 +72,7 @@ export default function Usage() {
       {/* Chart */}
       {chartData.length > 0 && (
         <div className="mb-6 bg-base-100 rounded-box p-5 shadow-sm">
-          <h2 className="font-display text-base font-semibold mb-4">Cost by Model</h2>
+          <h2 className="text-base font-semibold mb-4">Cost by Model</h2>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-base-300)" />

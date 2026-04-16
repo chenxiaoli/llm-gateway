@@ -20,6 +20,7 @@ fn make_state(db: Arc<llm_gateway_storage::sqlite::SqliteStorage>) -> Arc<AppSta
         rate_limiter: Arc::new(RateLimiter::new(60)),
         audit_logger: Arc::new(AuditLogger::new(db as Arc<dyn Storage>)),
         jwt_secret: common::TEST_JWT_SECRET.to_string(),
+        encryption_key: [0u8; 32],
     })
 }
 
@@ -42,7 +43,7 @@ async fn test_create_provider() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "OpenAI",
-                    "openai_base_url": "https://api.openai.com/v1"
+                    "base_url": "https://api.openai.com/v1"
                 }).to_string()))
                 .unwrap(),
         )
@@ -55,7 +56,7 @@ async fn test_create_provider() {
     )
     .unwrap();
     assert_eq!(body["name"], "OpenAI");
-    assert_eq!(body["openai_base_url"], "https://api.openai.com/v1");
+    assert_eq!(body["base_url"], "https://api.openai.com/v1");
 }
 
 #[tokio::test]
@@ -73,8 +74,7 @@ async fn test_create_provider_dual_protocol() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "MiniMax",
-                    "openai_base_url": "https://api.minimax.chat/v1",
-                    "anthropic_base_url": "https://api.minimax.chat/v1/anthropic"
+                    "endpoints": "{\"openai\":\"https://api.minimax.chat/v1\",\"anthropic\":\"https://api.minimax.chat/v1/anthropic\"}"
                 }).to_string()))
                 .unwrap(),
         )
@@ -86,8 +86,9 @@ async fn test_create_provider_dual_protocol() {
         &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
-    assert!(body["openai_base_url"].is_string());
-    assert!(body["anthropic_base_url"].is_string());
+    let endpoints: serde_json::Value = serde_json::from_str(body["endpoints"].as_str().unwrap_or("{}")).unwrap();
+    assert!(endpoints.get("openai").and_then(|v| v.as_str()).is_some());
+    assert!(endpoints.get("anthropic").and_then(|v| v.as_str()).is_some());
 }
 
 #[tokio::test]
@@ -106,7 +107,7 @@ async fn test_list_providers() {
                     .header("authorization", bearer_token(&admin.token))
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        json!({"name": name, "openai_base_url": "https://example.com"}).to_string(),
+                        json!({"name": name, "base_url": "https://example.com"}).to_string(),
                     ))
                     .unwrap(),
             )
@@ -151,7 +152,7 @@ async fn test_provider_model_lifecycle() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "TestProvider",
-                    "openai_base_url": "https://example.com"
+                    "base_url": "https://example.com"
                 }).to_string()))
                 .unwrap(),
         )
@@ -247,7 +248,7 @@ async fn test_create_and_list_channels() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "OpenAI",
-                    "openai_base_url": "https://api.openai.com/v1"
+                    "base_url": "https://api.openai.com/v1"
                 }).to_string()))
                 .unwrap(),
         )
@@ -277,7 +278,12 @@ async fn test_create_and_list_channels() {
             )
             .await
             .unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
+        let status = resp.status();
+        if !status.is_success() {
+            let body = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+            eprintln!("Channel create error ({}): {:?}", status, String::from_utf8_lossy(&body));
+        }
+        assert_eq!(status, StatusCode::OK, "Failed to create channel {}", name);
     }
 
     let list_resp = app
@@ -319,7 +325,7 @@ async fn test_update_and_delete_channel() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "TestProvider",
-                    "openai_base_url": "https://example.com"
+                    "base_url": "https://example.com"
                 }).to_string()))
                 .unwrap(),
         )

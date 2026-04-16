@@ -35,8 +35,8 @@ export interface UpdateKeyRequest {
 export interface Provider {
   id: string;
   name: string;
-  openai_base_url: string | null;
-  anthropic_base_url: string | null;
+  base_url: string | null;
+  endpoints: string | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -44,21 +44,23 @@ export interface Provider {
 
 export interface CreateProviderRequest {
   name: string;
-  openai_base_url?: string | null;
-  anthropic_base_url?: string | null;
+  base_url?: string | null;
+  endpoints?: string | null;
 }
 
 export interface UpdateProviderRequest {
   name?: string;
-  openai_base_url?: string | null;
-  anthropic_base_url?: string | null;
+  base_url?: string | null;
+  endpoints?: string | null;
   enabled?: boolean;
 }
 
 export interface Model {
+  id: string;
   name: string;
   provider_id: string;
-  billing_type: 'token' | 'request';
+  billing_type: string;
+  pricing_policy_id?: string | null;
   input_price: number;
   output_price: number;
   request_price: number;
@@ -66,16 +68,30 @@ export interface Model {
   created_at: string;
 }
 
+export interface ModelWithProvider extends Model {
+  provider_name: string;
+}
+
 export interface CreateModelRequest {
   name: string;
-  billing_type: 'token' | 'request';
+  billing_type: string;
   input_price?: number;
   output_price?: number;
   request_price?: number;
 }
 
+export interface CreateGlobalModelRequest {
+  provider_id: string;
+  name: string;
+  billing_type: string;
+  input_price?: number;
+  output_price?: number;
+  request_price?: number;
+  enabled?: boolean;
+}
+
 export interface UpdateModelRequest {
-  billing_type?: 'token' | 'request';
+  billing_type?: string;
   input_price?: number;
   output_price?: number;
   request_price?: number;
@@ -109,6 +125,7 @@ export interface AuditLog {
   provider_id: string;
   channel_id: string | null;
   protocol: 'openai' | 'anthropic';
+  stream: boolean;
   request_body: string;
   response_body: string;
   status_code: number;
@@ -186,10 +203,16 @@ export interface UpdateUserRequest {
 
 export interface SettingsResponse {
   allow_registration: boolean;
+  server_host: string;
+  audit_log_request: boolean;
+  audit_log_response: boolean;
 }
 
 export interface UpdateSettingsRequest {
-  allow_registration: boolean;
+  allow_registration?: boolean;
+  server_host?: string;
+  audit_log_request?: boolean;
+  audit_log_response?: boolean;
 }
 
 export interface Channel {
@@ -205,6 +228,7 @@ export interface Channel {
 }
 
 export interface CreateChannelRequest {
+  provider_id: string;
   name: string;
   api_key: string;
   base_url?: string | null;
@@ -219,9 +243,55 @@ export interface UpdateChannelRequest {
   enabled?: boolean;
 }
 
+// --- Channel Models ---
+
+export interface ChannelModel {
+  id: string;
+  channel_id: string;
+  model_id: string;
+  upstream_model_name: string;
+  priority_override: number | null;
+  billing_type?: string | null;
+  input_price?: number | null;
+  output_price?: number | null;
+  request_price?: number | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateChannelModelRequest {
+  channel_id: string;
+  model_id: string;
+  upstream_model_name: string;
+  priority_override?: number | null;
+  billing_type?: string | null;
+  input_price?: number | null;
+  output_price?: number | null;
+  request_price?: number | null;
+}
+
+export interface UpdateChannelModelRequest {
+  upstream_model_name?: string;
+  priority_override?: number | null;
+  enabled?: boolean;
+}
+
 export interface PaginatedResponse<T> {
   items: T[];
   total: number;
   page: number;
   page_size: number;
+}
+
+export interface SyncedModel {
+  name: string;
+  model_type: string | null;
+  created: boolean;
+}
+
+export interface SyncModelsResponse {
+  new: number;
+  updated: number;
+  models: SyncedModel[];
 }

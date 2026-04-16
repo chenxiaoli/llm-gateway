@@ -1,3 +1,31 @@
+# Build artifacts
 /target
-.claude/
-.worktrees/
+.vite/
+dist/
+
+# Dependencies
+node_modules/
+
+# Data & logs
+data/
+test-results/
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.tmp
+*.temp

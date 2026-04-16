@@ -6,12 +6,14 @@ use futures::stream::StreamExt;
 use std::sync::Arc;
 use serde_json::{json, Value};
 use std::time::Instant;
+use tracing::debug;
 
 use llm_gateway_auth::hash_api_key;
-use llm_gateway_billing::calculate_cost;
+use llm_gateway_billing::{PricingCalculator, Usage};
+use llm_gateway_encryption::decrypt;
 use llm_gateway_provider::anthropic::AnthropicProvider;
 use llm_gateway_provider::Provider;
-use llm_gateway_storage::{ApiKey, Protocol, UsageRecord};
+use llm_gateway_storage::{ApiKey, Channel, Protocol, UsageRecord};
 
 use crate::error::ApiError;
 use crate::extractors::extract_bearer_token;
@@ -24,24 +26,44 @@ async fn record_stream_usage(
     storage: Arc<dyn llm_gateway_storage::Storage>,
     audit_logger: Arc<llm_gateway_audit::AuditLogger>,
     key_id: String,
+    body: String,
+    response_body: String,
     model_name: String,
     provider_id: String,
     channel_id: String,
     protocol: Protocol,
+    stream: bool,
     response_desc: &str,
     status_code: i32,
     latency_ms: i64,
-    billing_type: llm_gateway_storage::BillingType,
+    pricing_policy_id: Option<String>,
     model_input_price: f64,
     model_output_price: f64,
     model_request_price: f64,
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
 ) {
-    let cost = llm_gateway_billing::calculate_cost(
-        &billing_type, input_tokens, output_tokens,
-        model_input_price, model_output_price, model_request_price,
-    );
+    // Use PricingCalculator
+    let usage = Usage::from_tokens(input_tokens, output_tokens, 1);
+    let calculator = PricingCalculator;
+
+    // Get policy from storage or fallback to legacy pricing
+    let cost = if let Some(policy_id) = &pricing_policy_id {
+        match storage.get_pricing_policy(policy_id).await {
+            Ok(Some(policy)) => calculator.calculate_cost(&policy, &usage),
+            _ => 0.0,
+        }
+    } else {
+        // Fallback to legacy pricing if no policy (backwards compat)
+        llm_gateway_billing::calculate_cost(
+            &llm_gateway_storage::BillingType::Token, // default to token
+            input_tokens,
+            output_tokens,
+            model_input_price,
+            model_output_price,
+            model_request_price,
+        ).cost
+    };
     let usage = UsageRecord {
         id: uuid::Uuid::new_v4().to_string(),
         key_id,
@@ -51,13 +73,13 @@ async fn record_stream_usage(
         protocol: protocol.clone(),
         input_tokens,
         output_tokens,
-        cost: cost.cost,
+        cost,
         created_at: chrono::Utc::now(),
     };
     let _ = storage.record_usage(&usage).await;
     let _ = audit_logger.log_request(
         &usage.key_id, &usage.model_name, &usage.provider_id,
-        protocol, "", response_desc, status_code,
+        protocol, stream, &body, &response_body, status_code,
         latency_ms, usage.input_tokens, usage.output_tokens,
     ).await;
 }
@@ -91,8 +113,8 @@ pub async fn messages(
         .ok_or(ApiError::BadRequest("Missing 'model' field".to_string()))?
         .to_string();
 
-    // 4. Check rate limits
-    let (rpm_limit, tpm_limit) = get_rate_limits(&state, &api_key, &model_name).await;
+    // 4. Check rate limits (global key level)
+    let (rpm_limit, tpm_limit) = get_rate_limits(&state, &api_key, &model_name, None).await;
 
     let allowed = state
         .rate_limiter
@@ -134,7 +156,7 @@ pub async fn messages(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     let model_entry = models
         .iter()
-        .find(|m| m.model.name == model_name && m.anthropic_compatible && m.model.enabled)
+        .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase() && m.anthropic_compatible && m.model.enabled)
         .ok_or(ApiError::NotFound(format!("Model '{}' not found or not available via Anthropic", model_name)))?;
 
     let provider_id = &model_entry.model.provider_id;
@@ -149,15 +171,23 @@ pub async fn messages(
         return Err(ApiError::NotFound(format!("Provider '{}' is disabled", provider_id)));
     }
 
-    // Get enabled channels for the provider (sorted by priority ASC)
-    let channels = state
-        .storage
-        .list_enabled_channels_by_provider(provider_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    // Get channels that support this model (via channel_models)
+    // If no mapping exists, fall back to all provider channels
+    let channels = match state.storage.get_channels_for_model(&model_name).await {
+        Ok(channels) if !channels.is_empty() => channels,
+        _ => {
+            // Fallback: use all enabled channels for provider
+            state.storage.list_enabled_channels_by_provider(provider_id).await
+                .map_err(|e| ApiError::Internal(e.to_string()))?
+        }
+    };
     if channels.is_empty() {
         return Err(ApiError::Internal(format!("Provider '{}' has no enabled channels", provider_id)));
     }
+
+    // Get channel_models to find upstream_model_name
+    let channel_models = state.storage.get_channel_models_for_model(&model_name).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // 7. Check for streaming
     let is_stream = req_json
@@ -173,22 +203,54 @@ pub async fn messages(
         // Failover loop over channels
         let mut last_error = String::new();
         for channel in &channels {
-            let base_url = match channel.base_url.as_deref() {
-                Some(url) => url.to_string(),
-                None => provider
-                    .anthropic_base_url
-                    .clone()
-                    .ok_or_else(|| ApiError::Internal(format!("Provider '{}' has no anthropic_base_url", provider_id)))?,
+            // Get upstream_model_name for this channel
+            let upstream_name = channel_models
+                .iter()
+                .find(|cm| cm.channel_id == channel.id)
+                .map(|cm| cm.upstream_model_name.as_str())
+                .unwrap_or(&model_name);
+
+            // Create modified body with upstream model name
+            let modified_body = if upstream_name != &model_name {
+                let mut req_json_modified = req_json.clone();
+                if let Some(model_obj) = req_json_modified.get_mut("model") {
+                    *model_obj = serde_json::Value::String(upstream_name.to_string());
+                }
+                serde_json::to_string(&req_json_modified).unwrap_or_else(|_| body.clone())
+            } else {
+                body.clone()
+            };
+
+            // Decrypt the channel's api_key for the request
+            let api_key_value = decrypt(&channel.api_key, &state.encryption_key)
+                .unwrap_or_else(|_| channel.api_key.clone());
+
+            // Get base_url: first try channel, then provider's endpoints JSON, then fallback to provider base_url
+            let base_url = if let Some(url) = channel.base_url.as_deref() {
+                url.to_string()
+            } else {
+                // Parse provider endpoints JSON to find Anthropic endpoint
+                let endpoints: serde_json::Value = provider
+                    .endpoints
+                    .as_ref()
+                    .and_then(|e| serde_json::from_str(e).ok())
+                    .unwrap_or(serde_json::Value::Null);
+                endpoints
+                    .get("anthropic")
+                    .and_then(|v| v.as_str())
+                    .or(provider.base_url.as_deref())
+                    .ok_or_else(|| ApiError::Internal(format!("Provider '{}' has no Anthropic endpoint", provider_id)))?
+                    .to_string()
             };
 
             // Build upstream request — Anthropic uses x-api-key and anthropic-version headers
             let url = format!("{}/v1/messages", base_url);
             let upstream_resp = match client
                 .post(&url)
-                .header("x-api-key", &channel.api_key)
+                .header("x-api-key", &api_key_value)
                 .header("anthropic-version", "2023-06-01")
                 .header("Content-Type", "application/json")
-                .body(body.clone())
+                .body(modified_body)
                 .send()
                 .await
             {
@@ -224,7 +286,7 @@ pub async fn messages(
             let provider_id = provider.id.clone();
             let channel_id = channel.id.clone();
             let model_name_clone = model_name.clone();
-            let billing_type = model_entry.model.billing_type.clone();
+            let pricing_policy_id = model_entry.model.pricing_policy_id.clone();
             let model_input_price = model_entry.model.input_price;
             let model_output_price = model_entry.model.output_price;
             let model_request_price = model_entry.model.request_price;
@@ -235,11 +297,15 @@ pub async fn messages(
                     let storage = storage_clone.clone();
                     let audit_logger = audit_logger_clone.clone();
                     let key_id = key_id.clone();
+                    let body = body.clone();
                     let provider_id = provider_id.clone();
                     let channel_id = channel_id.clone();
                     let model_name = model_name_clone.clone();
-                    let billing_type = billing_type.clone();
+                    let pricing_policy_id = pricing_policy_id.clone();
                     let start = start;
+                    let model_input_price = model_input_price;
+                    let model_output_price = model_output_price;
+                    let model_request_price = model_request_price;
                     async move {
                         loop {
                             // Try to extract a complete SSE event from buffer
@@ -252,17 +318,35 @@ pub async fn messages(
                                 for line in event_text.lines() {
                                     if let Some(data) = line.strip_prefix("data: ") {
                                         if data.trim() == "[DONE]" {
+                                            debug!("Anthropic stream [DONE] detected for model {}", model_name);
                                             // Stream finished — spawn audit + billing
                                             let latency_ms = start.elapsed().as_millis() as i64;
                                             tokio::spawn(async move {
-                                                let cost = calculate_cost(
-                                                    &billing_type,
-                                                    input_tokens,
-                                                    output_tokens,
-                                                    model_input_price,
-                                                    model_output_price,
-                                                    model_request_price,
+                                                // Use PricingCalculator
+                                                let usage = Usage::from_tokens(
+                                                    Some(input_tokens.unwrap_or(0)),
+                                                    Some(output_tokens.unwrap_or(0)),
+                                                    1,
                                                 );
+                                                let calculator = PricingCalculator;
+
+                                                // Get policy from storage or fallback to legacy pricing
+                                                let cost = if let Some(policy_id) = &pricing_policy_id {
+                                                    match storage.get_pricing_policy(policy_id).await {
+                                                        Ok(Some(policy)) => calculator.calculate_cost(&policy, &usage),
+                                                        _ => 0.0,
+                                                    }
+                                                } else {
+                                                    // Fallback to legacy pricing if no policy (backwards compat)
+                                                    llm_gateway_billing::calculate_cost(
+                                                        &llm_gateway_storage::BillingType::Token, // default to token
+                                                        input_tokens,
+                                                        output_tokens,
+                                                        model_input_price,
+                                                        model_output_price,
+                                                        model_request_price,
+                                                    ).cost
+                                                };
                                                 let usage = UsageRecord {
                                                     id: uuid::Uuid::new_v4().to_string(),
                                                     key_id: key_id.clone(),
@@ -272,7 +356,7 @@ pub async fn messages(
                                                     protocol: Protocol::Anthropic,
                                                     input_tokens,
                                                     output_tokens,
-                                                    cost: cost.cost,
+                                                    cost,
                                                     created_at: chrono::Utc::now(),
                                                 };
                                                 let _ = storage.record_usage(&usage).await;
@@ -282,8 +366,9 @@ pub async fn messages(
                                                         &model_name,
                                                         &provider_id,
                                                         Protocol::Anthropic,
-                                                        "",
-                                                        "[stream]",
+                                                        true,
+                                                        &body,
+                                                        &buffer,
                                                         200,
                                                         latency_ms,
                                                         input_tokens,
@@ -322,24 +407,25 @@ pub async fn messages(
                                 Some(Err(_)) => {
                                     tokio::spawn(record_stream_usage(
                                         storage.clone(), audit_logger.clone(),
-                                        key_id.clone(), model_name.clone(),
+                                        key_id.clone(), body.clone(), buffer.clone(), model_name.clone(),
                                         provider_id.clone(), channel_id.clone(),
-                                        Protocol::Anthropic, "[stream truncated]", 0,
+                                        Protocol::Anthropic, true, "[stream truncated]", 500,
                                         start.elapsed().as_millis() as i64,
-                                        billing_type.clone(),
+                                        pricing_policy_id.clone(),
                                         model_input_price, model_output_price, model_request_price,
                                         input_tokens, output_tokens,
                                     ));
                                     return None;
                                 }
                                 None => {
+                                    debug!("Anthropic stream ended (None) for model {}, buffer: {}", model_name, buffer.len());
                                     tokio::spawn(record_stream_usage(
                                         storage.clone(), audit_logger.clone(),
-                                        key_id.clone(), model_name.clone(),
+                                        key_id.clone(), body.clone(), buffer.clone(), model_name.clone(),
                                         provider_id.clone(), channel_id.clone(),
-                                        Protocol::Anthropic, "[stream incomplete]", 0,
+                                        Protocol::Anthropic, true, "[stream incomplete]", 200,
                                         start.elapsed().as_millis() as i64,
-                                        billing_type.clone(),
+                                        pricing_policy_id.clone(),
                                         model_input_price, model_output_price, model_request_price,
                                         input_tokens, output_tokens,
                                     ));
@@ -362,23 +448,55 @@ pub async fn messages(
     // 8. Non-streaming: failover loop over channels
     let mut last_error = String::new();
     for channel in &channels {
+        // Get upstream_model_name for this channel
+        let upstream_name = channel_models
+            .iter()
+            .find(|cm| cm.channel_id == channel.id)
+            .map(|cm| cm.upstream_model_name.as_str())
+            .unwrap_or(&model_name);
+
+        // Create modified body with upstream model name
+        let modified_body = if upstream_name != &model_name {
+            let mut req_json_modified = req_json.clone();
+            if let Some(model_obj) = req_json_modified.get_mut("model") {
+                *model_obj = serde_json::Value::String(upstream_name.to_string());
+            }
+            serde_json::to_string(&req_json_modified).unwrap_or_else(|_| body.clone())
+        } else {
+            body.clone()
+        };
+
+        // Decrypt the channel's api_key for the request
+        let api_key_value = decrypt(&channel.api_key, &state.encryption_key)
+            .unwrap_or_else(|_| channel.api_key.clone());
+
         let base_url = match channel.base_url.as_deref() {
             Some(url) => url.to_string(),
-            None => provider
-                .anthropic_base_url
-                .clone()
-                .ok_or_else(|| ApiError::Internal(format!("Provider '{}' has no anthropic_base_url", provider_id)))?,
+            None => {
+                // Try to get endpoint from JSON, fall back to base_url
+                let endpoints: serde_json::Value = provider
+                    .endpoints
+                    .as_ref()
+                    .and_then(|e| serde_json::from_str(e).ok())
+                    .unwrap_or(serde_json::Value::Null);
+                endpoints
+                    .get("anthropic")
+                    .and_then(|v| v.as_str())
+                    .or(provider.base_url.as_deref())
+                    .ok_or_else(|| ApiError::Internal(format!("Provider '{}' has no Anthropic endpoint", provider_id)))?
+                    .to_string()
+            }
         };
 
         let anthropic_provider = AnthropicProvider {
             name: provider.name.clone(),
             base_url,
-            api_key: channel.api_key.clone(),
+            api_key: api_key_value.clone(),
         };
 
         let start = Instant::now();
         let proxy_result = match anthropic_provider
-            .proxy_request(&client, "/v1/messages", body.clone(), vec![])
+            .proxy_request(&client, "/v1/messages", modified_body, vec![])
             .await
         {
             Ok(result) => result,
@@ -410,21 +528,37 @@ pub async fn messages(
         let response_body = proxy_result.response_body.clone();
         let input_tokens = proxy_result.input_tokens;
         let output_tokens = proxy_result.output_tokens;
-        let billing_type = model_entry.model.billing_type.clone();
+        let pricing_policy_id = model_entry.model.pricing_policy_id.clone();
         let model_input_price = model_entry.model.input_price;
         let model_output_price = model_entry.model.output_price;
         let model_request_price = model_entry.model.request_price;
 
         tokio::spawn(async move {
-            // Calculate cost
-            let cost = calculate_cost(
-                &billing_type,
-                input_tokens,
-                output_tokens,
-                model_input_price,
-                model_output_price,
-                model_request_price,
+            // Use PricingCalculator
+            let usage = Usage::from_tokens(
+                Some(input_tokens.unwrap_or(0)),
+                Some(output_tokens.unwrap_or(0)),
+                1,
             );
+            let calculator = PricingCalculator;
+
+            // Get policy from storage or fallback to legacy pricing
+            let cost = if let Some(policy_id) = &pricing_policy_id {
+                match storage.get_pricing_policy(policy_id).await {
+                    Ok(Some(policy)) => calculator.calculate_cost(&policy, &usage),
+                    _ => 0.0,
+                }
+            } else {
+                // Fallback to legacy pricing if no policy (backwards compat)
+                llm_gateway_billing::calculate_cost(
+                    &llm_gateway_storage::BillingType::Token, // default to token
+                    input_tokens,
+                    output_tokens,
+                    model_input_price,
+                    model_output_price,
+                    model_request_price,
+                ).cost
+            };
 
             // Record usage
             let usage = UsageRecord {
@@ -436,7 +570,7 @@ pub async fn messages(
                 protocol: Protocol::Anthropic,
                 input_tokens,
                 output_tokens,
-                cost: cost.cost,
+                cost,
                 created_at: chrono::Utc::now(),
             };
             let _ = storage.record_usage(&usage).await;
@@ -448,7 +582,8 @@ pub async fn messages(
                     &model_name_clone,
                     &provider_id,
                     Protocol::Anthropic,
-                    "",
+                    false,
+                    &body,
                     &response_body,
                     status_code as i32,
                     latency_ms,
@@ -509,11 +644,20 @@ pub async fn list_models(
 }
 
 /// Helper to determine rate limits for a key/model pair.
+/// Checks channel-level limits first, then falls back to key-level limits.
 async fn get_rate_limits(
     state: &Arc<AppState>,
     api_key: &ApiKey,
     model_name: &str,
+    channel: Option<&Channel>,
 ) -> (Option<i64>, Option<i64>) {
+    // 1. Check channel-level limits first
+    if let Some(ch) = channel {
+        if ch.rpm_limit.is_some() || ch.tpm_limit.is_some() {
+            return (ch.rpm_limit, ch.tpm_limit);
+        }
+    }
+    // 2. Fall back to key-level limits
     if let Ok(Some(limit)) = state.storage.get_key_model_rate_limit(&api_key.id, model_name).await {
         (Some(limit.rpm), Some(limit.tpm))
     } else {

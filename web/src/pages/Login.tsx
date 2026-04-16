@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/authStore';
 import { getAuthConfig } from '../api/auth';
 import { Button } from '../components/ui/Button';
 import { toast } from 'sonner';
+import { getErrorMessage } from '../api/client';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -26,8 +27,8 @@ export default function Login() {
     try {
       await login({ username, password });
       navigate('/console/dashboard');
-    } catch {
-      toast.error('Invalid username or password');
+    } catch (err) {
+      toast.error(getErrorMessage(err, 'Invalid username or password'));
     } finally {
       setLoading(false);
     }
@@ -38,10 +39,10 @@ export default function Login() {
       <div className="card w-[400px] max-w-[calc(100vw-48px)] bg-base-100 shadow-xl animate-fade-in-up">
         <div className="card-body">
           <div className="flex items-center justify-center gap-3 mb-2">
-            <div className="h-11 w-11 rounded-xl bg-primary flex items-center justify-center font-display font-extrabold text-lg text-primary-content tracking-tight">
+            <div className="h-11 w-11 rounded-xl bg-primary flex items-center justify-center font-bold text-lg text-primary-content tracking-tight">
               GW
             </div>
-            <span className="font-display font-bold text-xl">LLM Gateway</span>
+            <span className="font-bold text-xl">LLM Gateway</span>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">

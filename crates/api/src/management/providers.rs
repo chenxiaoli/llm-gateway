@@ -9,6 +9,18 @@ use crate::error::ApiError;
 use crate::extractors::require_admin;
 use crate::AppState;
 
+/// Generate slug from provider name
+fn make_slug(name: &str) -> String {
+    name.to_lowercase()
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
 pub async fn create_provider(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -17,11 +29,13 @@ pub async fn create_provider(
     require_admin(&headers, &state.jwt_secret)?;
 
     let now = chrono::Utc::now();
+    let slug = input.slug.unwrap_or_else(|| make_slug(&input.name));
     let provider = Provider {
         id: uuid::Uuid::new_v4().to_string(),
         name: input.name,
-        openai_base_url: input.openai_base_url,
-        anthropic_base_url: input.anthropic_base_url,
+        slug,
+        base_url: input.base_url,
+        endpoints: input.endpoints,
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -87,11 +101,11 @@ pub async fn update_provider(
     if let Some(name) = input.name {
         provider.name = name;
     }
-    if let Some(openai_base_url) = input.openai_base_url {
-        provider.openai_base_url = openai_base_url;
+    if let Some(base_url) = input.base_url {
+        provider.base_url = base_url;
     }
-    if let Some(anthropic_base_url) = input.anthropic_base_url {
-        provider.anthropic_base_url = anthropic_base_url;
+    if let Some(endpoints) = input.endpoints {
+        provider.endpoints = endpoints;
     }
     if let Some(enabled) = input.enabled {
         provider.enabled = enabled;

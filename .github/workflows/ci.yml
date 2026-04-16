@@ -64,6 +64,15 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install cargo-sqlx
+        run: cargo install cargo-sqlx
+
+      - name: Create database for sqlx
+        run: mkdir -p data && touch data/gateway.db
+
+      - name: Run sqlx prepare
+        run: DATABASE_URL=sqlite:data/gateway.db cargo sqlx prepare --workspace
+
       - name: Run tests
         run: cargo test --workspace
 

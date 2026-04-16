@@ -44,8 +44,11 @@ export default function Keys() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="font-display text-2xl font-bold">API Keys</h1>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">API Keys</h1>
+          <p className="text-sm text-base-content/40 mt-1">Manage access keys for API authentication</p>
+        </div>
         <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>
           Create Key
         </Button>
@@ -54,47 +57,54 @@ export default function Keys() {
       {isLoading ? (
         <div className="flex items-center justify-center py-12"><span className="loading loading-spinner loading-lg" /></div>
       ) : (
-        <>
-          <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
+        <div className="rounded-xl border border-base-300/50 bg-base-100/60 overflow-hidden">
+          <div className="overflow-x-auto">
             <table className="table table-sm">
               <thead>
-                <tr className="border-b border-base-300">
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th>
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th>
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Rate Limit (RPM)</th>
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Monthly Budget</th>
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Created</th>
+                <tr className="border-b border-base-300/50">
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Name</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Status</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Rate Limit (RPM)</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Monthly Budget</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Created</th>
                 </tr>
               </thead>
               <tbody>
                 {data?.items?.map((key) => (
-                  <tr key={key.id} className="border-b border-base-200 hover">
+                  <tr key={key.id} className="border-b border-base-200/50 hover:bg-base-200/30 transition-colors">
                     <td>
-                      <button onClick={() => navigate(`/console/keys/${key.id}`)} className="link link-primary">
+                      <button onClick={() => navigate(`/console/keys/${key.id}`)} className="link link-primary text-sm font-medium">
                         {key.name}
                       </button>
                     </td>
                     <td><Badge variant={key.enabled ? 'green' : 'red'}>{key.enabled ? 'Active' : 'Disabled'}</Badge></td>
-                    <td className="mono">{key.rate_limit ?? 'Unlimited'}</td>
-                    <td className="mono">{key.budget_monthly != null ? `$${key.budget_monthly.toFixed(2)}` : 'Unlimited'}</td>
-                    <td className="mono">{new Date(key.created_at).toLocaleDateString()}</td>
+                    <td className="mono text-[13px] text-base-content/60">{key.rate_limit ?? 'Unlimited'}</td>
+                    <td className="mono text-[13px] text-base-content/60">{key.budget_monthly != null ? `$${key.budget_monthly.toFixed(2)}` : 'Unlimited'}</td>
+                    <td className="mono text-[13px] text-base-content/50">{new Date(key.created_at).toLocaleDateString()}</td>
                   </tr>
                 ))}
+                {(!data?.items?.length) && (
+                  <tr>
+                    <td colSpan={5} className="text-center py-16 text-base-content/25 text-sm">
+                      No API keys yet
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
+        </div>
+      )}
 
-          {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between text-sm">
-              <span className="text-base-content/40">Total {data?.total ?? 0}</span>
-              <div className="join">
-                <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-                <span className="px-3 flex items-center text-base-content/60">{page} / {totalPages}</span>
-                <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
-              </div>
-            </div>
-          )}
-        </>
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between text-sm">
+          <span className="text-base-content/30">Total {data?.total ?? 0}</span>
+          <div className="join">
+            <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
+            <span className="px-3 flex items-center text-base-content/50">{page} / {totalPages}</span>
+            <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
+          </div>
+        </div>
       )}
 
       <Modal
@@ -110,13 +120,13 @@ export default function Keys() {
       >
         {createdKey ? (
           <div>
-            <p className="text-sm text-base-content/60">Save this key now. It won't be shown again.</p>
-            <div className="mt-2 rounded-lg border border-base-300 bg-base-200 p-3 font-mono text-sm break-all">{createdKey}</div>
+            <p className="text-sm text-base-content/40">Save this key now. It won't be shown again.</p>
+            <div className="mt-3 rounded-lg border border-base-300/50 bg-base-200/50 p-3 font-mono text-sm break-all">{createdKey}</div>
           </div>
         ) : (
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="form-control">
-              <label className="label"><span className="label-text">Name</span></label>
+              <label className="label"><span className="label-text font-medium">Name</span></label>
               <input
                 type="text"
                 value={name}
@@ -128,7 +138,7 @@ export default function Keys() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="form-control">
-                <label className="label"><span className="label-text">Rate Limit (RPM)</span></label>
+                <label className="label"><span className="label-text font-medium">Rate Limit (RPM)</span></label>
                 <input
                   type="number"
                   value={rateLimit}
@@ -139,7 +149,7 @@ export default function Keys() {
                 />
               </div>
               <div className="form-control">
-                <label className="label"><span className="label-text">Monthly Budget ($)</span></label>
+                <label className="label"><span className="label-text font-medium">Monthly Budget ($)</span></label>
                 <input
                   type="number"
                   value={budget}

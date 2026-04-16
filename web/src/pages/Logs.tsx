@@ -38,7 +38,7 @@ export default function Logs() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold">Audit Logs</h1>
+          <h1 className="text-2xl font-bold">Audit Logs</h1>
           <p className="text-sm text-base-content/40 mt-1">API request history with full request/response bodies</p>
         </div>
         {data?.total != null && (
@@ -117,6 +117,7 @@ export default function Logs() {
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Time</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Model</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Protocol</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Stream</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Latency</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Input</th>
@@ -127,7 +128,7 @@ export default function Logs() {
               <tbody>
                 {data?.items?.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-base-content/30">
+                    <td colSpan={9} className="text-center py-12 text-base-content/30">
                       <Search className="h-8 w-8 mx-auto mb-2 opacity-40" />
                       <div>No logs found</div>
                       {hasFilters && <div className="text-xs mt-1">Try adjusting your filters</div>}
@@ -139,6 +140,7 @@ export default function Logs() {
                     <td className="mono text-[13px] text-base-content/60">{new Date(log.created_at).toLocaleString()}</td>
                     <td className="mono font-medium">{log.model_name}</td>
                     <td><Badge variant={log.protocol === 'openai' ? 'blue' : 'purple'}>{log.protocol}</Badge></td>
+                    <td>{log.stream ? <Badge variant="blue">stream</Badge> : <span className="text-base-content/30">-</span>}</td>
                     <td><Badge variant={log.status_code < 400 ? 'green' : log.status_code < 500 ? 'amber' : 'red'}>{log.status_code}</Badge></td>
                     <td className="mono text-base-content/60">{log.latency_ms}ms</td>
                     <td className="mono text-base-content/60">{log.input_tokens ?? '-'}</td>
@@ -204,6 +206,10 @@ export default function Logs() {
                 <Badge variant={selectedLog.protocol === 'openai' ? 'blue' : 'purple'}>{selectedLog.protocol}</Badge>
               </div>
               <div className="bg-base-200/60 rounded-lg p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Stream</div>
+                {selectedLog.stream ? <Badge variant="blue">stream</Badge> : <span className="text-base-content/30">-</span>}
+              </div>
+              <div className="bg-base-200/60 rounded-lg p-3">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Status</div>
                 <Badge variant={selectedLog.status_code < 400 ? 'green' : selectedLog.status_code < 500 ? 'amber' : 'red'}>{selectedLog.status_code}</Badge>
               </div>
@@ -219,13 +225,13 @@ export default function Logs() {
 
             {/* Request body */}
             <div>
-              <h3 className="font-display text-sm font-semibold mb-2 text-base-content/70 uppercase tracking-wider">Request Body</h3>
+              <h3 className="text-sm font-semibold mb-2 text-base-content/70 uppercase tracking-wider">Request Body</h3>
               <JsonViewer data={selectedLog.request_body} />
             </div>
 
             {/* Response body */}
             <div>
-              <h3 className="font-display text-sm font-semibold mb-2 text-base-content/70 uppercase tracking-wider">Response Body</h3>
+              <h3 className="text-sm font-semibold mb-2 text-base-content/70 uppercase tracking-wider">Response Body</h3>
               <JsonViewer data={selectedLog.response_body} />
             </div>
           </div>

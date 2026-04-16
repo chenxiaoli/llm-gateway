@@ -26,16 +26,22 @@ describe('Settings page', () => {
     }, { timeout: 5000 });
   });
 
-  it('renders a switch toggle', async () => {
+  it('renders settings toggles', async () => {
     renderWithProviders(<Settings />, { route: '/console/settings' });
 
     await waitFor(() => {
-      expect(screen.getByRole('switch')).toBeInTheDocument();
+      expect(screen.getAllByRole('switch')).toHaveLength(3);
     }, { timeout: 5000 });
   });
 
   it('renders change password form', async () => {
     renderWithProviders(<Settings />, { route: '/console/settings' });
+
+    // Click on the Password tab to see the change password form
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument();
+    });
+    screen.getByRole('button', { name: 'Password' }).click();
 
     await waitFor(() => {
       expect(screen.getByText('Current Password')).toBeInTheDocument();

@@ -1,7 +1,12 @@
 pub mod types;
+pub mod seed;
+#[cfg(feature = "sqlite")]
 pub mod sqlite;
+#[cfg(feature = "postgres")]
+pub mod postgres;
 
 pub use types::*;
+pub use seed::{SeedData, SeedProvider, SeedModel, get_available_providers, get_available_models};
 
 #[async_trait::async_trait]
 pub trait Storage: Send + Sync {
@@ -24,9 +29,17 @@ pub trait Storage: Send + Sync {
     async fn update_provider(&self, provider: &Provider) -> Result<Provider, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_provider(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+    // Pricing Policies
+    async fn create_pricing_policy(&self, policy: &PricingPolicy) -> Result<PricingPolicy, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_pricing_policy(&self, id: &str) -> Result<Option<PricingPolicy>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_pricing_policies(&self) -> Result<Vec<PricingPolicy>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn update_pricing_policy(&self, policy: &PricingPolicy) -> Result<PricingPolicy, Box<dyn std::error::Error + Send + Sync>>;
+    async fn delete_pricing_policy(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
     // Channels
     async fn create_channel(&self, channel: &Channel) -> Result<Channel, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_channel(&self, id: &str) -> Result<Option<Channel>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_channels(&self) -> Result<Vec<Channel>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_enabled_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_channel(&self, channel: &Channel) -> Result<Channel, Box<dyn std::error::Error + Send + Sync>>;
@@ -35,6 +48,7 @@ pub trait Storage: Send + Sync {
     // Models
     async fn create_model(&self, model: &Model) -> Result<Model, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_model(&self, name: &str) -> Result<Option<Model>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_model_by_provider(&self, provider_id: &str, name: &str) -> Result<Option<Model>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_models(&self) -> Result<Vec<ModelWithProvider>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_models_by_provider(&self, provider_id: &str) -> Result<Vec<Model>, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_model(&self, model: &Model) -> Result<Model, Box<dyn std::error::Error + Send + Sync>>;
@@ -42,9 +56,19 @@ pub trait Storage: Send + Sync {
 
     // Key-Model Rate Limits
     async fn set_key_model_rate_limit(&self, limit: &KeyModelRateLimit) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
-    async fn get_key_model_rate_limit(&self, key_id: &str, model_name: &str) -> Result<Option<KeyModelRateLimit>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_key_model_rate_limit(&self, key_id: &str, model_id: &str) -> Result<Option<KeyModelRateLimit>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_key_model_rate_limits(&self, key_id: &str) -> Result<Vec<KeyModelRateLimit>, Box<dyn std::error::Error + Send + Sync>>;
-    async fn delete_key_model_rate_limit(&self, key_id: &str, model_name: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn delete_key_model_rate_limit(&self, key_id: &str, model_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    // Channel Models
+    async fn create_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_channel_model(&self, id: &str) -> Result<Option<ChannelModel>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_channel_models(&self) -> Result<Vec<ChannelModel>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_channel_models_by_channel(&self, channel_id: &str) -> Result<Vec<ChannelModel>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_channel_models_for_model(&self, model_id: &str) -> Result<Vec<ChannelModel>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_channels_for_model(&self, model_id: &str) -> Result<Vec<Channel>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn update_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, Box<dyn std::error::Error + Send + Sync>>;
+    async fn delete_channel_model(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     // Usage
     async fn record_usage(&self, usage: &UsageRecord) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
@@ -75,4 +99,7 @@ pub trait Storage: Send + Sync {
     // Settings
     async fn get_setting(&self, key: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
     async fn set_setting(&self, key: &str, value: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    // Seed data
+    async fn seed_data(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }

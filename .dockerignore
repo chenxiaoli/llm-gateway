@@ -1,0 +1,12 @@
+target/
+node_modules/
+.git/
+.gitignore
+.claude/
+.worktrees/
+data/
+test-results/
+web/test-results/
+web/tsconfig.tsbuildinfo
+docs/
+.github/

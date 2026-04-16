@@ -55,7 +55,7 @@ export default function KeyDetail() {
       </Button>
 
       <div className="mb-6">
-        <h1 className="font-display text-2xl font-bold">Edit Key: {key.name}</h1>
+        <h1 className="text-2xl font-bold">Edit Key: {key.name}</h1>
       </div>
 
       <form onSubmit={handleUpdate} className="max-w-lg space-y-4">
