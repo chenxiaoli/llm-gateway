@@ -79,7 +79,7 @@ async fn record_stream_usage(
     let _ = storage.record_usage(&usage).await;
     let _ = audit_logger.log_request(
         &usage.key_id, &usage.model_name, &usage.provider_id,
-        protocol, is_stream, &body, &response_body, status_code,
+        protocol, stream, &body, &response_body, status_code,
         latency_ms, usage.input_tokens, usage.output_tokens,
     ).await;
 }
