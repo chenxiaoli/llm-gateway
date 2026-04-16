@@ -64,6 +64,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Create database for sqlx
+        run: mkdir -p data && echo "DATABASE_URL=sqlite:data/gateway.db" >> $GITHUB_ENV
+
+      - name: Run sqlx prepare
+        run: cargo sqlx prepare --workspace
+
       - name: Run tests
         run: cargo test --workspace
 
