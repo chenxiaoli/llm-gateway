@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     provider_id   TEXT NOT NULL,
     channel_id    TEXT,
     protocol      TEXT NOT NULL,
+    stream       BOOLEAN NOT NULL DEFAULT false,
     request_body  TEXT NOT NULL,
     response_body TEXT NOT NULL,
     status_code   INTEGER NOT NULL,
