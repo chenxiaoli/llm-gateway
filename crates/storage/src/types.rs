@@ -254,7 +254,7 @@ pub struct ChannelModel {
     pub id: String,
     pub channel_id: String,
     pub model_id: String,
-    pub upstream_model_name: String,
+    pub upstream_model_name: Option<String>,
     pub priority_override: Option<i32>,
     pub cost_policy_id: Option<String>,   // NEW: for upstream cost
     pub markup_ratio: f64,                  // NEW, default 1.0
@@ -271,7 +271,7 @@ pub struct ChannelModel {
 pub struct CreateChannelModel {
     pub channel_id: String,
     pub model_id: String,
-    pub upstream_model_name: String,
+    pub upstream_model_name: Option<String>,
     pub priority_override: Option<i32>,
     pub cost_policy_id: Option<String>,   // NEW
     pub markup_ratio: Option<f64>,         // NEW

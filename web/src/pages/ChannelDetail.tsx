@@ -364,7 +364,6 @@ export default function ChannelDetail() {
               value={upstreamModelName}
               onChange={(e) => setUpstreamModelName(e.target.value)}
               placeholder="e.g., gpt-4o, claude-3-opus"
-              required
               className="input input-bordered w-full"
             />
             <label className="label">

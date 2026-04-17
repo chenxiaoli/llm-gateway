@@ -313,7 +313,7 @@ struct PgChannelModelRow {
     id: String,
     channel_id: String,
     model_id: String,
-    upstream_model_name: String,
+    upstream_model_name: Option<String>,
     priority_override: Option<i32>,
     cost_policy_id: Option<String>,
     markup_ratio: f64,

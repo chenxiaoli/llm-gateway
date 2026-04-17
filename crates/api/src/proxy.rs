@@ -143,7 +143,8 @@ pub async fn proxy(
 
     // === Route with failover ===
     for (channel, channel_model) in &routing_candidates {
-        let upstream_name = channel_model.upstream_model_name.as_str();
+        // Use upstream_model_name if provided, otherwise use the model name from request
+        let upstream_name = channel_model.upstream_model_name.as_deref().unwrap_or(&model_name);
 
         let modified_body = if upstream_name != &model_name {
             let mut req_json_modified = req_json.clone();
