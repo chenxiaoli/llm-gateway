@@ -77,7 +77,60 @@ pub async fn proxy(
             .ok_or(ApiError::NotFound(format!("Model '{}' not found or not Anthropic compatible", model_name)))?,
     };
 
-    let provider_id = model_entry.model.provider_id.clone();
+    // === Step 3: Route via ChannelModel (sole routing source) ===
+    // Get channel_models for this model, filter enabled, get channels, sort by priority
+    let channel_models = state
+        .storage
+        .get_channel_models_for_model(&model_entry.model.id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Filter enabled channel_models and get their channel_ids
+    let enabled_channel_model_ids: Vec<&str> = channel_models
+        .iter()
+        .filter(|cm| cm.enabled)
+        .map(|cm| cm.channel_id.as_str())
+        .collect();
+
+    if enabled_channel_model_ids.is_empty() {
+        return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
+    }
+
+    // Get all channels and filter to those in our channel_models
+    let all_channels = state
+        .storage
+        .list_channels()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Build a map for quick channel lookup by id
+    let channel_map: std::collections::HashMap<&str, &llm_gateway_storage::Channel> = all_channels
+        .iter()
+        .map(|c| (c.id.as_str(), c))
+        .collect();
+
+    // Create routing candidates: (channel, channel_model) pairs
+    let mut routing_candidates: Vec<(&llm_gateway_storage::Channel, &llm_gateway_storage::ChannelModel)> = Vec::new();
+
+    for cm in channel_models.iter().filter(|cm| cm.enabled) {
+        if let Some(channel) = channel_map.get(cm.channel_id.as_str()) {
+            if channel.enabled {
+                routing_candidates.push((channel, cm));
+            }
+        }
+    }
+
+    if routing_candidates.is_empty() {
+        return Err(ApiError::NotFound("No enabled channels available for routing".to_string()));
+    }
+
+    // Sort by channel priority (lower number = higher priority)
+    routing_candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
+
+    // Get provider from first channel (for base_url fallback)
+    let provider_id = routing_candidates.first().map(|(c, _)| c.provider_id.clone())
+        .ok_or_else(|| ApiError::Internal("No channels available".to_string()))?;
+
     let provider = state
         .storage
         .get_provider(&provider_id)
@@ -85,31 +138,12 @@ pub async fn proxy(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
 
-    if !provider.enabled {
-        return Err(ApiError::NotFound(format!("Provider '{}' is disabled", provider_id)));
-    }
-
-    let channels = match state.storage.get_channels_for_model(&model_name).await {
-        Ok(channels) if !channels.is_empty() => channels,
-        _ => state.storage.list_enabled_channels_by_provider(&provider_id).await.map_err(|e| ApiError::Internal(e.to_string()))?,
-    };
-    if channels.is_empty() {
-        return Err(ApiError::Internal(format!("Provider '{}' has no enabled channels", provider_id)));
-    }
-
-    let channel_models = state.storage.get_channel_models_for_model(&model_name).await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
     let client = reqwest::Client::new();
     let mut last_error = String::new();
 
     // === Route with failover ===
-    for channel in &channels {
-        let upstream_name = channel_models
-            .iter()
-            .find(|cm| cm.channel_id == channel.id)
-            .map(|cm| cm.upstream_model_name.as_str())
-            .unwrap_or(&model_name);
+    for (channel, channel_model) in &routing_candidates {
+        let upstream_name = channel_model.upstream_model_name.as_str();
 
         let modified_body = if upstream_name != &model_name {
             let mut req_json_modified = req_json.clone();
@@ -262,7 +296,7 @@ pub async fn proxy(
         let storage = state.storage.clone();
         let audit_logger = state.audit_logger.clone();
         let key_id = api_key.id.clone();
-        let provider_id = provider.id.clone();
+        let provider_id = provider_id.clone(); // Already captured from first channel above
         let model_name = model_name.clone();
         let upstream_name = upstream_name.to_string();
         let channel_id = channel.id.clone();
@@ -272,10 +306,14 @@ pub async fn proxy(
         };
         let proto_for_audit = proto.clone();
         let proto_for_usage = proto.clone();
-        let pricing_policy_id = model_entry.model.pricing_policy_id.clone();
-        let input_price = model_entry.model.input_price;
-        let output_price = model_entry.model.output_price;
-        let request_price = model_entry.model.request_price;
+
+        // Use ChannelModel override > Model default for pricing
+        let pricing_policy_id = channel_model.cost_policy_id.clone().or_else(|| model_entry.model.pricing_policy_id.clone());
+        let billing_type = channel_model.billing_type.clone().or_else(|| Some("token".to_string()));
+        let input_price = channel_model.input_price.unwrap_or(model_entry.model.input_price);
+        let output_price = channel_model.output_price.unwrap_or(model_entry.model.output_price);
+        let request_price = channel_model.request_price.unwrap_or(model_entry.model.request_price);
+
         let (input_tokens, output_tokens) = extract_usage_from_response(&response_body, protocol);
         let body_for_worker = body.clone();
         let response_for_worker = response_body.clone();
@@ -296,8 +334,13 @@ pub async fn proxy(
                     _ => 0.0,
                 }
             } else {
+                // Use billing_type from ChannelModel or default to Token
+                let billing = match billing_type.as_deref() {
+                    Some("request") => llm_gateway_storage::BillingType::Request,
+                    _ => llm_gateway_storage::BillingType::Token,
+                };
                 llm_gateway_billing::calculate_cost(
-                    &llm_gateway_storage::BillingType::Token,
+                    &billing,
                     input_tokens,
                     output_tokens,
                     input_price,

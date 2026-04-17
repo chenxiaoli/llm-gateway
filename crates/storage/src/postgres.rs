@@ -87,6 +87,7 @@ struct PgModelRow {
     input_price: f64,
     output_price: f64,
     request_price: f64,
+    pricing_policy_id: Option<String>,
     enabled: bool,
     created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -101,6 +102,7 @@ impl From<PgModelRow> for Model {
             input_price: r.input_price,
             output_price: r.output_price,
             request_price: r.request_price,
+            pricing_policy_id: r.pricing_policy_id,
             enabled: r.enabled,
             created_at: r.created_at,
         }
@@ -116,6 +118,7 @@ struct PgModelWithProviderRow {
     input_price: f64,
     output_price: f64,
     request_price: f64,
+    pricing_policy_id: Option<String>,
     enabled: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     provider_name: String,
@@ -150,6 +153,7 @@ impl From<PgModelWithProviderRow> for ModelWithProvider {
                 input_price: r.input_price,
                 output_price: r.output_price,
                 request_price: r.request_price,
+                pricing_policy_id: r.pricing_policy_id,
                 enabled: r.enabled,
                 created_at: r.created_at,
             },
@@ -760,12 +764,13 @@ impl crate::Storage for PostgresStorage {
     async fn update_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
             "UPDATE models SET billing_type = $1, input_price = $2, output_price = $3,
-             request_price = $4, enabled = $5 WHERE name = $6",
+             request_price = $4, pricing_policy_id = $5, enabled = $6 WHERE name = $7",
         )
         .bind(&model.billing_type)
         .bind(model.input_price)
         .bind(model.output_price)
         .bind(model.request_price)
+        .bind(&model.pricing_policy_id)
         .bind(model.enabled)
         .bind(&model.name)
         .execute(&self.pool)

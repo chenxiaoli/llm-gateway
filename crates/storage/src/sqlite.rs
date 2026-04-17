@@ -104,6 +104,7 @@ struct SqliteModelRow {
     input_price: f64,
     output_price: f64,
     request_price: f64,
+    pricing_policy_id: Option<String>,
     enabled: i64,
     created_at: String,
 }
@@ -118,6 +119,7 @@ impl From<SqliteModelRow> for Model {
             input_price: r.input_price,
             output_price: r.output_price,
             request_price: r.request_price,
+            pricing_policy_id: r.pricing_policy_id,
             enabled: r.enabled != 0,
             created_at: parse_rfc3339(&r.created_at),
         }
@@ -133,6 +135,7 @@ struct SqliteModelWithProviderRow {
     input_price: f64,
     output_price: f64,
     request_price: f64,
+    pricing_policy_id: Option<String>,
     enabled: i64,
     created_at: String,
     provider_name: String,
@@ -167,6 +170,7 @@ impl From<SqliteModelWithProviderRow> for ModelWithProvider {
                 input_price: r.input_price,
                 output_price: r.output_price,
                 request_price: r.request_price,
+                pricing_policy_id: r.pricing_policy_id,
                 enabled: r.enabled != 0,
                 created_at: parse_rfc3339(&r.created_at),
             },
@@ -800,12 +804,13 @@ impl crate::Storage for SqliteStorage {
     async fn update_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
             "UPDATE models SET billing_type = ?, input_price = ?, output_price = ?,
-             request_price = ?, enabled = ? WHERE name = ?",
+             request_price = ?, pricing_policy_id = ?, enabled = ? WHERE name = ?",
         )
         .bind(&model.billing_type)
         .bind(model.input_price)
         .bind(model.output_price)
         .bind(model.request_price)
+        .bind(&model.pricing_policy_id)
         .bind(model.enabled as i64)
         .bind(&model.name)
         .execute(&self.pool)

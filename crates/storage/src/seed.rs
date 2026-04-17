@@ -108,6 +108,7 @@ pub fn get_seed_models(_provider_ids: &[(String, String)]) -> Vec<Model> {
             input_price: m.input_price.unwrap_or(0.0),
             output_price: m.output_price.unwrap_or(0.0),
             request_price: 0.0,
+            pricing_policy_id: None,
             enabled: true,
             created_at: Utc::now(),
         })

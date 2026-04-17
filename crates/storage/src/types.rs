@@ -157,6 +157,7 @@ pub struct Model {
     pub input_price: f64,     // per 1M tokens
     pub output_price: f64,    // per 1M tokens
     pub request_price: f64,   // per request
+    pub pricing_policy_id: Option<String>,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
 }
