@@ -279,6 +279,7 @@ pub struct CreateChannelModel {
     pub input_price: Option<f64>,          // NEW: input_price
     pub output_price: Option<f64>,         // NEW: output_price
     pub request_price: Option<f64>,        // NEW: request_price
+    pub enabled: Option<bool>,             // NEW: enabled
 }
 
 #[derive(Debug, Deserialize)]

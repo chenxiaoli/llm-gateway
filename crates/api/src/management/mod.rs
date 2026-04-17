@@ -67,6 +67,14 @@ pub fn management_router() -> Router<Arc<AppState>> {
             post(channel_models::create_channel_model).get(channel_models::list_channel_models),
         )
         .route(
+            "/api/v1/admin/channels/{channel_id}/channel-models",
+            get(channel_models::list_channel_models_by_channel),
+        )
+        .route(
+            "/api/v1/admin/channels/{channel_id}/channel-models",
+            post(channel_models::create_channel_model_by_channel),
+        )
+        .route(
             "/api/v1/admin/channel-models/{id}",
             get(channel_models::get_channel_model).patch(channel_models::update_channel_model).delete(channel_models::delete_channel_model),
         )

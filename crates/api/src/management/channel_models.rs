@@ -44,7 +44,49 @@ pub async fn create_channel_model(
         input_price: input.input_price,
         output_price: input.output_price,
         request_price: input.request_price,
-        enabled: true,
+        enabled: input.enabled.unwrap_or(true),
+        created_at: now,
+        updated_at: now,
+    };
+
+    let created = state.storage.create_channel_model(&cm).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(created))
+}
+
+pub async fn create_channel_model_by_channel(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(channel_id): Path<String>,
+    Json(input): Json<CreateChannelModel>,
+) -> Result<Json<ChannelModel>, ApiError> {
+    require_admin(&headers, &state.jwt_secret)?;
+
+    // Verify channel exists
+    let channel = state.storage.get_channel(&channel_id).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound("Channel not found".to_string()))?;
+
+    // Verify model exists
+    let _model = state.storage.get_model(&input.model_id).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound("Model not found".to_string()))?;
+
+    let now = chrono::Utc::now();
+    let cm = ChannelModel {
+        id: uuid::Uuid::new_v4().to_string(),
+        channel_id: channel_id.clone(),
+        model_id: input.model_id,
+        upstream_model_name: input.upstream_model_name,
+        priority_override: input.priority_override,
+        cost_policy_id: input.cost_policy_id,
+        markup_ratio: input.markup_ratio.unwrap_or(1.0),
+        billing_type: input.billing_type,
+        input_price: input.input_price,
+        output_price: input.output_price,
+        request_price: input.request_price,
+        enabled: input.enabled.unwrap_or(true),
         created_at: now,
         updated_at: now,
     };
@@ -145,4 +187,17 @@ pub async fn delete_channel_model(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+pub async fn list_channel_models_by_channel(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(channel_id): Path<String>,
+) -> Result<Json<Vec<ChannelModel>>, ApiError> {
+    require_admin(&headers, &state.jwt_secret)?;
+
+    let models = state.storage.list_channel_models_by_channel(&channel_id).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(models))
 }

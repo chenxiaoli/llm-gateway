@@ -261,7 +261,6 @@ export interface ChannelModel {
 }
 
 export interface CreateChannelModelRequest {
-  channel_id: string;
   model_id: string;
   upstream_model_name: string;
   priority_override?: number | null;
@@ -269,6 +268,7 @@ export interface CreateChannelModelRequest {
   input_price?: number | null;
   output_price?: number | null;
   request_price?: number | null;
+  enabled?: boolean;
 }
 
 export interface UpdateChannelModelRequest {

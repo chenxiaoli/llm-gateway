@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Pencil, Trash2, KeyRound, Globe, Hash } from 'lucide-react';
-import { useChannel, useUpdateChannel, useDeleteChannel } from '../hooks/useProviders';
+import { ArrowLeft, Pencil, Trash2, KeyRound, Globe, Hash, Plus } from 'lucide-react';
+import { useChannel, useUpdateChannel, useDeleteChannel, useChannelModels, useCreateChannelModel, useDeleteChannelModel } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
+import { useAllModels } from '../hooks/useModels';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Toggle } from '../components/ui/Toggle';
@@ -14,8 +15,12 @@ export default function ChannelDetail() {
   const navigate = useNavigate();
   const { data: channel, isLoading } = useChannel(id!);
   const { data: providers } = useProviders();
+  const { data: channelModels, isLoading: modelsLoading } = useChannelModels(channel?.id || '');
+  const { data: allModels } = useAllModels();
   const updateMutation = useUpdateChannel(id!);
   const deleteMutation = useDeleteChannel(id!);
+  const createModelMutation = useCreateChannelModel(channel?.id || '');
+  const deleteModelMutation = useDeleteChannelModel(channel?.id || '');
 
   const [isEditing, setIsEditing] = useState(false);
   const [channelName, setChannelName] = useState('');
@@ -23,6 +28,11 @@ export default function ChannelDetail() {
   const [channelBaseUrl, setChannelBaseUrl] = useState('');
   const [channelPriority, setChannelPriority] = useState('0');
   const [channelEnabled, setChannelEnabled] = useState(false);
+
+  const [isAddingModel, setIsAddingModel] = useState(false);
+  const [selectedModel, setSelectedModel] = useState('');
+  const [upstreamModelName, setUpstreamModelName] = useState('');
+  const [modelEnabled, setModelEnabled] = useState(true);
 
   useEffect(() => {
     if (channel) {
@@ -187,6 +197,54 @@ export default function ChannelDetail() {
             </div>
           </div>
         </div>
+
+        {/* Channel Models Card */}
+        <div className="bg-base-100 rounded-box p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-base-content/60">Channel Models</h2>
+            <Button variant="secondary" size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => setIsAddingModel(true)}>
+              Add Model
+            </Button>
+          </div>
+
+          {modelsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <span className="loading loading-spinner loading-sm" />
+            </div>
+          ) : channelModels && channelModels.length > 0 ? (
+            <div className="space-y-2">
+              {channelModels.map((cm) => (
+                <div key={cm.id} className="flex items-center justify-between p-3 rounded-lg bg-base-200/50">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-mono text-sm truncate">{cm.upstream_model_name}</div>
+                    <div className="text-xs text-base-content/40 mt-0.5">
+                      Model ID: {cm.model_id}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${
+                      cm.enabled
+                        ? 'bg-success/10 text-success'
+                        : 'bg-base-300/50 text-base-content/40'
+                    }`}>
+                      {cm.enabled ? 'Active' : 'Disabled'}
+                    </span>
+                    <ConfirmDialog title={`Remove model "${cm.upstream_model_name}" from this channel?`} onConfirm={() => deleteModelMutation.mutateAsync(cm.id)} okText="Remove">
+                      <Button variant="ghost" size="sm" icon={<Trash2 className="h-4 w-4" />} />
+                    </ConfirmDialog>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-base-content/40">
+              <p className="text-sm">No models added to this channel</p>
+              <Button variant="ghost" size="sm" className="mt-2" onClick={() => setIsAddingModel(true)}>
+                Add your first model
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Edit Modal */}
@@ -257,6 +315,73 @@ export default function ChannelDetail() {
               Save Changes
             </Button>
             <Button variant="ghost" type="button" onClick={handleCancelEdit}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Add Model Modal */}
+      <Modal open={isAddingModel} onClose={() => setIsAddingModel(false)} title="Add Model to Channel">
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          if (!selectedModel || !upstreamModelName) return;
+          await createModelMutation.mutateAsync({
+            model_id: selectedModel,
+            upstream_model_name: upstreamModelName,
+            enabled: modelEnabled,
+          });
+          setIsAddingModel(false);
+          setSelectedModel('');
+          setUpstreamModelName('');
+          setModelEnabled(true);
+        }} className="space-y-4">
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Select Model</span>
+            </label>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              required
+              className="select select-bordered w-full"
+            >
+              <option value="">Select a model...</option>
+              {allModels?.filter(m => !channelModels?.some(cm => cm.model_id === m.id)).map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Upstream Model Name</span>
+            </label>
+            <input
+              type="text"
+              value={upstreamModelName}
+              onChange={(e) => setUpstreamModelName(e.target.value)}
+              placeholder="e.g., gpt-4o, claude-3-opus"
+              required
+              className="input input-bordered w-full"
+            />
+            <label className="label">
+              <span className="label-text-alt">The exact model name the provider expects</span>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="label-text">Enabled</span>
+            <Toggle checked={modelEnabled} onChange={setModelEnabled} />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Button variant="primary" type="submit" loading={createModelMutation.isPending}>
+              Add Model
+            </Button>
+            <Button variant="ghost" type="button" onClick={() => setIsAddingModel(false)}>
               Cancel
             </Button>
           </div>

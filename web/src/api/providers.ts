@@ -71,8 +71,18 @@ export async function listChannelModels(providerId: string): Promise<ChannelMode
   return data;
 }
 
+export async function listChannelModelsByChannel(channelId: string): Promise<ChannelModel[]> {
+  const { data } = await adminApiClient.get<ChannelModel[]>(`/channels/${channelId}/channel-models`);
+  return data;
+}
+
 export async function createChannelModel(providerId: string, input: CreateChannelModelRequest): Promise<ChannelModel> {
   const { data } = await adminApiClient.post<ChannelModel>(`/providers/${providerId}/channel-models`, input);
+  return data;
+}
+
+export async function createChannelModelByChannel(channelId: string, input: CreateChannelModelRequest): Promise<ChannelModel> {
+  const { data } = await adminApiClient.post<ChannelModel>(`/channels/${channelId}/channel-models`, input);
   return data;
 }
 

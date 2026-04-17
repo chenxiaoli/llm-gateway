@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Pencil, Trash2, RotateCcw } from 'lucide-react';
-import { useProvider, useUpdateProvider, useDeleteProvider, useChannels, useCreateChannel, useUpdateChannel, useDeleteChannel, useSyncModels } from '../hooks/useProviders';
+import { useProvider, useUpdateProvider, useDeleteProvider, useSyncModels } from '../hooks/useProviders';
+import { useChannels, useCreateChannel, useUpdateChannel, useDeleteChannel } from '../hooks/useChannels';
 import { useModels, useCreateModel, useUpdateModel, useDeleteModel } from '../hooks/useModels';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';

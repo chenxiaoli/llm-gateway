@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAllChannels, useProviders } from '../hooks/useProviders';
+import { useAllChannels } from '../hooks/useChannels';
+import { useProviders } from '../hooks/useProviders';
 import { createChannel } from '../api/providers';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
