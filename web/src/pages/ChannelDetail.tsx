@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Pencil, Trash2, KeyRound, Globe, Hash, Plus } from 'lucide-react';
+import { ArrowLeft, Pencil, Trash2, KeyRound, Globe, Hash, Plus, Building2, LinkIcon, Power } from 'lucide-react';
 import { useChannel, useUpdateChannel, useDeleteChannel, useChannelModels, useCreateChannelModel, useDeleteChannelModel } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
@@ -173,6 +173,67 @@ export default function ChannelDetail() {
           </div>
         </div>
 
+        {/* Provider Card */}
+        {provider && (
+          <div className="bg-base-100 rounded-box p-5 shadow-sm">
+            <h2 className="text-sm font-semibold text-base-content/60 mb-4">Provider</h2>
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
+                  <Building2 className="h-4 w-4 text-secondary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-base-content/40 uppercase tracking-wider">Name</div>
+                  <div className="text-sm font-medium">{provider.name}</div>
+                </div>
+              </div>
+
+              {provider.base_url && (
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
+                    <Globe className="h-4 w-4 text-secondary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-base-content/40 uppercase tracking-wider">Base URL</div>
+                    <div className="text-sm font-mono text-base-content/80 truncate" title={provider.base_url}>
+                      {provider.base_url}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {provider.endpoints && (
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
+                    <LinkIcon className="h-4 w-4 text-secondary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-base-content/40 uppercase tracking-wider">Endpoints</div>
+                    <div className="text-sm font-mono text-base-content/80 truncate" title={provider.endpoints}>
+                      {provider.endpoints}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
+                  <Power className="h-4 w-4 text-secondary" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-xs text-base-content/40 uppercase tracking-wider">Status</div>
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${
+                    provider.enabled
+                      ? 'bg-success/10 text-success'
+                      : 'bg-base-300/50 text-base-content/40'
+                  }`}>
+                    {provider.enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {/* Metadata Card */}
         <div className="bg-base-100 rounded-box p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-base-content/60 mb-4">Metadata</h2>
