@@ -58,16 +58,8 @@ pub fn management_router() -> Router<Arc<AppState>> {
             get(models::list_all_models).post(models::create_model_global),
         )
         .route(
-            "/api/v1/admin/providers/{id}/models",
-            get(models::list_models).post(models::create_model),
-        )
-        .route(
-            "/api/v1/admin/providers/{id}/models/{model_name}",
+            "/api/v1/admin/models/{model_name}",
             patch(models::update_model).delete(models::delete_model),
-        )
-        .route(
-            "/api/v1/admin/providers/{id}/sync-models",
-            post(models::sync_models),
         )
         // ChannelModels (admin)
         .route(

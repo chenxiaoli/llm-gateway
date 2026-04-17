@@ -159,7 +159,17 @@
       "Bash(export RUSTUP_TOOLCHAIN=stable-x86_64-unknown-linux-gnu)",
       "Bash(export PATH=\"/home/node/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:$PATH\" cargo check --package llm-gateway-api 2)",
       "Bash(export RUSTUP_HOME=/home/node/.rustup)",
-      "Bash(export CARGO_HOME=/home/node/.cargo)"
+      "Bash(export CARGO_HOME=/home/node/.cargo)",
+      "Bash(gh release:*)",
+      "Bash(gh issue:*)",
+      "Bash(/workspace/target/debug/cargo check:*)",
+      "Bash(/workspace/target/release/cargo check:*)",
+      "Bash(/root/.cargo/bin/cargo check:*)",
+      "Bash(timeout 10 ~/.cargo/bin/cargo run)",
+      "Bash(timeout 5 ~/.cargo/bin/cargo run)",
+      "Bash(cargo clean:*)",
+      "Bash(timeout 8 ~/.cargo/bin/cargo run)",
+      "Bash(~/.cargo/bin/cargo build:*)"
     ]
   }
 }
