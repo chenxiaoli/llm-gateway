@@ -152,7 +152,7 @@ pub async fn update_channel_model(
         .ok_or(ApiError::NotFound("ChannelModel not found".to_string()))?;
 
     if let Some(upstream) = input.upstream_model_name {
-        cm.upstream_model_name = upstream;
+        cm.upstream_model_name = Some(upstream);
     }
     if let Some(priority) = input.priority_override {
         cm.priority_override = priority;
