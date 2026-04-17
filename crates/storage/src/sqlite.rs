@@ -1056,7 +1056,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn query_logs(&self, filter: &LogFilter) -> Result<Vec<AuditLog>, DbErr> {
         let mut sql = String::from(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, 0 as stream, request_body, response_body,
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at
              FROM audit_logs WHERE 1=1",
         );
@@ -1127,7 +1127,7 @@ impl crate::Storage for SqliteStorage {
 
         let offset = (page - 1) * page_size;
         let data_sql = format!(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, 0 as stream, request_body, response_body, \
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body, \
              status_code, latency_ms, input_tokens, output_tokens, created_at \
              FROM audit_logs {} ORDER BY created_at DESC LIMIT ? OFFSET ?",
             where_sql
