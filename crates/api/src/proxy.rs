@@ -169,6 +169,17 @@ pub async fn proxy(
         }
 
         req = req.header("Authorization", format!("Bearer {}", api_key_value));
+
+        // Forward non-auth client headers to upstream (exclude host, authorization, content-length)
+        for (name, value) in headers.iter() {
+            match name.as_str() {
+                "host" | "authorization" | "content-length" => continue,
+                _ => {
+                    req = req.header(name.clone(), value);
+                }
+            }
+        }
+
         req = req.body(modified_body);
 
         let start = Instant::now();

@@ -251,6 +251,11 @@ pub async fn messages(
                 .header("x-api-key", &api_key_value)
                 .header("anthropic-version", "2023-06-01")
                 .header("Content-Type", "application/json")
+                // Forward non-auth client headers to upstream
+                .headers(headers.iter()
+                    .filter(|(name, _)| !matches!(name.as_str(), "host" | "authorization" | "content-length"))
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect())
                 .body(modified_body)
                 .send()
                 .await
