@@ -43,7 +43,7 @@ pub async fn list_models(
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-        if !channel_models.is_empty() {
+        if channel_models.iter().any(|cm| cm.enabled) {
             result.push(m);
         }
     }
