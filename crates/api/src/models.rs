@@ -33,18 +33,17 @@ pub async fn list_models(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // Filter to only models that have at least one enabled channel
+    // Filter to only models that have at least one enabled ChannelModel
     let mut result: Vec<ModelWithProvider> = Vec::new();
     for m in models {
-        // Check if model has any channel
-        let channels = state.storage.get_channels_for_model(&m.model.name).await
+        // Check if model has any channel models
+        let channel_models = state
+            .storage
+            .get_channel_models_for_model(&m.model.id)
+            .await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-        // Also check provider-level channels as fallback
-        let provider_channels = state.storage.list_enabled_channels_by_provider(&m.model.provider_id).await
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-        if !channels.is_empty() || !provider_channels.is_empty() {
+        if !channel_models.is_empty() {
             result.push(m);
         }
     }
@@ -57,7 +56,7 @@ pub async fn list_models(
                 "id": m.model.name,
                 "object": "model",
                 "created": m.model.created_at.timestamp(),
-                "owned_by": m.provider.name,
+                "owned_by": m.provider_name,
             })
         })
         .collect();
