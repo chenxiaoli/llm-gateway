@@ -94,7 +94,6 @@ pub async fn create_model_global(
     let model = Model {
         id: input.name.clone(),
         name: input.name,
-        provider_id: input.provider_id,
         model_type: None,
         pricing_policy_id: input.pricing_policy_id,
         billing_type,
@@ -135,7 +134,6 @@ pub async fn create_model(
     let model = Model {
         id: input.name.clone(),
         name: input.name,
-        provider_id,
         model_type: None,
         pricing_policy_id: input.pricing_policy_id,
         billing_type,
@@ -158,7 +156,7 @@ pub async fn create_model(
 pub async fn update_model(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path((provider_id, model_name)): Path<(String, String)>,
+    Path((_provider_id, model_name)): Path<(String, String)>,
     Json(input): Json<StorageUpdateModel>,
 ) -> Result<Json<Model>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
@@ -169,14 +167,6 @@ pub async fn update_model(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?;
-
-    // Verify the model belongs to the specified provider
-    if model.provider_id != provider_id {
-        return Err(ApiError::NotFound(format!(
-            "Model '{}' not found under provider '{}'",
-            model_name, provider_id
-        )));
-    }
 
     // Apply partial updates
     if let Some(pricing_policy_id) = input.pricing_policy_id {
@@ -210,24 +200,17 @@ pub async fn update_model(
 pub async fn delete_model(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path((provider_id, model_name)): Path<(String, String)>,
+    Path((_provider_id, model_name)): Path<(String, String)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
-    // Verify the model belongs to the specified provider
-    let model = state
+    // Verify the model exists
+    let _model = state
         .storage
         .get_model(&model_name)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?;
-
-    if model.provider_id != provider_id {
-        return Err(ApiError::NotFound(format!(
-            "Model '{}' not found under provider '{}'",
-            model_name, provider_id
-        )));
-    }
 
     state
         .storage
@@ -301,8 +284,8 @@ pub async fn sync_models(
                                 .and_then(|v| v.as_str())
                                 .map(|s| s.to_string());
 
-                            // Check if model exists for this provider
-                            let existing = state.storage.get_model_by_provider(&provider_id, &name).await.map_err(|e| ApiError::Internal(e.to_string()))?;
+                            // Check if model exists
+                            let existing = state.storage.get_model(&name).await.map_err(|e| ApiError::Internal(e.to_string()))?;
 
                             if existing.is_some() {
                                 updated_count += 1;
@@ -316,7 +299,6 @@ pub async fn sync_models(
                                 let model = Model {
                                     id: name.clone(),
                                     name: name.clone(),
-                                    provider_id: provider_id.clone(),
                                     model_type: model_type.clone(),
                                     pricing_policy_id: None,
                                     billing_type: "per_token".to_string(),
@@ -381,8 +363,8 @@ pub async fn sync_models(
                                 continue;
                             }
 
-                            // Check if model exists for this provider
-                            let existing = state.storage.get_model_by_provider(&provider_id, &name).await.map_err(|e| ApiError::Internal(e.to_string()))?;
+                            // Check if model exists
+                            let existing = state.storage.get_model(&name).await.map_err(|e| ApiError::Internal(e.to_string()))?;
 
                             if existing.is_some() {
                                 updated_count += 1;
@@ -396,7 +378,6 @@ pub async fn sync_models(
                                 let model = Model {
                                     id: name.clone(),
                                     name: name.clone(),
-                                    provider_id: provider_id.clone(),
                                     model_type: model_type.clone(),
                                     pricing_policy_id: None,
                                     billing_type: "per_token".to_string(),
