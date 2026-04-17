@@ -178,7 +178,7 @@ async fn test_provider_model_lifecycle() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "test-model",
-                    "billing_type": "token",
+                    "billing_type": "per_token",
                     "input_price": 3.0,
                     "output_price": 15.0
                 }).to_string()))
@@ -186,7 +186,12 @@ async fn test_provider_model_lifecycle() {
         )
         .await
         .unwrap();
-    assert_eq!(model_resp.status(), StatusCode::OK);
+    let model_status = model_resp.status();
+    if !model_status.is_success() {
+        let body = to_bytes(model_resp.into_body(), usize::MAX).await.unwrap();
+        eprintln!("Model create error ({}): {:?}", model_status, String::from_utf8_lossy(&body));
+    }
+    assert_eq!(model_status, StatusCode::OK);
 
     // Update model
     let update_resp = app
