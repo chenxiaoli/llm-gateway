@@ -52,16 +52,11 @@ export default function Providers() {
   };
 
   const handleEdit = (provider: Provider) => {
-    let parsedEndpoints: Record<string, string> = {};
-    if (provider.endpoints) {
-      try {
-        parsedEndpoints = JSON.parse(provider.endpoints);
-      } catch {}
-    }
+    // endpoints is now already parsed as object
     setEditingProvider(provider);
     setEditName(provider.name);
     setEditBaseUrl(provider.base_url || '');
-    setEditEndpoints(parsedEndpoints);
+    setEditEndpoints(provider.endpoints || {});
     setEditEnabled(provider.enabled);
     setEditOpen(true);
   };
@@ -139,15 +134,9 @@ export default function Providers() {
                     <td>
                       <div className="flex gap-1.5">
                         {(() => {
-                          let hasOpenai = false;
-                          let hasAnthropic = false;
-                          if (provider.endpoints) {
-                            try {
-                              const parsed = JSON.parse(provider.endpoints);
-                              hasOpenai = !!parsed.openai;
-                              hasAnthropic = !!parsed.anthropic;
-                            } catch {}
-                          }
+                          // endpoints is now already parsed as object
+                          const hasOpenai = !!provider.endpoints?.openai;
+                          const hasAnthropic = !!provider.endpoints?.anthropic;
                           return (
                             <>
                               {hasOpenai && <Badge variant="blue">OpenAI</Badge>}

@@ -66,15 +66,12 @@ export default function ProviderDetail() {
   useEffect(() => {
     if (provider) {
       setProvName(provider.name);
-      // Parse endpoints JSON
+      // endpoints is now already parsed as object
       let openaiUrl = '';
       let anthropicUrl = '';
       if (provider.endpoints) {
-        try {
-          const parsed = JSON.parse(provider.endpoints);
-          openaiUrl = parsed.openai || '';
-          anthropicUrl = parsed.anthropic || '';
-        } catch {}
+        openaiUrl = provider.endpoints.openai || '';
+        anthropicUrl = provider.endpoints.anthropic || '';
       }
       setProvBaseUrl(provider.base_url ?? '');
       setProvOpenaiUrl(openaiUrl);
@@ -88,6 +85,7 @@ export default function ProviderDetail() {
 
   const handleUpdateProvider = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Convert endpoints object back to JSON string for API
     const endpoints = JSON.stringify({
       openai: provOpenaiUrl || null,
       anthropic: provAnthropicUrl || null

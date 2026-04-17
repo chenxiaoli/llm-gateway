@@ -107,16 +107,11 @@ export default function Settings() {
 
   const openAddProvider = () => { setEditingProvider(null); setProvName(''); setProvBaseUrl(''); setProvEndpoints({}); setProvEnabled(true); setProviderModalOpen(true); };
   const openEditProvider = (p: Provider) => {
-    let parsedEndpoints: Record<string, string> = {};
-    if (p.endpoints) {
-      try {
-        parsedEndpoints = JSON.parse(p.endpoints);
-      } catch {}
-    }
+    // endpoints is already parsed as object
     setEditingProvider(p);
     setProvName(p.name);
     setProvBaseUrl(p.base_url ?? '');
-    setProvEndpoints(parsedEndpoints);
+    setProvEndpoints(p.endpoints || {});
     setProvEnabled(p.enabled);
     setProviderModalOpen(true);
   };

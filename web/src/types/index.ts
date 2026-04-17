@@ -35,8 +35,9 @@ export interface UpdateKeyRequest {
 export interface Provider {
   id: string;
   name: string;
+  slug: string;
   base_url: string | null;
-  endpoints: string | null;
+  endpoints: Record<string, string> | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;

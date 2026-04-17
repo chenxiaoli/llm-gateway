@@ -73,10 +73,40 @@ pub struct Provider {
     pub name: String,
     pub slug: String,
     pub base_url: Option<String>,           // single fallback URL
+    #[serde(skip)] // Don't serialize endpoints as JSON string, use ProviderWithEndpoints instead
     pub endpoints: Option<String>,      // JSON {"openai": "...", "anthropic": "..."}
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// Provider with endpoints parsed as JSON object
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderWithEndpoints {
+    pub id: String,
+    pub name: String,
+    pub slug: String,
+    pub base_url: Option<String>,
+    pub endpoints: Option<std::collections::HashMap<String, String>>,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl From<Provider> for ProviderWithEndpoints {
+    fn from(p: Provider) -> Self {
+        let endpoints = p.endpoints.and_then(|e| serde_json::from_str(&e).ok());
+        ProviderWithEndpoints {
+            id: p.id,
+            name: p.name,
+            slug: p.slug,
+            base_url: p.base_url,
+            endpoints,
+            enabled: p.enabled,
+            created_at: p.created_at,
+            updated_at: p.updated_at,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
