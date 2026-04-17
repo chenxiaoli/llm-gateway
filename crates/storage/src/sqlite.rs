@@ -784,6 +784,18 @@ impl crate::Storage for SqliteStorage {
         Ok(row.map(Model::from))
     }
 
+    async fn get_model_by_id(&self, id: &str) -> Result<Option<Model>, DbErr> {
+        let row: Option<SqliteModelRow> = sqlx::query_as(
+            "SELECT id, name, model_type, billing_type, input_price, output_price, request_price, pricing_policy_id, enabled, created_at
+             FROM models WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(Model::from))
+    }
+
     async fn get_model_by_provider(&self, _provider_id: &str, _name: &str) -> Result<Option<Model>, DbErr> {
         // No longer supported - models are now N:N with providers via model_providers table
         Ok(None)

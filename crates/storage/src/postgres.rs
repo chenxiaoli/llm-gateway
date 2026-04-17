@@ -744,6 +744,18 @@ impl crate::Storage for PostgresStorage {
         Ok(row.map(Model::from))
     }
 
+    async fn get_model_by_id(&self, id: &str) -> Result<Option<Model>, DbErr> {
+        let row: Option<PgModelRow> = sqlx::query_as(
+            "SELECT id, name, model_type, billing_type, input_price, output_price, request_price, enabled, created_at
+             FROM models WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(Model::from))
+    }
+
     async fn get_model_by_provider(&self, _provider_id: &str, _name: &str) -> Result<Option<Model>, DbErr> {
         // No longer supported - models are now N:N with providers
         Ok(None)

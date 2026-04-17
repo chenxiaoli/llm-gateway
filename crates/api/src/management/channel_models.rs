@@ -31,7 +31,7 @@ pub async fn create_channel_model(
     }
 
     // Verify model exists
-    let _model = state.storage.get_model(&input.model_id).await
+    let _model = state.storage.get_model_by_id(&input.model_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("Model not found".to_string()))?;
 
@@ -72,8 +72,8 @@ pub async fn create_channel_model_by_channel(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("Channel not found".to_string()))?;
 
-    // Verify model exists
-    let _model = state.storage.get_model(&input.model_id).await
+    // Verify model exists by ID
+    let _model = state.storage.get_model_by_id(&input.model_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("Model not found".to_string()))?;
 
