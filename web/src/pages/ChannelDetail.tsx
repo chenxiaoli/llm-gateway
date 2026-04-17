@@ -203,14 +203,21 @@ export default function ChannelDetail() {
               )}
 
               {provider.endpoints && (
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0 mt-0.5">
                     <LinkIcon className="h-4 w-4 text-secondary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs text-base-content/40 uppercase tracking-wider">Endpoints</div>
-                    <div className="text-sm font-mono text-base-content/80 truncate" title={provider.endpoints}>
-                      {provider.endpoints}
+                    <div className="text-xs text-base-content/40 uppercase tracking-wider mb-2">Endpoints</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.entries(provider.endpoints).map(([key, value]) => (
+                        <div key={key} className="bg-base-200/50 rounded px-2 py-1.5">
+                          <div className="text-xs text-secondary font-medium capitalize">{key}</div>
+                          <div className="text-xs font-mono text-base-content/60 truncate" title={value}>
+                            {value}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
