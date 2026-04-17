@@ -1038,8 +1038,8 @@ impl crate::Storage for SqliteStorage {
     async fn insert_log(&self, log: &AuditLog) -> Result<(), DbErr> {
         sqlx::query(
             "INSERT INTO audit_logs (id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
-             status_code, latency_ms, input_tokens, output_tokens, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&log.id)
         .bind(&log.key_id)
@@ -1055,6 +1055,9 @@ impl crate::Storage for SqliteStorage {
         .bind(log.input_tokens)
         .bind(log.output_tokens)
         .bind(log.created_at.to_rfc3339())
+        .bind(&log.original_model)
+        .bind(&log.upstream_model)
+        .bind(&log.model_override_reason)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -1063,7 +1066,7 @@ impl crate::Storage for SqliteStorage {
     async fn query_logs(&self, filter: &LogFilter) -> Result<Vec<AuditLog>, DbErr> {
         let mut sql = String::from(
             "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
-             status_code, latency_ms, input_tokens, output_tokens, created_at
+             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason
              FROM audit_logs WHERE 1=1",
         );
         let mut bind_vars: Vec<String> = Vec::new();
@@ -1134,7 +1137,7 @@ impl crate::Storage for SqliteStorage {
         let offset = (page - 1) * page_size;
         let data_sql = format!(
             "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body, \
-             status_code, latency_ms, input_tokens, output_tokens, created_at \
+             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason \
              FROM audit_logs {} ORDER BY created_at DESC LIMIT ? OFFSET ?",
             where_sql
         );
