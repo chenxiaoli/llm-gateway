@@ -41,7 +41,7 @@ async fn test_create_provider() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/providers")
+                .uri("/api/v1/admin/providers")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -72,7 +72,7 @@ async fn test_create_provider_dual_protocol() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/providers")
+                .uri("/api/v1/admin/providers")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -106,7 +106,7 @@ async fn test_list_providers() {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/providers")
+                    .uri("/api/v1/admin/providers")
                     .header("authorization", bearer_token(&admin.token))
                     .header("content-type", "application/json")
                     .body(Body::from(
@@ -122,7 +122,7 @@ async fn test_list_providers() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/providers")
+                .uri("/api/v1/admin/providers")
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
@@ -150,7 +150,7 @@ async fn test_provider_model_lifecycle() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/providers")
+                .uri("/api/v1/admin/providers")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -173,7 +173,7 @@ async fn test_provider_model_lifecycle() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/api/v1/providers/{}/models", provider_id))
+                .uri(&format!("/api/v1/admin/providers/{}/models", provider_id))
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -194,7 +194,7 @@ async fn test_provider_model_lifecycle() {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(&format!("/api/v1/providers/{}/models/test-model", provider_id))
+                .uri(&format!("/api/v1/admin/providers/{}/models/test-model", provider_id))
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"output_price": 20.0}).to_string()))
@@ -210,7 +210,7 @@ async fn test_provider_model_lifecycle() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(&format!("/api/v1/providers/{}/models/test-model", provider_id))
+                .uri(&format!("/api/v1/admin/providers/{}/models/test-model", provider_id))
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
@@ -225,7 +225,7 @@ async fn test_provider_model_lifecycle() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(&format!("/api/v1/providers/{}", provider_id))
+                .uri(&format!("/api/v1/admin/providers/{}", provider_id))
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
@@ -246,7 +246,7 @@ async fn test_create_and_list_channels() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/providers")
+                .uri("/api/v1/admin/providers")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -269,10 +269,11 @@ async fn test_create_and_list_channels() {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(&format!("/api/v1/providers/{}/channels", provider_id))
+                    .uri(&format!("/api/v1/admin/providers/{}/channels", provider_id))
                     .header("authorization", bearer_token(&admin.token))
                     .header("content-type", "application/json")
                     .body(Body::from(json!({
+                        "provider_id": provider_id,
                         "name": name,
                         "api_key": "sk-test-key",
                         "priority": priority
@@ -294,7 +295,7 @@ async fn test_create_and_list_channels() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/api/v1/providers/{}/channels", provider_id))
+                .uri(&format!("/api/v1/admin/providers/{}/channels", provider_id))
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
@@ -323,7 +324,7 @@ async fn test_update_and_delete_channel() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/providers")
+                .uri("/api/v1/admin/providers")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -345,14 +346,15 @@ async fn test_update_and_delete_channel() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/api/v1/providers/{}/channels", provider_id))
+                .uri(&format!("/api/v1/admin/providers/{}/channels", provider_id))
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
-                    "name": "ch1",
-                    "api_key": "sk-old",
-                    "priority": 0
-                }).to_string()))
+                        "provider_id": provider_id,
+                        "name": "ch1",
+                        "api_key": "sk-old",
+                        "priority": 0
+                    }).to_string()))
                 .unwrap(),
         )
         .await
@@ -368,7 +370,7 @@ async fn test_update_and_delete_channel() {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(&format!("/api/v1/channels/{}", channel_id))
+                .uri(&format!("/api/v1/admin/channels/{}", channel_id))
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "updated-ch", "api_key": "sk-new"}).to_string()))
@@ -388,7 +390,7 @@ async fn test_update_and_delete_channel() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(&format!("/api/v1/channels/{}", channel_id))
+                .uri(&format!("/api/v1/admin/channels/{}", channel_id))
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
