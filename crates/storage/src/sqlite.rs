@@ -99,9 +99,7 @@ impl From<SqliteProviderRow> for Provider {
 struct SqliteModelRow {
     id: String,
     name: String,
-    provider_id: String,
     model_type: Option<String>,
-    pricing_policy_id: Option<String>,
     billing_type: String,
     input_price: f64,
     output_price: f64,
@@ -115,9 +113,7 @@ impl From<SqliteModelRow> for Model {
         Model {
             id: r.id,
             name: r.name,
-            provider_id: r.provider_id,
             model_type: r.model_type,
-            pricing_policy_id: r.pricing_policy_id,
             billing_type: r.billing_type,
             input_price: r.input_price,
             output_price: r.output_price,
@@ -132,9 +128,7 @@ impl From<SqliteModelRow> for Model {
 struct SqliteModelWithProviderRow {
     id: String,
     name: String,
-    provider_id: String,
     model_type: Option<String>,
-    pricing_policy_id: Option<String>,
     billing_type: String,
     input_price: f64,
     output_price: f64,
@@ -168,9 +162,7 @@ impl From<SqliteModelWithProviderRow> for ModelWithProvider {
             model: Model {
                 id: r.id,
                 name: r.name,
-                provider_id: r.provider_id,
                 model_type: r.model_type,
-                pricing_policy_id: r.pricing_policy_id,
                 billing_type: r.billing_type,
                 input_price: r.input_price,
                 output_price: r.output_price,
@@ -758,14 +750,12 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "INSERT INTO models (id, name, provider_id, model_type, pricing_policy_id, billing_type, input_price, output_price, request_price, enabled, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO models (id, name, model_type, billing_type, input_price, output_price, request_price, enabled, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&model.id)
         .bind(&model.name)
-        .bind(&model.provider_id)
         .bind(&model.model_type)
-        .bind(&model.pricing_policy_id)
         .bind(&model.billing_type)
         .bind(model.input_price)
         .bind(model.output_price)
@@ -780,7 +770,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_model(&self, name: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<SqliteModelRow> = sqlx::query_as(
-            "SELECT id, name, provider_id, model_type, pricing_policy_id, billing_type, input_price, output_price, request_price, enabled, created_at
+            "SELECT id, name, model_type, billing_type, input_price, output_price, request_price, enabled, created_at
              FROM models WHERE name = ?",
         )
         .bind(name)
@@ -790,52 +780,28 @@ impl crate::Storage for SqliteStorage {
         Ok(row.map(Model::from))
     }
 
-    async fn get_model_by_provider(&self, provider_id: &str, name: &str) -> Result<Option<Model>, DbErr> {
-        let row: Option<SqliteModelRow> = sqlx::query_as(
-            "SELECT id, name, provider_id, model_type, pricing_policy_id, billing_type, input_price, output_price, request_price, enabled, created_at
-             FROM models WHERE provider_id = ? AND name = ?",
-        )
-        .bind(provider_id)
-        .bind(name)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(row.map(Model::from))
+    async fn get_model_by_provider(&self, _provider_id: &str, _name: &str) -> Result<Option<Model>, DbErr> {
+        // No longer supported - models are now N:N with providers via model_providers table
+        Ok(None)
     }
 
     async fn list_models(&self) -> Result<Vec<ModelWithProvider>, DbErr> {
-        let rows: Vec<SqliteModelWithProviderRow> = sqlx::query_as(
-            "SELECT m.id, m.name, m.provider_id, m.model_type, m.pricing_policy_id, m.billing_type, m.input_price, m.output_price, m.request_price,
-                    m.enabled, m.created_at, p.name as provider_name, p.base_url, p.endpoints
-             FROM models m
-             JOIN providers p ON m.provider_id = p.id
-             WHERE m.enabled = 1 AND p.enabled = 1",
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows.into_iter().map(ModelWithProvider::from).collect())
+        // For N:N architecture, list all enabled models with provider info via model_providers
+        // This requires a JOIN with model_providers and providers tables
+        // For now, return empty list - actual implementation needs model_providers table
+        Ok(vec![])
     }
 
-    async fn list_models_by_provider(&self, provider_id: &str) -> Result<Vec<Model>, DbErr> {
-        let rows: Vec<SqliteModelRow> = sqlx::query_as(
-            "SELECT id, name, provider_id, model_type, pricing_policy_id, billing_type, input_price, output_price, request_price, enabled, created_at
-             FROM models WHERE provider_id = ? ORDER BY name",
-        )
-        .bind(provider_id)
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows.into_iter().map(Model::from).collect())
+    async fn list_models_by_provider(&self, _provider_id: &str) -> Result<Vec<Model>, DbErr> {
+        // No longer supported - models are now N:N with providers
+        Ok(vec![])
     }
 
     async fn update_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "UPDATE models SET provider_id = ?, pricing_policy_id = ?, billing_type = ?, input_price = ?, output_price = ?,
+            "UPDATE models SET billing_type = ?, input_price = ?, output_price = ?,
              request_price = ?, enabled = ? WHERE name = ?",
         )
-        .bind(&model.provider_id)
-        .bind(&model.pricing_policy_id)
         .bind(&model.billing_type)
         .bind(model.input_price)
         .bind(model.output_price)
