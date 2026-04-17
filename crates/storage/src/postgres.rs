@@ -946,8 +946,8 @@ impl crate::Storage for PostgresStorage {
     async fn insert_log(&self, log: &AuditLog) -> Result<(), DbErr> {
         sqlx::query(
             "INSERT INTO audit_logs (id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
-             status_code, latency_ms, input_tokens, output_tokens, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
         )
         .bind(&log.id)
         .bind(&log.key_id)
@@ -963,6 +963,9 @@ impl crate::Storage for PostgresStorage {
         .bind(log.input_tokens)
         .bind(log.output_tokens)
         .bind(log.created_at)
+        .bind(&log.original_model)
+        .bind(&log.upstream_model)
+        .bind(&log.model_override_reason)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -971,7 +974,7 @@ impl crate::Storage for PostgresStorage {
     async fn query_logs(&self, filter: &LogFilter) -> Result<Vec<AuditLog>, DbErr> {
         let mut sql = String::from(
             "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
-             status_code, latency_ms, input_tokens, output_tokens, created_at
+             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason
              FROM audit_logs WHERE 1=1",
         );
 
@@ -1007,8 +1010,8 @@ impl crate::Storage for PostgresStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgAuditRow> = sqlx::query_as(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, request_body, response_body,
-             status_code, latency_ms, input_tokens, output_tokens, created_at
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
+             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason
              FROM audit_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2",
         )
         .bind(page_size)
