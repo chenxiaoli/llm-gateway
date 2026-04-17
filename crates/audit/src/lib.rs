@@ -71,6 +71,9 @@ impl AuditLogger {
             input_tokens,
             output_tokens,
             created_at: chrono::Utc::now(),
+            original_model: None,
+            upstream_model: None,
+            model_override_reason: None,
         };
         self.storage.insert_log(&log).await
     }

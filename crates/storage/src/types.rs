@@ -366,6 +366,9 @@ pub struct AuditLog {
     pub input_tokens: Option<i64>,
     pub output_tokens: Option<i64>,
     pub created_at: DateTime<Utc>,
+    pub original_model: Option<String>,
+    pub upstream_model: Option<String>,
+    pub model_override_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

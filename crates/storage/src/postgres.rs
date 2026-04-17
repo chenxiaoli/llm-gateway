@@ -215,6 +215,9 @@ struct PgAuditRow {
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
     created_at: chrono::DateTime<chrono::Utc>,
+    original_model: Option<String>,
+    upstream_model: Option<String>,
+    model_override_reason: Option<String>,
 }
 
 impl From<PgAuditRow> for AuditLog {
@@ -234,6 +237,9 @@ impl From<PgAuditRow> for AuditLog {
             input_tokens: r.input_tokens,
             output_tokens: r.output_tokens,
             created_at: r.created_at,
+            original_model: r.original_model,
+            upstream_model: r.upstream_model,
+            model_override_reason: r.model_override_reason,
         }
     }
 }
