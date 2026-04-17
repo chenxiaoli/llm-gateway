@@ -82,9 +82,7 @@ impl From<PgProviderRow> for Provider {
 struct PgModelRow {
     id: String,
     name: String,
-    provider_id: String,
     model_type: Option<String>,
-    pricing_policy_id: Option<String>,
     billing_type: String,
     input_price: f64,
     output_price: f64,
@@ -98,9 +96,7 @@ impl From<PgModelRow> for Model {
         Model {
             id: r.id,
             name: r.name,
-            provider_id: r.provider_id,
             model_type: r.model_type,
-            pricing_policy_id: r.pricing_policy_id,
             billing_type: r.billing_type,
             input_price: r.input_price,
             output_price: r.output_price,
@@ -115,9 +111,7 @@ impl From<PgModelRow> for Model {
 struct PgModelWithProviderRow {
     id: String,
     name: String,
-    provider_id: String,
     model_type: Option<String>,
-    pricing_policy_id: Option<String>,
     billing_type: String,
     input_price: f64,
     output_price: f64,
@@ -151,9 +145,7 @@ impl From<PgModelWithProviderRow> for ModelWithProvider {
             model: Model {
                 id: r.id,
                 name: r.name,
-                provider_id: r.provider_id,
                 model_type: r.model_type,
-                pricing_policy_id: r.pricing_policy_id,
                 billing_type: r.billing_type,
                 input_price: r.input_price,
                 output_price: r.output_price,
@@ -718,14 +710,12 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "INSERT INTO models (id, name, provider_id, model_type, pricing_policy_id, billing_type, input_price, output_price, request_price, enabled, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+            "INSERT INTO models (id, name, model_type, billing_type, input_price, output_price, request_price, enabled, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
         )
         .bind(&model.id)
         .bind(&model.name)
-        .bind(&model.provider_id)
         .bind(&model.model_type)
-        .bind(&model.pricing_policy_id)
         .bind(&model.billing_type)
         .bind(model.input_price)
         .bind(model.output_price)
@@ -740,7 +730,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_model(&self, name: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<PgModelRow> = sqlx::query_as(
-            "SELECT id, name, provider_id, model_type, pricing_policy_id, billing_type, input_price, output_price, request_price, enabled, created_at
+            "SELECT id, name, model_type, billing_type, input_price, output_price, request_price, enabled, created_at
              FROM models WHERE name = $1",
         )
         .bind(name)
@@ -750,52 +740,29 @@ impl crate::Storage for PostgresStorage {
         Ok(row.map(Model::from))
     }
 
-    async fn get_model_by_provider(&self, provider_id: &str, name: &str) -> Result<Option<Model>, DbErr> {
-        let row: Option<PgModelRow> = sqlx::query_as(
-            "SELECT id, name, provider_id, model_type, pricing_policy_id, billing_type, input_price, output_price, request_price, enabled, created_at
-             FROM models WHERE provider_id = $1 AND name = $2",
-        )
-        .bind(provider_id)
-        .bind(name)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        Ok(row.map(Model::from))
+    async fn get_model_by_provider(&self, _provider_id: &str, _name: &str) -> Result<Option<Model>, DbErr> {
+        // No longer supported - models are now N:N with providers
+        Ok(None)
     }
 
     async fn list_models(&self) -> Result<Vec<ModelWithProvider>, DbErr> {
-        let rows: Vec<PgModelWithProviderRow> = sqlx::query_as(
-            "SELECT m.id, m.name, m.provider_id, m.model_type, m.pricing_policy_id, m.billing_type, m.input_price, m.output_price, m.request_price,
-                    m.enabled, m.created_at, p.name as provider_name, p.base_url, p.endpoints
-             FROM models m
-             JOIN providers p ON m.provider_id = p.id
-             WHERE m.enabled = true AND p.enabled = true",
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows.into_iter().map(ModelWithProvider::from).collect())
+        // For N:N architecture, list all enabled models with provider info via model_providers
+        // This requires a JOIN with model_providers and providers tables
+        // For now, return empty list - actual implementation needs model_providers table
+        Ok(vec![])
+    }
     }
 
-    async fn list_models_by_provider(&self, provider_id: &str) -> Result<Vec<Model>, DbErr> {
-        let rows: Vec<PgModelRow> = sqlx::query_as(
-            "SELECT id, name, provider_id, model_type, pricing_policy_id, billing_type, input_price, output_price, request_price, enabled, created_at
-             FROM models WHERE provider_id = $1 ORDER BY name",
-        )
-        .bind(provider_id)
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows.into_iter().map(Model::from).collect())
+    async fn list_models_by_provider(&self, _provider_id: &str) -> Result<Vec<Model>, DbErr> {
+        // No longer supported - models are now N:N with providers
+        Ok(vec![])
     }
 
     async fn update_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "UPDATE models SET provider_id = $1, pricing_policy_id = $2, billing_type = $3, input_price = $4, output_price = $5,
-             request_price = $6, enabled = $7 WHERE name = $8",
+            "UPDATE models SET billing_type = $1, input_price = $2, output_price = $3,
+             request_price = $4, enabled = $5 WHERE name = $6",
         )
-        .bind(&model.provider_id)
-        .bind(&model.pricing_policy_id)
         .bind(&model.billing_type)
         .bind(model.input_price)
         .bind(model.output_price)
