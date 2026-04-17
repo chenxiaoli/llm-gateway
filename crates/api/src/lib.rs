@@ -35,4 +35,7 @@ pub struct AuditTask {
     pub latency_ms: i64,
     pub input_tokens: Option<i64>,
     pub output_tokens: Option<i64>,
+    pub original_model: Option<String>,
+    pub upstream_model: Option<String>,
+    pub model_override_reason: Option<String>,
 }

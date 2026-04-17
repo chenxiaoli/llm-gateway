@@ -214,6 +214,9 @@ pub async fn proxy(
                 latency_ms,
                 input_tokens: None,
                 output_tokens: None,
+                original_model: None,
+                upstream_model: None,
+                model_override_reason: None,
             };
             match state.audit_tx.send(audit_task).await {
                 Ok(()) => tracing::debug!("[PROXY] Sent audit task to channel"),
@@ -311,6 +314,9 @@ pub async fn proxy(
                 latency_ms,
                 input_tokens,
                 output_tokens,
+                None,
+                None,
+                None,
             ).await;
         });
 

@@ -44,6 +44,9 @@ impl AuditLogger {
         latency_ms: i64,
         input_tokens: Option<i64>,
         output_tokens: Option<i64>,
+        original_model: Option<&str>,
+        upstream_model: Option<&str>,
+        model_override_reason: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let settings = self.get_settings().await;
         let request_body = if settings.audit_log_request {
@@ -71,9 +74,9 @@ impl AuditLogger {
             input_tokens,
             output_tokens,
             created_at: chrono::Utc::now(),
-            original_model: None,
-            upstream_model: None,
-            model_override_reason: None,
+            original_model: original_model.map(String::from),
+            upstream_model: upstream_model.map(String::from),
+            model_override_reason: model_override_reason.map(String::from),
         };
         self.storage.insert_log(&log).await
     }

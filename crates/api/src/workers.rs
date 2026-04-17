@@ -27,6 +27,9 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
             task.latency_ms,
             task.input_tokens,
             task.output_tokens,
+            task.original_model,
+            task.upstream_model,
+            task.model_override_reason,
         ).await;
         tracing::debug!("[AUDIT-WORKER] Task completed");
     }
@@ -101,6 +104,9 @@ pub async fn audit_worker(
     latency_ms: i64,
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
+    original_model: Option<String>,
+    upstream_model: Option<String>,
+    model_override_reason: Option<String>,
 ) {
     tracing::debug!("[AUDIT-WORKER] Calling log_request: key_id={}, stream={}", key_id, stream);
     let result = audit_logger.log_request(
@@ -115,6 +121,9 @@ pub async fn audit_worker(
         latency_ms,
         input_tokens,
         output_tokens,
+        original_model.as_deref(),
+        upstream_model.as_deref(),
+        model_override_reason.as_deref(),
     ).await;
     match result {
         Ok(()) => tracing::debug!("[AUDIT-WORKER] log_request success"),

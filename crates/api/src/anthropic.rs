@@ -81,6 +81,7 @@ async fn record_stream_usage(
         &usage.key_id, &usage.model_name, &usage.provider_id,
         protocol, stream, &body, &response_body, status_code,
         latency_ms, usage.input_tokens, usage.output_tokens,
+        None, None, None,
     ).await;
 }
 
@@ -373,6 +374,9 @@ pub async fn messages(
                                                         latency_ms,
                                                         input_tokens,
                                                         output_tokens,
+                                                        None,
+                                                        None,
+                                                        None,
                                                     )
                                                     .await;
                                             });
@@ -589,6 +593,9 @@ pub async fn messages(
                     latency_ms,
                     input_tokens,
                     output_tokens,
+                    None,
+                    None,
+                    None,
                 )
                 .await;
         });
