@@ -7,7 +7,6 @@ use std::time::Instant;
 use llm_gateway_auth::hash_api_key;
 use llm_gateway_encryption::decrypt;
 use llm_gateway_storage::Protocol;
-use serde_json::{json, Value};
 
 use crate::error::ApiError;
 use crate::extractors::extract_bearer_token;
@@ -393,64 +392,4 @@ pub async fn messages(
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
     proxy(State(state), headers, body, ProxyProtocol::Anthropic).await
-}
-
-/// GET /v1/models — list models available via enabled channels
-pub async fn list_models(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-) -> Result<axum::Json<Value>, ApiError> {
-    use llm_gateway_auth::hash_api_key;
-    use llm_gateway_storage::ModelWithProvider;
-
-    // Auth check - any valid key can list models
-    let raw_token = extract_bearer_token(&headers)?;
-    let token_hash = hash_api_key(&raw_token);
-    let _api_key = state
-        .storage
-        .get_key_by_hash(&token_hash)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or(ApiError::Unauthorized)?;
-
-    // Get all models with their providers
-    let models = state
-        .storage
-        .list_models()
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    // Filter to only models that have at least one enabled channel
-    let mut result: Vec<ModelWithProvider> = Vec::new();
-    for m in models {
-        // Check if model has any channel
-        let channels = state.storage.get_channels_for_model(&m.model.name).await
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-        // Also check provider-level channels as fallback
-        let provider_channels = state.storage.list_enabled_channels_by_provider(&m.model.provider_id).await
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-        if !channels.is_empty() || !provider_channels.is_empty() {
-            result.push(m);
-        }
-    }
-
-    // Convert to OpenAI format
-    let openai_models: Vec<Value> = result
-        .iter()
-        .map(|m| {
-            json!({
-                "id": m.model.name,
-                "object": "model",
-                "created": m.model.created_at.timestamp(),
-                "owned_by": m.provider.name,
-            })
-        })
-        .collect();
-
-    Ok(axum::Json(json!({
-        "object": "list",
-        "data": openai_models,
-    })))
 }

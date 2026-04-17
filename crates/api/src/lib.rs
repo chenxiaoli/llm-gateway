@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod error;
 pub mod extractors;
+pub mod models;
 pub mod proxy;
 pub mod workers;
 pub mod management;
