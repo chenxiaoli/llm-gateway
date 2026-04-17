@@ -439,7 +439,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn run_migrations(&self) -> Result<(), DbErr> {
         // sqlx::migrate!() embeds migration files at compile time — no disk access at runtime.
-        let migrator = sqlx::migrate!("./migrations");
+        let migrator = sqlx::migrate!("./migrations/sqlite");
         migrator.run(&self.pool).await.map_err(|e: sqlx::migrate::MigrateError| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
 
         Ok(())
