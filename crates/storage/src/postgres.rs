@@ -750,10 +750,26 @@ impl crate::Storage for PostgresStorage {
     }
 
     async fn list_models(&self) -> Result<Vec<ModelWithProvider>, DbErr> {
-        // For N:N architecture, list all enabled models with provider info via model_providers
-        // This requires a JOIN with model_providers and providers tables
-        // For now, return empty list - actual implementation needs model_providers table
-        Ok(vec![])
+        // Query all models - for N:N with providers, we return models with placeholder provider info
+        // The provider relationship is stored in channel_models, not directly on models
+        let models = sqlx::query_as::<_, PgModelRow>(
+            "SELECT id, name, model_type, pricing_policy_id, billing_type,
+                    input_price, output_price, request_price, enabled, created_at
+             FROM models ORDER BY name"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let result: Vec<ModelWithProvider> = models.into_iter().map(|m| {
+            ModelWithProvider {
+                model: m.into(),
+                provider_name: "".to_string(),
+                openai_compatible: false,
+                anthropic_compatible: false,
+            }
+        }).collect();
+
+        Ok(result)
     }
 
     async fn list_models_by_provider(&self, _provider_id: &str) -> Result<Vec<Model>, DbErr> {

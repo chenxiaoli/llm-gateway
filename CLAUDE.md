@@ -77,6 +77,11 @@ Dark theme, ultra-clean minimal aesthetic (Linear/Vercel inspired). Currently mi
 
 Backend config via `config.toml` in the working directory (server, admin token, database, rate limit, upstream timeout, audit retention). Business data (keys, providers, models) managed via Management API or web UI.
 
+## Data Model
+
+- **Model and Provider**: N:N relationship via `channel_models` junction table. Model does NOT have `provider_id` field.
+- **Channel belongs to Provider**: 1:N relationship (Channel has `provider_id`)
+
 ## Development Workflow
 
 1. Run backend: `cargo run` (port 8080)
