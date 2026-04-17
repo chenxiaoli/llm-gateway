@@ -751,7 +751,6 @@ impl crate::Storage for PostgresStorage {
         // For now, return empty list - actual implementation needs model_providers table
         Ok(vec![])
     }
-    }
 
     async fn list_models_by_provider(&self, _provider_id: &str) -> Result<Vec<Model>, DbErr> {
         // No longer supported - models are now N:N with providers
