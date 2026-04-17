@@ -269,7 +269,7 @@ pub struct ChannelModel {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateChannelModel {
-    pub channel_id: String,
+    pub channel_id: Option<String>,  // Optional - can be in URL path or body
     pub model_id: String,
     pub upstream_model_name: Option<String>,
     pub priority_override: Option<i32>,

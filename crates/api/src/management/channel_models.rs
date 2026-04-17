@@ -17,8 +17,12 @@ pub async fn create_channel_model(
 ) -> Result<Json<ChannelModel>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
+    // channel_id is required when creating by provider
+    let channel_id = input.channel_id.as_ref()
+        .ok_or(ApiError::BadRequest("channel_id is required".to_string()))?;
+
     // Verify channel belongs to provider
-    let channel = state.storage.get_channel(&input.channel_id).await
+    let channel = state.storage.get_channel(channel_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("Channel not found".to_string()))?;
 
@@ -34,7 +38,7 @@ pub async fn create_channel_model(
     let now = chrono::Utc::now();
     let cm = ChannelModel {
         id: uuid::Uuid::new_v4().to_string(),
-        channel_id: input.channel_id,
+        channel_id: channel_id.clone(),
         model_id: input.model_id,
         upstream_model_name: input.upstream_model_name,
         priority_override: input.priority_override,
