@@ -152,9 +152,7 @@ pub struct UpdateChannel {
 pub struct Model {
     pub id: String,           // primary key
     pub name: String,          // display name
-    pub provider_id: String,
     pub model_type: Option<String>,
-    pub pricing_policy_id: Option<String>,  // nullable FK to pricing_policies
     pub billing_type: String,
     pub input_price: f64,     // per 1M tokens
     pub output_price: f64,    // per 1M tokens
