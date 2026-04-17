@@ -52,6 +52,8 @@ pub async fn proxy(
         .ok_or(ApiError::BadRequest("Missing 'model' field".to_string()))?
         .to_string();
 
+    let _original_model = model_name.clone();
+
     // === Step 3: Find model → provider → channels ===
     let models = state
         .storage
@@ -202,9 +204,14 @@ pub async fn proxy(
             };
 
             // Send audit task via MPSC channel (non-blocking)
+            let model_override_reason = if upstream_name != &model_name {
+                Some("channel_mapping".to_string())
+            } else {
+                None
+            };
             let audit_task = AuditTask {
                 key_id: api_key.id.clone(),
-                model_name: model_name.clone(),
+                model_name: upstream_name.to_string(),
                 provider_id: provider.id.clone(),
                 protocol: proto,
                 stream: true,
@@ -214,9 +221,9 @@ pub async fn proxy(
                 latency_ms,
                 input_tokens: None,
                 output_tokens: None,
-                original_model: None,
-                upstream_model: None,
-                model_override_reason: None,
+                original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
+                upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
+                model_override_reason,
             };
             match state.audit_tx.send(audit_task).await {
                 Ok(()) => tracing::debug!("[PROXY] Sent audit task to channel"),
@@ -246,6 +253,7 @@ pub async fn proxy(
         let key_id = api_key.id.clone();
         let provider_id = provider.id.clone();
         let model_name = model_name.clone();
+        let upstream_name = upstream_name.to_string();
         let channel_id = channel.id.clone();
         let proto = match protocol {
             ProxyProtocol::OpenAI => Protocol::Openai,
@@ -302,9 +310,15 @@ pub async fn proxy(
 
             let _ = storage.record_usage(&record).await;
 
+            let model_override_reason = if upstream_name != model_name {
+                Some("channel_mapping".to_string())
+            } else {
+                None
+            };
+
             let _ = audit_logger.log_request(
                 &key_id,
-                &model_name,
+                &upstream_name,
                 &provider_id,
                 proto_for_audit,
                 is_stream,
@@ -314,9 +328,9 @@ pub async fn proxy(
                 latency_ms,
                 input_tokens,
                 output_tokens,
-                None,
-                None,
-                None,
+                if upstream_name != model_name { Some(&model_name) } else { None },
+                if upstream_name != model_name { Some(upstream_name.as_str()) } else { None },
+                model_override_reason.as_deref(),
             ).await;
         });
 
