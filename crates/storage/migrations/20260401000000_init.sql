@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS providers (
 CREATE TABLE IF NOT EXISTS models (
     id               TEXT PRIMARY KEY,
     name             TEXT NOT NULL UNIQUE,
-    provider_id      TEXT NOT NULL REFERENCES providers(id),
+    provider_id      TEXT REFERENCES providers(id),
     model_type       TEXT,
     pricing_policy_id TEXT REFERENCES pricing_policies(id),
     billing_type     TEXT NOT NULL DEFAULT 'per_token'

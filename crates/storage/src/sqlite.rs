@@ -774,7 +774,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_model(&self, name: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<SqliteModelRow> = sqlx::query_as(
-            "SELECT id, name, model_type, billing_type, input_price, output_price, request_price, enabled, created_at
+            "SELECT id, name, model_type, billing_type, input_price, output_price, request_price, pricing_policy_id, enabled, created_at
              FROM models WHERE name = ?",
         )
         .bind(name)
