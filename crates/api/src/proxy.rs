@@ -139,7 +139,7 @@ pub async fn proxy(
 
     tracing::debug!("[PROXY] Routing candidates (sorted by priority): {}", routing_candidates.len());
 
-    // Get provider from first channel (for base_url fallback)
+    // Get provider from first channel (for endpoints lookup)
     let provider_id = routing_candidates.first().map(|(c, _)| c.provider_id.clone())
         .ok_or_else(|| ApiError::Internal("No channels available".to_string()))?;
 
@@ -171,27 +171,22 @@ pub async fn proxy(
         let api_key_value = decrypt(&channel.api_key, &state.encryption_key)
             .unwrap_or_else(|_| channel.api_key.clone());
 
-        // Get base_url: channel → provider endpoints JSON → provider base_url
-        let base_url = if let Some(url) = channel.base_url.as_deref() {
-            url.to_string()
-        } else {
-            // Try provider endpoints JSON
-            let endpoints: serde_json::Value = provider
-                .endpoints
-                .as_ref()
-                .and_then(|e| serde_json::from_str(e).ok())
-                .unwrap_or(serde_json::Value::Null);
-            let key = match protocol {
-                ProxyProtocol::OpenAI => "openai",
-                ProxyProtocol::Anthropic => "anthropic",
-            };
-            endpoints
-                .get(key)
-                .and_then(|v| v.as_str())
-                .or(provider.base_url.as_deref())
-                .map(|s| s.to_string())
-                .ok_or_else(|| ApiError::Internal(format!("No base_url for channel {} (check provider endpoints)", channel.name)))?
+        // Get base_url: provider.endpoints[protocol] → provider.endpoints["default"]
+        let endpoints_map: serde_json::Value = provider
+            .endpoints
+            .as_ref()
+            .and_then(|e| serde_json::from_str(e).ok())
+            .unwrap_or(serde_json::Value::Null);
+        let proto_key = match protocol {
+            ProxyProtocol::OpenAI => "openai",
+            ProxyProtocol::Anthropic => "anthropic",
         };
+        let base_url = endpoints_map
+            .get(proto_key)
+            .and_then(|v| v.as_str())
+            .or_else(|| endpoints_map.get("default").and_then(|v| v.as_str()))
+            .map(|s| s.to_string())
+            .ok_or_else(|| ApiError::Internal(format!("No endpoint for channel '{}' (check provider endpoints, need '{}' or 'default')", channel.name, proto_key)))?;
 
         // endpoints is base URL - append path
         // /v1/messages -> endpoint.anthropic + /v1/messages

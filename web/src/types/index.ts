@@ -36,7 +36,6 @@ export interface Provider {
   id: string;
   name: string;
   slug: string;
-  base_url: string | null;
   endpoints: Record<string, string> | null;
   enabled: boolean;
   created_at: string;
@@ -45,13 +44,11 @@ export interface Provider {
 
 export interface CreateProviderRequest {
   name: string;
-  base_url?: string | null;
   endpoints?: string | null;
 }
 
 export interface UpdateProviderRequest {
   name?: string;
-  base_url?: string | null;
   endpoints?: string | null;
   enabled?: boolean;
 }
@@ -221,7 +218,6 @@ export interface Channel {
   provider_id: string;
   name: string;
   api_key: string;
-  base_url: string | null;
   priority: number;
   enabled: boolean;
   created_at: string;
@@ -232,14 +228,13 @@ export interface CreateChannelRequest {
   provider_id: string;
   name: string;
   api_key: string;
-  base_url?: string | null;
   priority?: number;
 }
 
 export interface UpdateChannelRequest {
   name?: string;
   // api_key intentionally omitted — use dedicated updateChannelApiKey
-  base_url?: string | null;
+  // base_url removed — use provider.endpoints["default"]
   priority?: number;
   enabled?: boolean;
 }

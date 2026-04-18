@@ -72,9 +72,7 @@ pub struct Provider {
     pub id: String,
     pub name: String,
     pub slug: String,
-    pub base_url: Option<String>,           // single fallback URL
-    #[serde(skip)] // Don't serialize endpoints as JSON string, use ProviderWithEndpoints instead
-    pub endpoints: Option<String>,      // JSON {"openai": "...", "anthropic": "..."}
+    pub endpoints: Option<String>,      // JSON string {"default": "...", "openai": "...", "anthropic": "..."}
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -86,7 +84,6 @@ pub struct ProviderWithEndpoints {
     pub id: String,
     pub name: String,
     pub slug: String,
-    pub base_url: Option<String>,
     pub endpoints: Option<std::collections::HashMap<String, String>>,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
@@ -100,7 +97,6 @@ impl From<Provider> for ProviderWithEndpoints {
             id: p.id,
             name: p.name,
             slug: p.slug,
-            base_url: p.base_url,
             endpoints,
             enabled: p.enabled,
             created_at: p.created_at,
@@ -113,15 +109,13 @@ impl From<Provider> for ProviderWithEndpoints {
 pub struct CreateProvider {
     pub name: String,
     pub slug: Option<String>,
-    pub base_url: Option<String>,
-    pub endpoints: Option<String>,
+    pub endpoints: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateProvider {
     pub name: Option<String>,
-    pub base_url: Option<Option<String>>,
-    pub endpoints: Option<Option<String>>,
+    pub endpoints: Option<Option<serde_json::Value>>,
     pub enabled: Option<bool>,
 }
 
@@ -133,14 +127,13 @@ pub struct Channel {
     pub provider_id: String,
     pub name: String,
     pub api_key: String,
-    pub base_url: Option<String>,
     pub priority: i32,
-    pub pricing_policy_id: Option<String>,  // NEW
-    pub markup_ratio: f64,                  // NEW, default 1.0
-    pub rpm_limit: Option<i64>,     // NEW: requests per minute
-    pub tpm_limit: Option<i64>,     // NEW: tokens per minute
-    pub balance: Option<f64>,       // NEW: remaining quota in USD
-    pub weight: Option<i32>,        // NEW: routing weight (default 100)
+    pub pricing_policy_id: Option<String>,
+    pub markup_ratio: f64,
+    pub rpm_limit: Option<i64>,
+    pub tpm_limit: Option<i64>,
+    pub balance: Option<f64>,
+    pub weight: Option<i32>,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -151,21 +144,20 @@ pub struct CreateChannel {
     pub provider_id: String,
     pub name: String,
     pub api_key: String,
-    pub base_url: Option<String>,
     pub priority: Option<i32>,
-    pub pricing_policy_id: Option<String>,  // NEW
-    pub markup_ratio: Option<f64>,          // NEW
-    pub rpm_limit: Option<i64>,    // NEW
-    pub tpm_limit: Option<i64>,    // NEW
-    pub balance: Option<f64>,      // NEW
-    pub weight: Option<i32>,       // NEW
+    pub pricing_policy_id: Option<String>,
+    pub markup_ratio: Option<f64>,
+    pub rpm_limit: Option<i64>,
+    pub tpm_limit: Option<i64>,
+    pub balance: Option<f64>,
+    pub weight: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateChannel {
     pub name: Option<String>,
     // api_key intentionally omitted — use dedicated /api-key endpoint
-    pub base_url: Option<Option<String>>,
+    // base_url removed — use provider.endpoints["default"] for fallback
     pub priority: Option<i32>,
     pub pricing_policy_id: Option<Option<String>>,
     pub markup_ratio: Option<f64>,

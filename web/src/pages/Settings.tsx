@@ -35,11 +35,10 @@ export default function Settings() {
 
   const [providerModalOpen, setProviderModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
-  const [seedData, setSeedData] = useState<{ providers: Array<{ name: string; base_url?: string; endpoints?: Record<string, string>; enabled?: boolean; selected?: boolean }>; models: Array<{ provider: string; name: string; billing_type?: string; input_price?: number; output_price?: number; selected?: boolean }> } | null>(null);
+  const [seedData, setSeedData] = useState<{ providers: Array<{ name: string; endpoints?: Record<string, string>; enabled?: boolean; selected?: boolean }>; models: Array<{ provider: string; name: string; billing_type?: string; input_price?: number; output_price?: number; selected?: boolean }> } | null>(null);
   const [seedLoading, setSeedLoading] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [provName, setProvName] = useState('');
-  const [provBaseUrl, setProvBaseUrl] = useState('');
   const [provEndpoints, setProvEndpoints] = useState<Record<string, string>>({});
   const [provEnabled, setProvEnabled] = useState(true);
 
@@ -66,7 +65,6 @@ export default function Settings() {
     for (const p of seedData.providers.filter(p => p.selected)) {
       const created = await createProviderMutation.mutateAsync({
         name: p.name,
-        base_url: p.base_url || null,
         endpoints: p.endpoints ? JSON.stringify(p.endpoints) : null,
       });
       providerMap[p.name] = created.id;
@@ -105,12 +103,11 @@ export default function Settings() {
     }
   };
 
-  const openAddProvider = () => { setEditingProvider(null); setProvName(''); setProvBaseUrl(''); setProvEndpoints({}); setProvEnabled(true); setProviderModalOpen(true); };
+  const openAddProvider = () => { setEditingProvider(null); setProvName(''); setProvEndpoints({}); setProvEnabled(true); setProviderModalOpen(true); };
   const openEditProvider = (p: Provider) => {
     // endpoints is already parsed as object
     setEditingProvider(p);
     setProvName(p.name);
-    setProvBaseUrl(p.base_url ?? '');
     setProvEndpoints(p.endpoints || {});
     setProvEnabled(p.enabled);
     setProviderModalOpen(true);
@@ -123,9 +120,9 @@ export default function Settings() {
     });
 
     if (editingProvider) {
-      await updateProviderMutation.mutateAsync({ id: editingProvider.id, input: { name: provName, base_url: provBaseUrl || null, endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null, enabled: provEnabled } });
+      await updateProviderMutation.mutateAsync({ id: editingProvider.id, input: { name: provName, endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null, enabled: provEnabled } });
     } else {
-      await createProviderMutation.mutateAsync({ name: provName, base_url: provBaseUrl || null, endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null });
+      await createProviderMutation.mutateAsync({ name: provName, endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null });
     }
     setProviderModalOpen(false);
   };
@@ -232,7 +229,6 @@ export default function Settings() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold">{provider.name}</h3>
-              <p className="text-xs text-base-content/40">{provider.base_url}</p>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={() => openEditProvider(provider)} className="btn btn-ghost btn-sm btn-circle"><Pencil className="h-4 w-4" /></button>
@@ -285,10 +281,6 @@ export default function Settings() {
           <div className="form-control">
             <label className="label"><span className="label-text">Name</span></label>
             <input type="text" value={provName} onChange={(e) => setProvName(e.target.value)} required className="input input-bordered w-full" />
-          </div>
-          <div className="form-control">
-            <label className="label"><span className="label-text">Base URL (Fallback)</span></label>
-            <input type="text" value={provBaseUrl} onChange={(e) => setProvBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
           </div>
           <div className="form-control">
             <label className="label"><span className="label-text">Endpoints</span></label>

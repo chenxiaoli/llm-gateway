@@ -39,7 +39,6 @@ export default function ProviderDetail() {
   const { data: models } = useModels(id!);
 
   const [provName, setProvName] = useState('');
-  const [provBaseUrl, setProvBaseUrl] = useState('');
   const [provOpenaiUrl, setProvOpenaiUrl] = useState('');
   const [provAnthropicUrl, setProvAnthropicUrl] = useState('');
   const [provEnabled, setProvEnabled] = useState(false);
@@ -57,7 +56,6 @@ export default function ProviderDetail() {
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
   const [channelName, setChannelName] = useState('');
   const [channelApiKey, setChannelApiKey] = useState('');
-  const [channelBaseUrl, setChannelBaseUrl] = useState('');
   const [channelPriority, setChannelPriority] = useState('0');
   const [channelEnabled, setChannelEnabled] = useState(false);
 
@@ -73,7 +71,6 @@ export default function ProviderDetail() {
         openaiUrl = provider.endpoints.openai || '';
         anthropicUrl = provider.endpoints.anthropic || '';
       }
-      setProvBaseUrl(provider.base_url ?? '');
       setProvOpenaiUrl(openaiUrl);
       setProvAnthropicUrl(anthropicUrl);
       setProvEnabled(provider.enabled);
@@ -90,7 +87,7 @@ export default function ProviderDetail() {
       openai: provOpenaiUrl || null,
       anthropic: provAnthropicUrl || null
     });
-    await updateMutation.mutateAsync({ id: provider.id, input: { name: provName, base_url: provBaseUrl || null, endpoints, enabled: provEnabled } });
+    await updateMutation.mutateAsync({ id: provider.id, input: { name: provName, endpoints, enabled: provEnabled } });
   };
 
   const handleDeleteProvider = async () => {
@@ -114,16 +111,16 @@ export default function ProviderDetail() {
     setModelModalOpen(false);
   };
 
-  const resetChannelForm = () => { setChannelName(''); setChannelApiKey(''); setChannelBaseUrl(''); setChannelPriority('0'); setChannelEnabled(false); };
+  const resetChannelForm = () => { setChannelName(''); setChannelApiKey(''); setChannelPriority('0'); setChannelEnabled(false); };
   const openAddChannel = () => { setEditingChannel(null); resetChannelForm(); setChannelModalOpen(true); };
-  const openEditChannel = (channel: Channel) => { setEditingChannel(channel); setChannelName(channel.name); setChannelApiKey(channel.api_key); setChannelBaseUrl(channel.base_url ?? ''); setChannelPriority(String(channel.priority)); setChannelEnabled(channel.enabled); setChannelModalOpen(true); };
+  const openEditChannel = (channel: Channel) => { setEditingChannel(channel); setChannelName(channel.name); setChannelApiKey(channel.api_key); setChannelPriority(String(channel.priority)); setChannelEnabled(channel.enabled); setChannelModalOpen(true); };
 
   const handleSaveChannel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingChannel) {
-      await updateChannelMutation.mutateAsync({ id: editingChannel.id, input: { name: channelName, base_url: channelBaseUrl || null, priority: Number(channelPriority), enabled: channelEnabled } });
+      await updateChannelMutation.mutateAsync({ id: editingChannel.id, input: { name: channelName, priority: Number(channelPriority), enabled: channelEnabled } });
     } else {
-      await createChannelMutation.mutateAsync({ provider_id: provider.id, name: channelName, api_key: channelApiKey, base_url: channelBaseUrl || null, priority: Number(channelPriority) });
+      await createChannelMutation.mutateAsync({ provider_id: provider.id, name: channelName, api_key: channelApiKey, priority: Number(channelPriority) });
     }
     setChannelModalOpen(false);
   };
@@ -135,7 +132,6 @@ export default function ProviderDetail() {
 
       <form onSubmit={handleUpdateProvider} className="mb-8 max-w-lg bg-base-100 rounded-box p-5 shadow-sm space-y-4">
         <div className="form-control"><label className="label"><span className="label-text">Name</span></label><input type="text" value={provName} onChange={(e) => setProvName(e.target.value)} required className="input input-bordered w-full" /></div>
-        <div className="form-control"><label className="label"><span className="label-text">Base URL (Fallback)</span></label><input type="text" value={provBaseUrl} onChange={(e) => setProvBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" /></div>
         <div className="form-control"><label className="label"><span className="label-text">OpenAI Endpoint</span></label><input type="text" value={provOpenaiUrl} onChange={(e) => setProvOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" /></div>
         <div className="form-control"><label className="label"><span className="label-text">Anthropic Endpoint</span></label><input type="text" value={provAnthropicUrl} onChange={(e) => setProvAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" /></div>
         <div className="flex items-center justify-between"><label className="label-text">Enabled</label><Toggle checked={provEnabled} onChange={setProvEnabled} /></div>
@@ -202,12 +198,11 @@ export default function ProviderDetail() {
           <div className="flex items-center justify-between mb-3"><h2 className="text-base font-semibold">Channels</h2><Button icon={<Plus className="h-4 w-4" />} onClick={openAddChannel}>Add Channel</Button></div>
           <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
             <table className="table table-sm">
-              <thead><tr className="border-b border-base-300"><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Base URL</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Priority</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50 w-20">Actions</th></tr></thead>
+              <thead><tr className="border-b border-base-300"><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Priority</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50 w-20">Actions</th></tr></thead>
               <tbody>
                 {channels?.map((channel) => (
                   <tr key={channel.id} className="border-b border-base-200 hover">
                     <td>{channel.name}</td>
-                    <td className="mono">{channel.base_url ? channel.base_url : <span className="text-base-content/40">Default</span>}</td>
                     <td className="mono">{channel.priority}</td>
                     <td><Badge variant={channel.enabled ? 'green' : 'red'}>{channel.enabled ? 'Active' : 'Disabled'}</Badge></td>
                     <td>
@@ -258,7 +253,6 @@ export default function ProviderDetail() {
         <form onSubmit={handleSaveChannel} className="space-y-4">
           <div className="form-control"><label className="label"><span className="label-text">Name</span></label><input type="text" value={channelName} onChange={(e) => setChannelName(e.target.value)} placeholder="e.g., primary" required className="input input-bordered w-full" /></div>
           <div className="form-control"><label className="label"><span className="label-text">API Key</span></label><input type="password" value={channelApiKey} onChange={(e) => setChannelApiKey(e.target.value)} placeholder="Upstream API key" required className="input input-bordered w-full" /></div>
-          <div className="form-control"><label className="label"><span className="label-text">Base URL</span></label><input type="text" value={channelBaseUrl} onChange={(e) => setChannelBaseUrl(e.target.value)} placeholder="Leave empty to use provider default" className="input input-bordered w-full" /></div>
           <div className="form-control"><label className="label"><span className="label-text">Priority</span></label><input type="number" value={channelPriority} onChange={(e) => setChannelPriority(e.target.value)} min={0} className="input input-bordered w-full" /></div>
           {editingChannel && (<div className="flex items-center justify-between"><label className="label-text">Enabled</label><Toggle checked={channelEnabled} onChange={setChannelEnabled} /></div>)}
           <Button variant="primary" type="submit" loading={createChannelMutation.isPending || updateChannelMutation.isPending}>{editingChannel ? 'Update' : 'Create'}</Button>

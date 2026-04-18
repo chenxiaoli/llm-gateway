@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Pencil, Trash2, KeyRound, Globe, Hash, Plus, Building2, LinkIcon, Power, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Pencil, Trash2, KeyRound, Hash, Plus, Building2, LinkIcon, Power, Eye, EyeOff } from 'lucide-react';
 import { useChannel, useUpdateChannel, useDeleteChannel, useChannelModels, useCreateChannelModel, useDeleteChannelModel, useUpdateChannelApiKey } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
@@ -25,7 +25,6 @@ export default function ChannelDetail() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [channelName, setChannelName] = useState('');
-  const [channelBaseUrl, setChannelBaseUrl] = useState('');
   const [channelPriority, setChannelPriority] = useState('0');
   const [channelEnabled, setChannelEnabled] = useState(false);
   const [revealKey, setRevealKey] = useState(false);
@@ -41,7 +40,6 @@ export default function ChannelDetail() {
   useEffect(() => {
     if (channel) {
       setChannelName(channel.name);
-      setChannelBaseUrl(channel.base_url ?? '');
       setChannelPriority(String(channel.priority));
       setChannelEnabled(channel.enabled);
     }
@@ -72,7 +70,6 @@ export default function ChannelDetail() {
     e.preventDefault();
     const input: UpdateChannelRequest = {
       name: channelName,
-      base_url: channelBaseUrl || null,
       priority: Number(channelPriority),
       enabled: channelEnabled,
     };
@@ -87,7 +84,6 @@ export default function ChannelDetail() {
 
   const handleCancelEdit = () => {
     setChannelName(channel.name);
-    setChannelBaseUrl(channel.base_url ?? '');
     setChannelPriority(String(channel.priority));
     setChannelEnabled(channel.enabled);
     setIsEditing(false);
@@ -144,18 +140,6 @@ export default function ChannelDetail() {
         <div className="bg-base-100 rounded-box p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-base-content/60 mb-4">Configuration</h2>
           <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <Globe className="h-4 w-4 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs text-base-content/40 uppercase tracking-wider">Base URL</div>
-                <div className="text-sm font-mono text-base-content/80 truncate" title={channel.base_url ?? 'Provider default'}>
-                  {channel.base_url || <span className="text-base-content/40">Provider default</span>}
-                </div>
-              </div>
-            </div>
-
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-primary/10 flex items-center justify-center shrink-0">
                 <KeyRound className="h-4 w-4 text-primary" />
@@ -226,20 +210,6 @@ export default function ChannelDetail() {
                   <div className="text-sm font-medium">{provider.name}</div>
                 </div>
               </div>
-
-              {provider.base_url && (
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
-                    <Globe className="h-4 w-4 text-secondary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-base-content/40 uppercase tracking-wider">Base URL</div>
-                    <div className="text-sm font-mono text-base-content/80 truncate" title={provider.base_url}>
-                      {provider.base_url}
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {provider?.endpoints && (
                 <div className="flex items-start gap-3">
@@ -366,19 +336,6 @@ export default function ChannelDetail() {
               value={channelName}
               onChange={(e) => setChannelName(e.target.value)}
               required
-              className="input input-bordered w-full"
-            />
-          </div>
-
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">Base URL</span>
-            </label>
-            <input
-              type="text"
-              value={channelBaseUrl}
-              onChange={(e) => setChannelBaseUrl(e.target.value)}
-              placeholder="Leave empty to use provider default"
               className="input input-bordered w-full"
             />
           </div>

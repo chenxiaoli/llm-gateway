@@ -46,7 +46,7 @@ async fn test_create_provider() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "OpenAI",
-                    "base_url": "https://api.openai.com/v1"
+                    "endpoints": {"default": "https://api.openai.com/v1"}
                 }).to_string()))
                 .unwrap(),
         )
@@ -59,7 +59,8 @@ async fn test_create_provider() {
     )
     .unwrap();
     assert_eq!(body["name"], "OpenAI");
-    assert_eq!(body["base_url"], "https://api.openai.com/v1");
+    let endpoints: Value = serde_json::from_str(body["endpoints"].as_str().unwrap()).unwrap();
+    assert_eq!(endpoints["default"], "https://api.openai.com/v1");
 }
 
 #[tokio::test]
@@ -77,7 +78,10 @@ async fn test_create_provider_dual_protocol() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "MiniMax",
-                    "endpoints": "{\"openai\":\"https://api.minimax.chat/v1\",\"anthropic\":\"https://api.minimax.chat/v1/anthropic\"}"
+                    "endpoints": {
+                        "openai": "https://api.minimax.chat/v1",
+                        "anthropic": "https://api.minimax.chat/v1/anthropic"
+                    }
                 }).to_string()))
                 .unwrap(),
         )
@@ -89,7 +93,7 @@ async fn test_create_provider_dual_protocol() {
         &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
-    let endpoints: serde_json::Value = serde_json::from_str(body["endpoints"].as_str().unwrap_or("{}")).unwrap();
+    let endpoints: serde_json::Value = serde_json::from_str(body["endpoints"].as_str().unwrap()).unwrap();
     assert!(endpoints.get("openai").and_then(|v| v.as_str()).is_some());
     assert!(endpoints.get("anthropic").and_then(|v| v.as_str()).is_some());
 }
@@ -110,7 +114,7 @@ async fn test_list_providers() {
                     .header("authorization", bearer_token(&admin.token))
                     .header("content-type", "application/json")
                     .body(Body::from(
-                        json!({"name": name, "base_url": "https://example.com"}).to_string(),
+                        json!({"name": name, "endpoints": { "default": "https://example.com" }}).to_string(),
                     ))
                     .unwrap(),
             )
@@ -155,7 +159,7 @@ async fn test_provider_model_lifecycle() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "TestProvider",
-                    "base_url": "https://example.com"
+                    "endpoints": { "default": "https://example.com" }
                 }).to_string()))
                 .unwrap(),
         )
@@ -173,7 +177,7 @@ async fn test_provider_model_lifecycle() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/api/v1/admin/providers/{}/models", provider_id))
+                .uri("/api/v1/admin/models")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -199,7 +203,7 @@ async fn test_provider_model_lifecycle() {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(&format!("/api/v1/admin/providers/{}/models/test-model", provider_id))
+                .uri("/api/v1/admin/models/test-model")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"output_price": 20.0}).to_string()))
@@ -215,7 +219,7 @@ async fn test_provider_model_lifecycle() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(&format!("/api/v1/admin/providers/{}/models/test-model", provider_id))
+                .uri("/api/v1/admin/models/test-model")
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
@@ -256,7 +260,7 @@ async fn test_create_and_list_channels() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "OpenAI",
-                    "base_url": "https://api.openai.com/v1"
+                    "endpoints": { "default": "https://api.openai.com/v1" }
                 }).to_string()))
                 .unwrap(),
         )
@@ -334,7 +338,7 @@ async fn test_update_and_delete_channel() {
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
                     "name": "TestProvider",
-                    "base_url": "https://example.com"
+                    "endpoints": { "default": "https://example.com" }
                 }).to_string()))
                 .unwrap(),
         )

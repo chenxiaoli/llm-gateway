@@ -6,7 +6,7 @@ import { createChannel } from '../api/providers';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
-import { Globe, Plus, Radio, Hash, Link2, ShieldCheck, ChevronRight, Key, Wifi, Cpu } from 'lucide-react';
+import { Globe, Plus, Radio, Hash, ShieldCheck, ChevronRight, Key, Wifi, Cpu } from 'lucide-react';
 import type { Channel, CreateChannelRequest } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -26,14 +26,12 @@ function AddChannelDrawer({
   const [isPending, setIsPending] = useState(false);
   const [providerId, setProviderId] = useState('');
   const [name, setName] = useState('');
-  const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [priority, setPriority] = useState('1');
 
   const reset = () => {
     setProviderId('');
     setName('');
-    setBaseUrl('');
     setApiKey('');
     setPriority('1');
   };
@@ -49,7 +47,6 @@ function AddChannelDrawer({
         provider_id: providerId,
         name,
         api_key: apiKey,
-        base_url: baseUrl || null,
         priority: priority ? parseInt(priority) : 1,
       };
       await createChannel(input);
@@ -104,24 +101,6 @@ function AddChannelDrawer({
         </div>
 
         {/* Base URL */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
-            <Link2 className="h-3.5 w-3.5" />
-            Base URL
-            <span className="text-base-content/20 normal-case font-normal tracking-normal text-[10px]">(optional)</span>
-          </label>
-          <div className="relative">
-            <input
-              type="url"
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder="https://api.openai.com/v1"
-              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-            />
-          </div>
-        </div>
-
-        {/* API Key */}
         <div className="space-y-1.5">
           <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
             <Key className="h-3.5 w-3.5" />
@@ -242,12 +221,6 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
               <div className="flex items-center gap-1.5">
                 <Globe className="h-3 w-3 text-base-content/30" />
                 <span className="text-[11px] text-base-content/40 font-medium truncate">{providerName}</span>
-                {channel.base_url && (
-                  <>
-                    <span className="text-base-content/20">·</span>
-                    <span className="text-[11px] text-base-content/30 font-mono truncate">{channel.base_url}</span>
-                  </>
-                )}
               </div>
             </div>
 
@@ -309,13 +282,6 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
 
                     {/* Base URL */}
                     <div className="rounded-lg bg-base-200/40 px-3 py-2.5">
-                      <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1.5 flex items-center gap-1.5">
-                        <Link2 className="h-3 w-3" />
-                        Base URL
-                      </div>
-                      <div className="font-mono text-[11px] text-base-content/50 truncate">
-                        {channel.base_url ?? '—'}
-                      </div>
                     </div>
                   </div>
 

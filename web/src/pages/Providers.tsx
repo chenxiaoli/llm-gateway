@@ -19,14 +19,12 @@ export default function Providers() {
   // Create modal state
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
-  const [baseUrl, setBaseUrl] = useState('');
   const [createEndpoints, setCreateEndpoints] = useState<Record<string, string>>({});
 
   // Edit modal state
   const [editOpen, setEditOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [editName, setEditName] = useState('');
-  const [editBaseUrl, setEditBaseUrl] = useState('');
   const [editEndpoints, setEditEndpoints] = useState<Record<string, string>>({});
   const [editEnabled, setEditEnabled] = useState(true);
 
@@ -42,11 +40,9 @@ export default function Providers() {
     });
     await createMutation.mutateAsync({
       name,
-      base_url: baseUrl || null,
       endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null,
     });
     setName('');
-    setBaseUrl('');
     setCreateEndpoints({});
     setCreateOpen(false);
   };
@@ -55,7 +51,6 @@ export default function Providers() {
     // endpoints is now already parsed as object
     setEditingProvider(provider);
     setEditName(provider.name);
-    setEditBaseUrl(provider.base_url || '');
     setEditEndpoints(provider.endpoints || {});
     setEditEnabled(provider.enabled);
     setEditOpen(true);
@@ -72,7 +67,6 @@ export default function Providers() {
       id: editingProvider.id,
       input: {
         name: editName,
-        base_url: editBaseUrl || null,
         endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null,
         enabled: editEnabled,
       },
@@ -196,13 +190,6 @@ export default function Providers() {
           </div>
           <div className="form-control">
             <label className="label">
-              <span className="label-text font-medium">Base URL (Fallback)</span>
-              <span className="label-text-alt">Optional</span>
-            </label>
-            <input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
-          </div>
-          <div className="form-control">
-            <label className="label">
               <span className="label-text font-medium">Endpoints</span>
             </label>
             <EndpointsEditor
@@ -224,13 +211,6 @@ export default function Providers() {
               <span className="label-text font-medium">Name</span>
             </label>
             <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="e.g., OpenAI" required className="input input-bordered w-full" />
-          </div>
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">Base URL (Fallback)</span>
-              <span className="label-text-alt">Optional</span>
-            </label>
-            <input type="text" value={editBaseUrl} onChange={(e) => setEditBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
           </div>
           <div className="form-control">
             <label className="label">

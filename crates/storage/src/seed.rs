@@ -17,7 +17,6 @@ pub struct SeedData {
 #[serde(rename_all = "camelCase")]
 pub struct SeedProvider {
     pub name: String,
-    pub base_url: Option<String>,
     #[serde(default)]
     pub endpoints: Option<HashMap<String, String>>,
     pub enabled: Option<bool>,
@@ -79,7 +78,6 @@ pub fn get_seed_providers() -> Vec<Provider> {
                 id: Uuid::new_v4().to_string(),
                 name: p.name.clone(),
                 slug,
-                base_url: p.base_url,
                 endpoints,
                 enabled: p.enabled.unwrap_or(true),
                 created_at: Utc::now(),

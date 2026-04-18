@@ -73,6 +73,7 @@ struct SqliteProviderRow {
     id: String,
     name: String,
     slug: String,
+    #[allow(dead_code)]
     base_url: Option<String>,
     endpoints: Option<String>,
     enabled: i64,
@@ -86,7 +87,6 @@ impl From<SqliteProviderRow> for Provider {
             id: r.id,
             name: r.name,
             slug: r.slug,
-            base_url: r.base_url,
             endpoints: r.endpoints,
             enabled: r.enabled != 0,
             created_at: parse_rfc3339(&r.created_at),
@@ -122,61 +122,6 @@ impl From<SqliteModelRow> for Model {
             pricing_policy_id: r.pricing_policy_id,
             enabled: r.enabled != 0,
             created_at: parse_rfc3339(&r.created_at),
-        }
-    }
-}
-
-#[derive(FromRow)]
-struct SqliteModelWithProviderRow {
-    id: String,
-    name: String,
-    model_type: Option<String>,
-    billing_type: String,
-    input_price: f64,
-    output_price: f64,
-    request_price: f64,
-    pricing_policy_id: Option<String>,
-    enabled: i64,
-    created_at: String,
-    provider_name: String,
-    base_url: Option<String>,
-    endpoints: Option<String>,
-}
-
-impl From<SqliteModelWithProviderRow> for ModelWithProvider {
-    fn from(r: SqliteModelWithProviderRow) -> Self {
-        // Parse endpoints JSON to determine compatibility
-        // If provider name is "Anthropic", it's natively compatible with Anthropic API
-        // If provider name is "OpenAI", it's natively compatible with OpenAI API
-        let provider_name_lower = r.provider_name.to_lowercase();
-        let is_native_anthropic = provider_name_lower == "anthropic";
-        let is_native_openai = provider_name_lower == "openai";
-
-        let openai_compatible = r.endpoints.as_ref()
-            .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
-            .map(|v| v.get("openai").is_some())
-            .unwrap_or(r.base_url.is_some() || is_native_openai);
-        let anthropic_compatible = r.endpoints.as_ref()
-            .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
-            .map(|v| v.get("anthropic").is_some())
-            .unwrap_or(is_native_anthropic);
-
-        ModelWithProvider {
-            model: Model {
-                id: r.id,
-                name: r.name,
-                model_type: r.model_type,
-                billing_type: r.billing_type,
-                input_price: r.input_price,
-                output_price: r.output_price,
-                request_price: r.request_price,
-                pricing_policy_id: r.pricing_policy_id,
-                enabled: r.enabled != 0,
-                created_at: parse_rfc3339(&r.created_at),
-            },
-            provider_name: r.provider_name,
-            openai_compatible,
-            anthropic_compatible,
         }
     }
 }
@@ -263,6 +208,7 @@ struct SqliteChannelRow {
     provider_id: String,
     name: String,
     api_key: String,
+    #[allow(dead_code)]
     base_url: Option<String>,
     priority: i32,
     enabled: i64,
@@ -283,7 +229,6 @@ impl From<SqliteChannelRow> for Channel {
             provider_id: r.provider_id,
             name: r.name,
             api_key: r.api_key,
-            base_url: r.base_url,
             priority: r.priority,
             pricing_policy_id: r.pricing_policy_id,
             markup_ratio: r.markup_ratio,
@@ -583,7 +528,7 @@ impl crate::Storage for SqliteStorage {
         .bind(&provider.id)
         .bind(&provider.name)
         .bind(&provider.slug)
-        .bind(&provider.base_url)
+        .bind(None::<String>)
         .bind(&provider.endpoints)
         .bind(provider.enabled as i64)
         .bind(provider.created_at.to_rfc3339())
@@ -624,7 +569,7 @@ impl crate::Storage for SqliteStorage {
         )
         .bind(&provider.name)
         .bind(&provider.slug)
-        .bind(&provider.base_url)
+        .bind(None::<String>)
         .bind(&provider.endpoints)
         .bind(provider.enabled as i64)
         .bind(provider.updated_at.to_rfc3339())
@@ -654,7 +599,7 @@ impl crate::Storage for SqliteStorage {
         .bind(&channel.provider_id)
         .bind(&channel.name)
         .bind(&channel.api_key)
-        .bind(&channel.base_url)
+        .bind(None::<String>)
         .bind(channel.priority)
         .bind(&channel.pricing_policy_id)
         .bind(channel.markup_ratio)
@@ -725,7 +670,7 @@ impl crate::Storage for SqliteStorage {
         )
         .bind(&channel.name)
         .bind(&channel.api_key)
-        .bind(&channel.base_url)
+        .bind(None::<String>)
         .bind(channel.priority)
         .bind(&channel.pricing_policy_id)
         .bind(channel.markup_ratio)

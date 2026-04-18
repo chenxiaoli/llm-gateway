@@ -25,15 +25,6 @@ pub async fn create_channel(
     if name.len() > 100 {
         return Err(ApiError::BadRequest("Channel name must be at most 100 characters".to_string()));
     }
-    if let Some(ref base_url) = input.base_url {
-        if !base_url.is_empty() {
-            let parsed = url::Url::parse(base_url)
-                .map_err(|_| ApiError::BadRequest(format!("Invalid base URL: '{}'", base_url)))?;
-            if parsed.scheme() != "http" && parsed.scheme() != "https" {
-                return Err(ApiError::BadRequest("Base URL must use http or https scheme".to_string()));
-            }
-        }
-    }
 
     state
         .storage
@@ -50,7 +41,6 @@ pub async fn create_channel(
         provider_id,
         name,
         api_key: encrypted_key,
-        base_url: input.base_url.filter(|u| !u.is_empty()),
         priority: input.priority.unwrap_or(0),
         pricing_policy_id: input.pricing_policy_id,
         markup_ratio: input.markup_ratio.unwrap_or(1.0),
@@ -154,18 +144,6 @@ pub async fn update_channel(
             return Err(ApiError::BadRequest("Channel name must be at most 100 characters".to_string()));
         }
         channel.name = trimmed;
-    }
-    if let Some(base_url) = input.base_url {
-        if let Some(ref url) = base_url {
-            if !url.is_empty() {
-                let parsed = url::Url::parse(url)
-                    .map_err(|_| ApiError::BadRequest(format!("Invalid base URL: '{}'", url)))?;
-                if parsed.scheme() != "http" && parsed.scheme() != "https" {
-                    return Err(ApiError::BadRequest("Base URL must use http or https scheme".to_string()));
-                }
-            }
-        }
-        channel.base_url = base_url.filter(|u| !u.is_empty());
     }
     if let Some(priority) = input.priority {
         channel.priority = priority;

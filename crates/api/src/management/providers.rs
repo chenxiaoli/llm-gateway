@@ -34,8 +34,9 @@ pub async fn create_provider(
         id: uuid::Uuid::new_v4().to_string(),
         name: input.name,
         slug,
-        base_url: input.base_url,
-        endpoints: input.endpoints,
+        endpoints: input.endpoints.and_then(|v| {
+            if v.is_null() { None } else { Some(v.to_string()) }
+        }),
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -102,11 +103,10 @@ pub async fn update_provider(
     if let Some(name) = input.name {
         provider.name = name;
     }
-    if let Some(base_url) = input.base_url {
-        provider.base_url = base_url;
-    }
     if let Some(endpoints) = input.endpoints {
-        provider.endpoints = endpoints;
+        provider.endpoints = endpoints.and_then(|v| {
+            if v.is_null() { None } else { Some(v.to_string()) }
+        });
     }
     if let Some(enabled) = input.enabled {
         provider.enabled = enabled;

@@ -190,7 +190,7 @@ pub async fn sync_models(
     if let Some(base_url) = openai_endpoints
         .get("openai")
         .and_then(|v| v.as_str())
-        .or(provider.base_url.as_deref())
+        .or_else(|| openai_endpoints.get("default").and_then(|v| v.as_str()))
     {
         let url = format!("{}/models", base_url.trim_end_matches('/'));
         match client
@@ -263,7 +263,7 @@ pub async fn sync_models(
     if let Some(base_url) = anthropic_endpoints
         .get("anthropic")
         .and_then(|v| v.as_str())
-        .or(provider.base_url.as_deref())
+        .or_else(|| anthropic_endpoints.get("default").and_then(|v| v.as_str()))
     {
         let url = format!("{}/models", base_url.trim_end_matches('/'));
         match client
