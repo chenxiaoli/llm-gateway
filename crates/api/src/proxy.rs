@@ -253,9 +253,7 @@ pub async fn proxy(
             return Ok((StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY), error_body).into_response());
         }
 
-        // Get response body for logging
-        let response_body = resp.text().await.unwrap_or_default();
-        tracing::debug!("[PROXY] Upstream success response: body_len={}", response_body.len());
+        tracing::debug!("[PROXY] Upstream success response: status={}, is_stream={}", status, is_stream);
 
         // === Handle streaming vs non-streaming ===
         if is_stream {
