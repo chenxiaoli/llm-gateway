@@ -33,25 +33,25 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
     const cache = cfg['cache_read_price'];
     return (
       <div className="flex flex-wrap gap-1.5">
-        {input !== undefined && (
+        {(input as number | null) != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">In</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(input)}</span>
           </span>
         )}
-        {output !== undefined && (
+        {(output as number | null) != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Out</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(output)}</span>
           </span>
         )}
-        {cache !== undefined && (
+        {(cache as number | null) != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Cache</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(cache)}</span>
           </span>
         )}
-        {bt === 'hybrid' && (cfg['base_per_call'] ?? cfg['request_price']) !== undefined && (
+        {bt === 'hybrid' && (cfg['base_per_call'] ?? cfg['request_price']) != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Base</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(cfg['base_per_call'] ?? cfg['request_price'])}</span>
@@ -71,7 +71,7 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
     return (
       <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30">
         <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Per Call</span>
-        <span className="text-xs font-mono font-bold text-base-content">{p !== undefined ? fmt(p) : '—'}</span>
+        <span className="text-xs font-mono font-bold text-base-content">{p != null ? fmt(p) : '—'}</span>
       </span>
     );
   }
@@ -81,13 +81,13 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
     const output = cfg['output_per_1m'] ?? cfg['output_price'];
     return (
       <div className="flex flex-wrap gap-1.5">
-        {input !== undefined && (
+        {(input as number | null) != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">In/Char</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(input)}</span>
           </span>
         )}
-        {output !== undefined && (
+        {(output as number | null) != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Out/Char</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(output)}</span>
@@ -292,13 +292,9 @@ function EditPolicyModal({
     if (!policy) return;
     const cfg: Record<string, unknown> = {};
     if (inputPrice) cfg['input_per_1m'] = parseFloat(inputPrice);
-    else if (billingType === 'per_token' || billingType === 'tiered_token') cfg['input_per_1m'] = null;
     if (outputPrice) cfg['output_per_1m'] = parseFloat(outputPrice);
-    else if (billingType === 'per_token' || billingType === 'tiered_token') cfg['output_per_1m'] = null;
     if (requestPrice) cfg['request_price'] = parseFloat(requestPrice);
-    else if (billingType === 'per_request' || billingType === 'hybrid') cfg['request_price'] = null;
     if (cacheReadPrice) cfg['cache_read_price'] = parseFloat(cacheReadPrice);
-    else if (billingType === 'per_token' || billingType === 'tiered_token') cfg['cache_read_price'] = null;
 
     await onSave(policy.id, {
       name,
