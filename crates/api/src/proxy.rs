@@ -69,12 +69,12 @@ pub async fn proxy(
     let model_entry = match protocol {
         ProxyProtocol::OpenAI => models
             .iter()
-            .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase() && m.openai_compatible && m.model.enabled)
-            .ok_or(ApiError::NotFound(format!("Model '{}' not found or not OpenAI compatible", model_name)))?,
+            .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase() && m.model.enabled)
+            .ok_or(ApiError::NotFound(format!("Model '{}' not found or not enabled", model_name)))?,
         ProxyProtocol::Anthropic => models
             .iter()
-            .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase() && m.anthropic_compatible && m.model.enabled)
-            .ok_or(ApiError::NotFound(format!("Model '{}' not found or not Anthropic compatible", model_name)))?,
+            .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase() && m.model.enabled)
+            .ok_or(ApiError::NotFound(format!("Model '{}' not found or not enabled", model_name)))?,
     };
 
     // === Step 3: Route via ChannelModel (sole routing source) ===
