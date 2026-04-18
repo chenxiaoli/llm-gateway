@@ -56,6 +56,7 @@ struct PgProviderRow {
     id: String,
     name: String,
     slug: String,
+    #[allow(dead_code)]
     base_url: Option<String>,
     endpoints: Option<String>,
     enabled: bool,
@@ -69,7 +70,6 @@ impl From<PgProviderRow> for Provider {
             id: r.id,
             name: r.name,
             slug: r.slug,
-            base_url: r.base_url,
             endpoints: r.endpoints,
             enabled: r.enabled,
             created_at: r.created_at,
@@ -122,6 +122,7 @@ struct PgModelWithProviderRow {
     enabled: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     provider_name: String,
+    #[allow(dead_code)]
     base_url: Option<String>,
     endpoints: Option<String>,
 }
@@ -138,7 +139,7 @@ impl From<PgModelWithProviderRow> for ModelWithProvider {
         let openai_compatible = r.endpoints.as_ref()
             .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
             .map(|v| v.get("openai").is_some())
-            .unwrap_or(r.base_url.is_some() || is_native_openai);
+            .unwrap_or(is_native_openai);
         let anthropic_compatible = r.endpoints.as_ref()
             .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
             .map(|v| v.get("anthropic").is_some())
@@ -246,6 +247,7 @@ struct PgChannelRow {
     provider_id: String,
     name: String,
     api_key: String,
+    #[allow(dead_code)]
     base_url: Option<String>,
     priority: i32,
     pricing_policy_id: Option<String>,
@@ -266,7 +268,6 @@ impl From<PgChannelRow> for Channel {
             provider_id: r.provider_id,
             name: r.name,
             api_key: r.api_key,
-            base_url: r.base_url,
             priority: r.priority,
             pricing_policy_id: r.pricing_policy_id,
             markup_ratio: r.markup_ratio,
@@ -543,7 +544,7 @@ impl crate::Storage for PostgresStorage {
         .bind(&provider.id)
         .bind(&provider.name)
         .bind(&provider.slug)
-        .bind(&provider.base_url)
+        .bind(None::<String>)
         .bind(&provider.endpoints)
         .bind(provider.enabled)
         .bind(provider.created_at)
@@ -584,7 +585,7 @@ impl crate::Storage for PostgresStorage {
         )
         .bind(&provider.name)
         .bind(&provider.slug)
-        .bind(&provider.base_url)
+        .bind(None::<String>)
         .bind(&provider.endpoints)
         .bind(provider.enabled)
         .bind(provider.updated_at)
@@ -614,7 +615,7 @@ impl crate::Storage for PostgresStorage {
         .bind(&channel.provider_id)
         .bind(&channel.name)
         .bind(&channel.api_key)
-        .bind(&channel.base_url)
+        .bind(None::<String>)
         .bind(channel.priority)
         .bind(&channel.pricing_policy_id)
         .bind(channel.markup_ratio)
@@ -685,7 +686,7 @@ impl crate::Storage for PostgresStorage {
         )
         .bind(&channel.name)
         .bind(&channel.api_key)
-        .bind(&channel.base_url)
+        .bind(None::<String>)
         .bind(channel.priority)
         .bind(&channel.pricing_policy_id)
         .bind(channel.markup_ratio)
