@@ -4,7 +4,7 @@ use axum::Json;
 use std::sync::Arc;
 
 use llm_gateway_encryption::{decrypt, encrypt};
-use llm_gateway_storage::{Channel, CreateChannel, UpdateChannel};
+use llm_gateway_storage::{Channel, CreateChannel, UpdateChannel, UpdateChannelApiKey};
 
 use crate::error::ApiError;
 use crate::extractors::require_admin;
@@ -155,10 +155,6 @@ pub async fn update_channel(
         }
         channel.name = trimmed;
     }
-    if let Some(api_key) = input.api_key {
-        channel.api_key = encrypt(&api_key, &state.encryption_key)
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
-    }
     if let Some(base_url) = input.base_url {
         if let Some(ref url) = base_url {
             if !url.is_empty() {
@@ -189,6 +185,40 @@ pub async fn update_channel(
     if let Some(weight) = input.weight {
         channel.weight = weight;
     }
+    channel.updated_at = chrono::Utc::now();
+
+    let updated = state
+        .storage
+        .update_channel(&channel)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(updated))
+}
+
+/// Dedicated endpoint for updating a channel's API key.
+/// Separated from general channel updates to prevent accidental key clearing.
+pub async fn update_channel_api_key(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(input): Json<UpdateChannelApiKey>,
+) -> Result<Json<Channel>, ApiError> {
+    require_admin(&headers, &state.jwt_secret)?;
+
+    let mut channel = state
+        .storage
+        .get_channel(&id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound(format!("Channel '{}' not found", id)))?;
+
+    if input.api_key.is_empty() {
+        return Err(ApiError::BadRequest("API key must not be empty".to_string()));
+    }
+
+    channel.api_key = encrypt(&input.api_key, &state.encryption_key)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
     channel.updated_at = chrono::Utc::now();
 
     let updated = state

@@ -164,16 +164,24 @@ pub struct CreateChannel {
 #[derive(Debug, Deserialize)]
 pub struct UpdateChannel {
     pub name: Option<String>,
-    pub api_key: Option<String>,
+    // api_key intentionally omitted — use dedicated /api-key endpoint
     pub base_url: Option<Option<String>>,
     pub priority: Option<i32>,
-    pub pricing_policy_id: Option<Option<String>>,  // NEW
-    pub markup_ratio: Option<f64>,                  // NEW
+    pub pricing_policy_id: Option<Option<String>>,
+    pub markup_ratio: Option<f64>,
     pub enabled: Option<bool>,
-    pub rpm_limit: Option<Option<i64>>,  // NEW: None=keep, Some(None)=clear
-    pub tpm_limit: Option<Option<i64>>,  // NEW
-    pub balance: Option<Option<f64>>,    // NEW
-    pub weight: Option<Option<i32>>,     // NEW
+    pub rpm_limit: Option<Option<i64>>,
+    pub tpm_limit: Option<Option<i64>>,
+    pub balance: Option<Option<f64>>,
+    pub weight: Option<Option<i32>>,
+}
+
+/// Dedicated payload for updating a channel's API key.
+/// Using a separate type and endpoint prevents accidental key clearing
+/// when updating other channel fields.
+#[derive(Debug, Deserialize)]
+pub struct UpdateChannelApiKey {
+    pub api_key: String,
 }
 
 // --- Models ---

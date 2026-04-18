@@ -121,7 +121,7 @@ export default function ProviderDetail() {
   const handleSaveChannel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingChannel) {
-      await updateChannelMutation.mutateAsync({ id: editingChannel.id, input: { name: channelName, api_key: channelApiKey, base_url: channelBaseUrl || null, priority: Number(channelPriority), enabled: channelEnabled } });
+      await updateChannelMutation.mutateAsync({ id: editingChannel.id, input: { name: channelName, base_url: channelBaseUrl || null, priority: Number(channelPriority), enabled: channelEnabled } });
     } else {
       await createChannelMutation.mutateAsync({ provider_id: provider.id, name: channelName, api_key: channelApiKey, base_url: channelBaseUrl || null, priority: Number(channelPriority) });
     }

@@ -1,5 +1,5 @@
 import { adminApiClient } from './client';
-import type { Provider, CreateProviderRequest, UpdateProviderRequest, Channel, CreateChannelRequest, UpdateChannelRequest, SyncModelsResponse, ChannelModel, CreateChannelModelRequest, UpdateChannelModelRequest } from '../types';
+import type { Provider, CreateProviderRequest, UpdateProviderRequest, Channel, CreateChannelRequest, UpdateChannelRequest, SyncModelsResponse, ChannelModel, CreateChannelModelRequest, UpdateChannelModelRequest, UpdateChannelApiKeyRequest } from '../types';
 
 export async function getSeedData(): Promise<{ providers: Array<{ name: string; base_url?: string; endpoints?: Record<string, string>; enabled?: boolean }>; models: Array<{ provider: string; name: string; billing_type?: string; input_price?: number; output_price?: number }> }> {
   const { data } = await adminApiClient.get('/seed');
@@ -47,6 +47,11 @@ export async function createChannel(input: CreateChannelRequest): Promise<Channe
 
 export async function updateChannel(id: string, input: UpdateChannelRequest): Promise<Channel> {
   const { data } = await adminApiClient.patch<Channel>(`/channels/${id}`, input);
+  return data;
+}
+
+export async function updateChannelApiKey(id: string, input: UpdateChannelApiKeyRequest): Promise<Channel> {
+  const { data } = await adminApiClient.patch<Channel>(`/channels/${id}/api-key`, input);
   return data;
 }
 

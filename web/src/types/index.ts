@@ -238,10 +238,14 @@ export interface CreateChannelRequest {
 
 export interface UpdateChannelRequest {
   name?: string;
-  api_key?: string;
+  // api_key intentionally omitted — use dedicated updateChannelApiKey
   base_url?: string | null;
   priority?: number;
   enabled?: boolean;
+}
+
+export interface UpdateChannelApiKeyRequest {
+  api_key: string;
 }
 
 // --- Channel Models ---
