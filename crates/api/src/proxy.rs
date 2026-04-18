@@ -240,6 +240,8 @@ pub async fn proxy(
         let latency_ms = start.elapsed().as_millis() as i64;
         let status = resp.status().as_u16();
 
+        tracing::debug!("[PROXY] Upstream response: channel={}, status={}, latency={}ms", channel.name, status, latency_ms);
+
         if status >= 500 {
             last_error = format!("Server error {} on channel '{}'", status, channel.name);
             continue;
@@ -247,11 +249,13 @@ pub async fn proxy(
 
         if status != 200 && status < 500 {
             let error_body = resp.text().await.unwrap_or_default();
+            tracing::debug!("[PROXY] Upstream error response: status={}, body_len={}", status, error_body.len());
             return Ok((StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY), error_body).into_response());
         }
 
-        // === Handle streaming vs non-streaming ===
-        if is_stream {
+        // Get response body for logging
+        let response_body = resp.text().await.unwrap_or_default();
+        tracing::debug!("[PROXY] Upstream success response: body_len={}", response_body.len());
             // === Streaming: forward raw SSE stream as-is ===
             use futures::TryStreamExt;
             let byte_stream = resp.bytes_stream();
