@@ -3,19 +3,18 @@ import { useAllModels, useCreateGlobalModel, useUpdateGlobalModel } from '../hoo
 import { usePricingPolicies } from '../hooks/usePricingPolicies';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
-import { Globe, Plus, Cpu, Activity, Pencil, Sparkles } from 'lucide-react';
+import { Plus, Cpu, Activity, Pencil, Sparkles, Radio } from 'lucide-react';
 import type { CreateGlobalModelRequest, ModelWithProvider } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ── Model Card ───────────────────────────────────────────────────────────────
 interface ModelCardProps {
   model: ModelWithProvider;
-  providerName: string;
   index: number;
   onEdit: (model: ModelWithProvider) => void;
 }
 
-function ModelCard({ model, providerName, index, onEdit }: ModelCardProps) {
+function ModelCard({ model, index, onEdit }: ModelCardProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -37,10 +36,6 @@ function ModelCard({ model, providerName, index, onEdit }: ModelCardProps) {
               </div>
               <div>
                 <div className="font-mono text-[13px] font-semibold text-base-content leading-tight">{model.name}</div>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <Globe className="h-3 w-3 text-base-content/35" />
-                  <span className="text-[11px] text-base-content/45 font-medium">{providerName}</span>
-                </div>
               </div>
             </div>
 
@@ -56,17 +51,31 @@ function ModelCard({ model, providerName, index, onEdit }: ModelCardProps) {
           </div>
 
           {/* Pricing Policy */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-base-200/30 border border-base-300/20 mb-4">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-base-200/30 border border-base-300/20 mb-3">
             <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold shrink-0">Pricing Policy</div>
-            {model.pricing_policy_id ? (
-              <div className="flex items-center gap-1.5">
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-accent/8 text-accent/80 text-[10px] font-mono font-semibold border border-accent/15">
-                  {model.pricing_policy_id}
-                </span>
-              </div>
+            {model.pricing_policy_name ? (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-accent/8 text-accent/80 text-[10px] font-semibold border border-accent/15">
+                {model.pricing_policy_name}
+              </span>
             ) : (
-              <span className="text-[11px] text-base-content/25 italic">No policy assigned</span>
+              <span className="text-[11px] text-base-content/25 italic">No policy</span>
             )}
+          </div>
+
+          {/* Channels */}
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-base-200/30 border border-base-300/20 mb-4">
+            <Radio className="h-3 w-3 text-base-content/30 shrink-0 mt-0.5" />
+            <div className="flex flex-wrap gap-1">
+              {model.channel_names.length > 0 ? (
+                model.channel_names.map((ch, i) => (
+                  <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded bg-base-200/60 text-[10px] font-mono font-semibold text-base-content/60 border border-base-300/30">
+                    {ch}
+                  </span>
+                ))
+              ) : (
+                <span className="text-[11px] text-base-content/25 italic">Not routed</span>
+              )}
+            </div>
           </div>
 
           {/* Footer */}
@@ -347,29 +356,6 @@ export default function Models() {
         </AnimatePresence>
       </motion.div>
 
-      {/* Stats strip */}
-      {totalModels > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-          className="grid grid-cols-3 gap-3 mb-7"
-        >
-          <div className="rounded-xl border border-base-300/50 bg-base-100/50 px-4 py-3">
-            <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Total Models</div>
-            <div className="text-[20px] font-bold text-base-content font-mono">{totalModels}</div>
-          </div>
-          <div className="rounded-xl border border-accent/20 bg-accent/5 px-4 py-3">
-            <div className="text-[10px] uppercase tracking-widest text-accent/70 font-semibold mb-1">Active</div>
-            <div className="text-[20px] font-bold text-accent font-mono">{activeModels}</div>
-          </div>
-          <div className="rounded-xl border border-base-300/50 bg-base-100/50 px-4 py-3">
-            <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Disabled</div>
-            <div className="text-[20px] font-bold text-base-content/50 font-mono">{totalModels - activeModels}</div>
-          </div>
-        </motion.div>
-      )}
-
       {/* Model grid or empty state */}
       {totalModels === 0 ? (
         <EmptyState onAddClick={() => setIsAdding(true)} />
@@ -384,7 +370,6 @@ export default function Models() {
             <ModelCard
               key={model.id}
               model={model}
-              providerName={model.provider_name}
               index={i}
               onEdit={setEditingModel}
             />

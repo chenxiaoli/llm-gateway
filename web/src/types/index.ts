@@ -63,7 +63,9 @@ export interface Model {
 }
 
 export interface ModelWithProvider extends Model {
-  provider_name: string;
+  pricing_policy_name?: string | null;
+  channel_ids: string[];
+  channel_names: string[];
 }
 
 export interface CreateModelRequest {

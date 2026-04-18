@@ -88,6 +88,19 @@ struct PgModelRow {
     created_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(FromRow)]
+struct PgModelEnrichedRow {
+    id: String,
+    name: String,
+    model_type: Option<String>,
+    pp_id: Option<String>,
+    pp_name: Option<String>,
+    enabled: bool,
+    created_at: chrono::DateTime<chrono::Utc>,
+    channel_ids_csv: Option<String>,
+    channel_names_csv: Option<String>,
+}
+
 impl From<PgModelRow> for Model {
     fn from(r: PgModelRow) -> Self {
         Model {
@@ -750,21 +763,51 @@ impl crate::Storage for PostgresStorage {
     }
 
     async fn list_models(&self) -> Result<Vec<ModelWithProvider>, DbErr> {
-        // Query all models - for N:N with providers, we return models with placeholder provider info
-        // The provider relationship is stored in channel_models, not directly on models
-        let models = sqlx::query_as::<_, PgModelRow>(
-            "SELECT id, name, model_type, pricing_policy_id, enabled, created_at
-             FROM models ORDER BY name"
+        let rows = sqlx::query_as::<_, PgModelEnrichedRow>(
+            r#"
+            SELECT
+                m.id,
+                m.name,
+                m.model_type,
+                m.pricing_policy_id AS pp_id,
+                pp.name AS pp_name,
+                m.enabled,
+                m.created_at,
+                STRING_AGG(DISTINCT cm.id, ',') AS channel_ids_csv,
+                STRING_AGG(DISTINCT c.name, ',') AS channel_names_csv
+            FROM models m
+            LEFT JOIN pricing_policies pp ON m.pricing_policy_id = pp.id
+            LEFT JOIN channel_models cm ON cm.model_id = m.id
+            LEFT JOIN channels c ON c.id = cm.channel_id
+            GROUP BY m.id
+            ORDER BY m.name
+            "#
         )
         .fetch_all(&self.pool)
         .await?;
 
-        let result: Vec<ModelWithProvider> = models.into_iter().map(|m| {
+        let result: Vec<ModelWithProvider> = rows.into_iter().map(|r| {
+            let channel_ids: Vec<String> = r.channel_ids_csv
+                .as_ref()
+                .map(|s| s.split(',').filter(|x| !x.is_empty()).map(|x| x.to_string()).collect())
+                .unwrap_or_default();
+            let channel_names: Vec<String> = r.channel_names_csv
+                .as_ref()
+                .map(|s| s.split(',').filter(|x| !x.is_empty()).map(|x| x.to_string()).collect())
+                .unwrap_or_default();
+
             ModelWithProvider {
-                model: m.into(),
-                provider_name: "".to_string(),
-                openai_compatible: false,
-                anthropic_compatible: false,
+                model: Model {
+                    id: r.id,
+                    name: r.name,
+                    model_type: r.model_type,
+                    pricing_policy_id: r.pp_id,
+                    enabled: r.enabled,
+                    created_at: r.created_at,
+                },
+                pricing_policy_name: r.pp_name,
+                channel_ids,
+                channel_names,
             }
         }).collect();
 

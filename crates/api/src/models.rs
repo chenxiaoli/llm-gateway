@@ -56,7 +56,7 @@ pub async fn list_models(
                 "id": m.model.name,
                 "object": "model",
                 "created": m.model.created_at.timestamp(),
-                "owned_by": m.provider_name,
+                "owned_by": "gateway",
             })
         })
         .collect();

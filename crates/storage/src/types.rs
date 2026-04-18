@@ -270,9 +270,9 @@ pub struct UpdateModel {
 #[derive(Debug, Clone, Serialize)]
 pub struct ModelWithProvider {
     pub model: Model,
-    pub provider_name: String,
-    pub openai_compatible: bool,
-    pub anthropic_compatible: bool,
+    pub pricing_policy_name: Option<String>,
+    pub channel_ids: Vec<String>,
+    pub channel_names: Vec<String>,
 }
 
 // --- Channel Models (Junction Table) ---

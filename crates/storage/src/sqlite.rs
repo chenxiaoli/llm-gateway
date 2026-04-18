@@ -105,6 +105,19 @@ struct SqliteModelRow {
     created_at: String,
 }
 
+#[derive(FromRow)]
+struct SqliteModelEnrichedRow {
+    id: String,
+    name: String,
+    model_type: Option<String>,
+    pp_id: Option<String>,
+    pp_name: Option<String>,
+    enabled: i64,
+    created_at: String,
+    channel_ids_csv: Option<String>,
+    channel_names_csv: Option<String>,
+}
+
 impl From<SqliteModelRow> for Model {
     fn from(r: SqliteModelRow) -> Self {
         Model {
@@ -719,28 +732,51 @@ impl crate::Storage for SqliteStorage {
     }
 
     async fn list_models(&self) -> Result<Vec<ModelWithProvider>, DbErr> {
-        // Query all models - for N:N with providers, we return models with placeholder provider info
-        // The provider relationship is stored in channel_models, not directly on models
-        let models = sqlx::query_as::<_, SqliteModelRow>(
-            "SELECT id, name, model_type, pricing_policy_id, enabled, created_at
-             FROM models ORDER BY name"
+        let rows = sqlx::query_as::<_, SqliteModelEnrichedRow>(
+            r#"
+            SELECT
+                m.id,
+                m.name,
+                m.model_type,
+                m.pricing_policy_id AS pp_id,
+                pp.name AS pp_name,
+                m.enabled,
+                m.created_at,
+                GROUP_CONCAT(DISTINCT cm.id, ',') AS channel_ids_csv,
+                GROUP_CONCAT(DISTINCT c.name, ',') AS channel_names_csv
+            FROM models m
+            LEFT JOIN pricing_policies pp ON m.pricing_policy_id = pp.id
+            LEFT JOIN channel_models cm ON cm.model_id = m.id
+            LEFT JOIN channels c ON c.id = cm.channel_id
+            GROUP BY m.id
+            ORDER BY m.name
+            "#
         )
         .fetch_all(&self.pool)
         .await?;
 
-        let result: Vec<ModelWithProvider> = models.into_iter().map(|m| {
+        let result: Vec<ModelWithProvider> = rows.into_iter().map(|r| {
+            let channel_ids: Vec<String> = r.channel_ids_csv
+                .as_ref()
+                .map(|s| s.split(',').filter(|x| !x.is_empty()).map(|x| x.to_string()).collect())
+                .unwrap_or_default();
+            let channel_names: Vec<String> = r.channel_names_csv
+                .as_ref()
+                .map(|s| s.split(',').filter(|x| !x.is_empty()).map(|x| x.to_string()).collect())
+                .unwrap_or_default();
+
             ModelWithProvider {
                 model: Model {
-                    id: m.id,
-                    name: m.name,
-                    model_type: m.model_type,
-                    pricing_policy_id: m.pricing_policy_id,
-                    enabled: m.enabled != 0,
-                    created_at: parse_rfc3339(&m.created_at),
+                    id: r.id,
+                    name: r.name,
+                    model_type: r.model_type,
+                    pricing_policy_id: r.pp_id,
+                    enabled: r.enabled != 0,
+                    created_at: parse_rfc3339(&r.created_at),
                 },
-                provider_name: "".to_string(),
-                openai_compatible: false,
-                anthropic_compatible: false,
+                pricing_policy_name: r.pp_name,
+                channel_ids,
+                channel_names,
             }
         }).collect();
 
