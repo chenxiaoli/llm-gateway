@@ -205,10 +205,10 @@ pub async fn proxy(
 
         req = req.header("Authorization", format!("Bearer {}", api_key_value));
 
-        // Forward non-auth client headers to upstream (exclude host, authorization, content-length)
+        // Forward non-auth client headers to upstream (exclude host, authorization, content-length, api keys)
         for (name, value) in headers.iter() {
             match name.as_str() {
-                "host" | "authorization" | "content-length" => continue,
+                "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
                 _ => {
                     req = req.header(name.clone(), value);
                 }
