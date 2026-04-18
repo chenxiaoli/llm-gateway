@@ -296,41 +296,72 @@ export default function ChannelDetail() {
             </div>
           ) : channelModels && channelModels.length > 0 ? (
             <div className="space-y-2">
-              {channelModels.map((cm) => (
-                <div key={cm.id} className="flex items-center justify-between p-3 rounded-lg bg-base-200/50">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-mono text-sm truncate">{cm.upstream_model_name}</div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-base-content/40">Model ID: {cm.model_id}</span>
-                      {cm.pricing_policy_id && (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary/10 text-primary/80 text-[10px] font-semibold border border-primary/20">
-                          {policies?.find(p => p.id === cm.pricing_policy_id)?.name ?? cm.pricing_policy_id}
+              {channelModels.map((cm) => {
+                const model = allModels?.find(m => m.id === cm.model_id);
+                const policy = policies?.find(p => p.id === cm.pricing_policy_id);
+                return (
+                <div key={cm.id} className="p-4 rounded-lg bg-base-200/50 space-y-3">
+                  {/* Header row: model name + status + actions */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="font-mono text-sm font-semibold truncate text-base-content/90">
+                        {model?.name ?? cm.model_id}
+                      </div>
+                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                        cm.enabled
+                          ? 'bg-success/10 text-success'
+                          : 'bg-base-300/50 text-base-content/40'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${cm.enabled ? 'bg-success' : 'bg-base-content/30'}`} />
+                        {cm.enabled ? 'Active' : 'Disabled'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button variant="ghost" size="sm" icon={<Pencil className="h-4 w-4" />} onClick={() => setEditingModel(cm)} className="cursor-pointer" />
+                      <ConfirmDialog title={`Remove "${model?.name ?? cm.upstream_model_name}" from this channel?`} onConfirm={() => deleteModelMutation.mutateAsync(cm.id)} okText="Remove">
+                        <Button variant="ghost" size="sm" icon={<Trash2 className="h-4 w-4" />} />
+                      </ConfirmDialog>
+                    </div>
+                  </div>
+
+                  {/* Detail rows */}
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs">
+                    <div className="flex items-start gap-2">
+                      <span className="text-base-content/30 w-20 shrink-0">Upstream</span>
+                      <span className="font-mono text-base-content/60 truncate" title={cm.upstream_model_name ?? ''}>
+                        {cm.upstream_model_name ?? <span className="italic text-base-content/25">Not set</span>}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-base-content/30 w-20 shrink-0">Pricing</span>
+                      {policy ? (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary/10 text-primary/80 font-medium border border-primary/15">
+                          {policy.name}
                         </span>
+                      ) : (
+                        <span className="text-base-content/25 italic">No policy</span>
                       )}
-                      <span className="text-xs text-base-content/30">
-                        ×{cm.markup_ratio}
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-base-content/30 w-20 shrink-0">Markup</span>
+                      <span className="font-mono text-base-content/60">
+                        ×{cm.markup_ratio.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-base-content/30 w-20 shrink-0">Priority</span>
+                      <span className="font-mono text-base-content/60">
+                        {cm.priority_override != null ? cm.priority_override : <span className="text-base-content/25 italic">default</span>}
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${
-                      cm.enabled
-                        ? 'bg-success/10 text-success'
-                        : 'bg-base-300/50 text-base-content/40'
-                    }`}>
-                      {cm.enabled ? 'Active' : 'Disabled'}
-                    </span>
-                    <Button variant="ghost" size="sm" icon={<Pencil className="h-4 w-4" />} onClick={() => setEditingModel(cm)} className="cursor-pointer" />
-                    <ConfirmDialog title={`Remove model "${cm.upstream_model_name}" from this channel?`} onConfirm={() => deleteModelMutation.mutateAsync(cm.id)} okText="Remove">
-                      <Button variant="ghost" size="sm" icon={<Trash2 className="h-4 w-4" />} />
-                    </ConfirmDialog>
-                  </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           ) : (
             <div className="text-center py-8 text-base-content/40">
-              <p className="text-sm">No models added to this channel</p>
+              <p className="text-sm">No models on this channel</p>
               <Button variant="ghost" size="sm" className="mt-2" onClick={() => setIsAddingModel(true)}>
                 Add your first model
               </Button>
