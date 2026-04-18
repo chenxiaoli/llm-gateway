@@ -26,10 +26,10 @@ function StatPill({ label, value, accent }: StatPillProps) {
         ? 'bg-accent/[0.07] border-accent/20'
         : 'bg-base-100/40 border-base-300/40'
     }`}>
-      <span className={`text-[11px] font-semibold uppercase tracking-widest ${accent ? 'text-accent/70' : 'text-base-content/30'}`}>
+      <span className={`text-xs font-semibold uppercase tracking-widest ${accent ? 'text-accent/70' : 'text-base-content/30'}`}>
         {label}
       </span>
-      <span className={`text-[18px] font-bold tracking-tight font-mono ${accent ? 'text-accent' : 'text-base-content'}`}>
+      <span className={`text-xl font-bold tracking-tight font-mono ${accent ? 'text-accent' : 'text-base-content'}`}>
         {value}
       </span>
     </div>
@@ -87,7 +87,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                   : 'bg-base-200/60'
                 }
               `}>
-                <Cpu className={`h-[20px] w-[20px] transition-colors duration-300 ${isActive ? 'text-accent' : 'text-base-content/25'}`} />
+                <Cpu className={`h-5 w-5 transition-colors duration-300 ${isActive ? 'text-accent' : 'text-base-content/25'}`} />
                 {/* Active pulse dot */}
                 {isActive && (
                   <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent animate-pulse" />
@@ -96,10 +96,10 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
 
               {/* Model name */}
               <div className="min-w-0">
-                <div className="font-mono text-[15px] font-bold text-base-content leading-tight truncate max-w-[200px]">
+                <div className="font-mono text-lg font-bold text-base-content leading-tight truncate max-w-[200px]">
                   {model.name}
                 </div>
-                <div className={`text-[11px] mt-0.5 ${isActive ? 'text-accent/50' : 'text-base-content/20'}`}>
+                <div className={`text-xs mt-0.5 ${isActive ? 'text-accent/50' : 'text-base-content/20'}`}>
                   {isActive ? `${model.channel_names.length} channel${model.channel_names.length !== 1 ? 's' : ''} active` : 'No routing'}
                 </div>
               </div>
@@ -107,7 +107,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
 
             {/* Status badge */}
             <div className={`
-              shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest border
+              shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-widest border
               transition-all duration-300
               ${isActive
                 ? 'bg-accent/10 text-accent border-accent/25'
@@ -125,7 +125,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
           {/* Pricing section */}
           <div className="mb-5">
             <div className="flex items-center gap-2 mb-3">
-              <div className={`text-[10px] font-black uppercase tracking-[0.2em] ${isActive ? 'text-accent/60' : 'text-base-content/25'}`}>
+              <div className={`text-xs font-black uppercase tracking-[0.2em] ${isActive ? 'text-accent/60' : 'text-base-content/25'}`}>
                 Pricing
               </div>
               <div className={`flex-1 h-px ${isActive ? 'bg-gradient-to-r from-accent/20 to-transparent' : 'bg-base-300/20'}`} />
@@ -136,7 +136,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                 {/* Policy name tag */}
                 <div className="flex items-center gap-2">
                   <span className={`
-                    inline-flex items-center px-2 py-0.5 rounded-md text-[12px] font-bold border
+                    inline-flex items-center px-2 py-0.5 rounded-md text-sm font-bold border
                     ${isActive
                       ? 'bg-accent/10 text-accent/90 border-accent/25'
                       : 'bg-base-200/50 text-base-content/50 border-base-300/40'
@@ -145,7 +145,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                     {policy.name}
                   </span>
                   {isPerToken && (
-                    <span className={`text-[10px] font-semibold uppercase tracking-wider ${isActive ? 'text-accent/40' : 'text-base-content/20'}`}>
+                    <span className={`text-xs font-semibold uppercase tracking-wider ${isActive ? 'text-accent/40' : 'text-base-content/20'}`}>
                       per 1M tokens
                     </span>
                   )}
@@ -165,10 +165,10 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                       const val = config[key] as number | undefined;
                       return (
                         <div key={key} className="flex flex-col items-center text-center py-1">
-                          <span className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${isActive ? 'text-accent/50' : 'text-base-content/25'}`}>
+                          <span className={`text-xs font-bold uppercase tracking-wider mb-1 ${isActive ? 'text-accent/50' : 'text-base-content/25'}`}>
                             {label}
                           </span>
-                          <span className={`font-mono text-[15px] font-bold ${isActive ? 'text-accent' : 'text-base-content/60'}`}>
+                          <span className={`font-mono text-lg font-bold ${isActive ? 'text-accent' : 'text-base-content/60'}`}>
                             {formatPrice(val)}
                           </span>
                         </div>
@@ -177,7 +177,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className={`text-[12px] font-mono ${isActive ? 'text-accent/70' : 'text-base-content/30'}`}>
+                    <span className={`text-sm font-mono ${isActive ? 'text-accent/70' : 'text-base-content/30'}`}>
                       {billingType}
                     </span>
                   </div>
@@ -186,7 +186,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
             ) : (
               <div className="flex items-center gap-1.5">
                 <div className={`w-1 h-1 rounded-full ${isActive ? 'bg-accent/30' : 'bg-base-content/15'}`} />
-                <span className={`text-[12px] italic ${isActive ? 'text-accent/30' : 'text-base-content/20'}`}>
+                <span className={`text-sm italic ${isActive ? 'text-accent/30' : 'text-base-content/20'}`}>
                   No policy — channel-level pricing
                 </span>
               </div>
@@ -197,7 +197,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
           {model.channel_names.length > 0 && (
             <div className="mb-5">
               <div className="flex items-center gap-2 mb-3">
-                <div className={`text-[10px] font-black uppercase tracking-[0.2em] ${isActive ? 'text-accent/60' : 'text-base-content/25'}`}>
+                <div className={`text-xs font-black uppercase tracking-[0.2em] ${isActive ? 'text-accent/60' : 'text-base-content/25'}`}>
                   Channels
                 </div>
                 <div className={`flex-1 h-px ${isActive ? 'bg-gradient-to-r from-accent/20 to-transparent' : 'bg-base-300/20'}`} />
@@ -208,7 +208,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                   <span
                     key={i}
                     className={`
-                      inline-flex items-center gap-1 px-2 py-1 rounded-md text-[12px] font-mono font-bold border
+                      inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-mono font-bold border
                       transition-all duration-200
                       ${isActive
                         ? 'bg-base-100/60 text-base-content/70 border-base-300/40 hover:border-accent/30 hover:text-accent/70'
@@ -216,7 +216,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                       }
                     `}
                   >
-                    <Radio className={`h-[12px] w-[12px] shrink-0 ${isActive ? 'text-accent/50' : 'text-base-content/20'}`} />
+                    <Radio className={`h-3 w-3 shrink-0 ${isActive ? 'text-accent/50' : 'text-base-content/20'}`} />
                     {ch}
                   </span>
                 ))}
@@ -226,13 +226,13 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
 
           {/* Footer */}
           <div className="flex items-center justify-between pt-4 border-t border-base-300/20">
-            <div className={`text-[10px] font-mono uppercase tracking-wider ${isActive ? 'text-accent/30' : 'text-base-content/15'}`}>
+            <div className={`text-xs font-mono uppercase tracking-wider ${isActive ? 'text-accent/30' : 'text-base-content/15'}`}>
               {model.id}
             </div>
             <button
               onClick={() => onEdit(model)}
               className={`
-                flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium border
+                flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium border
                 transition-all duration-200 cursor-pointer
                 ${isActive
                   ? 'text-base-content/40 border-base-300/30 hover:border-accent/40 hover:text-accent'
@@ -274,8 +274,8 @@ function EmptyState({ onAddClick }: { onAddClick: () => void }) {
       </div>
 
       <div className="text-center max-w-sm">
-        <h3 className="text-[15px] font-bold text-base-content/50 mb-2">No models registered</h3>
-        <p className="text-[12px] text-base-content/25 leading-relaxed mb-8">
+        <h3 className="text-lg font-bold text-base-content/50 mb-2">No models registered</h3>
+        <p className="text-sm text-base-content/25 leading-relaxed mb-8">
           Add AI models to enable request routing through the gateway. Each model can be associated with a pricing policy.
         </p>
         <Button variant="primary" size="sm" onClick={onAddClick}>
@@ -319,7 +319,7 @@ function AddModelModal({
     <Modal open={open} onClose={handleClose} title="Register Model">
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Model Name</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Model Name</label>
           <div className="relative">
             <input
               type="text"
@@ -327,18 +327,18 @@ function AddModelModal({
               onChange={(e) => setName(e.target.value)}
               required
               placeholder="e.g. gpt-4o, claude-3-5-sonnet"
-              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
             <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/25" />
           </div>
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</label>
           <select
             value={pricingPolicyId}
             onChange={(e) => setPricingPolicyId(e.target.value)}
-            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
           >
             <option value="">No policy (pricing handled at channel level)</option>
             {policies?.map((p) => (
@@ -396,11 +396,11 @@ function EditModelModal({
     <Modal open={open} onClose={onClose} title={`Edit ${model?.name ?? 'Model'}`}>
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</label>
           <select
             value={pricingPolicyId}
             onChange={(e) => setPricingPolicyId(e.target.value)}
-            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
           >
             <option value="">No policy</option>
             {policies?.map((p) => (
@@ -467,10 +467,10 @@ export default function Models() {
       >
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-[28px] font-black tracking-tight text-base-content leading-none mb-1">
+            <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
               Models
             </h1>
-            <p className="text-[12px] text-base-content/30">
+            <p className="text-sm text-base-content/30">
               {totalModels === 0
                 ? 'Register AI models to route requests through the gateway'
                 : `${activeModels} live · ${totalModels - activeModels} idle · ${totalPolicies} policy${totalPolicies !== 1 ? 'ies' : ''}`
