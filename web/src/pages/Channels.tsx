@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAllChannels } from '../hooks/useChannels';
+import { useAllChannels, useChannelModels } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { createChannel } from '../api/providers';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
-import { Globe, Plus, Radio, Hash, Link2, ShieldCheck, ChevronRight, Key, Wifi } from 'lucide-react';
+import { Globe, Plus, Radio, Hash, Link2, ShieldCheck, ChevronRight, Key, Wifi, Cpu } from 'lucide-react';
 import type { Channel, CreateChannelRequest } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -186,7 +186,8 @@ interface ChannelRowProps {
 }
 
 function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true); // 默认展开
+  const { data: channelModels } = useChannelModels(channel.id);
 
   return (
     <motion.div
@@ -319,7 +320,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 mb-4">
                     <Link
                       to={`/console/channels/${channel.id}`}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-base-200/60 hover:bg-base-300/60 text-[11px] font-medium text-base-content/60 hover:text-base-content transition-all duration-150 cursor-pointer"
@@ -330,9 +331,33 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-base-200/40 text-[11px] font-medium text-base-content/35 cursor-default"
                     >
                       <Globe className="h-3 w-3" />
-                      {channel.provider_id}
+                      {providerName || channel.provider_id}
                     </span>
                   </div>
+
+                  {/* Channel Models */}
+                  {channelModels && channelModels.length > 0 && (
+                    <div className="pt-3 border-t border-base-300/30">
+                      <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-2 flex items-center gap-1.5">
+                        <Cpu className="h-3 w-3" />
+                        Models ({channelModels.length})
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {channelModels.map((cm) => (
+                          <span
+                            key={cm.id}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium ${
+                              cm.enabled
+                                ? 'bg-success/10 text-success/80'
+                                : 'bg-base-300/30 text-base-content/40'
+                            }`}
+                          >
+                            {cm.upstream_model_name || cm.model_id}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
