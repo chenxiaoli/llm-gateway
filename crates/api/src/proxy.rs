@@ -256,6 +256,9 @@ pub async fn proxy(
         // Get response body for logging
         let response_body = resp.text().await.unwrap_or_default();
         tracing::debug!("[PROXY] Upstream success response: body_len={}", response_body.len());
+
+        // === Handle streaming vs non-streaming ===
+        if is_stream {
             // === Streaming: forward raw SSE stream as-is ===
             use futures::TryStreamExt;
             let byte_stream = resp.bytes_stream();
