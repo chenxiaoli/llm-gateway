@@ -16,6 +16,90 @@ const BILLING_TYPES: Record<string, string> = {
   hybrid: 'Hybrid',
 };
 
+// ── Config renderer for table cells ───────────────────────────────────────────
+function fmt(val: unknown): string {
+  if (typeof val === 'number') return `$${(val / 1_000_000).toFixed(4)}/M`;
+  if (typeof val === 'object' && val !== null) return JSON.stringify(val);
+  return String(val);
+}
+
+function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
+  const cfg = policy.config ?? {};
+  const bt = policy.billing_type;
+
+  if (bt === 'per_token' || bt === 'tiered_token' || bt === 'hybrid') {
+    const input = cfg['input_per_1m'] ?? cfg['input_price'];
+    const output = cfg['output_per_1m'] ?? cfg['output_price'];
+    const cache = cfg['cache_read_price'];
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {input !== undefined && (
+          <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">In</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(input)}</span>
+          </span>
+        )}
+        {output !== undefined && (
+          <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Out</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(output)}</span>
+          </span>
+        )}
+        {cache !== undefined && (
+          <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Cache</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(cache)}</span>
+          </span>
+        )}
+        {bt === 'hybrid' && (cfg['base_per_call'] ?? cfg['request_price']) !== undefined && (
+          <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Base</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(cfg['base_per_call'] ?? cfg['request_price'])}</span>
+          </span>
+        )}
+        {bt === 'tiered_token' && Array.isArray(cfg['tiers']) && (
+          <span className="inline-flex items-center gap-1 text-xs text-base-content/40 italic">
+            {(cfg['tiers'] as unknown[]).length} tier{((cfg['tiers'] as unknown[]).length !== 1) ? 's' : ''}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  if (bt === 'per_request') {
+    const p = cfg['price_per_call'] ?? cfg['request_price'];
+    return (
+      <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30">
+        <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Per Call</span>
+        <span className="text-xs font-mono font-bold text-base-content">{p !== undefined ? fmt(p) : '—'}</span>
+      </span>
+    );
+  }
+
+  if (bt === 'per_character') {
+    const input = cfg['input_per_1m'] ?? cfg['input_price'];
+    const output = cfg['output_per_1m'] ?? cfg['output_price'];
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {input !== undefined && (
+          <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">In/Char</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(input)}</span>
+          </span>
+        )}
+        {output !== undefined && (
+          <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Out/Char</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(output)}</span>
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return <span className="text-xs text-base-content/30 italic">—</span>;
+}
+
 function priceFields(
   billingType: string,
   config: Record<string, unknown>,
@@ -346,6 +430,7 @@ export default function PricingPolicies() {
               <tr className="border-b border-base-300">
                 <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th>
                 <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Billing</th>
+                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Config</th>
                 <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Models</th>
                 <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Channel Models</th>
                 <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Created</th>
@@ -359,6 +444,7 @@ export default function PricingPolicies() {
                   <td>
                     <Badge variant="blue">{BILLING_TYPES[policy.billing_type] ?? policy.billing_type}</Badge>
                   </td>
+                  <td><ConfigCell policy={policy} /></td>
                   <td className="text-base-content/60">
                     <span className="inline-flex items-center gap-1.5">
                       <Cpu className="h-3.5 w-3.5 text-base-content/30" />
