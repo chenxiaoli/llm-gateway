@@ -212,6 +212,14 @@ pub struct PricingPolicy {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PricingPolicyWithCounts {
+    #[serde(flatten)]
+    pub policy: PricingPolicy,
+    pub model_count: i64,
+    pub channel_model_count: i64,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreatePricingPolicy {
     pub name: String,

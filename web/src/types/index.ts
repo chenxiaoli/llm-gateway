@@ -295,6 +295,26 @@ export interface SyncedModel {
   created: boolean;
 }
 
+export interface PricingPolicy {
+  id: string;
+  name: string;
+  billing_type: string;
+  config: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PricingPolicyWithCounts extends PricingPolicy {
+  model_count: number;
+  channel_model_count: number;
+}
+
+export interface CreatePricingPolicy {
+  name: string;
+  billing_type: string;
+  config: Record<string, unknown>;
+}
+
 export interface SyncModelsResponse {
   new: number;
   updated: number;

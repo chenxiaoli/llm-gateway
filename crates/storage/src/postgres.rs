@@ -1422,6 +1422,37 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(PricingPolicy::from).collect())
     }
 
+    async fn list_pricing_policies_with_counts(&self) -> Result<Vec<PricingPolicyWithCounts>, DbErr> {
+        let rows: Vec<PgPricingPolicyRow> = sqlx::query_as(
+            "SELECT id, name, billing_type, config, created_at, updated_at FROM pricing_policies",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            let policy = PricingPolicy::from(row);
+            let model_count: (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM models WHERE pricing_policy_id = $1",
+            )
+            .bind(&policy.id)
+            .fetch_one(&self.pool)
+            .await?;
+            let channel_model_count: (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM channel_models WHERE cost_policy_id = $1",
+            )
+            .bind(&policy.id)
+            .fetch_one(&self.pool)
+            .await?;
+            results.push(PricingPolicyWithCounts {
+                policy,
+                model_count: model_count.0,
+                channel_model_count: channel_model_count.0,
+            });
+        }
+        Ok(results)
+    }
+
     async fn update_pricing_policy(&self, policy: &PricingPolicy) -> Result<PricingPolicy, DbErr> {
         sqlx::query(
             "UPDATE pricing_policies SET name = $1, billing_type = $2, config = $3, updated_at = $4 WHERE id = $5",

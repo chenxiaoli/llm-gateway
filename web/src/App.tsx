@@ -12,6 +12,7 @@ import KeyDetail from './pages/KeyDetail';
 import Channels from './pages/Channels';
 import ChannelDetail from './pages/ChannelDetail';
 import Models from './pages/Models';
+import PricingPolicies from './pages/PricingPolicies';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
 import Usage from './pages/Usage';
@@ -52,6 +53,7 @@ function App() {
             <Route path="channels" element={<Channels />} />
             <Route path="channels/:id" element={<ChannelDetail />} />
             <Route path="models" element={<Models />} />
+            <Route path="pricing-policies" element={<PricingPolicies />} />
             <Route path="users" element={<Users />} />
             <Route path="settings" element={<Settings />} />
             <Route path="logs" element={<Logs />} />
