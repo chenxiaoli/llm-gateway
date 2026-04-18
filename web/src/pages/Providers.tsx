@@ -53,7 +53,6 @@ function ProviderCard({ provider, onEdit, onDelete, navigate }: {
   onDelete: (p: Provider) => void;
   navigate: ReturnType<typeof useNavigate>;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const endpointEntries = provider.endpoints ? Object.entries(provider.endpoints) : [];
   const hasEndpoints = endpointEntries.length > 0;
 
@@ -115,23 +114,12 @@ function ProviderCard({ provider, onEdit, onDelete, navigate }: {
           )}
         </div>
 
-        {/* Endpoint details — shown inline, collapsible */}
+        {/* Endpoint details */}
         {hasEndpoints && (
-          <div className="mb-3">
-            <button
-              onClick={() => setExpanded(e => !e)}
-              className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-base-content/30 hover:text-base-content/50 transition-colors mb-1.5"
-            >
-              <ChevronRight className={`h-3 w-3 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} />
-              Endpoints
-            </button>
-            {expanded && (
-              <div className="rounded-xl border border-base-200/60 bg-base-200/20 overflow-hidden divide-y divide-base-200/40">
-                {endpointEntries.map(([protocol, url]) => (
-                  <EndpointRow key={protocol} protocol={protocol} url={url} />
-                ))}
-              </div>
-            )}
+          <div className="rounded-xl border border-base-200/60 bg-base-200/20 overflow-hidden divide-y divide-base-200/40 mb-3">
+            {endpointEntries.map(([protocol, url]) => (
+              <EndpointRow key={protocol} protocol={protocol} url={url} />
+            ))}
           </div>
         )}
 
