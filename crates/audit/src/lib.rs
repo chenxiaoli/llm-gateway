@@ -47,6 +47,8 @@ impl AuditLogger {
         original_model: Option<&str>,
         upstream_model: Option<&str>,
         model_override_reason: Option<&str>,
+        request_path: Option<&str>,
+        upstream_url: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let settings = self.get_settings().await;
         let request_body = if settings.audit_log_request {
@@ -77,6 +79,8 @@ impl AuditLogger {
             original_model: original_model.map(String::from),
             upstream_model: upstream_model.map(String::from),
             model_override_reason: model_override_reason.map(String::from),
+            request_path: request_path.map(String::from),
+            upstream_url: upstream_url.map(String::from),
         };
         self.storage.insert_log(&log).await
     }

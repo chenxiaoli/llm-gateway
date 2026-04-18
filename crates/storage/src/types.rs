@@ -399,6 +399,8 @@ pub struct AuditLog {
     pub original_model: Option<String>,
     pub upstream_model: Option<String>,
     pub model_override_reason: Option<String>,
+    pub request_path: Option<String>,
+    pub upstream_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

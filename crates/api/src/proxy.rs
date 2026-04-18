@@ -197,8 +197,10 @@ pub async fn proxy(
             ProxyProtocol::OpenAI => "/v1/chat/completions",
             ProxyProtocol::Anthropic => "/v1/messages",
         };
-        let url = format!("{}{}", base_url.trim_end_matches('/'), path);
-        let mut req = client.post(&url);
+        let upstream_url = format!("{}{}", base_url.trim_end_matches('/'), path);
+
+        tracing::debug!("[PROXY] Upstream URL: {} -> {}", path, upstream_url);
+        let mut req = client.post(&upstream_url);
 
         match protocol {
             ProxyProtocol::OpenAI => {
@@ -277,6 +279,8 @@ pub async fn proxy(
             let input_price_for_worker = channel_model.input_price.unwrap_or(model_entry.model.input_price);
             let output_price_for_worker = channel_model.output_price.unwrap_or(model_entry.model.output_price);
             let request_price_for_worker = channel_model.request_price.unwrap_or(model_entry.model.request_price);
+            let request_path_for_worker = path.to_string();
+            let upstream_url_for_worker = upstream_url.clone();
 
             // Spawn: read upstream SSE → forward to client → accumulate → send to audit worker
             tokio::spawn(async move {
@@ -329,6 +333,8 @@ pub async fn proxy(
                         None
                     },
                     model_override_reason,
+                    request_path: Some(request_path_for_worker),
+                    upstream_url: Some(upstream_url_for_worker),
                 };
                 if let Err(e) = audit_tx.send(task).await {
                     tracing::warn!("[PROXY] Failed to send audit task: {}", e);
@@ -374,6 +380,8 @@ pub async fn proxy(
             original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
             upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
             model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
+            request_path: Some(path.to_string()),
+            upstream_url: Some(upstream_url.clone()),
         };
         let _ = state.audit_tx.try_send(task);
 

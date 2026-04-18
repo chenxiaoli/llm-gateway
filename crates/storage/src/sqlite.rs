@@ -176,6 +176,8 @@ struct SqliteAuditRow {
     original_model: Option<String>,
     upstream_model: Option<String>,
     model_override_reason: Option<String>,
+    request_path: Option<String>,
+    upstream_url: Option<String>,
 }
 
 impl From<SqliteAuditRow> for AuditLog {
@@ -198,6 +200,8 @@ impl From<SqliteAuditRow> for AuditLog {
             original_model: r.original_model,
             upstream_model: r.upstream_model,
             model_override_reason: r.model_override_reason,
+            request_path: r.request_path,
+            upstream_url: r.upstream_url,
         }
     }
 }
@@ -993,8 +997,9 @@ impl crate::Storage for SqliteStorage {
     async fn insert_log(&self, log: &AuditLog) -> Result<(), DbErr> {
         sqlx::query(
             "INSERT INTO audit_logs (id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
-             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
+             request_path, upstream_url)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&log.id)
         .bind(&log.key_id)
@@ -1013,6 +1018,8 @@ impl crate::Storage for SqliteStorage {
         .bind(&log.original_model)
         .bind(&log.upstream_model)
         .bind(&log.model_override_reason)
+        .bind(&log.request_path)
+        .bind(&log.upstream_url)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -1021,7 +1028,8 @@ impl crate::Storage for SqliteStorage {
     async fn query_logs(&self, filter: &LogFilter) -> Result<Vec<AuditLog>, DbErr> {
         let mut sql = String::from(
             "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
-             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason
+             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
+             request_path, upstream_url
              FROM audit_logs WHERE 1=1",
         );
         let mut bind_vars: Vec<String> = Vec::new();
@@ -1092,7 +1100,8 @@ impl crate::Storage for SqliteStorage {
         let offset = (page - 1) * page_size;
         let data_sql = format!(
             "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body, \
-             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason \
+             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason, \
+             request_path, upstream_url \
              FROM audit_logs {} ORDER BY created_at DESC LIMIT ? OFFSET ?",
             where_sql
         );
