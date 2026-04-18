@@ -72,7 +72,7 @@ export default function Settings() {
     }
     // Import selected models (as global models — pricing handled via pricing policies)
     for (const m of seedData.models.filter(m => m.selected)) {
-      const input: CreateGlobalModelRequest = { name: m.name, enabled: true };
+      const input: CreateGlobalModelRequest = { name: m.name };
       await createModelMutation.mutateAsync(input);
     }
     toast.success('Import completed');

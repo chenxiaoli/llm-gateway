@@ -101,7 +101,6 @@ struct SqliteModelRow {
     name: String,
     model_type: Option<String>,
     pricing_policy_id: Option<String>,
-    enabled: i64,
     created_at: String,
 }
 
@@ -112,7 +111,6 @@ struct SqliteModelEnrichedRow {
     model_type: Option<String>,
     pp_id: Option<String>,
     pp_name: Option<String>,
-    enabled: i64,
     created_at: String,
     channel_ids_csv: Option<String>,
     channel_names_csv: Option<String>,
@@ -125,7 +123,6 @@ impl From<SqliteModelRow> for Model {
             name: r.name,
             model_type: r.model_type,
             pricing_policy_id: r.pricing_policy_id,
-            enabled: r.enabled != 0,
             created_at: parse_rfc3339(&r.created_at),
         }
     }
@@ -710,14 +707,13 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "INSERT INTO models (id, name, model_type, pricing_policy_id, enabled, created_at)
-             VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO models (id, name, model_type, pricing_policy_id, created_at)
+             VALUES (?, ?, ?, ?, ?)",
         )
         .bind(&model.id)
         .bind(&model.name)
         .bind(&model.model_type)
         .bind(&model.pricing_policy_id)
-        .bind(model.enabled as i64)
         .bind(model.created_at.to_rfc3339())
         .execute(&self.pool)
         .await?;
@@ -727,7 +723,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_model(&self, name: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<SqliteModelRow> = sqlx::query_as(
-            "SELECT id, name, model_type, pricing_policy_id, enabled, created_at
+            "SELECT id, name, model_type, pricing_policy_id, created_at
              FROM models WHERE name = ?",
         )
         .bind(name)
@@ -739,7 +735,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_model_by_id(&self, id: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<SqliteModelRow> = sqlx::query_as(
-            "SELECT id, name, model_type, pricing_policy_id, enabled, created_at
+            "SELECT id, name, model_type, pricing_policy_id, created_at
              FROM models WHERE id = ?",
         )
         .bind(id)
@@ -763,7 +759,6 @@ impl crate::Storage for SqliteStorage {
                 m.model_type,
                 m.pricing_policy_id AS pp_id,
                 pp.name AS pp_name,
-                m.enabled,
                 m.created_at,
                 GROUP_CONCAT(cm.id, ',') AS channel_ids_csv,
                 GROUP_CONCAT(c.name, ',') AS channel_names_csv
@@ -794,7 +789,6 @@ impl crate::Storage for SqliteStorage {
                     name: r.name,
                     model_type: r.model_type,
                     pricing_policy_id: r.pp_id,
-                    enabled: r.enabled != 0,
                     created_at: parse_rfc3339(&r.created_at),
                 },
                 pricing_policy_name: r.pp_name,
@@ -813,10 +807,9 @@ impl crate::Storage for SqliteStorage {
 
     async fn update_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "UPDATE models SET pricing_policy_id = ?, enabled = ? WHERE name = ?",
+            "UPDATE models SET pricing_policy_id = ? WHERE name = ?",
         )
         .bind(&model.pricing_policy_id)
-        .bind(model.enabled as i64)
         .bind(&model.name)
         .execute(&self.pool)
         .await?;

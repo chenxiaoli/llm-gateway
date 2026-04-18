@@ -103,7 +103,6 @@ pub fn get_seed_models(_provider_ids: &[(String, String)]) -> Vec<Model> {
             name: m.name,
             model_type: None,
             pricing_policy_id: None,
-            enabled: true,
             created_at: Utc::now(),
         })
         .collect()

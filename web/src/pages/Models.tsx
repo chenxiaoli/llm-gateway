@@ -3,7 +3,7 @@ import { useAllModels, useCreateGlobalModel, useUpdateGlobalModel } from '../hoo
 import { usePricingPolicies } from '../hooks/usePricingPolicies';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
-import { Plus, Cpu, Activity, Pencil, Sparkles, Radio } from 'lucide-react';
+import { Plus, Cpu, Pencil, Sparkles, Radio } from 'lucide-react';
 import type { CreateGlobalModelRequest, ModelWithProvider } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -25,7 +25,7 @@ function ModelCard({ model, index, onEdit }: ModelCardProps) {
     >
       <div className="relative rounded-xl border border-base-300/60 bg-base-100/70 backdrop-blur-sm overflow-hidden transition-all duration-200 group-hover:border-accent/30 group-hover:bg-base-100/90">
         {/* Accent line top */}
-        <div className={`absolute top-0 left-0 right-0 h-[2px] transition-opacity duration-200 ${model.enabled ? 'bg-gradient-to-r from-accent to-accent/40 opacity-100' : 'opacity-0'}`} />
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-accent to-accent/40 opacity-100" />
 
         <div className="p-5">
           {/* Header */}
@@ -37,16 +37,6 @@ function ModelCard({ model, index, onEdit }: ModelCardProps) {
               <div>
                 <div className="font-mono text-[13px] font-semibold text-base-content leading-tight">{model.name}</div>
               </div>
-            </div>
-
-            {/* Status */}
-            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase transition-colors ${
-              model.enabled
-                ? 'bg-accent/10 text-accent'
-                : 'bg-base-300/40 text-base-content/35'
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${model.enabled ? 'bg-accent animate-pulse' : 'bg-base-content/25'}`} />
-              {model.enabled ? 'Active' : 'Disabled'}
             </div>
           </div>
 
@@ -87,14 +77,6 @@ function ModelCard({ model, index, onEdit }: ModelCardProps) {
               <Pencil className="h-3 w-3" />
               Edit
             </button>
-            <div className="flex items-center gap-1">
-              {model.enabled && (
-                <div className="flex items-center gap-1 text-[10px] text-base-content/30">
-                  <Activity className="h-3 w-3" />
-                  <span>Ready</span>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </div>
@@ -219,18 +201,16 @@ function EditModelModal({
   model: ModelWithProvider | null;
   open: boolean;
   onClose: () => void;
-  onSave: (data: { pricing_policy_id?: string | null; enabled: boolean }) => Promise<void>;
+  onSave: (data: { pricing_policy_id?: string | null }) => Promise<void>;
   isPending: boolean;
 }) {
   const { data: policies } = usePricingPolicies();
   const [pricingPolicyId, setPricingPolicyId] = useState('');
-  const [enabled, setEnabled] = useState(false);
 
   // Sync state when model changes
   useEffect(() => {
     if (model) {
       setPricingPolicyId(model.pricing_policy_id ?? '');
-      setEnabled(model.enabled);
     }
   }, [model]);
 
@@ -238,7 +218,6 @@ function EditModelModal({
     e.preventDefault();
     await onSave({
       pricing_policy_id: pricingPolicyId || undefined,
-      enabled,
     });
     onClose();
   };
@@ -246,21 +225,6 @@ function EditModelModal({
   return (
     <Modal open={open} onClose={onClose} title={`Edit ${model?.name ?? 'Model'}`}>
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Status toggle */}
-        <div className="flex items-center justify-between rounded-lg border border-base-300/50 bg-base-200/30 px-4 py-3">
-          <div>
-            <div className="text-[12px] font-semibold text-base-content/80">Enabled</div>
-            <div className="text-[11px] text-base-content/35">Allow this model to receive traffic</div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setEnabled(v => !v)}
-            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 cursor-pointer ${enabled ? 'bg-accent' : 'bg-base-300'}`}
-          >
-            <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform duration-200 ${enabled ? 'translate-x-5' : 'translate-x-1'}`} />
-          </button>
-        </div>
-
         {/* Pricing Policy */}
         <div className="space-y-1.5">
           <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</label>
@@ -298,9 +262,7 @@ export default function Models() {
   const [isAdding, setIsAdding] = useState(false);
   const [editingModel, setEditingModel] = useState<ModelWithProvider | null>(null);
 
-  // Stats
   const totalModels = models?.length ?? 0;
-  const activeModels = models?.filter(m => m.enabled).length ?? 0;
 
   if (isLoading) {
     return (
@@ -334,7 +296,7 @@ export default function Models() {
           <p className="text-[13px] text-base-content/35">
             {totalModels === 0
               ? 'Add AI models to route requests through the gateway'
-              : `${activeModels} active · ${totalModels - activeModels} disabled`}
+              : `${totalModels} model${totalModels !== 1 ? 's' : ''} total`}
           </p>
         </div>
 

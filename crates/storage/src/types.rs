@@ -184,7 +184,6 @@ pub struct Model {
     pub name: String,          // display name
     pub model_type: Option<String>,
     pub pricing_policy_id: Option<String>,
-    pub enabled: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -264,7 +263,6 @@ pub struct CreateModel {
 #[derive(Debug, Deserialize)]
 pub struct UpdateModel {
     pub pricing_policy_id: Option<Option<String>>,  // None=keep, Some(None)=clear
-    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]

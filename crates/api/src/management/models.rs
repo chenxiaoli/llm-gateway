@@ -43,7 +43,6 @@ pub async fn list_all_models(
 pub struct CreateModelRequest {
     pub name: String,
     pub pricing_policy_id: Option<String>,
-    pub enabled: Option<bool>,
 }
 
 pub async fn create_model_global(
@@ -58,7 +57,6 @@ pub async fn create_model_global(
         name: input.name,
         model_type: None,
         pricing_policy_id: input.pricing_policy_id,
-        enabled: input.enabled.unwrap_or(true),
         created_at: chrono::Utc::now(),
     };
 
@@ -89,9 +87,6 @@ pub async fn update_model(
     // Apply partial updates
     if let Some(pricing_policy_id) = input.pricing_policy_id {
         model.pricing_policy_id = pricing_policy_id;
-    }
-    if let Some(enabled) = input.enabled {
-        model.enabled = enabled;
     }
 
     let updated = state
@@ -201,13 +196,12 @@ pub async fn sync_models(
                                     created: false,
                                 });
                             } else {
-                                // Create new model (disabled by default - requires admin review)
+                                // Create new model
                                 let model = Model {
                                     id: name.clone(),
                                     name: name.clone(),
                                     model_type: model_type.clone(),
                                     pricing_policy_id: None,
-                                    enabled: false,
                                     created_at: chrono::Utc::now(),
                                 };
                                 let _ = state.storage.create_model(&model).await.map_err(|e| ApiError::Internal(e.to_string()));
@@ -276,13 +270,12 @@ pub async fn sync_models(
                                     created: false,
                                 });
                             } else {
-                                // Create new model (disabled by default - requires admin review)
+                                // Create new model
                                 let model = Model {
                                     id: name.clone(),
                                     name: name.clone(),
                                     model_type: model_type.clone(),
                                     pricing_policy_id: None,
-                                    enabled: false,
                                     created_at: chrono::Utc::now(),
                                 };
                                 let _ = state.storage.create_model(&model).await.map_err(|e| ApiError::Internal(e.to_string()));

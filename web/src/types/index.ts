@@ -58,7 +58,6 @@ export interface Model {
   name: string;
   model_type?: string | null;
   pricing_policy_id?: string | null;
-  enabled: boolean;
   created_at: string;
 }
 
@@ -71,18 +70,15 @@ export interface ModelWithProvider extends Model {
 export interface CreateModelRequest {
   name: string;
   pricing_policy_id?: string | null;
-  enabled?: boolean;
 }
 
 export interface CreateGlobalModelRequest {
   name: string;
   pricing_policy_id?: string | null;
-  enabled?: boolean;
 }
 
 export interface UpdateModelRequest {
   pricing_policy_id?: string | null;
-  enabled?: boolean;
 }
 
 export interface UsageRecord {

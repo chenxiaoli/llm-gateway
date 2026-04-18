@@ -84,7 +84,6 @@ struct PgModelRow {
     name: String,
     model_type: Option<String>,
     pricing_policy_id: Option<String>,
-    enabled: bool,
     created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -95,7 +94,6 @@ struct PgModelEnrichedRow {
     model_type: Option<String>,
     pp_id: Option<String>,
     pp_name: Option<String>,
-    enabled: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     channel_ids_csv: Option<String>,
     channel_names_csv: Option<String>,
@@ -108,7 +106,6 @@ impl From<PgModelRow> for Model {
             name: r.name,
             model_type: r.model_type,
             pricing_policy_id: r.pricing_policy_id,
-            enabled: r.enabled,
             created_at: r.created_at,
         }
     }
@@ -748,7 +745,6 @@ impl crate::Storage for PostgresStorage {
         .bind(&model.name)
         .bind(&model.model_type)
         .bind(&model.pricing_policy_id)
-        .bind(model.enabled)
         .bind(model.created_at)
         .execute(&self.pool)
         .await?;
@@ -758,7 +754,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_model(&self, name: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<PgModelRow> = sqlx::query_as(
-            "SELECT id, name, model_type, pricing_policy_id, enabled, created_at
+            "SELECT id, name, model_type, pricing_policy_id, created_at
              FROM models WHERE name = $1",
         )
         .bind(name)
@@ -770,7 +766,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_model_by_id(&self, id: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<PgModelRow> = sqlx::query_as(
-            "SELECT id, name, model_type, billing_type, input_price, output_price, request_price, enabled, created_at
+            "SELECT id, name, model_type, pricing_policy_id, created_at
              FROM models WHERE id = $1",
         )
         .bind(id)
@@ -794,7 +790,6 @@ impl crate::Storage for PostgresStorage {
                 m.model_type,
                 m.pricing_policy_id AS pp_id,
                 pp.name AS pp_name,
-                m.enabled,
                 m.created_at,
                 STRING_AGG(DISTINCT cm.id, ',') AS channel_ids_csv,
                 STRING_AGG(DISTINCT c.name, ',') AS channel_names_csv
@@ -825,7 +820,6 @@ impl crate::Storage for PostgresStorage {
                     name: r.name,
                     model_type: r.model_type,
                     pricing_policy_id: r.pp_id,
-                    enabled: r.enabled,
                     created_at: r.created_at,
                 },
                 pricing_policy_name: r.pp_name,
@@ -844,10 +838,9 @@ impl crate::Storage for PostgresStorage {
 
     async fn update_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "UPDATE models SET pricing_policy_id = $1, enabled = $2 WHERE name = $3",
+            "UPDATE models SET pricing_policy_id = $1 WHERE name = $2",
         )
         .bind(&model.pricing_policy_id)
-        .bind(model.enabled)
         .bind(&model.name)
         .execute(&self.pool)
         .await?;

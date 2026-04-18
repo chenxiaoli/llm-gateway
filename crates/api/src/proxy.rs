@@ -75,12 +75,12 @@ pub async fn proxy(
     let model_entry = match protocol {
         ProxyProtocol::OpenAI => models
             .iter()
-            .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase() && m.model.enabled)
-            .ok_or(ApiError::NotFound(format!("Model '{}' not found or not enabled", model_name)))?,
+            .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase())
+            .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?,
         ProxyProtocol::Anthropic => models
             .iter()
-            .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase() && m.model.enabled)
-            .ok_or(ApiError::NotFound(format!("Model '{}' not found or not enabled", model_name)))?,
+            .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase())
+            .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?,
     };
 
     tracing::debug!("[PROXY] Found model: {} (id: {})", model_entry.model.name, model_entry.model.id);
