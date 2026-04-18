@@ -15,6 +15,8 @@ interface ModelCardProps {
 }
 
 function ModelCard({ model, index, onEdit }: ModelCardProps) {
+  const isActive = model.channel_names.length > 0;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -23,20 +25,24 @@ function ModelCard({ model, index, onEdit }: ModelCardProps) {
       whileHover={{ y: -3 }}
       className="group relative"
     >
-      <div className="relative rounded-xl border border-base-300/60 bg-base-100/70 backdrop-blur-sm overflow-hidden transition-all duration-200 group-hover:border-accent/30 group-hover:bg-base-100/90">
-        {/* Accent line top */}
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-accent to-accent/40 opacity-100" />
+      <div className={`relative rounded-xl border bg-base-100/70 backdrop-blur-sm overflow-hidden transition-all duration-200 group-hover:${isActive ? 'border-accent/30' : 'border-base-300/60'} ${isActive ? 'border-accent/40 group-hover:bg-base-100/90' : 'bg-base-100/50'}`}>
+        {/* Accent line top — only for active models */}
+        <div className={`absolute top-0 left-0 right-0 h-[2px] transition-opacity duration-200 ${isActive ? 'bg-gradient-to-r from-accent to-accent/40 opacity-100' : 'opacity-0'}`} />
 
         <div className="p-5">
           {/* Header */}
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-base-200/70 flex items-center justify-center shrink-0">
-                <Cpu className="h-4 w-4 text-accent" />
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isActive ? 'bg-accent/10' : 'bg-base-200/70'}`}>
+                <Cpu className={`h-4 w-4 ${isActive ? 'text-accent' : 'text-base-content/30'}`} />
               </div>
               <div>
                 <div className="font-mono text-[13px] font-semibold text-base-content leading-tight">{model.name}</div>
               </div>
+            </div>
+            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase ${isActive ? 'bg-accent/10 text-accent' : 'bg-base-300/40 text-base-content/35'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-accent animate-pulse' : 'bg-base-content/25'}`} />
+              {isActive ? 'Active' : 'Not routed'}
             </div>
           </div>
 
@@ -54,7 +60,7 @@ function ModelCard({ model, index, onEdit }: ModelCardProps) {
 
           {/* Channels */}
           <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-base-200/30 border border-base-300/20 mb-4">
-            <Radio className="h-3 w-3 text-base-content/30 shrink-0 mt-0.5" />
+            <Radio className={`h-3 w-3 shrink-0 mt-0.5 ${isActive ? 'text-accent/60' : 'text-base-content/30'}`} />
             <div className="flex flex-wrap gap-1">
               {model.channel_names.length > 0 ? (
                 model.channel_names.map((ch, i) => (
@@ -63,7 +69,7 @@ function ModelCard({ model, index, onEdit }: ModelCardProps) {
                   </span>
                 ))
               ) : (
-                <span className="text-[11px] text-base-content/25 italic">Not routed</span>
+                <span className="text-[11px] text-base-content/25 italic">No channels</span>
               )}
             </div>
           </div>
@@ -263,6 +269,7 @@ export default function Models() {
   const [editingModel, setEditingModel] = useState<ModelWithProvider | null>(null);
 
   const totalModels = models?.length ?? 0;
+  const activeModels = models?.filter(m => m.channel_names.length > 0).length ?? 0;
 
   if (isLoading) {
     return (
@@ -296,7 +303,7 @@ export default function Models() {
           <p className="text-[13px] text-base-content/35">
             {totalModels === 0
               ? 'Add AI models to route requests through the gateway'
-              : `${totalModels} model${totalModels !== 1 ? 's' : ''} total`}
+              : `${activeModels} active · ${totalModels - activeModels} not routed`}
           </p>
         </div>
 
