@@ -742,8 +742,8 @@ impl crate::Storage for SqliteStorage {
                 pp.name AS pp_name,
                 m.enabled,
                 m.created_at,
-                GROUP_CONCAT(DISTINCT cm.id, ',') AS channel_ids_csv,
-                GROUP_CONCAT(DISTINCT c.name, ',') AS channel_names_csv
+                GROUP_CONCAT(cm.id, ',') AS channel_ids_csv,
+                GROUP_CONCAT(c.name, ',') AS channel_names_csv
             FROM models m
             LEFT JOIN pricing_policies pp ON m.pricing_policy_id = pp.id
             LEFT JOIN channel_models cm ON cm.model_id = m.id
