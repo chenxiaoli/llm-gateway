@@ -100,9 +100,16 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
   return <span className="text-xs text-base-content/30 italic">—</span>;
 }
 
+// ── Price fields form inputs ───────────────────────────────────────────────────
+// values come from local state so user edits are reflected immediately
 function priceFields(
   billingType: string,
-  config: Record<string, unknown>,
+  values: {
+    inputPrice: string;
+    outputPrice: string;
+    requestPrice: string;
+    cacheReadPrice: string;
+  },
   setters: {
     setInputPrice: (v: string) => void;
     setOutputPrice: (v: string) => void;
@@ -120,7 +127,7 @@ function priceFields(
             <input
               type="number"
               step="0.0001"
-              value={(config['input_per_1m'] as number | undefined) ?? (config['input_price'] as number | undefined) ?? ''}
+              value={values.inputPrice}
               onChange={(e) => setInputPrice(e.target.value)}
               placeholder="$0.00"
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
@@ -131,7 +138,7 @@ function priceFields(
             <input
               type="number"
               step="0.0001"
-              value={(config['output_per_1m'] as number | undefined) ?? (config['output_price'] as number | undefined) ?? ''}
+              value={values.outputPrice}
               onChange={(e) => setOutputPrice(e.target.value)}
               placeholder="$0.00"
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
@@ -143,7 +150,7 @@ function priceFields(
           <input
             type="number"
             step="0.0001"
-            value={(config['cache_read_price'] as number | undefined) ?? ''}
+            value={values.cacheReadPrice}
             onChange={(e) => setCacheReadPrice(e.target.value)}
             placeholder="$0.00 (defaults to input price)"
             className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
@@ -159,7 +166,7 @@ function priceFields(
         <input
           type="number"
           step="0.0001"
-          value={(config['request_price'] as number | undefined) ?? ''}
+          value={values.requestPrice}
           onChange={(e) => setRequestPrice(e.target.value)}
           placeholder="$0.00"
           className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
@@ -239,7 +246,7 @@ function AddPolicyModal({
           </select>
         </div>
 
-        {priceFields(billingType, {}, { setInputPrice, setOutputPrice, setRequestPrice, setCacheReadPrice })}
+        {priceFields(billingType, { inputPrice, outputPrice, requestPrice, cacheReadPrice }, { setInputPrice, setOutputPrice, setRequestPrice, setCacheReadPrice })}
 
         <div className="flex gap-2 pt-1">
           <Button type="submit" variant="primary" loading={isPending} className="flex-1">
@@ -254,7 +261,7 @@ function AddPolicyModal({
   );
 }
 
-// ── Edit Policy Modal ─────────────────────────────────────────────────────────
+// ── Edit Policy Modal ──────────────────────────────────────────────────────────
 function EditPolicyModal({
   policy,
   open,
@@ -275,7 +282,7 @@ function EditPolicyModal({
   const [requestPrice, setRequestPrice] = useState('');
   const [cacheReadPrice, setCacheReadPrice] = useState('');
 
-  // Sync state when policy changes
+  // Sync state when policy changes (e.g. modal opens with new policy)
   if (policy) {
     if (name !== policy.name) setName(policy.name);
     if (billingType !== policy.billing_type) setBillingType(policy.billing_type);
@@ -331,7 +338,7 @@ function EditPolicyModal({
           </select>
         </div>
 
-        {priceFields(billingType, policy?.config ?? {}, { setInputPrice, setOutputPrice, setRequestPrice, setCacheReadPrice })}
+        {priceFields(billingType, { inputPrice, outputPrice, requestPrice, cacheReadPrice }, { setInputPrice, setOutputPrice, setRequestPrice, setCacheReadPrice })}
 
         <div className="flex gap-2 pt-1">
           <Button type="submit" variant="primary" loading={isPending} className="flex-1">
