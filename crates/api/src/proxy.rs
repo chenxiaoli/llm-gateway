@@ -52,6 +52,8 @@ pub async fn proxy(
         .ok_or(ApiError::BadRequest("Missing 'model' field".to_string()))?
         .to_string();
 
+    tracing::debug!("[PROXY] Incoming request, model: {}, protocol: {:?}", model_name, protocol);
+
     let _original_model = model_name.clone();
 
     // === Step 3: Find model → provider → channels ===
@@ -60,6 +62,8 @@ pub async fn proxy(
         .list_models()
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    tracing::debug!("[PROXY] Found {} models in database", models.len());
 
     let is_stream = req_json
         .get("stream")
@@ -77,6 +81,8 @@ pub async fn proxy(
             .ok_or(ApiError::NotFound(format!("Model '{}' not found or not enabled", model_name)))?,
     };
 
+    tracing::debug!("[PROXY] Found model: {} (id: {})", model_entry.model.name, model_entry.model.id);
+
     // === Step 3: Route via ChannelModel (sole routing source) ===
     // Get channel_models for this model, filter enabled, get channels, sort by priority
     let channel_models = state
@@ -84,6 +90,8 @@ pub async fn proxy(
         .get_channel_models_for_model(&model_entry.model.id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    tracing::debug!("[PROXY] Found {} channel_models for model", channel_models.len());
 
     // Filter enabled channel_models and get their channel_ids
     let enabled_channel_model_ids: Vec<&str> = channel_models
@@ -95,6 +103,8 @@ pub async fn proxy(
     if enabled_channel_model_ids.is_empty() {
         return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
     }
+
+    tracing::debug!("[PROXY] Enabled channel_model ids: {:?}", enabled_channel_model_ids);
 
     // Get all channels and filter to those in our channel_models
     let all_channels = state
@@ -126,6 +136,8 @@ pub async fn proxy(
 
     // Sort by channel priority (lower number = higher priority)
     routing_candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
+
+    tracing::debug!("[PROXY] Routing candidates (sorted by priority): {}", routing_candidates.len());
 
     // Get provider from first channel (for base_url fallback)
     let provider_id = routing_candidates.first().map(|(c, _)| c.provider_id.clone())
@@ -363,6 +375,7 @@ pub async fn proxy(
                 created_at: chrono::Utc::now(),
             };
 
+            tracing::debug!("[PROXY] Recording usage: model={}, input_tokens={:?}, output_tokens={:?}, cost={}", model_name, input_tokens, output_tokens, cost);
             let _ = storage.record_usage(&record).await;
 
             let model_override_reason = if upstream_name != model_name {
