@@ -78,9 +78,9 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
     let audit_logger = Arc::new(AuditLogger::new(storage.clone()));
 
     while let Some(task) = rx.recv().await {
-        tracing::debug!(
-            "[AUDIT-WORKER] Task: key_id={}, model={}, stream={}",
-            task.key_id, task.model_name, task.stream
+        tracing::info!(
+            "[AUDIT-WORKER] Task received: key_id={}, model={}, stream={}, response_bytes_len={}",
+            task.key_id, task.model_name, task.stream, task.response_bytes.len()
         );
 
         // Parse usage from response bytes
@@ -100,8 +100,8 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
             task.request_price,
         ).cost;
 
-        tracing::debug!(
-            "[AUDIT-WORKER] Usage: input={:?}, output={:?}, cost={}",
+        tracing::info!(
+            "[AUDIT-WORKER] Parsed: input={:?}, output={:?}, cost={}",
             input_tokens, output_tokens, cost
         );
 
@@ -118,7 +118,9 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
             cost,
             created_at: chrono::Utc::now(),
         };
-        let _ = storage.record_usage(&record).await;
+        if let Err(e) = storage.record_usage(&record).await {
+            tracing::error!("[AUDIT-WORKER] Failed to record usage: {}", e);
+        }
 
         // Write audit log (only if not streaming, since full SSE response can be large)
         let response_body = if task.stream {
@@ -131,7 +133,7 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
             String::from_utf8_lossy(&task.response_bytes).to_string()
         };
 
-        let _ = audit_logger.log_request(
+        if let Err(e) = audit_logger.log_request(
             &task.key_id,
             &task.model_name,
             &task.provider_id,
@@ -146,9 +148,11 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
             task.original_model.as_deref(),
             task.upstream_model.as_deref(),
             task.model_override_reason.as_deref(),
-        ).await;
+        ).await {
+            tracing::error!("[AUDIT-WORKER] Failed to log audit request: {}", e);
+        }
 
-        tracing::debug!("[AUDIT-WORKER] Task completed");
+        tracing::info!("[AUDIT-WORKER] Task completed: key_id={}, model={}", task.key_id, task.model_name);
     }
     tracing::info!("[AUDIT-WORKER] Worker exiting, channel closed");
 }
