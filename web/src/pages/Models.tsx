@@ -614,7 +614,6 @@ export default function Models() {
         onSave={async (data) => {
           if (!editingModel) return;
           await updateMutation.mutateAsync({
-            providerId: editingModel.provider_id,
             modelName: editingModel.name,
             input: data,
           });

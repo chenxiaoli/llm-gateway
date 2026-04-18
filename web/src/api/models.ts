@@ -39,11 +39,11 @@ export async function createGlobalModel(input: CreateGlobalModelRequest): Promis
   return data;
 }
 
-export async function updateModel(providerId: string, modelName: string, input: UpdateModelRequest): Promise<Model> {
-  const { data } = await adminApiClient.patch<Model>(`/providers/${providerId}/models/${modelName}`, input);
+export async function updateModel(modelName: string, input: UpdateModelRequest): Promise<Model> {
+  const { data } = await adminApiClient.patch<Model>(`/models/${modelName}`, input);
   return data;
 }
 
-export async function deleteModel(providerId: string, modelName: string): Promise<void> {
-  await adminApiClient.delete(`/providers/${providerId}/models/${modelName}`);
+export async function deleteModel(modelName: string): Promise<void> {
+  await adminApiClient.delete(`/models/${modelName}`);
 }
