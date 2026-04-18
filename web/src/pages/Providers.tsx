@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, ChevronRight, Copy, Check } from 'lucide-react';
+import { Plus, Pencil, Trash2, Copy, Check } from 'lucide-react';
 import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider } from '../hooks/useProviders';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
@@ -47,11 +46,10 @@ function EndpointRow({ protocol, url }: { protocol: string; url: string }) {
   );
 }
 
-function ProviderCard({ provider, onEdit, onDelete, navigate }: {
+function ProviderCard({ provider, onEdit, onDelete }: {
   provider: Provider;
   onEdit: (p: Provider) => void;
   onDelete: (p: Provider) => void;
-  navigate: ReturnType<typeof useNavigate>;
 }) {
   const endpointEntries = provider.endpoints ? Object.entries(provider.endpoints) : [];
   const hasEndpoints = endpointEntries.length > 0;
@@ -124,16 +122,10 @@ function ProviderCard({ provider, onEdit, onDelete, navigate }: {
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-2 border-t border-base-200/40">
+        <div className="pt-2 border-t border-base-200/40">
           <span className="font-mono text-[11px] text-base-content/20">
             {new Date(provider.created_at).toLocaleDateString()}
           </span>
-          <button
-            onClick={() => navigate(`/console/providers/${provider.id}`)}
-            className="text-[11px] font-medium text-primary/60 hover:text-primary transition-colors flex items-center gap-0.5"
-          >
-            Channels <ChevronRight className="h-3 w-3" />
-          </button>
         </div>
       </div>
     </div>
@@ -145,7 +137,6 @@ export default function Providers() {
   const createMutation = useCreateProvider();
   const updateMutation = useUpdateProvider();
   const deleteMutation = useDeleteProvider();
-  const navigate = useNavigate();
 
   // Create modal state
   const [createOpen, setCreateOpen] = useState(false);
@@ -240,7 +231,6 @@ export default function Providers() {
               provider={provider}
               onEdit={handleEdit}
               onDelete={handleDelete}
-              navigate={navigate}
             />
           ))}
         </div>
