@@ -393,10 +393,10 @@ export default function ChannelDetail() {
       <Modal open={isAddingModel} onClose={() => setIsAddingModel(false)} title="Add Model to Channel">
         <form onSubmit={async (e) => {
           e.preventDefault();
-          if (!selectedModel || !upstreamModelName) return;
+          if (!selectedModel) return;
           await createModelMutation.mutateAsync({
             model_id: selectedModel,
-            upstream_model_name: upstreamModelName,
+            upstream_model_name: upstreamModelName || null,
             enabled: modelEnabled,
           });
           setIsAddingModel(false);
