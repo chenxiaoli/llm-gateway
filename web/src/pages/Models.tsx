@@ -87,7 +87,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                   : 'bg-base-200/60'
                 }
               `}>
-                <Cpu className={`h-[18px] w-[18px] transition-colors duration-300 ${isActive ? 'text-accent' : 'text-base-content/25'}`} />
+                <Cpu className={`h-[20px] w-[20px] transition-colors duration-300 ${isActive ? 'text-accent' : 'text-base-content/25'}`} />
                 {/* Active pulse dot */}
                 {isActive && (
                   <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent animate-pulse" />
@@ -96,10 +96,10 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
 
               {/* Model name */}
               <div className="min-w-0">
-                <div className="font-mono text-[13px] font-bold text-base-content leading-tight truncate max-w-[180px]">
+                <div className="font-mono text-[15px] font-bold text-base-content leading-tight truncate max-w-[200px]">
                   {model.name}
                 </div>
-                <div className={`text-[10px] mt-0.5 ${isActive ? 'text-accent/50' : 'text-base-content/20'}`}>
+                <div className={`text-[11px] mt-0.5 ${isActive ? 'text-accent/50' : 'text-base-content/20'}`}>
                   {isActive ? `${model.channel_names.length} channel${model.channel_names.length !== 1 ? 's' : ''} active` : 'No routing'}
                 </div>
               </div>
@@ -107,7 +107,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
 
             {/* Status badge */}
             <div className={`
-              shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border
+              shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-widest border
               transition-all duration-300
               ${isActive
                 ? 'bg-accent/10 text-accent border-accent/25'
@@ -125,7 +125,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
           {/* Pricing section */}
           <div className="mb-5">
             <div className="flex items-center gap-2 mb-3">
-              <div className={`text-[9px] font-black uppercase tracking-[0.2em] ${isActive ? 'text-accent/60' : 'text-base-content/25'}`}>
+              <div className={`text-[10px] font-black uppercase tracking-[0.2em] ${isActive ? 'text-accent/60' : 'text-base-content/25'}`}>
                 Pricing
               </div>
               <div className={`flex-1 h-px ${isActive ? 'bg-gradient-to-r from-accent/20 to-transparent' : 'bg-base-300/20'}`} />
@@ -136,7 +136,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                 {/* Policy name tag */}
                 <div className="flex items-center gap-2">
                   <span className={`
-                    inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border
+                    inline-flex items-center px-2 py-0.5 rounded-md text-[12px] font-bold border
                     ${isActive
                       ? 'bg-accent/10 text-accent/90 border-accent/25'
                       : 'bg-base-200/50 text-base-content/50 border-base-300/40'
@@ -145,7 +145,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                     {policy.name}
                   </span>
                   {isPerToken && (
-                    <span className={`text-[9px] font-semibold uppercase tracking-wider ${isActive ? 'text-accent/40' : 'text-base-content/20'}`}>
+                    <span className={`text-[10px] font-semibold uppercase tracking-wider ${isActive ? 'text-accent/40' : 'text-base-content/20'}`}>
                       per 1M tokens
                     </span>
                   )}
@@ -165,10 +165,10 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                       const val = config[key] as number | undefined;
                       return (
                         <div key={key} className="flex flex-col items-center text-center py-1">
-                          <span className={`text-[8px] font-bold uppercase tracking-wider mb-1 ${isActive ? 'text-accent/50' : 'text-base-content/25'}`}>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${isActive ? 'text-accent/50' : 'text-base-content/25'}`}>
                             {label}
                           </span>
-                          <span className={`font-mono text-[13px] font-bold ${isActive ? 'text-accent' : 'text-base-content/60'}`}>
+                          <span className={`font-mono text-[15px] font-bold ${isActive ? 'text-accent' : 'text-base-content/60'}`}>
                             {formatPrice(val)}
                           </span>
                         </div>
@@ -177,7 +177,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className={`text-[11px] font-mono ${isActive ? 'text-accent/70' : 'text-base-content/30'}`}>
+                    <span className={`text-[12px] font-mono ${isActive ? 'text-accent/70' : 'text-base-content/30'}`}>
                       {billingType}
                     </span>
                   </div>
@@ -186,7 +186,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
             ) : (
               <div className="flex items-center gap-1.5">
                 <div className={`w-1 h-1 rounded-full ${isActive ? 'bg-accent/30' : 'bg-base-content/15'}`} />
-                <span className={`text-[11px] italic ${isActive ? 'text-accent/30' : 'text-base-content/20'}`}>
+                <span className={`text-[12px] italic ${isActive ? 'text-accent/30' : 'text-base-content/20'}`}>
                   No policy — channel-level pricing
                 </span>
               </div>
@@ -197,7 +197,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
           {model.channel_names.length > 0 && (
             <div className="mb-5">
               <div className="flex items-center gap-2 mb-3">
-                <div className={`text-[9px] font-black uppercase tracking-[0.2em] ${isActive ? 'text-accent/60' : 'text-base-content/25'}`}>
+                <div className={`text-[10px] font-black uppercase tracking-[0.2em] ${isActive ? 'text-accent/60' : 'text-base-content/25'}`}>
                   Channels
                 </div>
                 <div className={`flex-1 h-px ${isActive ? 'bg-gradient-to-r from-accent/20 to-transparent' : 'bg-base-300/20'}`} />
@@ -208,7 +208,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                   <span
                     key={i}
                     className={`
-                      inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-mono font-bold border
+                      inline-flex items-center gap-1 px-2 py-1 rounded-md text-[12px] font-mono font-bold border
                       transition-all duration-200
                       ${isActive
                         ? 'bg-base-100/60 text-base-content/70 border-base-300/40 hover:border-accent/30 hover:text-accent/70'
@@ -216,7 +216,7 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                       }
                     `}
                   >
-                    <Radio className={`h-[10px] w-[10px] shrink-0 ${isActive ? 'text-accent/50' : 'text-base-content/20'}`} />
+                    <Radio className={`h-[12px] w-[12px] shrink-0 ${isActive ? 'text-accent/50' : 'text-base-content/20'}`} />
                     {ch}
                   </span>
                 ))}
@@ -226,13 +226,13 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
 
           {/* Footer */}
           <div className="flex items-center justify-between pt-4 border-t border-base-300/20">
-            <div className={`text-[9px] font-mono uppercase tracking-wider ${isActive ? 'text-accent/30' : 'text-base-content/15'}`}>
+            <div className={`text-[10px] font-mono uppercase tracking-wider ${isActive ? 'text-accent/30' : 'text-base-content/15'}`}>
               {model.id}
             </div>
             <button
               onClick={() => onEdit(model)}
               className={`
-                flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border
+                flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium border
                 transition-all duration-200 cursor-pointer
                 ${isActive
                   ? 'text-base-content/40 border-base-300/30 hover:border-accent/40 hover:text-accent'
