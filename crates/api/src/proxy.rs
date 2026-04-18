@@ -3,6 +3,8 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::mpsc;
+use tokio_stream::StreamExt;
 
 use llm_gateway_auth::hash_api_key;
 use llm_gateway_encryption::decrypt;
@@ -250,50 +252,95 @@ pub async fn proxy(
 
         tracing::debug!("[PROXY] Upstream success response: status={}, is_stream={}", status, is_stream);
 
-        // === Handle streaming vs non-streaming ===
+        // === Handle streaming: accumulate SSE → forward to client → audit worker parses & calculates cost ===
         if is_stream {
-            // === Streaming: forward raw SSE stream as-is ===
-            use futures::TryStreamExt;
-            let byte_stream = resp.bytes_stream();
+            let audit_tx = state.audit_tx.clone();
+            let (tx, rx) = mpsc::channel::<bytes::Bytes>(100);
 
+            let upstream_name_for_worker = upstream_name.to_string();
+            let model_name_for_worker = model_name.clone();
+            let provider_id_for_worker = provider_id.clone();
+            let api_key_id_for_worker = api_key.id.clone();
+            let body_for_worker = body.clone();
             let proto = match protocol {
                 ProxyProtocol::OpenAI => Protocol::Openai,
                 ProxyProtocol::Anthropic => Protocol::Anthropic,
             };
-
-            // Send audit task via MPSC channel (non-blocking)
+            let channel_id_for_worker = channel.id.clone();
             let model_override_reason = if upstream_name != &model_name {
                 Some("channel_mapping".to_string())
             } else {
                 None
             };
-            let audit_task = AuditTask {
-                key_id: api_key.id.clone(),
-                model_name: upstream_name.to_string(),
-                provider_id: provider.id.clone(),
-                protocol: proto,
-                stream: true,
-                request_body: body.clone(),
-                response_body: "[streaming]".to_string(),
-                status_code: 200,
-                latency_ms,
-                input_tokens: None,
-                output_tokens: None,
-                original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
-                upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
-                model_override_reason,
-            };
-            match state.audit_tx.send(audit_task).await {
-                Ok(()) => tracing::debug!("[PROXY] Sent audit task to channel"),
-                Err(e) => tracing::warn!("[PROXY] Failed to send audit task: channel full or closed"),
-            }
+            // Pricing info sent to audit worker for cost calculation
+            let billing_type_for_worker = channel_model.billing_type.clone();
+            let input_price_for_worker = channel_model.input_price.unwrap_or(model_entry.model.input_price);
+            let output_price_for_worker = channel_model.output_price.unwrap_or(model_entry.model.output_price);
+            let request_price_for_worker = channel_model.request_price.unwrap_or(model_entry.model.request_price);
 
-            // Simply forward the stream without processing
-            let stream = byte_stream.map_ok(|bytes| bytes);
+            // Spawn: read upstream SSE → forward to client → accumulate → send to audit worker
+            tokio::spawn(async move {
+                use futures::TryStreamExt;
 
-            let mut response = axum::response::Response::new(axum::body::Body::from_stream(stream));
+                let byte_stream = resp.bytes_stream();
+                let mut acc = Vec::new();
 
-            // Set proper content-type for SSE
+                tokio::pin!(byte_stream);
+                loop {
+                    match futures::TryStreamExt::try_next(&mut byte_stream).await {
+                        Ok(Some(bytes)) => {
+                            acc.extend_from_slice(&bytes);
+                            let _ = tx.send(bytes).await;
+                        }
+                        Ok(None) => break,
+                        Err(e) => {
+                            tracing::warn!("[PROXY] Stream read error: {}", e);
+                            let _ = tx.send(bytes::Bytes::new()).await;
+                            break;
+                        }
+                    }
+                }
+                drop(tx);
+
+                // Send accumulated bytes to audit worker (it parses SSE, calculates cost, writes DB)
+                let task = AuditTask {
+                    key_id: api_key_id_for_worker,
+                    model_name: upstream_name_for_worker.clone(),
+                    provider_id: provider_id_for_worker.clone(),
+                    protocol: proto,
+                    stream: true,
+                    request_body: body_for_worker,
+                    response_bytes: acc,
+                    status_code: 200,
+                    latency_ms,
+                    billing_type: billing_type_for_worker,
+                    input_price: input_price_for_worker,
+                    output_price: output_price_for_worker,
+                    request_price: request_price_for_worker,
+                    channel_id: Some(channel_id_for_worker),
+                    original_model: if upstream_name_for_worker != model_name_for_worker {
+                        Some(model_name_for_worker)
+                    } else {
+                        None
+                    },
+                    upstream_model: if upstream_name_for_worker != model_name_for_worker {
+                        Some(upstream_name_for_worker.clone())
+                    } else {
+                        None
+                    },
+                    model_override_reason,
+                };
+                if let Err(e) = audit_tx.send(task).await {
+                    tracing::warn!("[PROXY] Failed to send audit task: {}", e);
+                }
+            });
+
+            let stream_body = axum::body::Body::from_stream(
+                tokio_stream::wrappers::ReceiverStream::new(rx)
+                    .map(|b: bytes::Bytes| Ok::<_, std::convert::Infallible>(b))
+            );
+
+            let mut response = axum::response::Response::new(stream_body);
             response.headers_mut().insert(
                 axum::http::header::CONTENT_TYPE,
                 "text/event-stream; charset=utf-8".parse().unwrap(),
@@ -302,137 +349,39 @@ pub async fn proxy(
             return Ok(response);
         }
 
-        // Non-streaming: original behavior
-        let response_body = resp.text().await.unwrap_or_default();
+        // Non-streaming: send to audit worker (it parses JSON, calculates cost, writes DB)
+        let response_bytes = resp.bytes().await.unwrap_or_default().to_vec();
 
-        // === Spawn async workers ===
-        let storage = state.storage.clone();
-        let audit_logger = state.audit_logger.clone();
-        let key_id = api_key.id.clone();
-        let provider_id = provider_id.clone(); // Already captured from first channel above
-        let model_name = model_name.clone();
-        let upstream_name = upstream_name.to_string();
-        let channel_id = channel.id.clone();
         let proto = match protocol {
             ProxyProtocol::OpenAI => Protocol::Openai,
             ProxyProtocol::Anthropic => Protocol::Anthropic,
         };
-        let proto_for_audit = proto.clone();
-        let proto_for_usage = proto.clone();
+        let task = AuditTask {
+            key_id: api_key.id.clone(),
+            model_name: upstream_name.to_string(),
+            provider_id: provider_id.clone(),
+            protocol: proto,
+            stream: false,
+            request_body: body.clone(),
+            response_bytes,
+            status_code: 200,
+            latency_ms,
+            billing_type: channel_model.billing_type.clone(),
+            input_price: channel_model.input_price.unwrap_or(model_entry.model.input_price),
+            output_price: channel_model.output_price.unwrap_or(model_entry.model.output_price),
+            request_price: channel_model.request_price.unwrap_or(model_entry.model.request_price),
+            channel_id: Some(channel.id.clone()),
+            original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
+            upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
+            model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
+        };
+        let _ = state.audit_tx.try_send(task);
 
-        // Use ChannelModel override > Model default for pricing
-        let pricing_policy_id = channel_model.cost_policy_id.clone().or_else(|| model_entry.model.pricing_policy_id.clone());
-        let billing_type = channel_model.billing_type.clone().or_else(|| Some("token".to_string()));
-        let input_price = channel_model.input_price.unwrap_or(model_entry.model.input_price);
-        let output_price = channel_model.output_price.unwrap_or(model_entry.model.output_price);
-        let request_price = channel_model.request_price.unwrap_or(model_entry.model.request_price);
-
-        let (input_tokens, output_tokens) = extract_usage_from_response(&response_body, protocol);
-        let body_for_worker = body.clone();
-        let response_for_worker = response_body.clone();
-
-        tokio::spawn(async move {
-            use llm_gateway_billing::{PricingCalculator, Usage};
-
-            // Note: audit_logger.log_request already checks settings internally
-            let request_body = body_for_worker;
-            let response_body = response_for_worker;
-
-            let usage = Usage::from_tokens(input_tokens, output_tokens, 1);
-            let calculator = PricingCalculator;
-
-            let cost = if let Some(pid) = &pricing_policy_id {
-                match storage.get_pricing_policy(pid).await {
-                    Ok(Some(policy)) => calculator.calculate_cost(&policy, &usage),
-                    _ => 0.0,
-                }
-            } else {
-                // Use billing_type from ChannelModel or default to Token
-                let billing = match billing_type.as_deref() {
-                    Some("request") => llm_gateway_storage::BillingType::Request,
-                    _ => llm_gateway_storage::BillingType::Token,
-                };
-                llm_gateway_billing::calculate_cost(
-                    &billing,
-                    input_tokens,
-                    output_tokens,
-                    input_price,
-                    output_price,
-                    request_price,
-                ).cost
-            };
-
-            let record = llm_gateway_storage::UsageRecord {
-                id: uuid::Uuid::new_v4().to_string(),
-                key_id: key_id.clone(),
-                model_name: model_name.clone(),
-                provider_id: provider_id.clone(),
-                channel_id: Some(channel_id.clone()),
-                protocol: proto_for_usage,
-                input_tokens,
-                output_tokens,
-                cost,
-                created_at: chrono::Utc::now(),
-            };
-
-            tracing::debug!("[PROXY] Recording usage: model={}, input_tokens={:?}, output_tokens={:?}, cost={}", model_name, input_tokens, output_tokens, cost);
-            let _ = storage.record_usage(&record).await;
-
-            let model_override_reason = if upstream_name != model_name {
-                Some("channel_mapping".to_string())
-            } else {
-                None
-            };
-
-            let _ = audit_logger.log_request(
-                &key_id,
-                &upstream_name,
-                &provider_id,
-                proto_for_audit,
-                is_stream,
-                &request_body,
-                &response_body,
-                200,
-                latency_ms,
-                input_tokens,
-                output_tokens,
-                if upstream_name != model_name { Some(&model_name) } else { None },
-                if upstream_name != model_name { Some(upstream_name.as_str()) } else { None },
-                model_override_reason.as_deref(),
-            ).await;
-        });
-
-        return Ok(response_body.into_response());
+        return Ok(response_bytes.into_response());
     }
 
     Err(ApiError::UpstreamError(502, format!("All channels failed. Last error: {}", last_error)))
 }
-
-fn extract_usage_from_response(body: &str, protocol: ProxyProtocol) -> (Option<i64>, Option<i64>) {
-    let v: serde_json::Value = match serde_json::from_str(body) {
-        Ok(v) => v,
-        Err(_) => return (None, None),
-    };
-
-    let usage = match v.get("usage") {
-        Some(u) => u,
-        None => return (None, None),
-    };
-
-    match protocol {
-        ProxyProtocol::OpenAI => {
-            let input = usage.get("prompt_tokens").and_then(|t| t.as_i64());
-            let output = usage.get("completion_tokens").and_then(|t| t.as_i64());
-            (input, output)
-        }
-        ProxyProtocol::Anthropic => {
-            let input = usage.get("input_tokens").and_then(|t| t.as_i64());
-            let output = usage.get("output_tokens").and_then(|t| t.as_i64());
-            (input, output)
-        }
-    }
-}
-
 /// Wrapper for /v1/chat/completions - uses OpenAI protocol
 pub async fn proxy_with_protocol(
     State(state): State<Arc<AppState>>,
