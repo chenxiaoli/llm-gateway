@@ -32,22 +32,22 @@ function priceFields(
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Input Price (per 1M)</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Input Price ($ per 1M)</label>
             <input
               type="number"
               step="0.0001"
-              value={(config['input_price'] as number | undefined) ?? ''}
+              value={(config['input_per_1m'] as number | undefined) ?? (config['input_price'] as number | undefined) ?? ''}
               onChange={(e) => setInputPrice(e.target.value)}
               placeholder="$0.00"
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Output Price (per 1M)</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Output Price ($ per 1M)</label>
             <input
               type="number"
               step="0.0001"
-              value={(config['output_price'] as number | undefined) ?? ''}
+              value={(config['output_per_1m'] as number | undefined) ?? (config['output_price'] as number | undefined) ?? ''}
               onChange={(e) => setOutputPrice(e.target.value)}
               placeholder="$0.00"
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
@@ -55,7 +55,7 @@ function priceFields(
           </div>
         </div>
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Cache Read Price (per 1M, cheaper)</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Cache Read Price ($ per 1M, cheaper)</label>
           <input
             type="number"
             step="0.0001"
@@ -114,10 +114,10 @@ function AddPolicyModal({
 
   const buildConfig = (): Record<string, unknown> => {
     const cfg: Record<string, unknown> = {};
-    if (inputPrice) cfg.input_price = parseFloat(inputPrice);
-    if (outputPrice) cfg.output_price = parseFloat(outputPrice);
-    if (requestPrice) cfg.request_price = parseFloat(requestPrice);
-    if (cacheReadPrice) cfg.cache_read_price = parseFloat(cacheReadPrice);
+    if (inputPrice) cfg['input_per_1m'] = parseFloat(inputPrice);
+    if (outputPrice) cfg['output_per_1m'] = parseFloat(outputPrice);
+    if (requestPrice) cfg['request_price'] = parseFloat(requestPrice);
+    if (cacheReadPrice) cfg['cache_read_price'] = parseFloat(cacheReadPrice);
     return cfg;
   };
 
@@ -195,8 +195,10 @@ function EditPolicyModal({
   if (policy) {
     if (name !== policy.name) setName(policy.name);
     if (billingType !== policy.billing_type) setBillingType(policy.billing_type);
-    if (inputPrice !== String(policy.config['input_price'] ?? '')) setInputPrice(String(policy.config['input_price'] ?? ''));
-    if (outputPrice !== String(policy.config['output_price'] ?? '')) setOutputPrice(String(policy.config['output_price'] ?? ''));
+    const storedInput = (policy.config['input_per_1m'] ?? policy.config['input_price']) as number | undefined;
+    if (inputPrice !== String(storedInput ?? '')) setInputPrice(String(storedInput ?? ''));
+    const storedOutput = (policy.config['output_per_1m'] ?? policy.config['output_price']) as number | undefined;
+    if (outputPrice !== String(storedOutput ?? '')) setOutputPrice(String(storedOutput ?? ''));
     if (requestPrice !== String(policy.config['request_price'] ?? '')) setRequestPrice(String(policy.config['request_price'] ?? ''));
     if (cacheReadPrice !== String(policy.config['cache_read_price'] ?? '')) setCacheReadPrice(String(policy.config['cache_read_price'] ?? ''));
   }
@@ -205,14 +207,14 @@ function EditPolicyModal({
     e.preventDefault();
     if (!policy) return;
     const cfg: Record<string, unknown> = {};
-    if (inputPrice) cfg.input_price = parseFloat(inputPrice);
-    else if (billingType === 'per_token' || billingType === 'tiered_token') cfg.input_price = null;
-    if (outputPrice) cfg.output_price = parseFloat(outputPrice);
-    else if (billingType === 'per_token' || billingType === 'tiered_token') cfg.output_price = null;
-    if (requestPrice) cfg.request_price = parseFloat(requestPrice);
-    else if (billingType === 'per_request' || billingType === 'hybrid') cfg.request_price = null;
-    if (cacheReadPrice) cfg.cache_read_price = parseFloat(cacheReadPrice);
-    else if (billingType === 'per_token' || billingType === 'tiered_token') cfg.cache_read_price = null;
+    if (inputPrice) cfg['input_per_1m'] = parseFloat(inputPrice);
+    else if (billingType === 'per_token' || billingType === 'tiered_token') cfg['input_per_1m'] = null;
+    if (outputPrice) cfg['output_per_1m'] = parseFloat(outputPrice);
+    else if (billingType === 'per_token' || billingType === 'tiered_token') cfg['output_per_1m'] = null;
+    if (requestPrice) cfg['request_price'] = parseFloat(requestPrice);
+    else if (billingType === 'per_request' || billingType === 'hybrid') cfg['request_price'] = null;
+    if (cacheReadPrice) cfg['cache_read_price'] = parseFloat(cacheReadPrice);
+    else if (billingType === 'per_token' || billingType === 'tiered_token') cfg['cache_read_price'] = null;
 
     await onSave(policy.id, {
       name,

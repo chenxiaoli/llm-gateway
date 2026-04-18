@@ -24,10 +24,12 @@ impl PricingCalculator {
         let input_price = config.get("input_per_1m")
             .and_then(|v| v.as_f64())
             .or_else(|| config.get("input_per_1k").and_then(|v| v.as_f64()))
+            .or_else(|| config.get("input_price").and_then(|v| v.as_f64()))
             .unwrap_or(0.0);
         let output_price = config.get("output_per_1m")
             .and_then(|v| v.as_f64())
             .or_else(|| config.get("output_per_1k").and_then(|v| v.as_f64()))
+            .or_else(|| config.get("output_price").and_then(|v| v.as_f64()))
             .unwrap_or(0.0);
         let cache_read_price = config.get("cache_read_price")
             .and_then(|v| v.as_f64())
@@ -57,10 +59,12 @@ impl PricingCalculator {
         let input_price = config.get("input_per_1m")
             .and_then(|v| v.as_f64())
             .or_else(|| config.get("input_per_1k").and_then(|v| v.as_f64()))
+            .or_else(|| config.get("input_price").and_then(|v| v.as_f64()))
             .unwrap_or(0.0);
         let output_price = config.get("output_per_1m")
             .and_then(|v| v.as_f64())
             .or_else(|| config.get("output_per_1k").and_then(|v| v.as_f64()))
+            .or_else(|| config.get("output_price").and_then(|v| v.as_f64()))
             .unwrap_or(0.0);
 
         let input_chars = usage.input_chars.unwrap_or(0);
