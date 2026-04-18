@@ -1478,7 +1478,7 @@ impl crate::Storage for SqliteStorage {
             .fetch_one(&self.pool)
             .await?;
             let channel_model_count: (i64,) = sqlx::query_as(
-                "SELECT COUNT(*) FROM channel_models WHERE cost_policy_id = ?",
+                "SELECT COUNT(*) FROM channel_models WHERE pricing_policy_id = ?",
             )
             .bind(&policy.id)
             .fetch_one(&self.pool)

@@ -1452,7 +1452,7 @@ impl crate::Storage for PostgresStorage {
             .fetch_one(&self.pool)
             .await?;
             let channel_model_count: (i64,) = sqlx::query_as(
-                "SELECT COUNT(*) FROM channel_models WHERE cost_policy_id = $1",
+                "SELECT COUNT(*) FROM channel_models WHERE pricing_policy_id = $1",
             )
             .bind(&policy.id)
             .fetch_one(&self.pool)
