@@ -319,7 +319,7 @@ pub async fn proxy(
                     request_price: request_price_for_worker,
                     channel_id: Some(channel_id_for_worker),
                     original_model: if upstream_name_for_worker != model_name_for_worker {
-                        Some(model_name_for_worker)
+                        Some(model_name_for_worker.clone())
                     } else {
                         None
                     },
@@ -363,7 +363,7 @@ pub async fn proxy(
             protocol: proto,
             stream: false,
             request_body: body.clone(),
-            response_bytes,
+            response_bytes: response_bytes.clone(),
             status_code: 200,
             latency_ms,
             billing_type: channel_model.billing_type.clone(),

@@ -1,5 +1,4 @@
 use llm_gateway_audit::AuditLogger;
-use llm_gateway_billing::Usage;
 use llm_gateway_storage::{Protocol, UsageRecord};
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -85,7 +84,8 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
         );
 
         // Parse usage from response bytes
-        let (input_tokens, output_tokens) = parse_usage(&task.response_bytes, task.stream, task.protocol);
+        let proto = task.protocol.clone();
+        let (input_tokens, output_tokens) = parse_usage(&task.response_bytes, task.stream, proto);
 
         // Calculate cost
         let cost = llm_gateway_billing::calculate_cost(
