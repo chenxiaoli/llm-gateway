@@ -34,10 +34,9 @@ pub struct AuditTask {
     pub status_code: i32,
     pub latency_ms: i64,
     // Pricing params (worker parses usage and calculates cost)
-    pub billing_type: Option<String>,
-    pub input_price: f64,
-    pub output_price: f64,
-    pub request_price: f64,
+    pub pricing_policy_config: Option<serde_json::Value>,  // config from PricingPolicy
+    pub pricing_policy_billing_type: String,               // billing type from PricingPolicy
+    pub markup_ratio: f64,                                // multiplier applied to pricing policy cost
     pub channel_id: Option<String>,
     pub original_model: Option<String>,
     pub upstream_model: Option<String>,

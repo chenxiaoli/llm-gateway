@@ -1,24 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useAllModels, useCreateGlobalModel, useUpdateGlobalModel } from '../hooks/useModels';
-import { useProviders } from '../hooks/useProviders';
-import { Link } from 'react-router-dom';
+import { usePricingPolicies } from '../hooks/usePricingPolicies';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
-import { Badge } from '../components/ui/Badge';
 import { Globe, Plus, Cpu, Activity, Pencil, Sparkles } from 'lucide-react';
 import type { CreateGlobalModelRequest, ModelWithProvider } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
-
-// Billing types
-const BILLING_TYPES = [
-  { value: 'per_token', label: 'Per Token', desc: 'Per-token pricing for input & output' },
-  { value: 'per_request', label: 'Per Request', desc: 'Flat fee per API call' },
-  { value: 'per_character', label: 'Per Character', desc: 'Pricing per character' },
-  { value: 'tiered_token', label: 'Tiered Token', desc: 'Volume-based token pricing' },
-  { value: 'hybrid', label: 'Hybrid', desc: 'Combined token + request' },
-] as const;
-
-export type BillingType = typeof BILLING_TYPES[number]['value'];
 
 // ── Model Card ───────────────────────────────────────────────────────────────
 interface ModelCardProps {
@@ -68,36 +55,6 @@ function ModelCard({ model, providerName, index, onEdit }: ModelCardProps) {
             </div>
           </div>
 
-          {/* Billing & Pricing */}
-          <div className="grid grid-cols-3 gap-2 mb-4">
-            <div className="rounded-lg bg-base-200/40 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Billing</div>
-              <Badge variant="blue">{model.billing_type}</Badge>
-            </div>
-            <div className="rounded-lg bg-base-200/40 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Input</div>
-              <div className="text-[12px] font-mono font-semibold text-base-content/80">
-                {model.input_price != null ? `$${model.input_price.toFixed(4)}` : '—'}
-              </div>
-            </div>
-            <div className="rounded-lg bg-base-200/40 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Output</div>
-              <div className="text-[12px] font-mono font-semibold text-base-content/80">
-                {model.output_price != null ? `$${model.output_price.toFixed(4)}` : '—'}
-              </div>
-            </div>
-          </div>
-
-          {/* Request price (if applicable) */}
-          {(model.billing_type === 'per_request' || model.billing_type === 'hybrid') && model.request_price != null && (
-            <div className="rounded-lg bg-base-200/40 px-3 py-2 mb-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold">Per Request</span>
-                <span className="text-[12px] font-mono font-semibold text-base-content/80">${model.request_price.toFixed(4)}</span>
-              </div>
-            </div>
-          )}
-
           {/* Pricing Policy */}
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-base-200/30 border border-base-300/20 mb-4">
             <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold shrink-0">Pricing Policy</div>
@@ -137,7 +94,7 @@ function ModelCard({ model, providerName, index, onEdit }: ModelCardProps) {
 }
 
 // ── Empty State ───────────────────────────────────────────────────────────────
-function EmptyState({ hasProviders, onAddClick }: { hasProviders: boolean; onAddClick: () => void }) {
+function EmptyState({ onAddClick }: { onAddClick: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}
@@ -155,19 +112,11 @@ function EmptyState({ hasProviders, onAddClick }: { hasProviders: boolean; onAdd
       </div>
       <h3 className="text-[15px] font-semibold text-base-content/60 mb-1.5">No models yet</h3>
       <p className="text-[13px] text-base-content/30 mb-6 text-center max-w-xs">
-        {hasProviders
-          ? 'Add your first AI model to start routing requests through the gateway.'
-          : 'You need to add a provider before you can configure models.'}
+        Add your first AI model to start routing requests through the gateway.
       </p>
-      {hasProviders ? (
-        <Button variant="primary" size="sm" onClick={onAddClick}>
-          Add First Model
-        </Button>
-      ) : (
-        <Link to="/console/channels">
-          <Button variant="secondary" size="sm">Add Provider First</Button>
-        </Link>
-      )}
+      <Button variant="primary" size="sm" onClick={onAddClick}>
+        Add First Model
+      </Button>
     </motion.div>
   );
 }
@@ -177,39 +126,26 @@ function EmptyState({ hasProviders, onAddClick }: { hasProviders: boolean; onAdd
 function AddModelModal({
   open,
   onClose,
-  providers,
   onAdd,
   isPending,
 }: {
   open: boolean;
   onClose: () => void;
-  providers?: Array<{ id: string; name: string }>;
   onAdd: (data: CreateGlobalModelRequest) => Promise<void>;
   isPending: boolean;
 }) {
-  const [providerId, setProviderId] = useState('');
+  const { data: policies } = usePricingPolicies();
   const [name, setName] = useState('');
-  const [billingType, setBillingType] = useState<string>('per_token');
-  const [inputPrice, setInputPrice] = useState('');
-  const [outputPrice, setOutputPrice] = useState('');
-  const [requestPrice, setRequestPrice] = useState('');
+  const [pricingPolicyId, setPricingPolicyId] = useState('');
 
-  const reset = () => {
-    setProviderId(''); setName(''); setBillingType('per_token');
-    setInputPrice(''); setOutputPrice(''); setRequestPrice('');
-  };
-
+  const reset = () => { setName(''); setPricingPolicyId(''); };
   const handleClose = () => { reset(); onClose(); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await onAdd({
-      provider_id: providerId,
       name,
-      billing_type: billingType,
-      input_price: inputPrice ? parseFloat(inputPrice) : undefined,
-      output_price: outputPrice ? parseFloat(outputPrice) : undefined,
-      request_price: requestPrice ? parseFloat(requestPrice) : undefined,
+      pricing_policy_id: pricingPolicyId || undefined,
     });
     handleClose();
   };
@@ -217,22 +153,6 @@ function AddModelModal({
   return (
     <Modal open={open} onClose={handleClose} title="Add Model">
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Provider */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Provider</label>
-          <select
-            value={providerId}
-            onChange={(e) => setProviderId(e.target.value)}
-            required
-            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-          >
-            <option value="">Select a provider...</option>
-            {providers?.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-
         {/* Model name */}
         <div className="space-y-1.5">
           <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Model Name</label>
@@ -249,84 +169,19 @@ function AddModelModal({
           </div>
         </div>
 
-        {/* Billing type */}
+        {/* Pricing Policy */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Billing Type</label>
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</label>
           <select
-            value={billingType}
-            onChange={(e) => setBillingType(e.target.value)}
-            required
+            value={pricingPolicyId}
+            onChange={(e) => setPricingPolicyId(e.target.value)}
             className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
           >
-            {BILLING_TYPES.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label} - {opt.desc}</option>
+            <option value="">No policy (pricing handled at channel level)</option>
+            {policies?.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
-        </div>
-
-        {/* Pricing */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">
-            {billingType === 'per_request' || billingType === 'hybrid' ? 'Request Pricing' : 'Token Pricing (per 1M tokens)'}
-          </label>
-          {(billingType === 'per_token' || billingType === 'tiered_token') && (
-            <div className="grid grid-cols-2 gap-2">
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={inputPrice}
-                  onChange={(e) => setInputPrice(e.target.value)}
-                  placeholder="Input price"
-                  className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">In</span>
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={outputPrice}
-                  onChange={(e) => setOutputPrice(e.target.value)}
-                  placeholder="Output price"
-                  className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">Out</span>
-              </div>
-            </div>
-          )}
-          {(billingType === 'per_request' || billingType === 'hybrid') && (
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-              <input
-                type="number"
-                step="0.0001"
-                value={requestPrice}
-                onChange={(e) => setRequestPrice(e.target.value)}
-                placeholder="0.00"
-                className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">/req</span>
-            </div>
-          )}
-          {billingType === 'per_character' && (
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-              <input
-                type="number"
-                step="0.0001"
-                value={inputPrice}
-                onChange={(e) => setInputPrice(e.target.value)}
-                placeholder="Price per character"
-                className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-              />
-            </div>
-          )}
-          <p className="text-[10px] text-base-content/25">
-            Leave blank to inherit from provider pricing
-          </p>
         </div>
 
         {/* Actions */}
@@ -355,22 +210,17 @@ function EditModelModal({
   model: ModelWithProvider | null;
   open: boolean;
   onClose: () => void;
-  onSave: (data: { billing_type: string; input_price?: number; output_price?: number; request_price?: number; enabled: boolean }) => Promise<void>;
+  onSave: (data: { pricing_policy_id?: string | null; enabled: boolean }) => Promise<void>;
   isPending: boolean;
 }) {
-  const [billingType, setBillingType] = useState<string>('per_token');
-  const [inputPrice, setInputPrice] = useState('');
-  const [outputPrice, setOutputPrice] = useState('');
-  const [requestPrice, setRequestPrice] = useState('');
+  const { data: policies } = usePricingPolicies();
+  const [pricingPolicyId, setPricingPolicyId] = useState('');
   const [enabled, setEnabled] = useState(false);
 
   // Sync state when model changes
   useEffect(() => {
     if (model) {
-      setBillingType(model.billing_type || 'per_token');
-      setInputPrice(model.input_price != null ? String(model.input_price) : '');
-      setOutputPrice(model.output_price != null ? String(model.output_price) : '');
-      setRequestPrice(model.request_price != null ? String(model.request_price) : '');
+      setPricingPolicyId(model.pricing_policy_id ?? '');
       setEnabled(model.enabled);
     }
   }, [model]);
@@ -378,10 +228,7 @@ function EditModelModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await onSave({
-      billing_type: billingType,
-      input_price: inputPrice ? parseFloat(inputPrice) : undefined,
-      output_price: outputPrice ? parseFloat(outputPrice) : undefined,
-      request_price: requestPrice ? parseFloat(requestPrice) : undefined,
+      pricing_policy_id: pricingPolicyId || undefined,
       enabled,
     });
     onClose();
@@ -405,68 +252,19 @@ function EditModelModal({
           </button>
         </div>
 
-        {/* Billing type */}
+        {/* Pricing Policy */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Billing Type</label>
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</label>
           <select
-            value={billingType}
-            onChange={(e) => setBillingType(e.target.value)}
-            required
+            value={pricingPolicyId}
+            onChange={(e) => setPricingPolicyId(e.target.value)}
             className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
           >
-            {BILLING_TYPES.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label} - {opt.desc}</option>
+            <option value="">No policy</option>
+            {policies?.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
-        </div>
-
-        {/* Pricing */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">
-            {billingType === 'per_request' || billingType === 'hybrid' ? 'Request Pricing' : 'Token Pricing (per 1M tokens)'}
-          </label>
-          {(billingType === 'per_token' || billingType === 'tiered_token') && (
-            <div className="grid grid-cols-2 gap-2">
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={inputPrice}
-                  onChange={(e) => setInputPrice(e.target.value)}
-                  placeholder="Input price"
-                  className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">In</span>
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={outputPrice}
-                  onChange={(e) => setOutputPrice(e.target.value)}
-                  placeholder="Output price"
-                  className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">Out</span>
-              </div>
-            </div>
-          )}
-          {(billingType === 'per_request' || billingType === 'hybrid') && (
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-              <input
-                type="number"
-                step="0.0001"
-                value={requestPrice}
-                onChange={(e) => setRequestPrice(e.target.value)}
-                placeholder="0.00"
-                className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">/req</span>
-            </div>
-          )}
         </div>
 
         {/* Actions */}
@@ -486,7 +284,6 @@ function EditModelModal({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Models() {
   const { data: models, isLoading } = useAllModels();
-  const { data: providers } = useProviders();
   const createMutation = useCreateGlobalModel();
   const updateMutation = useUpdateGlobalModel();
   const [isAdding, setIsAdding] = useState(false);
@@ -533,22 +330,20 @@ export default function Models() {
         </div>
 
         <AnimatePresence>
-          {(providers?.length ?? 0) > 0 && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.92 }}
-              transition={{ duration: 0.2 }}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.92 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Button
+              icon={<Plus className="h-4 w-4" />}
+              onClick={() => setIsAdding(true)}
+              size="sm"
             >
-              <Button
-                icon={<Plus className="h-4 w-4" />}
-                onClick={() => setIsAdding(true)}
-                size="sm"
-              >
-                Add Model
-              </Button>
-            </motion.div>
-          )}
+              Add Model
+            </Button>
+          </motion.div>
         </AnimatePresence>
       </motion.div>
 
@@ -577,7 +372,7 @@ export default function Models() {
 
       {/* Model grid or empty state */}
       {totalModels === 0 ? (
-        <EmptyState hasProviders={(providers?.length ?? 0) > 0} onAddClick={() => setIsAdding(true)} />
+        <EmptyState onAddClick={() => setIsAdding(true)} />
       ) : (
         <motion.div
           initial="hidden"
@@ -589,7 +384,7 @@ export default function Models() {
             <ModelCard
               key={model.id}
               model={model}
-              providerName={model.provider_name ?? providers?.find(p => p.id === model.provider_id)?.name ?? model.provider_id}
+              providerName={model.provider_name}
               index={i}
               onEdit={setEditingModel}
             />
@@ -600,7 +395,6 @@ export default function Models() {
       <AddModelModal
         open={isAdding}
         onClose={() => setIsAdding(false)}
-        providers={providers}
         onAdd={async (data) => {
           await createMutation.mutateAsync(data);
         }}

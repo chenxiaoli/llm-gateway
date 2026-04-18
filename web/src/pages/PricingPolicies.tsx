@@ -30,6 +30,7 @@ function AddPolicyModal({
   const [inputPrice, setInputPrice] = useState('');
   const [outputPrice, setOutputPrice] = useState('');
   const [requestPrice, setRequestPrice] = useState('');
+  const [cacheReadPrice, setCacheReadPrice] = useState('');
 
   const reset = () => {
     setName('');
@@ -37,6 +38,7 @@ function AddPolicyModal({
     setInputPrice('');
     setOutputPrice('');
     setRequestPrice('');
+    setCacheReadPrice('');
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -47,6 +49,7 @@ function AddPolicyModal({
     if (inputPrice) config.input_price = parseFloat(inputPrice);
     if (outputPrice) config.output_price = parseFloat(outputPrice);
     if (requestPrice) config.request_price = parseFloat(requestPrice);
+    if (cacheReadPrice) config.cache_read_price = parseFloat(cacheReadPrice);
 
     await onAdd({ name, billing_type: billingType, config });
     handleClose();
@@ -81,26 +84,39 @@ function AddPolicyModal({
         </div>
 
         {(billingType === 'per_token' || billingType === 'tiered_token') && (
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Input Price (per 1M)</label>
-              <input
-                type="number"
-                step="0.0001"
-                value={inputPrice}
-                onChange={(e) => setInputPrice(e.target.value)}
-                placeholder="$0.00"
-                className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
-              />
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Input Price (per 1M)</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={inputPrice}
+                  onChange={(e) => setInputPrice(e.target.value)}
+                  placeholder="$0.00"
+                  className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Output Price (per 1M)</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  value={outputPrice}
+                  onChange={(e) => setOutputPrice(e.target.value)}
+                  placeholder="$0.00"
+                  className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
+                />
+              </div>
             </div>
             <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Output Price (per 1M)</label>
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Cache Read Price (per 1M, cheaper)</label>
               <input
                 type="number"
                 step="0.0001"
-                value={outputPrice}
-                onChange={(e) => setOutputPrice(e.target.value)}
-                placeholder="$0.00"
+                value={cacheReadPrice}
+                onChange={(e) => setCacheReadPrice(e.target.value)}
+                placeholder="$0.00 (defaults to input price)"
                 className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
               />
             </div>

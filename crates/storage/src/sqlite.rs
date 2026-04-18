@@ -100,10 +100,6 @@ struct SqliteModelRow {
     id: String,
     name: String,
     model_type: Option<String>,
-    billing_type: String,
-    input_price: f64,
-    output_price: f64,
-    request_price: f64,
     pricing_policy_id: Option<String>,
     enabled: i64,
     created_at: String,
@@ -115,10 +111,6 @@ impl From<SqliteModelRow> for Model {
             id: r.id,
             name: r.name,
             model_type: r.model_type,
-            billing_type: r.billing_type,
-            input_price: r.input_price,
-            output_price: r.output_price,
-            request_price: r.request_price,
             pricing_policy_id: r.pricing_policy_id,
             enabled: r.enabled != 0,
             created_at: parse_rfc3339(&r.created_at),
@@ -136,6 +128,7 @@ struct SqliteUsageRow {
     protocol: String,
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
+    cache_read_tokens: Option<i64>,
     cost: f64,
     created_at: String,
 }
@@ -151,6 +144,7 @@ impl From<SqliteUsageRow> for UsageRecord {
             protocol: parse_protocol(&r.protocol),
             input_tokens: r.input_tokens,
             output_tokens: r.output_tokens,
+            cache_read_tokens: r.cache_read_tokens,
             cost: r.cost,
             created_at: parse_rfc3339(&r.created_at),
         }
@@ -281,12 +275,8 @@ struct SqliteChannelModelRow {
     model_id: String,
     upstream_model_name: Option<String>,
     priority_override: Option<i32>,
-    cost_policy_id: Option<String>,   // NEW: for upstream cost
-    markup_ratio: f64,                // NEW, default 1.0
-    billing_type: Option<String>,      // NEW: billing_type
-    input_price: Option<f64>,          // NEW: input_price
-    output_price: Option<f64>,         // NEW: output_price
-    request_price: Option<f64>,        // NEW: request_price
+    pricing_policy_id: Option<String>,
+    markup_ratio: f64,
     enabled: i64,
     created_at: String,
     updated_at: String,
@@ -300,12 +290,8 @@ impl From<SqliteChannelModelRow> for ChannelModel {
             model_id: r.model_id,
             upstream_model_name: r.upstream_model_name,
             priority_override: r.priority_override,
-            cost_policy_id: r.cost_policy_id,
+            pricing_policy_id: r.pricing_policy_id,
             markup_ratio: r.markup_ratio,
-            billing_type: r.billing_type,
-            input_price: r.input_price,
-            output_price: r.output_price,
-            request_price: r.request_price,
             enabled: r.enabled != 0,
             created_at: parse_rfc3339(&r.created_at),
             updated_at: parse_rfc3339(&r.updated_at),
@@ -346,26 +332,11 @@ fn parse_rfc3339(s: &str) -> chrono::DateTime<chrono::Utc> {
         .with_timezone(&chrono::Utc)
 }
 
-fn parse_billing_type(s: &str) -> BillingType {
-    match s {
-        "token" => BillingType::Token,
-        "request" => BillingType::Request,
-        _ => BillingType::Token,
-    }
-}
-
 fn parse_protocol(s: &str) -> Protocol {
     match s {
         "openai" => Protocol::Openai,
         "anthropic" => Protocol::Anthropic,
         _ => Protocol::Openai,
-    }
-}
-
-fn billing_type_str(bt: &BillingType) -> &'static str {
-    match bt {
-        BillingType::Token => "token",
-        BillingType::Request => "request",
     }
 }
 
@@ -703,16 +674,13 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "INSERT INTO models (id, name, model_type, billing_type, input_price, output_price, request_price, enabled, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO models (id, name, model_type, pricing_policy_id, enabled, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)",
         )
         .bind(&model.id)
         .bind(&model.name)
         .bind(&model.model_type)
-        .bind(&model.billing_type)
-        .bind(model.input_price)
-        .bind(model.output_price)
-        .bind(model.request_price)
+        .bind(&model.pricing_policy_id)
         .bind(model.enabled as i64)
         .bind(model.created_at.to_rfc3339())
         .execute(&self.pool)
@@ -723,7 +691,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_model(&self, name: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<SqliteModelRow> = sqlx::query_as(
-            "SELECT id, name, model_type, billing_type, input_price, output_price, request_price, pricing_policy_id, enabled, created_at
+            "SELECT id, name, model_type, pricing_policy_id, enabled, created_at
              FROM models WHERE name = ?",
         )
         .bind(name)
@@ -735,7 +703,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_model_by_id(&self, id: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<SqliteModelRow> = sqlx::query_as(
-            "SELECT id, name, model_type, billing_type, input_price, output_price, request_price, pricing_policy_id, enabled, created_at
+            "SELECT id, name, model_type, pricing_policy_id, enabled, created_at
              FROM models WHERE id = ?",
         )
         .bind(id)
@@ -754,8 +722,7 @@ impl crate::Storage for SqliteStorage {
         // Query all models - for N:N with providers, we return models with placeholder provider info
         // The provider relationship is stored in channel_models, not directly on models
         let models = sqlx::query_as::<_, SqliteModelRow>(
-            "SELECT id, name, model_type, pricing_policy_id, billing_type,
-                    input_price, output_price, request_price, enabled, created_at
+            "SELECT id, name, model_type, pricing_policy_id, enabled, created_at
              FROM models ORDER BY name"
         )
         .fetch_all(&self.pool)
@@ -767,10 +734,6 @@ impl crate::Storage for SqliteStorage {
                     id: m.id,
                     name: m.name,
                     model_type: m.model_type,
-                    billing_type: m.billing_type,
-                    input_price: m.input_price,
-                    output_price: m.output_price,
-                    request_price: m.request_price,
                     pricing_policy_id: m.pricing_policy_id,
                     enabled: m.enabled != 0,
                     created_at: parse_rfc3339(&m.created_at),
@@ -791,13 +754,8 @@ impl crate::Storage for SqliteStorage {
 
     async fn update_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "UPDATE models SET billing_type = ?, input_price = ?, output_price = ?,
-             request_price = ?, pricing_policy_id = ?, enabled = ? WHERE name = ?",
+            "UPDATE models SET pricing_policy_id = ?, enabled = ? WHERE name = ?",
         )
-        .bind(&model.billing_type)
-        .bind(model.input_price)
-        .bind(model.output_price)
-        .bind(model.request_price)
         .bind(&model.pricing_policy_id)
         .bind(model.enabled as i64)
         .bind(&model.name)
@@ -890,8 +848,8 @@ impl crate::Storage for SqliteStorage {
 
     async fn record_usage(&self, usage: &UsageRecord) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO usage_records (id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cost, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO usage_records (id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&usage.id)
         .bind(&usage.key_id)
@@ -901,6 +859,7 @@ impl crate::Storage for SqliteStorage {
         .bind(protocol_str(&usage.protocol))
         .bind(usage.input_tokens)
         .bind(usage.output_tokens)
+        .bind(usage.cache_read_tokens)
         .bind(usage.cost)
         .bind(usage.created_at.to_rfc3339())
         .execute(&self.pool)
@@ -910,7 +869,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn query_usage(&self, filter: &UsageFilter) -> Result<Vec<UsageRecord>, DbErr> {
         let mut sql = String::from(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cost, created_at
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at
              FROM usage_records WHERE 1=1",
         );
         let mut bind_vars: Vec<String> = Vec::new();
@@ -973,7 +932,7 @@ impl crate::Storage for SqliteStorage {
 
         let offset = (page - 1) * page_size;
         let data_sql = format!(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cost, created_at \
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at \
              FROM usage_records {} ORDER BY created_at DESC LIMIT ? OFFSET ?",
             where_sql
         );
@@ -1264,20 +1223,16 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, DbErr> {
         sqlx::query(
-            "INSERT INTO channel_models (id, channel_id, model_id, upstream_model_name, priority_override, cost_policy_id, markup_ratio, billing_type, input_price, output_price, request_price, enabled, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO channel_models (id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&cm.id)
         .bind(&cm.channel_id)
         .bind(&cm.model_id)
         .bind(&cm.upstream_model_name)
         .bind(cm.priority_override)
-        .bind(&cm.cost_policy_id)
+        .bind(&cm.pricing_policy_id)
         .bind(cm.markup_ratio)
-        .bind(&cm.billing_type)
-        .bind(cm.input_price)
-        .bind(cm.output_price)
-        .bind(cm.request_price)
         .bind(cm.enabled as i64)
         .bind(cm.created_at.to_rfc3339())
         .bind(cm.updated_at.to_rfc3339())
@@ -1289,7 +1244,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_channel_model(&self, id: &str) -> Result<Option<ChannelModel>, DbErr> {
         let row: Option<SqliteChannelModelRow> = sqlx::query_as(
-            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, cost_policy_id, markup_ratio, billing_type, input_price, output_price, request_price, enabled, created_at, updated_at
+            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
              FROM channel_models WHERE id = ?",
         )
         .bind(id)
@@ -1301,7 +1256,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_channel_models(&self) -> Result<Vec<ChannelModel>, DbErr> {
         let rows: Vec<SqliteChannelModelRow> = sqlx::query_as(
-            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, cost_policy_id, markup_ratio, billing_type, input_price, output_price, request_price, enabled, created_at, updated_at
+            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
              FROM channel_models",
         )
         .fetch_all(&self.pool)
@@ -1312,7 +1267,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_channel_models_by_channel(&self, channel_id: &str) -> Result<Vec<ChannelModel>, DbErr> {
         let rows: Vec<SqliteChannelModelRow> = sqlx::query_as(
-            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, cost_policy_id, markup_ratio, billing_type, input_price, output_price, request_price, enabled, created_at, updated_at
+            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
              FROM channel_models WHERE channel_id = ?",
         )
         .bind(channel_id)
@@ -1324,7 +1279,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_channel_models_for_model(&self, model_id: &str) -> Result<Vec<ChannelModel>, DbErr> {
         let rows: Vec<SqliteChannelModelRow> = sqlx::query_as(
-            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, cost_policy_id, markup_ratio, billing_type, input_price, output_price, request_price, enabled, created_at, updated_at
+            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
              FROM channel_models WHERE model_id = ?",
         )
         .bind(model_id)
@@ -1351,18 +1306,14 @@ impl crate::Storage for SqliteStorage {
     async fn update_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, DbErr> {
         sqlx::query(
             "UPDATE channel_models SET channel_id = ?, model_id = ?, upstream_model_name = ?,
-             priority_override = ?, cost_policy_id = ?, markup_ratio = ?, billing_type = ?, input_price = ?, output_price = ?, request_price = ?, enabled = ?, updated_at = ? WHERE id = ?",
+             priority_override = ?, pricing_policy_id = ?, markup_ratio = ?, enabled = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&cm.channel_id)
         .bind(&cm.model_id)
         .bind(&cm.upstream_model_name)
         .bind(cm.priority_override)
-        .bind(&cm.cost_policy_id)
+        .bind(&cm.pricing_policy_id)
         .bind(cm.markup_ratio)
-        .bind(&cm.billing_type)
-        .bind(cm.input_price)
-        .bind(cm.output_price)
-        .bind(cm.request_price)
         .bind(cm.enabled as i64)
         .bind(cm.updated_at.to_rfc3339())
         .bind(&cm.id)

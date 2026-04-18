@@ -4,7 +4,7 @@ use axum::Json;
 use serde::Serialize;
 use std::sync::Arc;
 
-use llm_gateway_storage::{Model, UpdateModel as StorageUpdateModel};
+use llm_gateway_storage::{Model, UpdateModel};
 
 use crate::error::ApiError;
 use crate::extractors::require_admin;
@@ -43,10 +43,6 @@ pub async fn list_all_models(
 pub struct CreateModelRequest {
     pub name: String,
     pub pricing_policy_id: Option<String>,
-    pub billing_type: Option<String>,
-    pub input_price: Option<f64>,
-    pub output_price: Option<f64>,
-    pub request_price: Option<f64>,
     pub enabled: Option<bool>,
 }
 
@@ -57,17 +53,11 @@ pub async fn create_model_global(
 ) -> Result<Json<Model>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
-    let billing_type = input.billing_type.clone().unwrap_or_else(|| "per_token".to_string());
-
     let model = Model {
         id: input.name.clone(),
         name: input.name,
         model_type: None,
         pricing_policy_id: input.pricing_policy_id,
-        billing_type,
-        input_price: input.input_price.unwrap_or(0.0),
-        output_price: input.output_price.unwrap_or(0.0),
-        request_price: input.request_price.unwrap_or(0.0),
         enabled: input.enabled.unwrap_or(true),
         created_at: chrono::Utc::now(),
     };
@@ -85,7 +75,7 @@ pub async fn update_model(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(model_name): Path<String>,
-    Json(input): Json<StorageUpdateModel>,
+    Json(input): Json<UpdateModel>,
 ) -> Result<Json<Model>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
@@ -99,18 +89,6 @@ pub async fn update_model(
     // Apply partial updates
     if let Some(pricing_policy_id) = input.pricing_policy_id {
         model.pricing_policy_id = pricing_policy_id;
-    }
-    if let Some(billing_type) = input.billing_type {
-        model.billing_type = billing_type.unwrap_or_else(|| "per_token".to_string());
-    }
-    if let Some(input_price) = input.input_price {
-        model.input_price = input_price;
-    }
-    if let Some(output_price) = input.output_price {
-        model.output_price = output_price;
-    }
-    if let Some(request_price) = input.request_price {
-        model.request_price = request_price;
     }
     if let Some(enabled) = input.enabled {
         model.enabled = enabled;
@@ -229,10 +207,6 @@ pub async fn sync_models(
                                     name: name.clone(),
                                     model_type: model_type.clone(),
                                     pricing_policy_id: None,
-                                    billing_type: "per_token".to_string(),
-                                    input_price: 0.0,
-                                    output_price: 0.0,
-                                    request_price: 0.0,
                                     enabled: false,
                                     created_at: chrono::Utc::now(),
                                 };
@@ -308,10 +282,6 @@ pub async fn sync_models(
                                     name: name.clone(),
                                     model_type: model_type.clone(),
                                     pricing_policy_id: None,
-                                    billing_type: "per_token".to_string(),
-                                    input_price: 0.0,
-                                    output_price: 0.0,
-                                    request_price: 0.0,
                                     enabled: false,
                                     created_at: chrono::Utc::now(),
                                 };

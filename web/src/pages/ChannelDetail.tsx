@@ -4,6 +4,7 @@ import { ArrowLeft, Pencil, Trash2, KeyRound, Hash, Plus, Building2, LinkIcon, P
 import { useChannel, useUpdateChannel, useDeleteChannel, useChannelModels, useCreateChannelModel, useDeleteChannelModel, useUpdateChannelApiKey } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
+import { usePricingPolicies } from '../hooks/usePricingPolicies';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Toggle } from '../components/ui/Toggle';
@@ -17,6 +18,7 @@ export default function ChannelDetail() {
   const { data: providers } = useProviders();
   const { data: channelModels, isLoading: modelsLoading } = useChannelModels(channel?.id || '');
   const { data: allModels } = useAllModels();
+  const { data: policies } = usePricingPolicies();
   const updateMutation = useUpdateChannel(id!);
   const deleteMutation = useDeleteChannel(id!);
   const createModelMutation = useCreateChannelModel(channel?.id || '');
@@ -35,6 +37,8 @@ export default function ChannelDetail() {
   const [isAddingModel, setIsAddingModel] = useState(false);
   const [selectedModel, setSelectedModel] = useState('');
   const [upstreamModelName, setUpstreamModelName] = useState('');
+  const [pricingPolicyId, setPricingPolicyId] = useState('');
+  const [markupRatio, setMarkupRatio] = useState('1.0');
   const [modelEnabled, setModelEnabled] = useState(true);
 
   useEffect(() => {
@@ -376,12 +380,16 @@ export default function ChannelDetail() {
           if (!selectedModel) return;
           await createModelMutation.mutateAsync({
             model_id: selectedModel,
-            upstream_model_name: upstreamModelName || null,
+            upstream_model_name: upstreamModelName || undefined,
+            pricing_policy_id: pricingPolicyId || undefined,
+            markup_ratio: Number(markupRatio),
             enabled: modelEnabled,
           });
           setIsAddingModel(false);
           setSelectedModel('');
           setUpstreamModelName('');
+          setPricingPolicyId('');
+          setMarkupRatio('1.0');
           setModelEnabled(true);
         }} className="space-y-4">
           <div className="form-control">
@@ -416,6 +424,39 @@ export default function ChannelDetail() {
             />
             <label className="label">
               <span className="label-text-alt">The exact model name the provider expects</span>
+            </label>
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Pricing Policy</span>
+            </label>
+            <select
+              value={pricingPolicyId}
+              onChange={(e) => setPricingPolicyId(e.target.value)}
+              className="select select-bordered w-full"
+            >
+              <option value="">No policy</option>
+              {policies?.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Markup Ratio</span>
+            </label>
+            <input
+              type="number"
+              value={markupRatio}
+              onChange={(e) => setMarkupRatio(e.target.value)}
+              min={0}
+              step={0.1}
+              className="input input-bordered w-full"
+            />
+            <label className="label">
+              <span className="label-text-alt">Multiplier applied to pricing policy cost (e.g., 1.0 = no markup)</span>
             </label>
           </div>
 

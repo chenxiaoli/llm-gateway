@@ -56,12 +56,8 @@ export interface UpdateProviderRequest {
 export interface Model {
   id: string;
   name: string;
-  provider_id: string;
-  billing_type: string;
+  model_type?: string | null;
   pricing_policy_id?: string | null;
-  input_price: number;
-  output_price: number;
-  request_price: number;
   enabled: boolean;
   created_at: string;
 }
@@ -72,27 +68,18 @@ export interface ModelWithProvider extends Model {
 
 export interface CreateModelRequest {
   name: string;
-  billing_type: string;
-  input_price?: number;
-  output_price?: number;
-  request_price?: number;
+  pricing_policy_id?: string | null;
+  enabled?: boolean;
 }
 
 export interface CreateGlobalModelRequest {
-  provider_id: string;
   name: string;
-  billing_type: string;
-  input_price?: number;
-  output_price?: number;
-  request_price?: number;
+  pricing_policy_id?: string | null;
   enabled?: boolean;
 }
 
 export interface UpdateModelRequest {
-  billing_type?: string;
-  input_price?: number;
-  output_price?: number;
-  request_price?: number;
+  pricing_policy_id?: string | null;
   enabled?: boolean;
 }
 
@@ -105,6 +92,7 @@ export interface UsageRecord {
   protocol: 'openai' | 'anthropic';
   input_tokens: number | null;
   output_tokens: number | null;
+  cache_read_tokens: number | null;
   cost: number;
   created_at: string;
 }
@@ -254,12 +242,10 @@ export interface ChannelModel {
   id: string;
   channel_id: string;
   model_id: string;
-  upstream_model_name: string;
+  upstream_model_name: string | null;
   priority_override: number | null;
-  billing_type?: string | null;
-  input_price?: number | null;
-  output_price?: number | null;
-  request_price?: number | null;
+  pricing_policy_id?: string | null;
+  markup_ratio: number;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -269,16 +255,16 @@ export interface CreateChannelModelRequest {
   model_id: string;
   upstream_model_name?: string | null;
   priority_override?: number | null;
-  billing_type?: string | null;
-  input_price?: number | null;
-  output_price?: number | null;
-  request_price?: number | null;
+  pricing_policy_id?: string | null;
+  markup_ratio?: number;
   enabled?: boolean;
 }
 
 export interface UpdateChannelModelRequest {
-  upstream_model_name?: string;
+  upstream_model_name?: string | null;
   priority_override?: number | null;
+  pricing_policy_id?: string | null;
+  markup_ratio?: number;
   enabled?: boolean;
 }
 

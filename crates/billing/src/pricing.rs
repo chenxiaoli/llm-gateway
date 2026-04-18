@@ -29,10 +29,17 @@ impl PricingCalculator {
             .and_then(|v| v.as_f64())
             .or_else(|| config.get("output_per_1k").and_then(|v| v.as_f64()))
             .unwrap_or(0.0);
+        let cache_read_price = config.get("cache_read_price")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
 
-        let input_cost = (usage.input_tokens as f64 / divisor) * input_price;
+        let cache = usage.cache_read_tokens.unwrap_or(0);
+        let thinking_input = usage.input_tokens.saturating_sub(cache);
+
+        let input_cost = (thinking_input as f64 / divisor) * input_price;
+        let cache_cost = (cache as f64 / divisor) * cache_read_price;
         let output_cost = (usage.output_tokens as f64 / divisor) * output_price;
-        input_cost + output_cost
+        input_cost + cache_cost + output_cost
     }
 
     fn calculate_per_request(&self, config: &serde_json::Value, usage: &Usage) -> f64 {
@@ -150,7 +157,7 @@ mod tests {
     fn test_per_token() {
         let calc = PricingCalculator;
         let policy = make_policy("per_token", json!({"input_per_1m": 3.0, "output_per_1m": 15.0}));
-        let usage = Usage { input_tokens: 1_000_000, output_tokens: 500_000, input_chars: None, output_chars: None, request_count: 1 };
+        let usage = Usage { input_tokens: 1_000_000, output_tokens: 500_000, input_chars: None, output_chars: None, request_count: 1, cache_read_tokens: None };
         let cost = calc.calculate_cost(&policy, &usage);
         assert!((cost - 10.5).abs() < 0.001);
     }
@@ -159,7 +166,7 @@ mod tests {
     fn test_per_request() {
         let calc = PricingCalculator;
         let policy = make_policy("per_request", json!({"price_per_call": 0.05}));
-        let usage = Usage { input_tokens: 0, output_tokens: 0, input_chars: None, output_chars: None, request_count: 100 };
+        let usage = Usage { input_tokens: 0, output_tokens: 0, input_chars: None, output_chars: None, request_count: 100, cache_read_tokens: None };
         let cost = calc.calculate_cost(&policy, &usage);
         assert!((cost - 5.0).abs() < 0.001);
     }
@@ -173,7 +180,7 @@ mod tests {
                 {"up_to": null, "input_per_1k": 4.0, "output_per_1k": 12.0}
             ]
         }));
-        let usage = Usage { input_tokens: 1_000_000, output_tokens: 0, input_chars: None, output_chars: None, request_count: 1 };
+        let usage = Usage { input_tokens: 1_000_000, output_tokens: 0, input_chars: None, output_chars: None, request_count: 1, cache_read_tokens: None };
         let cost = calc.calculate_cost(&policy, &usage);
         // 1M tokens at tier 1 (5.0 per 1k) = 1000 * 5.0 = 5000
         assert!((cost - 5000.0).abs() < 0.001);
@@ -184,7 +191,7 @@ mod tests {
         let calc = PricingCalculator;
         // Using _per_1k pricing for hybrid
         let policy = make_policy("hybrid", json!({"base_per_call": 0.001, "input_per_1k": 1.0, "output_per_1k": 3.0}));
-        let usage = Usage { input_tokens: 1_000_000, output_tokens: 500_000, input_chars: None, output_chars: None, request_count: 10 };
+        let usage = Usage { input_tokens: 1_000_000, output_tokens: 500_000, input_chars: None, output_chars: None, request_count: 10, cache_read_tokens: None };
         let cost = calc.calculate_cost(&policy, &usage);
         // base: 0.001 * 10 = 0.01
         // usage: 1M * 1.0 / 1000 + 500k * 3.0 / 1000 = 1000 + 1500 = 2500
@@ -196,7 +203,7 @@ mod tests {
     fn test_per_character() {
         let calc = PricingCalculator;
         let policy = make_policy("per_character", json!({"input_per_1k": 0.001, "output_per_1k": 0.004}));
-        let usage = Usage { input_tokens: 0, output_tokens: 0, input_chars: Some(1_000_000), output_chars: Some(500_000), request_count: 1 };
+        let usage = Usage { input_tokens: 0, output_tokens: 0, input_chars: Some(1_000_000), output_chars: Some(500_000), request_count: 1, cache_read_tokens: None };
         let cost = calc.calculate_cost(&policy, &usage);
         // 1M input chars * 0.001/1k = 1.0
         // 500k output chars * 0.004/1k = 2.0

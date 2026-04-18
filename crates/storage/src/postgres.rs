@@ -83,10 +83,6 @@ struct PgModelRow {
     id: String,
     name: String,
     model_type: Option<String>,
-    billing_type: String,
-    input_price: f64,
-    output_price: f64,
-    request_price: f64,
     pricing_policy_id: Option<String>,
     enabled: bool,
     created_at: chrono::DateTime<chrono::Utc>,
@@ -98,10 +94,6 @@ impl From<PgModelRow> for Model {
             id: r.id,
             name: r.name,
             model_type: r.model_type,
-            billing_type: r.billing_type,
-            input_price: r.input_price,
-            output_price: r.output_price,
-            request_price: r.request_price,
             pricing_policy_id: r.pricing_policy_id,
             enabled: r.enabled,
             created_at: r.created_at,
@@ -175,6 +167,7 @@ struct PgUsageRow {
     protocol: String,
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
+    cache_read_tokens: Option<i64>,
     cost: f64,
     created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -190,6 +183,7 @@ impl From<PgUsageRow> for UsageRecord {
             protocol: parse_protocol(&r.protocol),
             input_tokens: r.input_tokens,
             output_tokens: r.output_tokens,
+            cache_read_tokens: r.cache_read_tokens,
             cost: r.cost,
             created_at: r.created_at,
         }
@@ -320,12 +314,8 @@ struct PgChannelModelRow {
     model_id: String,
     upstream_model_name: Option<String>,
     priority_override: Option<i32>,
-    cost_policy_id: Option<String>,
+    pricing_policy_id: Option<String>,
     markup_ratio: f64,
-    billing_type: Option<String>,
-    input_price: Option<f64>,
-    output_price: Option<f64>,
-    request_price: Option<f64>,
     enabled: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -339,12 +329,8 @@ impl From<PgChannelModelRow> for ChannelModel {
             model_id: r.model_id,
             upstream_model_name: r.upstream_model_name,
             priority_override: r.priority_override,
-            cost_policy_id: r.cost_policy_id,
+            pricing_policy_id: r.pricing_policy_id,
             markup_ratio: r.markup_ratio,
-            billing_type: r.billing_type,
-            input_price: r.input_price,
-            output_price: r.output_price,
-            request_price: r.request_price,
             enabled: r.enabled,
             created_at: r.created_at,
             updated_at: r.updated_at,
@@ -719,16 +705,13 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "INSERT INTO models (id, name, model_type, billing_type, input_price, output_price, request_price, enabled, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            "INSERT INTO models (id, name, model_type, pricing_policy_id, enabled, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6)",
         )
         .bind(&model.id)
         .bind(&model.name)
         .bind(&model.model_type)
-        .bind(&model.billing_type)
-        .bind(model.input_price)
-        .bind(model.output_price)
-        .bind(model.request_price)
+        .bind(&model.pricing_policy_id)
         .bind(model.enabled)
         .bind(model.created_at)
         .execute(&self.pool)
@@ -739,7 +722,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_model(&self, name: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<PgModelRow> = sqlx::query_as(
-            "SELECT id, name, model_type, billing_type, input_price, output_price, request_price, enabled, created_at
+            "SELECT id, name, model_type, pricing_policy_id, enabled, created_at
              FROM models WHERE name = $1",
         )
         .bind(name)
@@ -770,8 +753,7 @@ impl crate::Storage for PostgresStorage {
         // Query all models - for N:N with providers, we return models with placeholder provider info
         // The provider relationship is stored in channel_models, not directly on models
         let models = sqlx::query_as::<_, PgModelRow>(
-            "SELECT id, name, model_type, pricing_policy_id, billing_type,
-                    input_price, output_price, request_price, enabled, created_at
+            "SELECT id, name, model_type, pricing_policy_id, enabled, created_at
              FROM models ORDER BY name"
         )
         .fetch_all(&self.pool)
@@ -796,13 +778,8 @@ impl crate::Storage for PostgresStorage {
 
     async fn update_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "UPDATE models SET billing_type = $1, input_price = $2, output_price = $3,
-             request_price = $4, pricing_policy_id = $5, enabled = $6 WHERE name = $7",
+            "UPDATE models SET pricing_policy_id = $1, enabled = $2 WHERE name = $3",
         )
-        .bind(&model.billing_type)
-        .bind(model.input_price)
-        .bind(model.output_price)
-        .bind(model.request_price)
         .bind(&model.pricing_policy_id)
         .bind(model.enabled)
         .bind(&model.name)
@@ -895,8 +872,8 @@ impl crate::Storage for PostgresStorage {
 
     async fn record_usage(&self, usage: &UsageRecord) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO usage_records (id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cost, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+            "INSERT INTO usage_records (id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
         )
         .bind(&usage.id)
         .bind(&usage.key_id)
@@ -906,6 +883,7 @@ impl crate::Storage for PostgresStorage {
         .bind(protocol_str(&usage.protocol))
         .bind(usage.input_tokens)
         .bind(usage.output_tokens)
+        .bind(usage.cache_read_tokens)
         .bind(usage.cost)
         .bind(usage.created_at)
         .execute(&self.pool)
@@ -916,7 +894,7 @@ impl crate::Storage for PostgresStorage {
     async fn query_usage(&self, filter: &UsageFilter) -> Result<Vec<UsageRecord>, DbErr> {
         // Build query dynamically based on filter - for now, just fetch all
         let rows: Vec<PgUsageRow> = sqlx::query_as(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cost, created_at
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at
              FROM usage_records ORDER BY created_at DESC",
         )
         .fetch_all(&self.pool)
@@ -930,7 +908,7 @@ impl crate::Storage for PostgresStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgUsageRow> = sqlx::query_as(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cost, created_at
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at
              FROM usage_records ORDER BY created_at DESC LIMIT $1 OFFSET $2",
         )
         .bind(page_size)
@@ -1179,20 +1157,16 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, DbErr> {
         sqlx::query(
-            "INSERT INTO channel_models (id, channel_id, model_id, upstream_model_name, priority_override, cost_policy_id, markup_ratio, billing_type, input_price, output_price, request_price, enabled, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+            "INSERT INTO channel_models (id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         )
         .bind(&cm.id)
         .bind(&cm.channel_id)
         .bind(&cm.model_id)
         .bind(&cm.upstream_model_name)
         .bind(cm.priority_override)
-        .bind(&cm.cost_policy_id)
+        .bind(&cm.pricing_policy_id)
         .bind(cm.markup_ratio)
-        .bind(&cm.billing_type)
-        .bind(cm.input_price)
-        .bind(cm.output_price)
-        .bind(cm.request_price)
         .bind(cm.enabled)
         .bind(cm.created_at)
         .bind(cm.updated_at)
@@ -1204,7 +1178,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_channel_model(&self, id: &str) -> Result<Option<ChannelModel>, DbErr> {
         let row: Option<PgChannelModelRow> = sqlx::query_as(
-            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, cost_policy_id, markup_ratio, billing_type, input_price, output_price, request_price, enabled, created_at, updated_at
+            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
              FROM channel_models WHERE id = $1",
         )
         .bind(id)
@@ -1216,7 +1190,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_channel_models(&self) -> Result<Vec<ChannelModel>, DbErr> {
         let rows: Vec<PgChannelModelRow> = sqlx::query_as(
-            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, cost_policy_id, markup_ratio, billing_type, input_price, output_price, request_price, enabled, created_at, updated_at
+            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
              FROM channel_models",
         )
         .fetch_all(&self.pool)
@@ -1227,7 +1201,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_channel_models_by_channel(&self, channel_id: &str) -> Result<Vec<ChannelModel>, DbErr> {
         let rows: Vec<PgChannelModelRow> = sqlx::query_as(
-            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, cost_policy_id, markup_ratio, billing_type, input_price, output_price, request_price, enabled, created_at, updated_at
+            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
              FROM channel_models WHERE channel_id = $1",
         )
         .bind(channel_id)
@@ -1239,7 +1213,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_channel_models_for_model(&self, model_id: &str) -> Result<Vec<ChannelModel>, DbErr> {
         let rows: Vec<PgChannelModelRow> = sqlx::query_as(
-            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, cost_policy_id, markup_ratio, billing_type, input_price, output_price, request_price, enabled, created_at, updated_at
+            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
              FROM channel_models WHERE model_id = $1",
         )
         .bind(model_id)
@@ -1266,18 +1240,14 @@ impl crate::Storage for PostgresStorage {
     async fn update_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, DbErr> {
         sqlx::query(
             "UPDATE channel_models SET channel_id = $1, model_id = $2, upstream_model_name = $3,
-             priority_override = $4, cost_policy_id = $5, markup_ratio = $6, billing_type = $7, input_price = $8, output_price = $9, request_price = $10, enabled = $11, updated_at = $12 WHERE id = $13",
+             priority_override = $4, pricing_policy_id = $5, markup_ratio = $6, enabled = $7, updated_at = $8 WHERE id = $9",
         )
         .bind(&cm.channel_id)
         .bind(&cm.model_id)
         .bind(&cm.upstream_model_name)
         .bind(cm.priority_override)
-        .bind(&cm.cost_policy_id)
+        .bind(&cm.pricing_policy_id)
         .bind(cm.markup_ratio)
-        .bind(&cm.billing_type)
-        .bind(cm.input_price)
-        .bind(cm.output_price)
-        .bind(cm.request_price)
         .bind(cm.enabled)
         .bind(cm.updated_at)
         .bind(&cm.id)

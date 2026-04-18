@@ -13,6 +13,7 @@ import { EndpointsEditor } from '../components/ui/EndpointsEditor';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Upload } from 'lucide-react';
+import type { CreateGlobalModelRequest } from '../types';
 import type { Provider } from '../types';
 
 type Tab = 'general' | 'providers' | 'password';
@@ -35,7 +36,7 @@ export default function Settings() {
 
   const [providerModalOpen, setProviderModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
-  const [seedData, setSeedData] = useState<{ providers: Array<{ name: string; endpoints?: Record<string, string>; enabled?: boolean; selected?: boolean }>; models: Array<{ provider: string; name: string; billing_type?: string; input_price?: number; output_price?: number; selected?: boolean }> } | null>(null);
+  const [seedData, setSeedData] = useState<{ providers: Array<{ name: string; endpoints?: Record<string, string>; enabled?: boolean; selected?: boolean }>; models: Array<{ provider: string; name: string; selected?: boolean }> } | null>(null);
   const [seedLoading, setSeedLoading] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [provName, setProvName] = useState('');
@@ -69,18 +70,10 @@ export default function Settings() {
       });
       providerMap[p.name] = created.id;
     }
-    // Import selected models
+    // Import selected models (as global models — pricing handled via pricing policies)
     for (const m of seedData.models.filter(m => m.selected)) {
-      const providerId = providerMap[m.provider];
-      if (providerId) {
-        await createModelMutation.mutateAsync({
-          provider_id: providerId,
-          name: m.name,
-          billing_type: m.billing_type || 'per_token',
-          input_price: m.input_price,
-          output_price: m.output_price,
-        });
-      }
+      const input: CreateGlobalModelRequest = { name: m.name, enabled: true };
+      await createModelMutation.mutateAsync(input);
     }
     toast.success('Import completed');
     setImportModalOpen(false);

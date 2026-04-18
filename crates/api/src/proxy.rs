@@ -274,18 +274,28 @@ pub async fn proxy(
             } else {
                 None
             };
-            // Pricing info sent to audit worker for cost calculation
-            let billing_type_for_worker = channel_model.billing_type.clone();
-            let input_price_for_worker = channel_model.input_price.unwrap_or(model_entry.model.input_price);
-            let output_price_for_worker = channel_model.output_price.unwrap_or(model_entry.model.output_price);
-            let request_price_for_worker = channel_model.request_price.unwrap_or(model_entry.model.request_price);
+            // Resolve pricing policy for cost calculation
+            let (pricing_policy_config, pricing_policy_billing_type) = {
+                let policy_id = channel_model.pricing_policy_id.as_deref()
+                    .or(model_entry.model.pricing_policy_id.as_deref());
+                match policy_id {
+                    Some(id) => {
+                        let opt = state.storage.get_pricing_policy(id).await
+                            .map_err(|e| ApiError::Internal(e.to_string()))?;
+                        match opt {
+                            Some(p) => (Some(p.config), p.billing_type),
+                            None => (None, "per_token".to_string()),
+                        }
+                    }
+                    None => (None, "per_token".to_string()),
+                }
+            };
+            let markup_ratio_for_worker = channel_model.markup_ratio;
             let request_path_for_worker = path.to_string();
             let upstream_url_for_worker = upstream_url.clone();
 
             // Spawn: read upstream SSE → forward to client → accumulate → send to audit worker
             tokio::spawn(async move {
-                use futures::TryStreamExt;
-
                 let byte_stream = resp.bytes_stream();
                 let mut acc = Vec::new();
 
@@ -317,10 +327,9 @@ pub async fn proxy(
                     response_bytes: acc,
                     status_code: 200,
                     latency_ms,
-                    billing_type: billing_type_for_worker,
-                    input_price: input_price_for_worker,
-                    output_price: output_price_for_worker,
-                    request_price: request_price_for_worker,
+                    pricing_policy_config,
+                    pricing_policy_billing_type,
+                    markup_ratio: markup_ratio_for_worker,
                     channel_id: Some(channel_id_for_worker),
                     original_model: if upstream_name_for_worker != model_name_for_worker {
                         Some(model_name_for_worker.clone())
@@ -358,6 +367,23 @@ pub async fn proxy(
         // Non-streaming: send to audit worker (it parses JSON, calculates cost, writes DB)
         let response_bytes = resp.bytes().await.unwrap_or_default().to_vec();
 
+        // Resolve pricing policy for cost calculation
+        let (pricing_policy_config, pricing_policy_billing_type) = {
+            let policy_id = channel_model.pricing_policy_id.as_deref()
+                .or(model_entry.model.pricing_policy_id.as_deref());
+            match policy_id {
+                Some(id) => {
+                    let opt = state.storage.get_pricing_policy(id).await
+                        .map_err(|e| ApiError::Internal(e.to_string()))?;
+                    match opt {
+                        Some(p) => (Some(p.config), p.billing_type),
+                        None => (None, "per_token".to_string()),
+                    }
+                }
+                None => (None, "per_token".to_string()),
+            }
+        };
+
         let proto = match protocol {
             ProxyProtocol::OpenAI => Protocol::Openai,
             ProxyProtocol::Anthropic => Protocol::Anthropic,
@@ -372,10 +398,9 @@ pub async fn proxy(
             response_bytes: response_bytes.clone(),
             status_code: 200,
             latency_ms,
-            billing_type: channel_model.billing_type.clone(),
-            input_price: channel_model.input_price.unwrap_or(model_entry.model.input_price),
-            output_price: channel_model.output_price.unwrap_or(model_entry.model.output_price),
-            request_price: channel_model.request_price.unwrap_or(model_entry.model.request_price),
+            pricing_policy_config,
+            pricing_policy_billing_type,
+            markup_ratio: channel_model.markup_ratio,
             channel_id: Some(channel.id.clone()),
             original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
             upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },

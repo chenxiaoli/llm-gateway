@@ -42,12 +42,8 @@ pub async fn create_channel_model(
         model_id: input.model_id,
         upstream_model_name: input.upstream_model_name,
         priority_override: input.priority_override,
-        cost_policy_id: input.cost_policy_id,
+        pricing_policy_id: input.pricing_policy_id,
         markup_ratio: input.markup_ratio.unwrap_or(1.0),
-        billing_type: input.billing_type,
-        input_price: input.input_price,
-        output_price: input.output_price,
-        request_price: input.request_price,
         enabled: input.enabled.unwrap_or(true),
         created_at: now,
         updated_at: now,
@@ -68,7 +64,7 @@ pub async fn create_channel_model_by_channel(
     require_admin(&headers, &state.jwt_secret)?;
 
     // Verify channel exists
-    let channel = state.storage.get_channel(&channel_id).await
+    let _channel = state.storage.get_channel(&channel_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("Channel not found".to_string()))?;
 
@@ -84,12 +80,8 @@ pub async fn create_channel_model_by_channel(
         model_id: input.model_id,
         upstream_model_name: input.upstream_model_name,
         priority_override: input.priority_override,
-        cost_policy_id: input.cost_policy_id,
+        pricing_policy_id: input.pricing_policy_id,
         markup_ratio: input.markup_ratio.unwrap_or(1.0),
-        billing_type: input.billing_type,
-        input_price: input.input_price,
-        output_price: input.output_price,
-        request_price: input.request_price,
         enabled: input.enabled.unwrap_or(true),
         created_at: now,
         updated_at: now,
@@ -157,17 +149,11 @@ pub async fn update_channel_model(
     if let Some(priority) = input.priority_override {
         cm.priority_override = priority;
     }
-    if let Some(Some(billing_type)) = input.billing_type {
-        cm.billing_type = Some(billing_type);
+    if let Some(pricing_policy_id) = input.pricing_policy_id {
+        cm.pricing_policy_id = pricing_policy_id;
     }
-    if let Some(input_price) = input.input_price {
-        cm.input_price = Some(input_price);
-    }
-    if let Some(output_price) = input.output_price {
-        cm.output_price = Some(output_price);
-    }
-    if let Some(request_price) = input.request_price {
-        cm.request_price = Some(request_price);
+    if let Some(markup_ratio) = input.markup_ratio {
+        cm.markup_ratio = markup_ratio;
     }
     if let Some(enabled) = input.enabled {
         cm.enabled = enabled;

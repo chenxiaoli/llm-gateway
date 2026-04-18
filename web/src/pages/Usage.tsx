@@ -25,6 +25,7 @@ export default function Usage() {
   const totalRequests = usageItems.length;
   const totalInputTokens = usageItems.reduce((sum, r) => sum + (r.input_tokens ?? 0), 0);
   const totalOutputTokens = usageItems.reduce((sum, r) => sum + (r.output_tokens ?? 0), 0);
+  const totalCacheReadTokens = usageItems.reduce((sum, r) => sum + (r.cache_read_tokens ?? 0), 0);
 
   const byModel: Record<string, { model: string; requests: number; cost: number }> = {};
   usageItems.forEach((r) => {
@@ -50,18 +51,22 @@ export default function Usage() {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6 max-lg:grid-cols-2 max-sm:grid-cols-1">
+      <div className="grid grid-cols-5 gap-4 mb-6 max-lg:grid-cols-2 max-sm:grid-cols-1">
         <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
           <div className="stat-title text-base-content/50"><DollarSign className="h-4 w-4 inline mr-1" />Total Cost</div>
           <div className="stat-value text-2xl font-mono">${totalCost.toFixed(4)}</div>
         </div>
         <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
-          <div className="stat-title text-base-content/50"><MessageSquare className="h-4 w-4 inline mr-1" />Total Requests</div>
+          <div className="stat-title text-base-content/50"><MessageSquare className="h-4 w-4 inline mr-1" />Requests</div>
           <div className="stat-value text-2xl font-mono">{totalRequests.toLocaleString()}</div>
         </div>
         <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
           <div className="stat-title text-base-content/50">Input Tokens</div>
           <div className="stat-value text-2xl font-mono">{totalInputTokens.toLocaleString()}</div>
+        </div>
+        <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
+          <div className="stat-title text-base-content/50">Cache Read</div>
+          <div className="stat-value text-2xl font-mono">{totalCacheReadTokens.toLocaleString()}</div>
         </div>
         <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
           <div className="stat-title text-base-content/50">Output Tokens</div>
@@ -99,6 +104,7 @@ export default function Usage() {
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Model</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Protocol</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Input Tokens</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Cache Read</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Output Tokens</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Cost</th>
                 </tr>
@@ -111,6 +117,7 @@ export default function Usage() {
                     <td className="mono">{item.model_name}</td>
                     <td><Badge variant={item.protocol === 'openai' ? 'blue' : 'purple'}>{item.protocol}</Badge></td>
                     <td className="mono">{item.input_tokens ?? '-'}</td>
+                    <td className="mono">{item.cache_read_tokens ?? '-'}</td>
                     <td className="mono">{item.output_tokens ?? '-'}</td>
                     <td className="mono">${item.cost.toFixed(6)}</td>
                   </tr>

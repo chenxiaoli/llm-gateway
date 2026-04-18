@@ -17,11 +17,27 @@ pub fn calculate_cost(
     output_price: f64,  // per 1M tokens
     request_price: f64, // per request
 ) -> CostCalculation {
+    calculate_cost_with_cache(input_tokens, output_tokens, input_price, output_price, request_price, 0.0, None, billing_type)
+}
+
+pub fn calculate_cost_with_cache(
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+    input_price: f64,           // per 1M tokens
+    output_price: f64,          // per 1M tokens
+    request_price: f64,         // per request
+    cache_read_price: f64,      // per 1M tokens (for cache reads, cheaper)
+    cache_read_tokens: Option<i64>,
+    billing_type: &BillingType,
+) -> CostCalculation {
     let cost = match billing_type {
         BillingType::Token => {
-            let input_cost = input_tokens.unwrap_or(0) as f64 / 1_000_000.0 * input_price;
-            let output_cost = output_tokens.unwrap_or(0) as f64 / 1_000_000.0 * output_price;
-            input_cost + output_cost
+            let cache = cache_read_tokens.unwrap_or(0);
+            let thinking_input = input_tokens.unwrap_or(0).saturating_sub(cache);
+            let cache_cost = (cache as f64 / 1_000_000.0) * cache_read_price;
+            let thinking_cost = (thinking_input as f64 / 1_000_000.0) * input_price;
+            let output_cost = (output_tokens.unwrap_or(0) as f64 / 1_000_000.0) * output_price;
+            cache_cost + thinking_cost + output_cost
         }
         BillingType::Request => request_price,
     };

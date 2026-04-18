@@ -183,10 +183,6 @@ pub struct Model {
     pub id: String,           // primary key
     pub name: String,          // display name
     pub model_type: Option<String>,
-    pub billing_type: String,
-    pub input_price: f64,     // per 1M tokens
-    pub output_price: f64,    // per 1M tokens
-    pub request_price: f64,   // per request
     pub pricing_policy_id: Option<String>,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
@@ -243,6 +239,7 @@ pub struct Usage {
     pub input_chars: Option<i64>,
     pub output_chars: Option<i64>,
     pub request_count: i64,
+    pub cache_read_tokens: Option<i64>, // tokens read from cache (cheaper)
 }
 
 impl Usage {
@@ -253,6 +250,7 @@ impl Usage {
             input_chars: None,
             output_chars: None,
             request_count: requests,
+            cache_read_tokens: None,
         }
     }
 }
@@ -260,20 +258,12 @@ impl Usage {
 #[derive(Debug, Deserialize)]
 pub struct CreateModel {
     pub name: String,
-    pub pricing_policy_id: Option<String>,  // NEW
-    pub billing_type: Option<String>,
-    pub input_price: Option<f64>,
-    pub output_price: Option<f64>,
-    pub request_price: Option<f64>,
+    pub pricing_policy_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateModel {
     pub pricing_policy_id: Option<Option<String>>,  // None=keep, Some(None)=clear
-    pub billing_type: Option<Option<String>>,  // None=keep, Some(None)=clear
-    pub input_price: Option<f64>,
-    pub output_price: Option<f64>,
-    pub request_price: Option<f64>,
     pub enabled: Option<bool>,
 }
 
@@ -294,12 +284,8 @@ pub struct ChannelModel {
     pub model_id: String,
     pub upstream_model_name: Option<String>,
     pub priority_override: Option<i32>,
-    pub cost_policy_id: Option<String>,   // NEW: for upstream cost
-    pub markup_ratio: f64,                  // NEW, default 1.0
-    pub billing_type: Option<String>,       // NEW: billing_type
-    pub input_price: Option<f64>,            // NEW: input_price
-    pub output_price: Option<f64>,          // NEW: output_price
-    pub request_price: Option<f64>,         // NEW: request_price
+    pub pricing_policy_id: Option<String>,
+    pub markup_ratio: f64,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -307,29 +293,21 @@ pub struct ChannelModel {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateChannelModel {
-    pub channel_id: Option<String>,  // Optional - can be in URL path or body
+    pub channel_id: Option<String>,
     pub model_id: String,
     pub upstream_model_name: Option<String>,
     pub priority_override: Option<i32>,
-    pub cost_policy_id: Option<String>,   // NEW
-    pub markup_ratio: Option<f64>,         // NEW
-    pub billing_type: Option<String>,       // NEW: billing_type
-    pub input_price: Option<f64>,          // NEW: input_price
-    pub output_price: Option<f64>,         // NEW: output_price
-    pub request_price: Option<f64>,        // NEW: request_price
-    pub enabled: Option<bool>,             // NEW: enabled
+    pub pricing_policy_id: Option<String>,
+    pub markup_ratio: Option<f64>,
+    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateChannelModel {
     pub upstream_model_name: Option<String>,
-    pub priority_override: Option<Option<i32>>,  // None=keep, Some(None)=clear
-    pub cost_policy_id: Option<Option<String>>,  // NEW
-    pub markup_ratio: Option<f64>,                // NEW
-    pub billing_type: Option<Option<String>>,     // NEW: None=keep, Some(None)=clear
-    pub input_price: Option<f64>,                // NEW
-    pub output_price: Option<f64>,               // NEW
-    pub request_price: Option<f64>,              // NEW
+    pub priority_override: Option<Option<i32>>,
+    pub pricing_policy_id: Option<Option<String>>,
+    pub markup_ratio: Option<f64>,
     pub enabled: Option<bool>,
 }
 
@@ -355,6 +333,7 @@ pub struct UsageRecord {
     pub protocol: Protocol,
     pub input_tokens: Option<i64>,
     pub output_tokens: Option<i64>,
+    pub cache_read_tokens: Option<i64>,
     pub cost: f64,
     pub created_at: DateTime<Utc>,
 }
