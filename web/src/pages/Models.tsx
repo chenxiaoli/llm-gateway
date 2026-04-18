@@ -8,9 +8,9 @@ import type { CreateGlobalModelRequest, ModelWithProvider, PricingPolicy } from 
 import { motion } from 'framer-motion';
 
 // ── Price formatter ────────────────────────────────────────────────────────────
-function formatPrice(centsPerMillion: number | undefined): string {
-  if (centsPerMillion === undefined) return '—';
-  return `$${(centsPerMillion / 1_000_000).toFixed(4)}`;
+function formatPrice(dollarsPerMillion: number | undefined): string {
+  if (dollarsPerMillion === undefined) return '—';
+  return `$${dollarsPerMillion.toFixed(4)}`;
 }
 
 // ── Page-level stat pill ──────────────────────────────────────────────────────

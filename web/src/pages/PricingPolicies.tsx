@@ -18,7 +18,7 @@ const BILLING_TYPES: Record<string, string> = {
 
 // ── Config renderer for table cells ───────────────────────────────────────────
 function fmt(val: unknown): string {
-  if (typeof val === 'number') return `$${(val / 1_000_000).toFixed(4)}/M`;
+  if (typeof val === 'number') return `$${val.toFixed(4)}/M`;
   if (typeof val === 'object' && val !== null) return JSON.stringify(val);
   return String(val);
 }
