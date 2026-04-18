@@ -204,6 +204,29 @@ impl From<PgUsageRow> for UsageRecord {
 }
 
 #[derive(FromRow)]
+struct PgUsageSummaryRow {
+    model_name: String,
+    total_input_tokens: i64,
+    total_cache_read_tokens: i64,
+    total_output_tokens: i64,
+    total_cost: f64,
+    request_count: i64,
+}
+
+impl From<PgUsageSummaryRow> for UsageSummaryRecord {
+    fn from(r: PgUsageSummaryRow) -> Self {
+        UsageSummaryRecord {
+            model_name: r.model_name,
+            total_input_tokens: r.total_input_tokens,
+            total_cache_read_tokens: r.total_cache_read_tokens,
+            total_output_tokens: r.total_output_tokens,
+            total_cost: r.total_cost,
+            request_count: r.request_count,
+        }
+    }
+}
+
+#[derive(FromRow)]
 struct PgAuditRow {
     id: String,
     key_id: String,
@@ -946,24 +969,110 @@ impl crate::Storage for PostgresStorage {
     }
 
     async fn query_usage_paginated(&self, filter: &UsageFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<UsageRecord>, Box<dyn std::error::Error + Send + Sync>> {
-        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM usage_records")
-            .fetch_one(&self.pool)
-            .await?;
+        let mut conditions = Vec::new();
+        let mut bind_vals: Vec<String> = Vec::new();
+
+        if let Some(ref key_id) = filter.key_id {
+            conditions.push(format!("key_id = ${}", bind_vals.len() + 1));
+            bind_vals.push(key_id.clone());
+        }
+        if let Some(ref model_name) = filter.model_name {
+            conditions.push(format!("model_name = ${}", bind_vals.len() + 1));
+            bind_vals.push(model_name.clone());
+        }
+        if let Some(since) = filter.since {
+            conditions.push(format!("created_at >= ${}", bind_vals.len() + 1));
+            bind_vals.push(since.to_rfc3339());
+        }
+        if let Some(until) = filter.until {
+            conditions.push(format!("created_at <= ${}", bind_vals.len() + 1));
+            bind_vals.push(until.to_rfc3339());
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!(" WHERE {}", conditions.join(" AND "))
+        };
+
+        let count_sql = format!("SELECT COUNT(*) FROM usage_records{}", where_clause);
+        let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
+        for val in &bind_vals {
+            count_query = count_query.bind(val);
+        }
+        let total = count_query.fetch_one(&self.pool).await?.0;
+
         let offset = (page - 1) * page_size;
-        let rows: Vec<PgUsageRow> = sqlx::query_as(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at
-             FROM usage_records ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-        )
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await?;
+        let data_sql = format!(
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at \
+             FROM usage_records{} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
+            where_clause,
+            bind_vals.len() + 1,
+            bind_vals.len() + 2
+        );
+        let mut data_query = sqlx::query_as::<_, PgUsageRow>(&data_sql);
+        for val in bind_vals {
+            data_query = data_query.bind(val);
+        }
+        data_query = data_query.bind(page_size).bind(offset);
+        let rows = data_query.fetch_all(&self.pool).await?;
+
         Ok(PaginatedResponse {
             items: rows.into_iter().map(UsageRecord::from).collect(),
-            total: total.0,
+            total,
             page,
             page_size,
         })
+    }
+
+    async fn query_usage_summary(&self, filter: &UsageFilter) -> Result<Vec<UsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut conditions = Vec::new();
+        let mut bind_vals: Vec<String> = Vec::new();
+
+        if let Some(ref key_id) = filter.key_id {
+            conditions.push(format!("key_id = ${}", bind_vals.len() + 1));
+            bind_vals.push(key_id.clone());
+        }
+        if let Some(ref model_name) = filter.model_name {
+            conditions.push(format!("model_name = ${}", bind_vals.len() + 1));
+            bind_vals.push(model_name.clone());
+        }
+        if let Some(since) = filter.since {
+            conditions.push(format!("created_at >= ${}", bind_vals.len() + 1));
+            bind_vals.push(since.to_rfc3339());
+        }
+        if let Some(until) = filter.until {
+            conditions.push(format!("created_at <= ${}", bind_vals.len() + 1));
+            bind_vals.push(until.to_rfc3339());
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!(" WHERE {}", conditions.join(" AND "))
+        };
+
+        let sql = format!(
+            "SELECT \
+               model_name, \
+               COALESCE(SUM(input_tokens), 0) AS total_input_tokens, \
+               COALESCE(SUM(cache_read_tokens), 0) AS total_cache_read_tokens, \
+               COALESCE(SUM(output_tokens), 0) AS total_output_tokens, \
+               COALESCE(SUM(cost), 0.0) AS total_cost, \
+               COUNT(*) AS request_count \
+             FROM usage_records{} \
+             GROUP BY model_name \
+             ORDER BY total_cost DESC",
+            where_clause
+        );
+
+        let mut query = sqlx::query_as::<_, PgUsageSummaryRow>(&sql);
+        for val in bind_vals {
+            query = query.bind(val);
+        }
+
+        let rows: Vec<PgUsageSummaryRow> = query.fetch_all(&self.pool).await?;
+        Ok(rows.into_iter().map(UsageSummaryRecord::from).collect())
     }
 
     // ---- Audit ----

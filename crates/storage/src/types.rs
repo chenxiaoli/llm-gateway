@@ -345,6 +345,16 @@ pub enum Protocol {
     Anthropic,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct UsageSummaryRecord {
+    pub model_name: String,
+    pub total_input_tokens: i64,
+    pub total_cache_read_tokens: i64,
+    pub total_output_tokens: i64,
+    pub total_cost: f64,
+    pub request_count: i64,
+}
+
 fn deserialize_datetime_opt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<DateTime<Utc>>, D::Error> {
     let s: Option<String> = Option::deserialize(d)?;
     match s {

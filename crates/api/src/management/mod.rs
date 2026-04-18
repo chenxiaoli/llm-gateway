@@ -84,6 +84,7 @@ pub fn management_router() -> Router<Arc<AppState>> {
         )
         // Usage (authenticated)
         .route("/api/v1/usage", get(usage::get_usage))
+        .route("/api/v1/usage/summary", get(usage::get_usage_summary))
         // Logs (admin)
         .route("/api/v1/admin/logs", get(logs::get_logs))
         // Users (admin)

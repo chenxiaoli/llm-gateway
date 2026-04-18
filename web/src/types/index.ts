@@ -99,6 +99,15 @@ export interface UsageRecord {
   created_at: string;
 }
 
+export interface UsageSummaryRecord {
+  model_name: string;
+  total_input_tokens: number;
+  total_cache_read_tokens: number;
+  total_output_tokens: number;
+  total_cost: number;
+  request_count: number;
+}
+
 export interface UsageFilter {
   key_id?: string;
   model_name?: string;

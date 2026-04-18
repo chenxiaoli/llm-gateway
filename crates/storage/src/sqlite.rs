@@ -132,6 +132,29 @@ impl From<SqliteModelRow> for Model {
 }
 
 #[derive(FromRow)]
+struct SqliteUsageSummaryRow {
+    model_name: String,
+    total_input_tokens: i64,
+    total_cache_read_tokens: i64,
+    total_output_tokens: i64,
+    total_cost: f64,
+    request_count: i64,
+}
+
+impl From<SqliteUsageSummaryRow> for UsageSummaryRecord {
+    fn from(r: SqliteUsageSummaryRow) -> Self {
+        UsageSummaryRecord {
+            model_name: r.model_name,
+            total_input_tokens: r.total_input_tokens,
+            total_cache_read_tokens: r.total_cache_read_tokens,
+            total_output_tokens: r.total_output_tokens,
+            total_cost: r.total_cost,
+            request_count: r.request_count,
+        }
+    }
+}
+
+#[derive(FromRow)]
 struct SqliteUsageRow {
     id: String,
     key_id: String,
@@ -985,6 +1008,50 @@ impl crate::Storage for SqliteStorage {
             page,
             page_size,
         })
+    }
+
+    async fn query_usage_summary(&self, filter: &UsageFilter) -> Result<Vec<UsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut where_sql = String::from("WHERE 1=1");
+        let mut bind_vars: Vec<String> = Vec::new();
+
+        if let Some(ref key_id) = filter.key_id {
+            where_sql.push_str(" AND key_id = ?");
+            bind_vars.push(key_id.clone());
+        }
+        if let Some(ref model_name) = filter.model_name {
+            where_sql.push_str(" AND model_name = ?");
+            bind_vars.push(model_name.clone());
+        }
+        if let Some(since) = filter.since {
+            where_sql.push_str(" AND created_at >= ?");
+            bind_vars.push(since.to_rfc3339());
+        }
+        if let Some(until) = filter.until {
+            where_sql.push_str(" AND created_at <= ?");
+            bind_vars.push(until.to_rfc3339());
+        }
+
+        let sql = format!(
+            "SELECT \
+               model_name, \
+               COALESCE(SUM(input_tokens), 0) AS total_input_tokens, \
+               COALESCE(SUM(cache_read_tokens), 0) AS total_cache_read_tokens, \
+               COALESCE(SUM(output_tokens), 0) AS total_output_tokens, \
+               COALESCE(SUM(cost), 0.0) AS total_cost, \
+               COUNT(*) AS request_count \
+             FROM usage_records {} \
+             GROUP BY model_name \
+             ORDER BY total_cost DESC",
+            where_sql
+        );
+
+        let mut query = sqlx::query_as::<_, SqliteUsageSummaryRow>(&sql);
+        for var in bind_vars {
+            query = query.bind(var);
+        }
+
+        let rows: Vec<SqliteUsageSummaryRow> = query.fetch_all(&self.pool).await?;
+        Ok(rows.into_iter().map(UsageSummaryRecord::from).collect())
     }
 
     // ---- Audit ----
