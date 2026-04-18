@@ -308,6 +308,12 @@ export interface CreatePricingPolicy {
   config: Record<string, unknown>;
 }
 
+export interface UpdatePricingPolicy {
+  name?: string;
+  billing_type?: string;
+  config?: Record<string, unknown>;
+}
+
 export interface SyncModelsResponse {
   new: number;
   updated: number;

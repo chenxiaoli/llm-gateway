@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { DollarSign, Plus, Cpu, Globe } from 'lucide-react';
-import { usePricingPolicies, useCreatePricingPolicy } from '../hooks/usePricingPolicies';
+import { DollarSign, Plus, Cpu, Globe, Pencil, Trash2 } from 'lucide-react';
+import { usePricingPolicies, useCreatePricingPolicy, useUpdatePricingPolicy, useDeletePricingPolicy } from '../hooks/usePricingPolicies';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { motion } from 'framer-motion';
+import type { PricingPolicyWithCounts, UpdatePricingPolicy } from '../types';
 
 const BILLING_TYPES: Record<string, string> = {
   per_token: 'Per Token',
@@ -14,6 +16,77 @@ const BILLING_TYPES: Record<string, string> = {
   hybrid: 'Hybrid',
 };
 
+function priceFields(
+  billingType: string,
+  config: Record<string, unknown>,
+  setters: {
+    setInputPrice: (v: string) => void;
+    setOutputPrice: (v: string) => void;
+    setRequestPrice: (v: string) => void;
+    setCacheReadPrice: (v: string) => void;
+  },
+) {
+  const { setInputPrice, setOutputPrice, setRequestPrice, setCacheReadPrice } = setters;
+  if (billingType === 'per_token' || billingType === 'tiered_token') {
+    return (
+      <div className="space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Input Price (per 1M)</label>
+            <input
+              type="number"
+              step="0.0001"
+              value={(config['input_price'] as number | undefined) ?? ''}
+              onChange={(e) => setInputPrice(e.target.value)}
+              placeholder="$0.00"
+              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Output Price (per 1M)</label>
+            <input
+              type="number"
+              step="0.0001"
+              value={(config['output_price'] as number | undefined) ?? ''}
+              onChange={(e) => setOutputPrice(e.target.value)}
+              placeholder="$0.00"
+              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Cache Read Price (per 1M, cheaper)</label>
+          <input
+            type="number"
+            step="0.0001"
+            value={(config['cache_read_price'] as number | undefined) ?? ''}
+            onChange={(e) => setCacheReadPrice(e.target.value)}
+            placeholder="$0.00 (defaults to input price)"
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
+          />
+        </div>
+      </div>
+    );
+  }
+  if (billingType === 'per_request' || billingType === 'hybrid') {
+    return (
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Per Request Price</label>
+        <input
+          type="number"
+          step="0.0001"
+          value={(config['request_price'] as number | undefined) ?? ''}
+          onChange={(e) => setRequestPrice(e.target.value)}
+          placeholder="$0.00"
+          className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
+        />
+      </div>
+    );
+  }
+  return null;
+}
+
+// ── Add Policy Modal ──────────────────────────────────────────────────────────
 function AddPolicyModal({
   open,
   onClose,
@@ -33,25 +106,24 @@ function AddPolicyModal({
   const [cacheReadPrice, setCacheReadPrice] = useState('');
 
   const reset = () => {
-    setName('');
-    setBillingType('per_token');
-    setInputPrice('');
-    setOutputPrice('');
-    setRequestPrice('');
-    setCacheReadPrice('');
+    setName(''); setBillingType('per_token');
+    setInputPrice(''); setOutputPrice('');
+    setRequestPrice(''); setCacheReadPrice('');
   };
-
   const handleClose = () => { reset(); onClose(); };
+
+  const buildConfig = (): Record<string, unknown> => {
+    const cfg: Record<string, unknown> = {};
+    if (inputPrice) cfg.input_price = parseFloat(inputPrice);
+    if (outputPrice) cfg.output_price = parseFloat(outputPrice);
+    if (requestPrice) cfg.request_price = parseFloat(requestPrice);
+    if (cacheReadPrice) cfg.cache_read_price = parseFloat(cacheReadPrice);
+    return cfg;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const config: Record<string, unknown> = {};
-    if (inputPrice) config.input_price = parseFloat(inputPrice);
-    if (outputPrice) config.output_price = parseFloat(outputPrice);
-    if (requestPrice) config.request_price = parseFloat(requestPrice);
-    if (cacheReadPrice) config.cache_read_price = parseFloat(cacheReadPrice);
-
-    await onAdd({ name, billing_type: billingType, config });
+    await onAdd({ name, billing_type: billingType, config: buildConfig() });
     handleClose();
   };
 
@@ -59,23 +131,23 @@ function AddPolicyModal({
     <Modal open={open} onClose={handleClose} title="Add Pricing Policy">
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Policy Name</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Policy Name</label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
             placeholder="e.g. Standard GPT-4 Pricing"
-            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
           />
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Billing Type</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Billing Type</label>
           <select
             value={billingType}
             onChange={(e) => setBillingType(e.target.value)}
-            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] text-base-content focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
           >
             {Object.entries(BILLING_TYPES).map(([val, label]) => (
               <option key={val} value={val}>{label}</option>
@@ -83,59 +155,7 @@ function AddPolicyModal({
           </select>
         </div>
 
-        {(billingType === 'per_token' || billingType === 'tiered_token') && (
-          <div className="space-y-2">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Input Price (per 1M)</label>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={inputPrice}
-                  onChange={(e) => setInputPrice(e.target.value)}
-                  placeholder="$0.00"
-                  className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Output Price (per 1M)</label>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={outputPrice}
-                  onChange={(e) => setOutputPrice(e.target.value)}
-                  placeholder="$0.00"
-                  className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Cache Read Price (per 1M, cheaper)</label>
-              <input
-                type="number"
-                step="0.0001"
-                value={cacheReadPrice}
-                onChange={(e) => setCacheReadPrice(e.target.value)}
-                placeholder="$0.00 (defaults to input price)"
-                className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
-              />
-            </div>
-          </div>
-        )}
-
-        {(billingType === 'per_request' || billingType === 'hybrid') && (
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Per Request Price</label>
-            <input
-              type="number"
-              step="0.0001"
-              value={requestPrice}
-              onChange={(e) => setRequestPrice(e.target.value)}
-              placeholder="$0.00"
-              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
-            />
-          </div>
-        )}
+        {priceFields(billingType, {}, { setInputPrice, setOutputPrice, setRequestPrice, setCacheReadPrice })}
 
         <div className="flex gap-2 pt-1">
           <Button type="submit" variant="primary" loading={isPending} className="flex-1">
@@ -150,10 +170,108 @@ function AddPolicyModal({
   );
 }
 
+// ── Edit Policy Modal ─────────────────────────────────────────────────────────
+function EditPolicyModal({
+  policy,
+  open,
+  onClose,
+  onSave,
+  isPending,
+}: {
+  policy: PricingPolicyWithCounts | null;
+  open: boolean;
+  onClose: () => void;
+  onSave: (id: string, data: UpdatePricingPolicy) => Promise<void>;
+  isPending: boolean;
+}) {
+  const [name, setName] = useState('');
+  const [billingType, setBillingType] = useState('per_token');
+  const [inputPrice, setInputPrice] = useState('');
+  const [outputPrice, setOutputPrice] = useState('');
+  const [requestPrice, setRequestPrice] = useState('');
+  const [cacheReadPrice, setCacheReadPrice] = useState('');
+
+  // Sync state when policy changes
+  if (policy) {
+    if (name !== policy.name) setName(policy.name);
+    if (billingType !== policy.billing_type) setBillingType(policy.billing_type);
+    if (inputPrice !== String(policy.config['input_price'] ?? '')) setInputPrice(String(policy.config['input_price'] ?? ''));
+    if (outputPrice !== String(policy.config['output_price'] ?? '')) setOutputPrice(String(policy.config['output_price'] ?? ''));
+    if (requestPrice !== String(policy.config['request_price'] ?? '')) setRequestPrice(String(policy.config['request_price'] ?? ''));
+    if (cacheReadPrice !== String(policy.config['cache_read_price'] ?? '')) setCacheReadPrice(String(policy.config['cache_read_price'] ?? ''));
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!policy) return;
+    const cfg: Record<string, unknown> = {};
+    if (inputPrice) cfg.input_price = parseFloat(inputPrice);
+    else if (billingType === 'per_token' || billingType === 'tiered_token') cfg.input_price = null;
+    if (outputPrice) cfg.output_price = parseFloat(outputPrice);
+    else if (billingType === 'per_token' || billingType === 'tiered_token') cfg.output_price = null;
+    if (requestPrice) cfg.request_price = parseFloat(requestPrice);
+    else if (billingType === 'per_request' || billingType === 'hybrid') cfg.request_price = null;
+    if (cacheReadPrice) cfg.cache_read_price = parseFloat(cacheReadPrice);
+    else if (billingType === 'per_token' || billingType === 'tiered_token') cfg.cache_read_price = null;
+
+    await onSave(policy.id, {
+      name,
+      billing_type: billingType,
+      config: cfg,
+    });
+    onClose();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Edit ${policy?.name ?? 'Policy'}`}>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Policy Name</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Billing Type</label>
+          <select
+            value={billingType}
+            onChange={(e) => setBillingType(e.target.value)}
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
+          >
+            {Object.entries(BILLING_TYPES).map(([val, label]) => (
+              <option key={val} value={val}>{label}</option>
+            ))}
+          </select>
+        </div>
+
+        {priceFields(billingType, policy?.config ?? {}, { setInputPrice, setOutputPrice, setRequestPrice, setCacheReadPrice })}
+
+        <div className="flex gap-2 pt-1">
+          <Button type="submit" variant="primary" loading={isPending} className="flex-1">
+            Save Changes
+          </Button>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function PricingPolicies() {
   const { data: policies, isLoading } = usePricingPolicies();
   const createMutation = useCreatePricingPolicy();
+  const updateMutation = useUpdatePricingPolicy();
+  const deleteMutation = useDeletePricingPolicy();
   const [isAdding, setIsAdding] = useState(false);
+  const [editingPolicy, setEditingPolicy] = useState<PricingPolicyWithCounts | null>(null);
 
   const total = policies?.length ?? 0;
 
@@ -162,7 +280,7 @@ export default function PricingPolicies() {
       <div className="flex items-center justify-center py-24">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-          <span className="text-[12px] text-base-content/35 font-medium">Loading pricing policies…</span>
+          <span className="text-xs text-base-content/35 font-medium">Loading pricing policies…</span>
         </div>
       </div>
     );
@@ -178,14 +296,14 @@ export default function PricingPolicies() {
       >
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-[22px] font-bold tracking-tight text-base-content">Pricing Policies</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-base-content">Pricing Policies</h1>
             {total > 0 && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-base-200/70 text-base-content/40 border border-base-300/50">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-widest bg-base-200/70 text-base-content/40 border border-base-300/50">
                 {total}
               </span>
             )}
           </div>
-          <p className="text-[13px] text-base-content/35">
+          <p className="text-sm text-base-content/35">
             {total === 0 ? 'Configure pricing rules for models and channels' : `${total} pricing policies configured`}
           </p>
         </div>
@@ -211,8 +329,8 @@ export default function PricingPolicies() {
           <div className="w-16 h-16 rounded-2xl bg-base-200/60 flex items-center justify-center mb-6">
             <DollarSign className="h-8 w-8 text-base-content/20" />
           </div>
-          <h3 className="text-[15px] font-semibold text-base-content/60 mb-1.5">No pricing policies yet</h3>
-          <p className="text-[13px] text-base-content/30 mb-6 text-center max-w-xs">
+          <h3 className="text-lg font-semibold text-base-content/60 mb-1.5">No pricing policies yet</h3>
+          <p className="text-sm text-base-content/30 mb-6 text-center max-w-xs">
             Create pricing policies to apply billing rules to models and channels.
           </p>
           <Button variant="primary" size="sm" onClick={() => setIsAdding(true)}>
@@ -220,8 +338,8 @@ export default function PricingPolicies() {
           </Button>
         </motion.div>
       ) : (
-        <div className="overflow-x-auto bg-base-100 rounded-box border border-base-300 shadow-sm">
-          <table className="table table-sm">
+        <div className="bg-base-100 rounded-xl border border-base-300 overflow-hidden">
+          <table className="table">
             <thead>
               <tr className="border-b border-base-300">
                 <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th>
@@ -229,29 +347,54 @@ export default function PricingPolicies() {
                 <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Models</th>
                 <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Channel Models</th>
                 <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Created</th>
+                <th className="w-20"></th>
               </tr>
             </thead>
             <tbody>
               {policies!.map((policy) => (
-                <tr key={policy.id} className="border-b border-base-200 hover">
+                <tr key={policy.id} className="border-b border-base-200 hover:bg-base-50">
                   <td className="font-mono font-medium">{policy.name}</td>
                   <td>
                     <Badge variant="blue">{BILLING_TYPES[policy.billing_type] ?? policy.billing_type}</Badge>
                   </td>
-                  <td className="mono text-base-content/60">
-                    <span className="inline-flex items-center gap-1">
-                      <Cpu className="h-3 w-3 text-base-content/30" />
+                  <td className="text-base-content/60">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Cpu className="h-3.5 w-3.5 text-base-content/30" />
                       {policy.model_count}
                     </span>
                   </td>
-                  <td className="mono text-base-content/60">
-                    <span className="inline-flex items-center gap-1">
-                      <Globe className="h-3 w-3 text-base-content/30" />
+                  <td className="text-base-content/60">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Globe className="h-3.5 w-3.5 text-base-content/30" />
                       {policy.channel_model_count}
                     </span>
                   </td>
-                  <td className="mono text-base-content/40 text-[12px]">
+                  <td className="text-base-content/40 text-sm">
                     {new Date(policy.created_at).toLocaleDateString()}
+                  </td>
+                  <td>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEditingPolicy(policy)}
+                        className="btn btn-ghost btn-sm btn-circle"
+                        title="Edit"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <ConfirmDialog
+                        title={`Delete "${policy.name}"?`}
+                        onConfirm={() => deleteMutation.mutate(policy.id)}
+                        okText="Delete"
+                      >
+                        <button
+                          className="btn btn-ghost btn-sm btn-circle text-error"
+                          title="Delete"
+                          disabled={deleteMutation.isPending}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </ConfirmDialog>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -267,6 +410,16 @@ export default function PricingPolicies() {
           await createMutation.mutateAsync(data);
         }}
         isPending={createMutation.isPending}
+      />
+
+      <EditPolicyModal
+        policy={editingPolicy}
+        open={editingPolicy !== null}
+        onClose={() => setEditingPolicy(null)}
+        onSave={async (id, data) => {
+          await updateMutation.mutateAsync({ id, input: data });
+        }}
+        isPending={updateMutation.isPending}
       />
     </div>
   );
