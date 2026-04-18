@@ -4,18 +4,29 @@ import { usePricingPolicies } from '../hooks/usePricingPolicies';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Plus, Cpu, Pencil, Sparkles, Radio } from 'lucide-react';
-import type { CreateGlobalModelRequest, ModelWithProvider } from '../types';
+import type { CreateGlobalModelRequest, ModelWithProvider, PricingPolicy } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// ── Price formatter ────────────────────────────────────────────────────────────
+function formatPrice(centsPerMillion: number | undefined): string {
+  if (centsPerMillion === undefined) return '—';
+  return `$${(centsPerMillion / 1_000_000).toFixed(4)}/M`;
+}
 
 // ── Model Card ───────────────────────────────────────────────────────────────
 interface ModelCardProps {
   model: ModelWithProvider;
   index: number;
   onEdit: (model: ModelWithProvider) => void;
+  policies: PricingPolicy[];
 }
 
-function ModelCard({ model, index, onEdit }: ModelCardProps) {
+function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
   const isActive = model.channel_names.length > 0;
+  const policy = policies.find(p => p.id === model.pricing_policy_id);
+  const billingType = policy?.billing_type ?? '';
+  const config = policy?.config ?? {};
+  const isPerToken = billingType === 'per_token';
 
   return (
     <motion.div
@@ -25,7 +36,7 @@ function ModelCard({ model, index, onEdit }: ModelCardProps) {
       whileHover={{ y: -3 }}
       className="group relative"
     >
-      <div className={`relative rounded-xl border bg-base-100/70 backdrop-blur-sm overflow-hidden transition-all duration-200 group-hover:${isActive ? 'border-accent/30' : 'border-base-300/60'} ${isActive ? 'border-accent/40 group-hover:bg-base-100/90' : 'bg-base-100/50'}`}>
+      <div className={`relative rounded-xl border bg-base-100/70 backdrop-blur-sm overflow-hidden transition-all duration-200 ${isActive ? 'border-accent/40 group-hover:bg-base-100/90' : 'bg-base-100/50'}`}>
         {/* Accent line top — only for active models */}
         <div className={`absolute top-0 left-0 right-0 h-[2px] transition-opacity duration-200 ${isActive ? 'bg-gradient-to-r from-accent to-accent/40 opacity-100' : 'opacity-0'}`} />
 
@@ -47,12 +58,32 @@ function ModelCard({ model, index, onEdit }: ModelCardProps) {
           </div>
 
           {/* Pricing Policy */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-base-200/30 border border-base-300/20 mb-3">
-            <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold shrink-0">Pricing Policy</div>
-            {model.pricing_policy_name ? (
-              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-accent/8 text-accent/80 text-[10px] font-semibold border border-accent/15">
-                {model.pricing_policy_name}
-              </span>
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-base-200/30 border border-base-300/20 mb-3">
+            <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold shrink-0">Policy</div>
+            {policy ? (
+              <div className="flex flex-col gap-1">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-accent/8 text-accent/80 text-[10px] font-semibold border border-accent/15">
+                  {policy.name}
+                </span>
+                {isPerToken ? (
+                  <div className="flex flex-wrap gap-2">
+                    <span className="flex items-center gap-0.5 text-[10px] text-base-content/50 font-mono">
+                      <span className="text-[9px] text-base-content/25 uppercase">in</span>
+                      {formatPrice(config['input_price'] as number | undefined)}
+                    </span>
+                    <span className="flex items-center gap-0.5 text-[10px] text-base-content/50 font-mono">
+                      <span className="text-[9px] text-base-content/25 uppercase">out</span>
+                      {formatPrice(config['output_price'] as number | undefined)}
+                    </span>
+                    <span className="flex items-center gap-0.5 text-[10px] text-base-content/50 font-mono">
+                      <span className="text-[9px] text-base-content/25 uppercase">cache</span>
+                      {formatPrice(config['cache_read_price'] as number | undefined)}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-[10px] text-base-content/30 italic">{billingType}</span>
+                )}
+              </div>
             ) : (
               <span className="text-[11px] text-base-content/25 italic">No policy</span>
             )}
@@ -267,6 +298,7 @@ export default function Models() {
   const updateMutation = useUpdateGlobalModel();
   const [isAdding, setIsAdding] = useState(false);
   const [editingModel, setEditingModel] = useState<ModelWithProvider | null>(null);
+  const { data: policies } = usePricingPolicies();
 
   const totalModels = models?.length ?? 0;
   const activeModels = models?.filter(m => m.channel_names.length > 0).length ?? 0;
@@ -341,6 +373,7 @@ export default function Models() {
               model={model}
               index={i}
               onEdit={setEditingModel}
+              policies={policies ?? []}
             />
           ))}
         </motion.div>
