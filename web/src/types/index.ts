@@ -131,6 +131,11 @@ export interface AuditLog {
   input_tokens: number | null;
   output_tokens: number | null;
   created_at: string;
+  original_model?: string;
+  upstream_model?: string;
+  model_override_reason?: string;
+  request_path?: string;
+  upstream_url?: string;
 }
 
 export interface LogFilter {
