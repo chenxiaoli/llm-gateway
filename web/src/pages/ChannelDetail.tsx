@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Pencil, Trash2, KeyRound, Hash, Plus, Building2, LinkIcon, Power, Eye, EyeOff } from 'lucide-react';
-import { useChannel, useUpdateChannel, useDeleteChannel, useChannelModels, useCreateChannelModel, useDeleteChannelModel, useUpdateChannelApiKey } from '../hooks/useChannels';
+import { useChannel, useUpdateChannel, useDeleteChannel, useChannelModels, useCreateChannelModel, useDeleteChannelModel, useUpdateChannelModel, useUpdateChannelApiKey } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
 import { usePricingPolicies } from '../hooks/usePricingPolicies';
@@ -9,7 +9,7 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Toggle } from '../components/ui/Toggle';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
-import type { UpdateChannelRequest } from '../types';
+import type { UpdateChannelRequest, ChannelModel } from '../types';
 
 export default function ChannelDetail() {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +23,7 @@ export default function ChannelDetail() {
   const deleteMutation = useDeleteChannel(id!);
   const createModelMutation = useCreateChannelModel(channel?.id || '');
   const deleteModelMutation = useDeleteChannelModel(channel?.id || '');
+  const updateModelMutation = useUpdateChannelModel(channel?.id || '');
   const updateApiKeyMutation = useUpdateChannelApiKey(channel?.id || '');
 
   const [isEditing, setIsEditing] = useState(false);
@@ -40,6 +41,7 @@ export default function ChannelDetail() {
   const [pricingPolicyId, setPricingPolicyId] = useState('');
   const [markupRatio, setMarkupRatio] = useState('1.0');
   const [modelEnabled, setModelEnabled] = useState(true);
+  const [editingModel, setEditingModel] = useState<ChannelModel | null>(null);
 
   useEffect(() => {
     if (channel) {
@@ -298,8 +300,16 @@ export default function ChannelDetail() {
                 <div key={cm.id} className="flex items-center justify-between p-3 rounded-lg bg-base-200/50">
                   <div className="flex-1 min-w-0">
                     <div className="font-mono text-sm truncate">{cm.upstream_model_name}</div>
-                    <div className="text-xs text-base-content/40 mt-0.5">
-                      Model ID: {cm.model_id}
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-base-content/40">Model ID: {cm.model_id}</span>
+                      {cm.pricing_policy_id && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary/10 text-primary/80 text-[10px] font-semibold border border-primary/20">
+                          {policies?.find(p => p.id === cm.pricing_policy_id)?.name ?? cm.pricing_policy_id}
+                        </span>
+                      )}
+                      <span className="text-xs text-base-content/30">
+                        ×{cm.markup_ratio}
+                      </span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -310,6 +320,7 @@ export default function ChannelDetail() {
                     }`}>
                       {cm.enabled ? 'Active' : 'Disabled'}
                     </span>
+                    <Button variant="ghost" size="sm" icon={<Pencil className="h-4 w-4" />} onClick={() => setEditingModel(cm)} className="cursor-pointer" />
                     <ConfirmDialog title={`Remove model "${cm.upstream_model_name}" from this channel?`} onConfirm={() => deleteModelMutation.mutateAsync(cm.id)} okText="Remove">
                       <Button variant="ghost" size="sm" icon={<Trash2 className="h-4 w-4" />} />
                     </ConfirmDialog>
@@ -470,6 +481,103 @@ export default function ChannelDetail() {
               Add Model
             </Button>
             <Button variant="ghost" type="button" onClick={() => setIsAddingModel(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Channel Model Modal */}
+      <Modal open={editingModel !== null} onClose={() => setEditingModel(null)} title={`Edit ${editingModel?.upstream_model_name ?? 'Model'}`}>
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          if (!editingModel) return;
+          await updateModelMutation.mutateAsync({
+            id: editingModel.id,
+            input: {
+              upstream_model_name: (document.getElementById('edit-upstream') as HTMLInputElement).value || undefined,
+              pricing_policy_id: (document.getElementById('edit-policy') as HTMLSelectElement).value || undefined,
+              markup_ratio: Number((document.getElementById('edit-markup') as HTMLInputElement).value),
+              priority_override: (document.getElementById('edit-priority') as HTMLInputElement).value ? Number((document.getElementById('edit-priority') as HTMLInputElement).value) : undefined,
+              enabled: (document.getElementById('edit-enabled') as HTMLInputElement).checked,
+            },
+          });
+          setEditingModel(null);
+        }} className="space-y-4">
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Upstream Model Name</span>
+            </label>
+            <input
+              id="edit-upstream"
+              type="text"
+              defaultValue={editingModel?.upstream_model_name ?? ''}
+              placeholder="e.g., gpt-4o, claude-3-opus"
+              className="input input-bordered w-full"
+            />
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Pricing Policy</span>
+            </label>
+            <select
+              id="edit-policy"
+              defaultValue={editingModel?.pricing_policy_id ?? ''}
+              className="select select-bordered w-full"
+            >
+              <option value="">No policy</option>
+              {policies?.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Markup Ratio</span>
+            </label>
+            <input
+              id="edit-markup"
+              type="number"
+              defaultValue={editingModel?.markup_ratio ?? 1.0}
+              min={0}
+              step={0.1}
+              className="input input-bordered w-full"
+            />
+            <label className="label">
+              <span className="label-text-alt">Multiplier applied to pricing policy cost</span>
+            </label>
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Priority Override</span>
+            </label>
+            <input
+              id="edit-priority"
+              type="number"
+              defaultValue={editingModel?.priority_override ?? ''}
+              placeholder="Leave blank to use channel default"
+              className="input input-bordered w-full"
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="label-text">Enabled</span>
+            <input
+              id="edit-enabled"
+              type="checkbox"
+              className="toggle toggle-primary"
+              defaultChecked={editingModel?.enabled ?? true}
+            />
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Button variant="primary" type="submit" loading={updateModelMutation.isPending}>
+              Save Changes
+            </Button>
+            <Button variant="ghost" type="button" onClick={() => setEditingModel(null)}>
               Cancel
             </Button>
           </div>
