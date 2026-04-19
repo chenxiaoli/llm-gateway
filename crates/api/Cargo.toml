@@ -21,6 +21,7 @@ tracing = { workspace = true }
 tower = { workspace = true }
 hyper = { workspace = true }
 reqwest = { workspace = true }
+async-trait = "0.1"
 futures = "0.3"
 tokio-stream = "0.1"
 bytes = "1"

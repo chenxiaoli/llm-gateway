@@ -1,10 +1,15 @@
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::IntoResponse;
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
+use uuid::Uuid;
+
+use async_trait::async_trait;
 
 use llm_gateway_auth::hash_api_key;
 use llm_gateway_encryption::decrypt;
@@ -14,6 +19,31 @@ use crate::error::ApiError;
 use crate::extractors::extract_bearer_token;
 use crate::AppState;
 use crate::AuditTask;
+
+// ─── Resolved Channel ────────────────────────────────────────────────────────
+
+#[derive(Clone, Debug)]
+pub struct ResolvedChannel {
+    pub channel_id: Uuid,
+    pub provider_id: String,
+    pub upstream_base_url: String,
+    pub upstream_api_key: String, // decrypted
+    pub adapter: ProxyProtocol,
+    pub timeout_ms: u64,
+    pub priority: i32,
+    pub pricing_policy_id: Option<String>,
+    pub markup_ratio: f64,
+    pub upstream_model_name: Option<String>,
+}
+
+// ─── Channel Registry ────────────────────────────────────────────────────────
+
+#[async_trait]
+pub trait ChannelRegistry: Send + Sync {
+    async fn resolve_by_model(&self, model: &str) -> Vec<ResolvedChannel>;
+    async fn resolve(&self, channel_id: &str) -> Option<ResolvedChannel>;
+    async fn reload(&self);
+}
 
 /// Protocol for determining which adapter to use
 #[derive(Debug, Clone, Copy, PartialEq)]
