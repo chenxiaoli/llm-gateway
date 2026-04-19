@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
-use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 use async_trait::async_trait;
@@ -216,6 +215,159 @@ impl ChannelRegistry for InMemoryChannelRegistry {
 
     async fn reload(&self) {
         Self::reload(self).await;
+    }
+}
+
+/// Parameters for SSE AuditTask construction
+pub struct SseAuditParams {
+    pub key_id: String,
+    pub model_name: String,
+    pub provider_id: String,
+    pub protocol: llm_gateway_storage::Protocol,
+    pub request_body: String,
+    pub pricing_policy_config: Option<serde_json::Value>,
+    pub pricing_policy_billing_type: String,
+    pub markup_ratio: f64,
+    pub channel_id: String,
+    pub original_model: Option<String>,
+    pub upstream_model: Option<String>,
+    pub model_override_reason: Option<String>,
+    pub request_path: String,
+    pub upstream_url: String,
+    pub request_headers: String,
+    pub response_headers: String,
+}
+
+/// SSE passthrough with concurrent accumulation for DB logging.
+async fn process_sse_stream(
+    upstream_resp: reqwest::Response,
+    tx: mpsc::Sender<Result<Event, std::convert::Infallible>>,
+    audit_tx: mpsc::Sender<AuditTask>,
+    audit_params: SseAuditParams,
+    start: Instant,
+) {
+    let byte_stream = upstream_resp.bytes_stream();
+    tokio::pin!(byte_stream);
+    let mut line_buf = String::new();
+    let mut accumulated = String::new();
+
+    'outer: loop {
+        match futures::TryStreamExt::try_next(&mut byte_stream).await {
+            Ok(Some(chunk)) => {
+                // Forward raw bytes to client immediately
+                if tx.send(Ok(Event::default().data(String::from_utf8_lossy(&chunk).as_ref()))).await.is_err() {
+                    tracing::debug!("[PROXY] client disconnected");
+                    break;
+                }
+
+                // Accumulate for audit
+                line_buf.push_str(&String::from_utf8_lossy(&chunk));
+
+                // SSE events delimited by double newline
+                loop {
+                    match line_buf.find("\n\n") {
+                        None => break,
+                        Some(pos) => {
+                            let raw_event = line_buf[..pos].to_owned();
+                            line_buf = line_buf[pos + 2..].to_owned();
+
+                            // Parse event block
+                            let mut event_type: Option<String> = None;
+                            let mut event_id: Option<String> = None;
+                            let mut data_parts: Vec<String> = Vec::new();
+
+                            for line in raw_event.lines() {
+                                if let Some(part) = line.strip_prefix("data:") {
+                                    data_parts.push(part.trim_start().to_owned());
+                                } else if let Some(et) = line.strip_prefix("event:") {
+                                    event_type = Some(et.trim_start().to_owned());
+                                } else if let Some(id) = line.strip_prefix("id:") {
+                                    event_id = Some(id.trim_start().to_owned());
+                                }
+                            }
+
+                            if data_parts.is_empty() {
+                                continue;
+                            }
+
+                            let data = data_parts.join("\n");
+
+                            // Build full event block for audit (preserve event/id lines)
+                            let mut full_block = String::new();
+                            if let Some(ref et) = event_type {
+                                full_block.push_str("event:");
+                                full_block.push_str(et);
+                                full_block.push('\n');
+                            }
+                            if let Some(ref id) = event_id {
+                                full_block.push_str("id:");
+                                full_block.push_str(id);
+                                full_block.push('\n');
+                            }
+                            for dp in &data_parts {
+                                full_block.push_str("data:");
+                                full_block.push_str(dp);
+                                full_block.push('\n');
+                            }
+                            accumulated.push_str(&full_block);
+
+                            // Forward to client
+                            let mut sse_event = Event::default().data(&data);
+                            if let Some(et) = event_type {
+                                sse_event = sse_event.event(et);
+                            }
+                            if let Some(id) = event_id {
+                                sse_event = sse_event.id(id);
+                            }
+                            if tx.send(Ok(sse_event)).await.is_err() {
+                                tracing::debug!("[PROXY] client disconnected");
+                                break 'outer;
+                            }
+
+                            if data == "[DONE]" {
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(None) => break,
+            Err(e) => {
+                tracing::warn!("[PROXY] SSE upstream read error: {}", e);
+                break;
+            }
+        }
+    }
+
+    drop(tx);
+    let latency_ms = start.elapsed().as_millis() as i64;
+
+    tracing::info!("[PROXY] SSE stream complete, latency={}ms", latency_ms);
+
+    let task = AuditTask {
+        key_id: audit_params.key_id,
+        model_name: audit_params.model_name,
+        provider_id: audit_params.provider_id,
+        protocol: audit_params.protocol,
+        stream: true,
+        request_body: audit_params.request_body,
+        response_bytes: accumulated.into_bytes(),
+        status_code: 200,
+        latency_ms,
+        pricing_policy_config: audit_params.pricing_policy_config,
+        pricing_policy_billing_type: audit_params.pricing_policy_billing_type,
+        markup_ratio: audit_params.markup_ratio,
+        channel_id: Some(audit_params.channel_id),
+        original_model: audit_params.original_model,
+        upstream_model: audit_params.upstream_model,
+        model_override_reason: audit_params.model_override_reason,
+        request_path: Some(audit_params.request_path),
+        upstream_url: Some(audit_params.upstream_url),
+        request_headers: Some(audit_params.request_headers),
+        response_headers: Some(audit_params.response_headers),
+    };
+    if let Err(e) = audit_tx.send(task).await {
+        tracing::warn!("[PROXY] Failed to send SSE audit task: {}", e);
     }
 }
 
@@ -467,9 +619,9 @@ pub async fn proxy(
             serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
         };
 
-        // === Handle streaming: accumulate SSE → forward to client → audit worker parses & calculates cost ===
+        // === Handle streaming: SSE passthrough with mpsc channel architecture ===
         if is_stream {
-            // Capture response headers before consuming resp (must happen before bytes_stream borrows resp)
+            // Capture upstream response headers (must happen before bytes_stream consumes resp)
             let response_headers_for_worker: String = {
                 let mut map = serde_json::Map::new();
                 for (name, value) in resp.headers().iter() {
@@ -481,24 +633,11 @@ pub async fn proxy(
             };
             let upstream_resp_headers: Vec<_> = resp.headers().iter().map(|(n, v)| (n.clone(), v.clone())).collect();
 
-            let audit_tx = state.audit_tx.clone();
-            let (tx, rx) = mpsc::channel::<bytes::Bytes>(100);
-
-            let upstream_name_for_worker = upstream_name.to_string();
-            let model_name_for_worker = model_name.clone();
-            let provider_id_for_worker = provider_id.clone();
-            let api_key_id_for_worker = api_key.id.clone();
-            let body_for_worker = body.clone();
             let proto = match protocol {
-                ProxyProtocol::OpenAI => Protocol::Openai,
-                ProxyProtocol::Anthropic => Protocol::Anthropic,
+                ProxyProtocol::OpenAI => llm_gateway_storage::Protocol::Openai,
+                ProxyProtocol::Anthropic => llm_gateway_storage::Protocol::Anthropic,
             };
-            let channel_id_for_worker = channel.id.clone();
-            let model_override_reason = if upstream_name != &model_name {
-                Some("channel_mapping".to_string())
-            } else {
-                None
-            };
+
             // Resolve pricing policy for cost calculation
             let (pricing_policy_config, pricing_policy_billing_type) = {
                 let policy_id = channel_model.pricing_policy_id.as_deref()
@@ -515,109 +654,54 @@ pub async fn proxy(
                     None => (None, "per_token".to_string()),
                 }
             };
-            let markup_ratio_for_worker = channel_model.markup_ratio;
-            let request_path_for_worker = path.to_string();
-            let upstream_url_for_worker = upstream_url.clone();
-            let request_headers_for_worker = request_headers_for_worker.clone();
-            let response_headers_for_worker = response_headers_for_worker.clone();
 
-            // Spawn: read upstream SSE → forward to client → accumulate decoded text → send to audit worker
-            tokio::spawn(async move {
-                let byte_stream = resp.bytes_stream();
-                let mut acc = String::new();  // decoded text for audit log
-                let mut line_buf = String::new();  // incomplete line buffer
+            let audit_params = SseAuditParams {
+                key_id: api_key.id.clone(),
+                model_name: upstream_name.to_string(),
+                provider_id: provider_id.clone(),
+                protocol: proto,
+                request_body: body.clone(),
+                pricing_policy_config,
+                pricing_policy_billing_type,
+                markup_ratio: channel_model.markup_ratio,
+                channel_id: channel.id.clone(),
+                original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
+                upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
+                model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
+                request_path: path.to_string(),
+                upstream_url: upstream_url.clone(),
+                request_headers: request_headers_for_worker.clone(),
+                response_headers: response_headers_for_worker,
+            };
 
-                tokio::pin!(byte_stream);
-                loop {
-                    match futures::TryStreamExt::try_next(&mut byte_stream).await {
-                        Ok(Some(chunk)) => {
-                            // Forward raw bytes to client immediately
-                            let _ = tx.send(chunk.clone()).await;
+            let audit_tx = state.audit_tx.clone();
+            let upstream_resp = resp;
+            let start = start;
 
-                            // Decode chunk and accumulate SSE data lines for audit log
-                            line_buf.push_str(&String::from_utf8_lossy(&chunk));
+            // mpsc channel for SSE events
+            let (tx, rx) = mpsc::channel::<Result<Event, std::convert::Infallible>>(256);
 
-                            // SSE events are delimited by double newline; process complete events
-                            loop {
-                                match line_buf.find("\n\n") {
-                                    None => break,  // incomplete event — wait for more
-                                    Some(pos) => {
-                                        let raw_event = line_buf[..pos].to_owned();
-                                        line_buf = line_buf[pos + 2..].to_owned();
+            tokio::spawn(process_sse_stream(
+                upstream_resp,
+                tx,
+                audit_tx,
+                audit_params,
+                start,
+            ));
 
-                                        // Extract `data:` lines from the event block
-                                        for line in raw_event.lines() {
-                                            if let Some(data) = line.strip_prefix("data:") {
-                                                let data = data.trim_start();
-                                                if data != "[DONE]" {
-                                                    acc.push_str(data);
-                                                    acc.push('\n');
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Ok(None) => break,
-                        Err(e) => {
-                            tracing::warn!("[PROXY] Stream read error: {}", e);
-                            break;
-                        }
-                    }
-                }
-                drop(tx);
+            let event_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+            let sse_response = Sse::new(event_stream)
+                .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).text("keep-alive"))
+                .into_response();
 
-                // Send accumulated text to audit worker (it parses SSE for usage, calculates cost, writes DB)
-                let task = AuditTask {
-                    key_id: api_key_id_for_worker,
-                    model_name: upstream_name_for_worker.clone(),
-                    provider_id: provider_id_for_worker.clone(),
-                    protocol: proto,
-                    stream: true,
-                    request_body: body_for_worker,
-                    response_bytes: acc.into_bytes(),
-                    status_code: 200,
-                    latency_ms,
-                    pricing_policy_config,
-                    pricing_policy_billing_type,
-                    markup_ratio: markup_ratio_for_worker,
-                    channel_id: Some(channel_id_for_worker),
-                    original_model: if upstream_name_for_worker != model_name_for_worker {
-                        Some(model_name_for_worker.clone())
-                    } else {
-                        None
-                    },
-                    upstream_model: if upstream_name_for_worker != model_name_for_worker {
-                        Some(upstream_name_for_worker.clone())
-                    } else {
-                        None
-                    },
-                    model_override_reason,
-                    request_path: Some(request_path_for_worker),
-                    upstream_url: Some(upstream_url_for_worker),
-                    request_headers: Some(request_headers_for_worker),
-                    response_headers: Some(response_headers_for_worker),
-                };
-                if let Err(e) = audit_tx.send(task).await {
-                    tracing::warn!("[PROXY] Failed to send audit task: {}", e);
-                }
-            });
-
-            let stream_body = axum::body::Body::from_stream(
-                tokio_stream::wrappers::ReceiverStream::new(rx)
-                    .map(|b: bytes::Bytes| Ok::<_, std::convert::Infallible>(b))
-            );
-
-            let mut response = axum::response::Response::new(stream_body);
-            // Forward upstream response headers to client (except content-length which is dynamic for streams)
+            // Forward upstream headers (except content-length which is dynamic for streams)
+            let mut response = sse_response;
             for (name, value) in upstream_resp_headers {
                 if name.as_str() == "content-length" {
                     continue;
                 }
                 response.headers_mut().insert(name.clone(), value.clone());
             }
-            // Always set SSE content-type (overwrites upstream's if present)
             response.headers_mut().insert(
                 axum::http::header::CONTENT_TYPE,
                 "text/event-stream; charset=utf-8".parse().unwrap(),
