@@ -239,7 +239,7 @@ pub async fn proxy(
         let latency_ms = start.elapsed().as_millis() as i64;
         let status = resp.status().as_u16();
 
-        tracing::debug!("[PROXY] Upstream response: channel={}, status={}, latency={}ms", channel.name, status, latency_ms);
+        tracing::debug!("[PROXY] Upstream response: channel={}, status={}, latency={}ms, content-encoding={:?}", channel.name, status, latency_ms, resp.headers().get("content-encoding"));
 
         if status >= 500 {
             last_error = format!("Server error {} on channel '{}'", status, channel.name);
@@ -294,29 +294,54 @@ pub async fn proxy(
             let request_path_for_worker = path.to_string();
             let upstream_url_for_worker = upstream_url.clone();
 
-            // Spawn: read upstream SSE → forward to client → accumulate → send to audit worker
+            // Spawn: read upstream SSE → forward to client → accumulate decoded text → send to audit worker
             tokio::spawn(async move {
                 let byte_stream = resp.bytes_stream();
-                let mut acc = Vec::new();
+                let mut acc = String::new();  // decoded text for audit log
+                let mut line_buf = String::new();  // incomplete line buffer
 
                 tokio::pin!(byte_stream);
                 loop {
                     match futures::TryStreamExt::try_next(&mut byte_stream).await {
-                        Ok(Some(bytes)) => {
-                            acc.extend_from_slice(&bytes);
-                            let _ = tx.send(bytes).await;
+                        Ok(Some(chunk)) => {
+                            // Forward raw bytes to client immediately
+                            let _ = tx.send(chunk.clone()).await;
+
+                            // Decode chunk and accumulate SSE data lines for audit log
+                            line_buf.push_str(&String::from_utf8_lossy(&chunk));
+
+                            // SSE events are delimited by double newline; process complete events
+                            loop {
+                                match line_buf.find("\n\n") {
+                                    None => break,  // incomplete event — wait for more
+                                    Some(pos) => {
+                                        let raw_event = line_buf[..pos].to_owned();
+                                        line_buf = line_buf[pos + 2..].to_owned();
+
+                                        // Extract `data:` lines from the event block
+                                        for line in raw_event.lines() {
+                                            if let Some(data) = line.strip_prefix("data:") {
+                                                let data = data.trim_start();
+                                                if data != "[DONE]" {
+                                                    acc.push_str(data);
+                                                    acc.push('\n');
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                         Ok(None) => break,
                         Err(e) => {
                             tracing::warn!("[PROXY] Stream read error: {}", e);
-                            let _ = tx.send(bytes::Bytes::new()).await;
                             break;
                         }
                     }
                 }
                 drop(tx);
 
-                // Send accumulated bytes to audit worker (it parses SSE, calculates cost, writes DB)
+                // Send accumulated text to audit worker (it parses SSE for usage, calculates cost, writes DB)
                 let task = AuditTask {
                     key_id: api_key_id_for_worker,
                     model_name: upstream_name_for_worker.clone(),
@@ -324,7 +349,7 @@ pub async fn proxy(
                     protocol: proto,
                     stream: true,
                     request_body: body_for_worker,
-                    response_bytes: acc,
+                    response_bytes: acc.into_bytes(),
                     status_code: 200,
                     latency_ms,
                     pricing_policy_config,
