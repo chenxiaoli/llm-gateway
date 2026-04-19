@@ -9,7 +9,7 @@ allow_registration = true
 
 [database]
 driver = "sqlite"
-sqlite_path = "./data/gateway.db"
+url = "./data/gateway.db"
 
 [rate_limit]
 flush_interval_secs = 30

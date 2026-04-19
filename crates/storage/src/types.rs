@@ -574,7 +574,6 @@ pub struct AuthConfig {
 #[derive(Debug, Deserialize)]
 pub struct DatabaseConfig {
     pub driver: String,
-    pub sqlite_path: Option<String>,
     pub url: Option<String>,
 }
 

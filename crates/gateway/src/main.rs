@@ -25,15 +25,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config: AppConfig = toml::from_str(&config_str)?;
 
     // Init storage
-    let db_path = config
-        .database
-        .sqlite_path
-        .as_deref()
-        .unwrap_or("./data/gateway.db");
+    let db_path = config.database.url.as_deref().unwrap_or("./data/gateway.db");
     let storage = SqliteStorage::new(db_path).await?;
     storage.run_migrations().await?;
     storage.seed_data().await?;
-
     let storage: Arc<dyn Storage> = Arc::new(storage);
 
     // Init rate limiter

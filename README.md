@@ -90,7 +90,7 @@ allow_registration = true  # default: true
 
 [database]
 driver = "sqlite"   # or "postgres"
-sqlite_path = "./data/gateway.db"
+url = "./data/gateway.db"                          # for sqlite
 # url = "postgresql://user:pass@localhost/gateway"  # for postgres
 
 [rate_limit]
