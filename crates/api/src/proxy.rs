@@ -52,6 +52,173 @@ pub enum ProxyProtocol {
     Anthropic,
 }
 
+// ─── InMemoryChannelRegistry ─────────────────────────────────────────────────
+
+use arc_swap::ArcSwap;
+
+pub struct InMemoryChannelRegistry {
+    cache: Arc<ArcSwap<HashMap<String, ResolvedChannel>>>,
+    model_index: Arc<ArcSwap<HashMap<String, Vec<String>>>>,
+    storage: Arc<dyn llm_gateway_storage::Storage>,
+    encryption_key: [u8; 32],
+    refresh_interval: Duration,
+}
+
+impl InMemoryChannelRegistry {
+    pub fn new(
+        storage: Arc<dyn llm_gateway_storage::Storage>,
+        encryption_key: [u8; 32],
+        refresh_interval: Duration,
+    ) -> Self {
+        Self {
+            cache: Arc::new(ArcSwap::from_pointee(HashMap::new())),
+            model_index: Arc::new(ArcSwap::from_pointee(HashMap::new())),
+            storage,
+            encryption_key,
+            refresh_interval,
+        }
+    }
+
+    pub async fn start_refresh_loop(self: Arc<Self>) {
+        self.reload().await;
+        let mut interval = tokio::time::interval(self.refresh_interval);
+        loop {
+            interval.tick().await;
+            if let Err(e) = self.do_reload().await {
+                tracing::warn!("ChannelRegistry reload failed: {}", e);
+            }
+        }
+    }
+
+    async fn reload(&self) {
+        if let Err(e) = self.do_reload().await {
+            tracing::warn!("ChannelRegistry reload failed: {}", e);
+        }
+    }
+
+    async fn do_reload(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let channels = self.storage.list_channels().await?;
+        let channel_models = self.storage.list_channel_models().await?;
+        let providers = self.storage.list_providers().await?;
+        let models = self.storage.list_models().await?;
+
+        let mut cache = HashMap::new();
+        let mut model_index: HashMap<String, Vec<String>> = HashMap::new();
+
+        let provider_map: HashMap<&str, &llm_gateway_storage::Provider> =
+            providers.iter().map(|p| (p.id.as_str(), p)).collect();
+
+        let cm_by_channel: HashMap<&str, Vec<&llm_gateway_storage::ChannelModel>> = {
+            let mut m: HashMap<&str, Vec<&llm_gateway_storage::ChannelModel>> = HashMap::new();
+            for cm in &channel_models {
+                m.entry(cm.channel_id.as_str()).or_default().push(cm);
+            }
+            m
+        };
+
+        for channel in &channels {
+            if !channel.enabled {
+                continue;
+            }
+
+            let provider = match provider_map.get(channel.provider_id.as_str()) {
+                Some(p) => p,
+                None => continue,
+            };
+
+            let endpoints: serde_json::Value = provider
+                .endpoints
+                .as_ref()
+                .and_then(|e| serde_json::from_str(e).ok())
+                .unwrap_or(serde_json::Value::Null);
+
+            let endpoint_openai = endpoints
+                .get("openai")
+                .and_then(|v| v.as_str())
+                .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
+                .map(|s| s.to_string());
+
+            let api_key = llm_gateway_encryption::decrypt(&channel.api_key, &self.encryption_key)
+                .unwrap_or_else(|_| channel.api_key.clone());
+
+            let resolved = ResolvedChannel {
+                channel_id: Uuid::parse_str(&channel.id).unwrap_or_else(|_| Uuid::new_v4()),
+                provider_id: channel.provider_id.clone(),
+                upstream_base_url: endpoint_openai.unwrap_or_default(),
+                upstream_api_key: api_key,
+                adapter: ProxyProtocol::OpenAI,
+                timeout_ms: 60_000,
+                priority: channel.priority,
+                pricing_policy_id: channel.pricing_policy_id.clone(),
+                markup_ratio: channel.markup_ratio,
+                upstream_model_name: None,
+            };
+
+            cache.insert(channel.id.clone(), resolved);
+
+            if let Some(cms) = cm_by_channel.get(channel.id.as_str()) {
+                for cm in cms {
+                    if !cm.enabled {
+                        continue;
+                    }
+                    if let Some(model) = models.iter().find(|m| m.model.id == cm.model_id) {
+                        let model_name = model.model.name.to_lowercase();
+                        model_index
+                            .entry(model_name)
+                            .or_default()
+                            .push(channel.id.clone());
+                    }
+                }
+            }
+        }
+
+        // Sort channel_ids by priority (higher priority first)
+        for (_model, channel_ids) in model_index.iter_mut() {
+            channel_ids.sort_by(|a, b| {
+                let prio_a = cache
+                    .get(a)
+                    .map(|c| c.priority)
+                    .unwrap_or(i32::MIN);
+                let prio_b = cache
+                    .get(b)
+                    .map(|c| c.priority)
+                    .unwrap_or(i32::MIN);
+                prio_b.cmp(&prio_a)
+            });
+        }
+
+        self.cache.store(Arc::new(cache));
+        self.model_index.store(Arc::new(model_index));
+
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl ChannelRegistry for InMemoryChannelRegistry {
+    async fn resolve_by_model(&self, model: &str) -> Vec<ResolvedChannel> {
+        let model_key = model.to_lowercase();
+        let channel_ids = self.model_index.load().get(&model_key).cloned();
+        match channel_ids {
+            Some(ids) => {
+                let cache = self.cache.load();
+                ids.iter()
+                    .filter_map(|id| cache.get(id).cloned())
+                    .collect()
+            }
+            None => Vec::new(),
+        }
+    }
+
+    async fn resolve(&self, channel_id: &str) -> Option<ResolvedChannel> {
+        self.cache.load().get(channel_id).cloned()
+    }
+
+    async fn reload(&self) {
+        Self::reload(self).await;
+    }
+}
+
 /// Unified proxy: receives request → forwards to upstream → returns response
 /// Usage/Cost/Audit are handled in spawned async tasks
 pub async fn proxy(
