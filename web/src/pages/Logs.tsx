@@ -270,6 +270,27 @@ export default function Logs() {
               </div>
             )}
 
+            {/* Headers */}
+            {(selectedLog.request_headers || selectedLog.response_headers) && (
+              <div className="bg-base-200/60 rounded-lg p-4">
+                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-3">Headers</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {selectedLog.request_headers && (
+                    <div>
+                      <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-2">Request Headers</div>
+                      <JsonViewer data={selectedLog.request_headers} />
+                    </div>
+                  )}
+                  {selectedLog.response_headers && (
+                    <div>
+                      <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-2">Response Headers</div>
+                      <JsonViewer data={selectedLog.response_headers} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Request body */}
             <div>
               <h3 className="text-sm font-semibold mb-2 text-base-content/70 uppercase tracking-wider">Request Body</h3>
