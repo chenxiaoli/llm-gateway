@@ -37,18 +37,12 @@ describe('Settings page', () => {
   it('renders change password form', async () => {
     renderWithProviders(<Settings />, { route: '/console/settings' });
 
-    // Click on the Password tab to see the change password form
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Password' })).toBeInTheDocument();
-    });
-    screen.getByRole('button', { name: 'Password' }).click();
-
     await waitFor(() => {
       expect(screen.getByText('Current Password')).toBeInTheDocument();
     }, { timeout: 5000 });
 
     expect(screen.getByText('New Password')).toBeInTheDocument();
-    expect(screen.getByText('Confirm New Password')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Change Password' })).toBeInTheDocument();
+    expect(screen.getByText('Confirm Password')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Update Password' })).toBeInTheDocument();
   });
 });

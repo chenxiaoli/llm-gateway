@@ -58,6 +58,22 @@ export const server = setupServer(
       audit_log_response: true,
     });
   }),
+  http.get('*/api/v1/admin/settings', () => {
+    return HttpResponse.json({
+      allow_registration: true,
+      server_host: 'http://localhost:8080',
+      audit_log_request: true,
+      audit_log_response: true,
+    });
+  }),
+  http.patch('*/api/v1/admin/settings', () => {
+    return HttpResponse.json({
+      allow_registration: true,
+      server_host: 'http://localhost:8080',
+      audit_log_request: true,
+      audit_log_response: true,
+    });
+  }),
   http.get('*/api/v1/usage', () => {
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
