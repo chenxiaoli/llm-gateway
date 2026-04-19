@@ -272,7 +272,7 @@ pub async fn proxy(
 
         // === Handle streaming: accumulate SSE → forward to client → audit worker parses & calculates cost ===
         if is_stream {
-            // Capture response headers before consuming resp
+            // Capture response headers before consuming resp (must happen before bytes_stream borrows resp)
             let response_headers_for_worker: String = {
                 let mut map = serde_json::Map::new();
                 for (name, value) in resp.headers().iter() {
@@ -282,6 +282,7 @@ pub async fn proxy(
                 }
                 serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
             };
+            let upstream_resp_headers: Vec<_> = resp.headers().iter().map(|(n, v)| (n.clone(), v.clone())).collect();
 
             let audit_tx = state.audit_tx.clone();
             let (tx, rx) = mpsc::channel::<bytes::Bytes>(100);
@@ -412,6 +413,14 @@ pub async fn proxy(
             );
 
             let mut response = axum::response::Response::new(stream_body);
+            // Forward upstream response headers to client (except content-length which is dynamic for streams)
+            for (name, value) in upstream_resp_headers {
+                if name.as_str() == "content-length" {
+                    continue;
+                }
+                response.headers_mut().insert(name.clone(), value.clone());
+            }
+            // Always set SSE content-type (overwrites upstream's if present)
             response.headers_mut().insert(
                 axum::http::header::CONTENT_TYPE,
                 "text/event-stream; charset=utf-8".parse().unwrap(),
