@@ -254,12 +254,6 @@ async fn process_sse_stream(
     'outer: loop {
         match futures::TryStreamExt::try_next(&mut byte_stream).await {
             Ok(Some(chunk)) => {
-                // Forward raw bytes to client immediately
-                if tx.send(Ok(Event::default().data(String::from_utf8_lossy(&chunk).as_ref()))).await.is_err() {
-                    tracing::debug!("[PROXY] client disconnected");
-                    break;
-                }
-
                 // Accumulate for audit
                 line_buf.push_str(&String::from_utf8_lossy(&chunk));
 
