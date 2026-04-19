@@ -3,7 +3,7 @@ use axum::http::HeaderMap;
 use axum::Json;
 use std::sync::Arc;
 
-use llm_gateway_storage::{CreateProvider as StorageCreateProvider, Provider, UpdateProvider as StorageUpdateProvider};
+use llm_gateway_storage::{CreateProvider as StorageCreateProvider, Provider, ProviderWithEndpoints, UpdateProvider as StorageUpdateProvider};
 
 use crate::error::ApiError;
 use crate::extractors::require_admin;
@@ -34,8 +34,9 @@ pub async fn create_provider(
         id: uuid::Uuid::new_v4().to_string(),
         name: input.name,
         slug,
-        base_url: input.base_url,
-        endpoints: input.endpoints,
+        endpoints: input.endpoints.and_then(|v| {
+            if v.is_null() { None } else { Some(v.to_string()) }
+        }),
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -53,7 +54,7 @@ pub async fn create_provider(
 pub async fn list_providers(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-) -> Result<Json<Vec<Provider>>, ApiError> {
+) -> Result<Json<Vec<ProviderWithEndpoints>>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     let providers = state
@@ -62,14 +63,15 @@ pub async fn list_providers(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(Json(providers))
+    let with_endpoints: Vec<ProviderWithEndpoints> = providers.into_iter().map(|p| p.into()).collect();
+    Ok(Json(with_endpoints))
 }
 
 pub async fn get_provider(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(id): Path<String>,
-) -> Result<Json<Provider>, ApiError> {
+) -> Result<Json<ProviderWithEndpoints>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     let provider = state
@@ -79,7 +81,7 @@ pub async fn get_provider(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Provider '{}' not found", id)))?;
 
-    Ok(Json(provider))
+    Ok(Json(provider.into()))
 }
 
 pub async fn update_provider(
@@ -101,11 +103,10 @@ pub async fn update_provider(
     if let Some(name) = input.name {
         provider.name = name;
     }
-    if let Some(base_url) = input.base_url {
-        provider.base_url = base_url;
-    }
     if let Some(endpoints) = input.endpoints {
-        provider.endpoints = endpoints;
+        provider.endpoints = endpoints.and_then(|v| {
+            if v.is_null() { None } else { Some(v.to_string()) }
+        });
     }
     if let Some(enabled) = input.enabled {
         provider.enabled = enabled;

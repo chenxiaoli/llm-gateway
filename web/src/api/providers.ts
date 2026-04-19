@@ -1,7 +1,7 @@
 import { adminApiClient } from './client';
-import type { Provider, CreateProviderRequest, UpdateProviderRequest, Channel, CreateChannelRequest, UpdateChannelRequest, SyncModelsResponse, ChannelModel, CreateChannelModelRequest, UpdateChannelModelRequest } from '../types';
+import type { Provider, CreateProviderRequest, UpdateProviderRequest, Channel, CreateChannelRequest, UpdateChannelRequest, SyncModelsResponse, ChannelModel, CreateChannelModelRequest, UpdateChannelModelRequest, UpdateChannelApiKeyRequest } from '../types';
 
-export async function getSeedData(): Promise<{ providers: Array<{ name: string; base_url?: string; endpoints?: Record<string, string>; enabled?: boolean }>; models: Array<{ provider: string; name: string; billing_type?: string; input_price?: number; output_price?: number }> }> {
+export async function getSeedData(): Promise<{ providers: Array<{ name: string; endpoints?: Record<string, string>; enabled?: boolean }>; models: Array<{ provider: string; name: string; billing_type?: string; input_price?: number; output_price?: number }> }> {
   const { data } = await adminApiClient.get('/seed');
   return data;
 }
@@ -50,6 +50,11 @@ export async function updateChannel(id: string, input: UpdateChannelRequest): Pr
   return data;
 }
 
+export async function updateChannelApiKey(id: string, input: UpdateChannelApiKeyRequest): Promise<Channel> {
+  const { data } = await adminApiClient.patch<Channel>(`/channels/${id}/api-key`, input);
+  return data;
+}
+
 export async function getChannel(id: string): Promise<Channel> {
   const { data } = await adminApiClient.get<Channel>(`/channels/${id}`);
   return data;
@@ -71,8 +76,18 @@ export async function listChannelModels(providerId: string): Promise<ChannelMode
   return data;
 }
 
+export async function listChannelModelsByChannel(channelId: string): Promise<ChannelModel[]> {
+  const { data } = await adminApiClient.get<ChannelModel[]>(`/channels/${channelId}/channel-models`);
+  return data;
+}
+
 export async function createChannelModel(providerId: string, input: CreateChannelModelRequest): Promise<ChannelModel> {
   const { data } = await adminApiClient.post<ChannelModel>(`/providers/${providerId}/channel-models`, input);
+  return data;
+}
+
+export async function createChannelModelByChannel(channelId: string, input: CreateChannelModelRequest): Promise<ChannelModel> {
+  const { data } = await adminApiClient.post<ChannelModel>(`/channels/${channelId}/channel-models`, input);
   return data;
 }
 

@@ -33,6 +33,7 @@ pub trait Storage: Send + Sync {
     async fn create_pricing_policy(&self, policy: &PricingPolicy) -> Result<PricingPolicy, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_pricing_policy(&self, id: &str) -> Result<Option<PricingPolicy>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_pricing_policies(&self) -> Result<Vec<PricingPolicy>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_pricing_policies_with_counts(&self) -> Result<Vec<PricingPolicyWithCounts>, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_pricing_policy(&self, policy: &PricingPolicy) -> Result<PricingPolicy, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_pricing_policy(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
@@ -48,6 +49,7 @@ pub trait Storage: Send + Sync {
     // Models
     async fn create_model(&self, model: &Model) -> Result<Model, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_model(&self, name: &str) -> Result<Option<Model>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_model_by_id(&self, id: &str) -> Result<Option<Model>, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_model_by_provider(&self, provider_id: &str, name: &str) -> Result<Option<Model>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_models(&self) -> Result<Vec<ModelWithProvider>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_models_by_provider(&self, provider_id: &str) -> Result<Vec<Model>, Box<dyn std::error::Error + Send + Sync>>;
@@ -74,6 +76,7 @@ pub trait Storage: Send + Sync {
     async fn record_usage(&self, usage: &UsageRecord) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage(&self, filter: &UsageFilter) -> Result<Vec<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage_paginated(&self, filter: &UsageFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn query_usage_summary(&self, filter: &UsageFilter) -> Result<Vec<UsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>>;
 
     // Audit
     async fn insert_log(&self, log: &AuditLog) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;

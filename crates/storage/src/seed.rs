@@ -17,7 +17,6 @@ pub struct SeedData {
 #[serde(rename_all = "camelCase")]
 pub struct SeedProvider {
     pub name: String,
-    pub base_url: Option<String>,
     #[serde(default)]
     pub endpoints: Option<HashMap<String, String>>,
     pub enabled: Option<bool>,
@@ -79,7 +78,6 @@ pub fn get_seed_providers() -> Vec<Provider> {
                 id: Uuid::new_v4().to_string(),
                 name: p.name.clone(),
                 slug,
-                base_url: p.base_url,
                 endpoints,
                 enabled: p.enabled.unwrap_or(true),
                 created_at: Utc::now(),
@@ -90,33 +88,22 @@ pub fn get_seed_providers() -> Vec<Provider> {
 }
 
 /// Load seed models given provider IDs mapped by provider name
-pub fn get_seed_models(provider_ids: &[(String, String)]) -> Vec<Model> {
+pub fn get_seed_models(_provider_ids: &[(String, String)]) -> Vec<Model> {
     let data: SeedData = match serde_json::from_str(SEED_JSON) {
         Ok(d) => d,
         Err(_) => return Vec::new(),
     };
 
-    let provider_map: HashMap<&str, &str> = provider_ids
-        .iter()
-        .map(|(name, id)| (name.as_str(), id.as_str()))
-        .collect();
-
+    // For N:N architecture, models no longer belong to a single provider
+    // We still load models but without provider_id - they will be linked via model_providers
     data.models
         .into_iter()
-        .filter_map(|m| {
-            provider_map.get(m.provider.as_str()).map(|provider_id| Model {
-                id: Uuid::new_v4().to_string(),
-                name: m.name,
-                provider_id: provider_id.to_string(),
-                model_type: None,
-                pricing_policy_id: None,
-                billing_type: m.billing_type.unwrap_or_else(|| "per_token".to_string()),
-                input_price: m.input_price.unwrap_or(0.0),
-                output_price: m.output_price.unwrap_or(0.0),
-                request_price: 0.0,
-                enabled: true,
-                created_at: Utc::now(),
-            })
+        .map(|m| Model {
+            id: Uuid::new_v4().to_string(),
+            name: m.name,
+            model_type: None,
+            pricing_policy_id: None,
+            created_at: Utc::now(),
         })
         .collect()
 }

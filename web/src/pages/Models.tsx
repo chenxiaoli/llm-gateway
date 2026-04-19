@@ -1,134 +1,250 @@
 import { useState, useEffect } from 'react';
 import { useAllModels, useCreateGlobalModel, useUpdateGlobalModel } from '../hooks/useModels';
-import { useProviders } from '../hooks/useProviders';
-import { Link } from 'react-router-dom';
+import { usePricingPolicies } from '../hooks/usePricingPolicies';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
-import { Badge } from '../components/ui/Badge';
-import { Globe, Plus, Cpu, Activity, Pencil, Sparkles } from 'lucide-react';
-import type { CreateGlobalModelRequest, ModelWithProvider } from '../types';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Cpu, Pencil, Sparkles, Radio } from 'lucide-react';
+import type { CreateGlobalModelRequest, ModelWithProvider, PricingPolicy } from '../types';
+import { motion } from 'framer-motion';
 
-// Billing types
-const BILLING_TYPES = [
-  { value: 'per_token', label: 'Per Token', desc: 'Per-token pricing for input & output' },
-  { value: 'per_request', label: 'Per Request', desc: 'Flat fee per API call' },
-  { value: 'per_character', label: 'Per Character', desc: 'Pricing per character' },
-  { value: 'tiered_token', label: 'Tiered Token', desc: 'Volume-based token pricing' },
-  { value: 'hybrid', label: 'Hybrid', desc: 'Combined token + request' },
-] as const;
+// ── Price formatter ────────────────────────────────────────────────────────────
+function formatPrice(dollarsPerMillion: number | undefined): string {
+  if (dollarsPerMillion === undefined) return '—';
+  return `$${dollarsPerMillion.toFixed(4)}`;
+}
 
-export type BillingType = typeof BILLING_TYPES[number]['value'];
+// ── Page-level stat pill ──────────────────────────────────────────────────────
+interface StatPillProps {
+  label: string;
+  value: string | number;
+  accent?: boolean;
+}
+function StatPill({ label, value, accent }: StatPillProps) {
+  return (
+    <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border backdrop-blur-sm transition-all duration-200 ${
+      accent
+        ? 'bg-accent/[0.07] border-accent/20'
+        : 'bg-base-100/40 border-base-300/40'
+    }`}>
+      <span className={`text-xs font-semibold uppercase tracking-widest ${accent ? 'text-accent/70' : 'text-base-content/30'}`}>
+        {label}
+      </span>
+      <span className={`text-xl font-bold tracking-tight font-mono ${accent ? 'text-accent' : 'text-base-content'}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
 
 // ── Model Card ───────────────────────────────────────────────────────────────
 interface ModelCardProps {
   model: ModelWithProvider;
-  providerName: string;
   index: number;
   onEdit: (model: ModelWithProvider) => void;
+  policies: PricingPolicy[];
 }
 
-function ModelCard({ model, providerName, index, onEdit }: ModelCardProps) {
+function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
+  const isActive = model.channel_names.length > 0;
+  const policy = policies.find(p => p.id === model.pricing_policy_id);
+  const billingType = policy?.billing_type ?? '';
+  const config = policy?.config ?? {};
+  const isPerToken = billingType === 'per_token';
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay: index * 0.05, ease: [0.25, 0.1, 0.25, 1] }}
-      whileHover={{ y: -3 }}
+      transition={{ duration: 0.5, delay: 0.1 + index * 0.06, ease: [0.16, 1, 0.3, 1] }}
       className="group relative"
     >
-      <div className="relative rounded-xl border border-base-300/60 bg-base-100/70 backdrop-blur-sm overflow-hidden transition-all duration-200 group-hover:border-accent/30 group-hover:bg-base-100/90">
-        {/* Accent line top */}
-        <div className={`absolute top-0 left-0 right-0 h-[2px] transition-opacity duration-200 ${model.enabled ? 'bg-gradient-to-r from-accent to-accent/40 opacity-100' : 'opacity-0'}`} />
+      <div className={`
+        relative rounded-2xl overflow-hidden transition-all duration-300 cursor-pointer
+        ${isActive
+          ? 'bg-gradient-to-b from-base-100 to-base-100/60 border border-accent/20 group-hover:border-accent/40 group-hover:shadow-[0_0_24px_-4px_rgba(var(--accent),0.12)]'
+          : 'bg-base-100/40 border border-base-300/30 group-hover:border-base-300/60 group-hover:bg-base-100/70'
+        }
+        group-hover:-translate-y-0.5
+      `}>
+        {/* Top accent bar */}
+        <div className={`h-[2px] w-full ${isActive ? 'bg-gradient-to-r from-accent via-accent/60 to-transparent' : 'bg-gradient-to-r from-base-300/40 to-transparent'}`} />
 
-        <div className="p-5">
-          {/* Header */}
-          <div className="flex items-start justify-between mb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-base-200/70 flex items-center justify-center shrink-0">
-                <Cpu className="h-4 w-4 text-accent" />
+        {/* Scanline overlay for active cards */}
+        {isActive && (
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent_0%,rgba(var(--accent),0.015)_50%,transparent_100%)] pointer-events-none" />
+        )}
+
+        <div className="relative p-5">
+          {/* Header row */}
+          <div className="flex items-start justify-between mb-5">
+            <div className="flex items-center gap-3">
+              {/* Icon container */}
+              <div className={`
+                relative w-10 h-10 rounded-xl flex items-center justify-center shrink-0
+                transition-all duration-300
+                ${isActive
+                  ? 'bg-accent/10 ring-1 ring-accent/20'
+                  : 'bg-base-200/60'
+                }
+              `}>
+                <Cpu className={`h-5 w-5 transition-colors duration-300 ${isActive ? 'text-accent' : 'text-base-content/25'}`} />
+                {/* Active pulse dot */}
+                {isActive && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-accent animate-pulse" />
+                )}
               </div>
-              <div>
-                <div className="font-mono text-[13px] font-semibold text-base-content leading-tight">{model.name}</div>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <Globe className="h-3 w-3 text-base-content/35" />
-                  <span className="text-[11px] text-base-content/45 font-medium">{providerName}</span>
+
+              {/* Model name */}
+              <div className="min-w-0">
+                <div className="font-mono text-lg font-bold text-base-content leading-tight truncate max-w-[200px]">
+                  {model.name}
+                </div>
+                <div className={`text-xs mt-0.5 ${isActive ? 'text-accent/50' : 'text-base-content/20'}`}>
+                  {isActive ? `${model.channel_names.length} channel${model.channel_names.length !== 1 ? 's' : ''} active` : 'No routing'}
                 </div>
               </div>
             </div>
 
-            {/* Status */}
-            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase transition-colors ${
-              model.enabled
-                ? 'bg-accent/10 text-accent'
-                : 'bg-base-300/40 text-base-content/35'
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${model.enabled ? 'bg-accent animate-pulse' : 'bg-base-content/25'}`} />
-              {model.enabled ? 'Active' : 'Disabled'}
+            {/* Status badge */}
+            <div className={`
+              shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-widest border
+              transition-all duration-300
+              ${isActive
+                ? 'bg-accent/10 text-accent border-accent/25'
+                : 'bg-base-200/40 text-base-content/25 border-base-300/40'
+              }
+            `}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-accent animate-pulse' : 'bg-base-content/20'}`} />
+              {isActive ? 'Live' : 'Idle'}
             </div>
           </div>
 
-          {/* Billing & Pricing */}
-          <div className="grid grid-cols-3 gap-2 mb-4">
-            <div className="rounded-lg bg-base-200/40 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Billing</div>
-              <Badge variant="blue">{model.billing_type}</Badge>
-            </div>
-            <div className="rounded-lg bg-base-200/40 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Input</div>
-              <div className="text-[12px] font-mono font-semibold text-base-content/80">
-                {model.input_price != null ? `$${model.input_price.toFixed(4)}` : '—'}
+          {/* Divider */}
+          <div className="h-px bg-gradient-to-r from-base-300/20 via-base-300/10 to-transparent mb-5" />
+
+          {/* Pricing section */}
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <div className={`text-xs font-black uppercase tracking-[0.2em] ${isActive ? 'text-accent/60' : 'text-base-content/25'}`}>
+                Pricing
               </div>
+              <div className={`flex-1 h-px ${isActive ? 'bg-gradient-to-r from-accent/20 to-transparent' : 'bg-base-300/20'}`} />
             </div>
-            <div className="rounded-lg bg-base-200/40 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Output</div>
-              <div className="text-[12px] font-mono font-semibold text-base-content/80">
-                {model.output_price != null ? `$${model.output_price.toFixed(4)}` : '—'}
+
+            {policy ? (
+              <div className="space-y-2">
+                {/* Policy name tag */}
+                <div className="flex items-center gap-2">
+                  <span className={`
+                    inline-flex items-center px-2 py-0.5 rounded-md text-sm font-bold border
+                    ${isActive
+                      ? 'bg-accent/10 text-accent/90 border-accent/25'
+                      : 'bg-base-200/50 text-base-content/50 border-base-300/40'
+                    }
+                  `}>
+                    {policy.name}
+                  </span>
+                  {isPerToken && (
+                    <span className={`text-xs font-semibold uppercase tracking-wider ${isActive ? 'text-accent/40' : 'text-base-content/20'}`}>
+                      per 1M tokens
+                    </span>
+                  )}
+                </div>
+
+                {/* Per-token price grid */}
+                {isPerToken ? (
+                  <div className={`
+                    grid grid-cols-3 gap-1.5 p-2.5 rounded-xl border
+                    ${isActive ? 'bg-base-100/50 border-accent/10' : 'bg-base-200/20 border-base-300/20'}
+                  `}>
+                    {[
+                      { label: 'Input', keys: ['input_per_1m', 'input_price'] },
+                      { label: 'Output', keys: ['output_per_1m', 'output_price'] },
+                      { label: 'Cache', keys: ['cache_read_price'] },
+                    ].map(({ label, keys }) => {
+                      const val = (keys.length > 1
+                        ? (config[keys[0]] ?? config[keys[1]])
+                        : config[keys[0]]) as number | undefined;
+                      return (
+                        <div key={label} className="flex flex-col items-center text-center py-1">
+                          <span className={`text-xs font-bold uppercase tracking-wider mb-1 ${isActive ? 'text-accent/50' : 'text-base-content/25'}`}>
+                            {label}
+                          </span>
+                          <span className={`font-mono text-lg font-bold ${isActive ? 'text-accent' : 'text-base-content/60'}`}>
+                            {formatPrice(val)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-mono ${isActive ? 'text-accent/70' : 'text-base-content/30'}`}>
+                      {billingType}
+                    </span>
+                  </div>
+                )}
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <div className={`w-1 h-1 rounded-full ${isActive ? 'bg-accent/30' : 'bg-base-content/15'}`} />
+                <span className={`text-sm italic ${isActive ? 'text-accent/30' : 'text-base-content/20'}`}>
+                  No policy — channel-level pricing
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* Request price (if applicable) */}
-          {(model.billing_type === 'per_request' || model.billing_type === 'hybrid') && model.request_price != null && (
-            <div className="rounded-lg bg-base-200/40 px-3 py-2 mb-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold">Per Request</span>
-                <span className="text-[12px] font-mono font-semibold text-base-content/80">${model.request_price.toFixed(4)}</span>
+          {/* Channels section */}
+          {model.channel_names.length > 0 && (
+            <div className="mb-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className={`text-xs font-black uppercase tracking-[0.2em] ${isActive ? 'text-accent/60' : 'text-base-content/25'}`}>
+                  Channels
+                </div>
+                <div className={`flex-1 h-px ${isActive ? 'bg-gradient-to-r from-accent/20 to-transparent' : 'bg-base-300/20'}`} />
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {model.channel_names.map((ch, i) => (
+                  <span
+                    key={i}
+                    className={`
+                      inline-flex items-center gap-1 px-2 py-1 rounded-md text-sm font-mono font-bold border
+                      transition-all duration-200
+                      ${isActive
+                        ? 'bg-base-100/60 text-base-content/70 border-base-300/40 hover:border-accent/30 hover:text-accent/70'
+                        : 'bg-base-200/40 text-base-content/35 border-base-300/30'
+                      }
+                    `}
+                  >
+                    <Radio className={`h-3 w-3 shrink-0 ${isActive ? 'text-accent/50' : 'text-base-content/20'}`} />
+                    {ch}
+                  </span>
+                ))}
               </div>
             </div>
           )}
 
-          {/* Pricing Policy */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-base-200/30 border border-base-300/20 mb-4">
-            <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold shrink-0">Pricing Policy</div>
-            {model.pricing_policy_id ? (
-              <div className="flex items-center gap-1.5">
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-accent/8 text-accent/80 text-[10px] font-mono font-semibold border border-accent/15">
-                  {model.pricing_policy_id}
-                </span>
-              </div>
-            ) : (
-              <span className="text-[11px] text-base-content/25 italic">No policy assigned</span>
-            )}
-          </div>
-
           {/* Footer */}
-          <div className="flex items-center justify-between pt-3 border-t border-base-300/40">
+          <div className="flex items-center justify-between pt-4 border-t border-base-300/20">
+            <div className={`text-xs font-mono uppercase tracking-wider ${isActive ? 'text-accent/30' : 'text-base-content/15'}`}>
+              {model.id}
+            </div>
             <button
               onClick={() => onEdit(model)}
-              className="flex items-center gap-1.5 text-[11px] font-medium text-base-content/40 hover:text-accent transition-colors duration-150 cursor-pointer"
+              className={`
+                flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium border
+                transition-all duration-200 cursor-pointer
+                ${isActive
+                  ? 'text-base-content/40 border-base-300/30 hover:border-accent/40 hover:text-accent'
+                  : 'text-base-content/25 border-base-300/20 hover:border-base-300/50 hover:text-base-content/50'
+                }
+              `}
             >
               <Pencil className="h-3 w-3" />
               Edit
             </button>
-            <div className="flex items-center gap-1">
-              {model.enabled && (
-                <div className="flex items-center gap-1 text-[10px] text-base-content/30">
-                  <Activity className="h-3 w-3" />
-                  <span>Ready</span>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </div>
@@ -137,37 +253,37 @@ function ModelCard({ model, providerName, index, onEdit }: ModelCardProps) {
 }
 
 // ── Empty State ───────────────────────────────────────────────────────────────
-function EmptyState({ hasProviders, onAddClick }: { hasProviders: boolean; onAddClick: () => void }) {
+function EmptyState({ onAddClick }: { onAddClick: () => void }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="flex flex-col items-center justify-center py-24 px-4"
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+      className="flex flex-col items-center justify-center py-32 px-4"
     >
-      <div className="relative mb-6">
-        <div className="w-16 h-16 rounded-2xl bg-base-200/60 flex items-center justify-center">
-          <Cpu className="h-8 w-8 text-base-content/20" />
+      {/* Decorative grid */}
+      <div className="relative mb-10">
+        <div className="w-20 h-20 rounded-3xl border-2 border-base-300/30 flex items-center justify-center bg-base-100/30 backdrop-blur-sm">
+          <Cpu className="h-10 w-10 text-base-content/15" />
         </div>
-        <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center">
-          <Plus className="h-3 w-3 text-accent" />
+        {/* Corner accents */}
+        <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-accent/30 rounded-tl-lg" />
+        <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-accent/30 rounded-br-lg" />
+        {/* Plus icon */}
+        <div className="absolute -bottom-2 -right-2 w-7 h-7 rounded-xl bg-base-100 border-2 border-base-300/40 flex items-center justify-center">
+          <Plus className="h-3.5 w-3.5 text-accent/60" />
         </div>
       </div>
-      <h3 className="text-[15px] font-semibold text-base-content/60 mb-1.5">No models yet</h3>
-      <p className="text-[13px] text-base-content/30 mb-6 text-center max-w-xs">
-        {hasProviders
-          ? 'Add your first AI model to start routing requests through the gateway.'
-          : 'You need to add a provider before you can configure models.'}
-      </p>
-      {hasProviders ? (
+
+      <div className="text-center max-w-sm">
+        <h3 className="text-lg font-bold text-base-content/50 mb-2">No models registered</h3>
+        <p className="text-sm text-base-content/25 leading-relaxed mb-8">
+          Add AI models to enable request routing through the gateway. Each model can be associated with a pricing policy.
+        </p>
         <Button variant="primary" size="sm" onClick={onAddClick}>
-          Add First Model
+          Register First Model
         </Button>
-      ) : (
-        <Link to="/console/channels">
-          <Button variant="secondary" size="sm">Add Provider First</Button>
-        </Link>
-      )}
+      </div>
     </motion.div>
   );
 }
@@ -177,65 +293,35 @@ function EmptyState({ hasProviders, onAddClick }: { hasProviders: boolean; onAdd
 function AddModelModal({
   open,
   onClose,
-  providers,
   onAdd,
   isPending,
 }: {
   open: boolean;
   onClose: () => void;
-  providers?: Array<{ id: string; name: string }>;
   onAdd: (data: CreateGlobalModelRequest) => Promise<void>;
   isPending: boolean;
 }) {
-  const [providerId, setProviderId] = useState('');
+  const { data: policies } = usePricingPolicies();
   const [name, setName] = useState('');
-  const [billingType, setBillingType] = useState<string>('per_token');
-  const [inputPrice, setInputPrice] = useState('');
-  const [outputPrice, setOutputPrice] = useState('');
-  const [requestPrice, setRequestPrice] = useState('');
+  const [pricingPolicyId, setPricingPolicyId] = useState('');
 
-  const reset = () => {
-    setProviderId(''); setName(''); setBillingType('per_token');
-    setInputPrice(''); setOutputPrice(''); setRequestPrice('');
-  };
-
+  const reset = () => { setName(''); setPricingPolicyId(''); };
   const handleClose = () => { reset(); onClose(); };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await onAdd({
-      provider_id: providerId,
       name,
-      billing_type: billingType,
-      input_price: inputPrice ? parseFloat(inputPrice) : undefined,
-      output_price: outputPrice ? parseFloat(outputPrice) : undefined,
-      request_price: requestPrice ? parseFloat(requestPrice) : undefined,
+      pricing_policy_id: pricingPolicyId || undefined,
     });
     handleClose();
   };
 
   return (
-    <Modal open={open} onClose={handleClose} title="Add Model">
+    <Modal open={open} onClose={handleClose} title="Register Model">
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Provider */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Provider</label>
-          <select
-            value={providerId}
-            onChange={(e) => setProviderId(e.target.value)}
-            required
-            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-          >
-            <option value="">Select a provider...</option>
-            {providers?.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Model name */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Model Name</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Model Name</label>
           <div className="relative">
             <input
               type="text"
@@ -243,96 +329,29 @@ function AddModelModal({
               onChange={(e) => setName(e.target.value)}
               required
               placeholder="e.g. gpt-4o, claude-3-5-sonnet"
-              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
             <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/25" />
           </div>
         </div>
 
-        {/* Billing type */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Billing Type</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</label>
           <select
-            value={billingType}
-            onChange={(e) => setBillingType(e.target.value)}
-            required
-            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+            value={pricingPolicyId}
+            onChange={(e) => setPricingPolicyId(e.target.value)}
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
           >
-            {BILLING_TYPES.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label} - {opt.desc}</option>
+            <option value="">No policy (pricing handled at channel level)</option>
+            {policies?.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
         </div>
 
-        {/* Pricing */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">
-            {billingType === 'per_request' || billingType === 'hybrid' ? 'Request Pricing' : 'Token Pricing (per 1M tokens)'}
-          </label>
-          {(billingType === 'per_token' || billingType === 'tiered_token') && (
-            <div className="grid grid-cols-2 gap-2">
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={inputPrice}
-                  onChange={(e) => setInputPrice(e.target.value)}
-                  placeholder="Input price"
-                  className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">In</span>
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={outputPrice}
-                  onChange={(e) => setOutputPrice(e.target.value)}
-                  placeholder="Output price"
-                  className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">Out</span>
-              </div>
-            </div>
-          )}
-          {(billingType === 'per_request' || billingType === 'hybrid') && (
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-              <input
-                type="number"
-                step="0.0001"
-                value={requestPrice}
-                onChange={(e) => setRequestPrice(e.target.value)}
-                placeholder="0.00"
-                className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">/req</span>
-            </div>
-          )}
-          {billingType === 'per_character' && (
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-              <input
-                type="number"
-                step="0.0001"
-                value={inputPrice}
-                onChange={(e) => setInputPrice(e.target.value)}
-                placeholder="Price per character"
-                className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-              />
-            </div>
-          )}
-          <p className="text-[10px] text-base-content/25">
-            Leave blank to inherit from provider pricing
-          </p>
-        </div>
-
-        {/* Actions */}
         <div className="flex items-center gap-2 pt-1">
           <Button type="submit" variant="primary" loading={isPending} className="flex-1">
-            Add Model
+            Register
           </Button>
           <Button type="button" variant="ghost" onClick={handleClose}>
             Cancel
@@ -355,34 +374,22 @@ function EditModelModal({
   model: ModelWithProvider | null;
   open: boolean;
   onClose: () => void;
-  onSave: (data: { billing_type: string; input_price?: number; output_price?: number; request_price?: number; enabled: boolean }) => Promise<void>;
+  onSave: (data: { pricing_policy_id?: string | null }) => Promise<void>;
   isPending: boolean;
 }) {
-  const [billingType, setBillingType] = useState<string>('per_token');
-  const [inputPrice, setInputPrice] = useState('');
-  const [outputPrice, setOutputPrice] = useState('');
-  const [requestPrice, setRequestPrice] = useState('');
-  const [enabled, setEnabled] = useState(false);
+  const { data: policies } = usePricingPolicies();
+  const [pricingPolicyId, setPricingPolicyId] = useState('');
 
-  // Sync state when model changes
   useEffect(() => {
     if (model) {
-      setBillingType(model.billing_type || 'per_token');
-      setInputPrice(model.input_price != null ? String(model.input_price) : '');
-      setOutputPrice(model.output_price != null ? String(model.output_price) : '');
-      setRequestPrice(model.request_price != null ? String(model.request_price) : '');
-      setEnabled(model.enabled);
+      setPricingPolicyId(model.pricing_policy_id ?? '');
     }
   }, [model]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await onSave({
-      billing_type: billingType,
-      input_price: inputPrice ? parseFloat(inputPrice) : undefined,
-      output_price: outputPrice ? parseFloat(outputPrice) : undefined,
-      request_price: requestPrice ? parseFloat(requestPrice) : undefined,
-      enabled,
+      pricing_policy_id: pricingPolicyId || undefined,
     });
     onClose();
   };
@@ -390,86 +397,20 @@ function EditModelModal({
   return (
     <Modal open={open} onClose={onClose} title={`Edit ${model?.name ?? 'Model'}`}>
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Status toggle */}
-        <div className="flex items-center justify-between rounded-lg border border-base-300/50 bg-base-200/30 px-4 py-3">
-          <div>
-            <div className="text-[12px] font-semibold text-base-content/80">Enabled</div>
-            <div className="text-[11px] text-base-content/35">Allow this model to receive traffic</div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setEnabled(v => !v)}
-            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 cursor-pointer ${enabled ? 'bg-accent' : 'bg-base-300'}`}
-          >
-            <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform duration-200 ${enabled ? 'translate-x-5' : 'translate-x-1'}`} />
-          </button>
-        </div>
-
-        {/* Billing type */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Billing Type</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</label>
           <select
-            value={billingType}
-            onChange={(e) => setBillingType(e.target.value)}
-            required
-            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+            value={pricingPolicyId}
+            onChange={(e) => setPricingPolicyId(e.target.value)}
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
           >
-            {BILLING_TYPES.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label} - {opt.desc}</option>
+            <option value="">No policy</option>
+            {policies?.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
         </div>
 
-        {/* Pricing */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">
-            {billingType === 'per_request' || billingType === 'hybrid' ? 'Request Pricing' : 'Token Pricing (per 1M tokens)'}
-          </label>
-          {(billingType === 'per_token' || billingType === 'tiered_token') && (
-            <div className="grid grid-cols-2 gap-2">
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={inputPrice}
-                  onChange={(e) => setInputPrice(e.target.value)}
-                  placeholder="Input price"
-                  className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">In</span>
-              </div>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={outputPrice}
-                  onChange={(e) => setOutputPrice(e.target.value)}
-                  placeholder="Output price"
-                  className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">Out</span>
-              </div>
-            </div>
-          )}
-          {(billingType === 'per_request' || billingType === 'hybrid') && (
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-base-content/35 font-mono">$</span>
-              <input
-                type="number"
-                step="0.0001"
-                value={requestPrice}
-                onChange={(e) => setRequestPrice(e.target.value)}
-                placeholder="0.00"
-                className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-7 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-base-content/25">/req</span>
-            </div>
-          )}
-        </div>
-
-        {/* Actions */}
         <div className="flex items-center gap-2 pt-1">
           <Button type="submit" variant="primary" loading={isPending} className="flex-1">
             Save Changes
@@ -486,22 +427,32 @@ function EditModelModal({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Models() {
   const { data: models, isLoading } = useAllModels();
-  const { data: providers } = useProviders();
   const createMutation = useCreateGlobalModel();
   const updateMutation = useUpdateGlobalModel();
   const [isAdding, setIsAdding] = useState(false);
   const [editingModel, setEditingModel] = useState<ModelWithProvider | null>(null);
+  const { data: policies } = usePricingPolicies();
 
-  // Stats
   const totalModels = models?.length ?? 0;
-  const activeModels = models?.filter(m => m.enabled).length ?? 0;
+  const activeModels = models?.filter(m => m.channel_names.length > 0).length ?? 0;
+  const totalPolicies = new Set(models?.map(m => m.pricing_policy_id).filter(Boolean)).size;
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 rounded-full border-2 border-accent/30 border-t-accent animate-spin" />
-          <span className="text-[12px] text-base-content/35 font-medium">Loading models...</span>
+      <div className="px-6 pb-8 pt-8">
+        {/* Header skeleton */}
+        <div className="mb-8 flex items-start justify-between">
+          <div className="space-y-2">
+            <div className="h-7 w-24 bg-base-200/60 rounded-lg animate-pulse" />
+            <div className="h-4 w-48 bg-base-200/40 rounded animate-pulse" />
+          </div>
+          <div className="h-9 w-28 bg-base-200/40 rounded-lg animate-pulse" />
+        </div>
+        {/* Card skeletons */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-56 bg-base-100/30 rounded-2xl border border-base-300/20 animate-pulse" />
+          ))}
         </div>
       </div>
     );
@@ -509,75 +460,53 @@ export default function Models() {
 
   return (
     <div className="px-6 pb-8">
-      {/* Page header */}
+      {/* ── Hero header ── */}
       <motion.div
-        initial={{ opacity: 0, y: -8 }}
+        initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="mb-6 flex items-start justify-between pt-8"
+        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        className="mb-8 pt-8"
       >
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-[22px] font-bold tracking-tight text-base-content">Models</h1>
-            {totalModels > 0 && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-base-200/70 text-base-content/40 border border-base-300/50">
-                {totalModels}
-              </span>
-            )}
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
+              Models
+            </h1>
+            <p className="text-sm text-base-content/30">
+              {totalModels === 0
+                ? 'Register AI models to route requests through the gateway'
+                : `${activeModels} live · ${totalModels - activeModels} idle · ${totalPolicies} policy${totalPolicies !== 1 ? 'ies' : ''}`
+              }
+            </p>
           </div>
-          <p className="text-[13px] text-base-content/35">
-            {totalModels === 0
-              ? 'Add AI models to route requests through the gateway'
-              : `${activeModels} active · ${totalModels - activeModels} disabled`}
-          </p>
+
+          <Button
+            icon={<Plus className="h-4 w-4" />}
+            onClick={() => setIsAdding(true)}
+            size="sm"
+          >
+            Add Model
+          </Button>
         </div>
 
-        <AnimatePresence>
-          {(providers?.length ?? 0) > 0 && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.92 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.92 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Button
-                icon={<Plus className="h-4 w-4" />}
-                onClick={() => setIsAdding(true)}
-                size="sm"
-              >
-                Add Model
-              </Button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {/* Stats row */}
+        {totalModels > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-wrap gap-2.5 mt-6"
+          >
+            <StatPill label="Total" value={totalModels} />
+            <StatPill label="Live" value={activeModels} accent />
+            <StatPill label="Idle" value={totalModels - activeModels} />
+          </motion.div>
+        )}
       </motion.div>
 
-      {/* Stats strip */}
-      {totalModels > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-          className="grid grid-cols-3 gap-3 mb-7"
-        >
-          <div className="rounded-xl border border-base-300/50 bg-base-100/50 px-4 py-3">
-            <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Total Models</div>
-            <div className="text-[20px] font-bold text-base-content font-mono">{totalModels}</div>
-          </div>
-          <div className="rounded-xl border border-accent/20 bg-accent/5 px-4 py-3">
-            <div className="text-[10px] uppercase tracking-widest text-accent/70 font-semibold mb-1">Active</div>
-            <div className="text-[20px] font-bold text-accent font-mono">{activeModels}</div>
-          </div>
-          <div className="rounded-xl border border-base-300/50 bg-base-100/50 px-4 py-3">
-            <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Disabled</div>
-            <div className="text-[20px] font-bold text-base-content/50 font-mono">{totalModels - activeModels}</div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Model grid or empty state */}
+      {/* ── Grid ── */}
       {totalModels === 0 ? (
-        <EmptyState hasProviders={(providers?.length ?? 0) > 0} onAddClick={() => setIsAdding(true)} />
+        <EmptyState onAddClick={() => setIsAdding(true)} />
       ) : (
         <motion.div
           initial="hidden"
@@ -589,9 +518,9 @@ export default function Models() {
             <ModelCard
               key={model.id}
               model={model}
-              providerName={model.provider_name ?? providers?.find(p => p.id === model.provider_id)?.name ?? model.provider_id}
               index={i}
               onEdit={setEditingModel}
+              policies={policies ?? []}
             />
           ))}
         </motion.div>
@@ -600,7 +529,6 @@ export default function Models() {
       <AddModelModal
         open={isAdding}
         onClose={() => setIsAdding(false)}
-        providers={providers}
         onAdd={async (data) => {
           await createMutation.mutateAsync(data);
         }}
@@ -614,7 +542,6 @@ export default function Models() {
         onSave={async (data) => {
           if (!editingModel) return;
           await updateMutation.mutateAsync({
-            providerId: editingModel.provider_id,
             modelName: editingModel.name,
             input: data,
           });

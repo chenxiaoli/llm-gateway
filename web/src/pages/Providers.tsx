@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Copy, Check } from 'lucide-react';
 import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider } from '../hooks/useProviders';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
@@ -9,24 +8,145 @@ import { EndpointsEditor } from '../components/ui/EndpointsEditor';
 import { Badge } from '../components/ui/Badge';
 import type { Provider } from '../types';
 
+const PROTOCOL_META: Record<string, { label: string; color: string; dot: string; badge: 'blue' | 'purple' }> = {
+  openai:    { label: 'OpenAI',    color: 'text-info',    dot: 'bg-info',    badge: 'blue'   },
+  anthropic: { label: 'Anthropic', color: 'text-primary', dot: 'bg-primary', badge: 'purple' },
+};
+
+function EndpointRow({ protocol, url }: { protocol: string; url: string }) {
+  const [copied, setCopied] = useState(false);
+  const meta = PROTOCOL_META[protocol] ?? { label: protocol, color: 'text-base-content/50', dot: 'bg-base-content/30', badge: 'neutral' as const };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <div className="flex items-center gap-3 px-3.5 py-2 rounded-lg hover:bg-base-200/40 transition-colors group">
+      <span className={`w-2 h-2 rounded-full shrink-0 ${meta.dot}`} />
+      <span className={`text-[10px] font-semibold uppercase tracking-widest w-16 shrink-0 ${meta.color}`}>
+        {meta.label}
+      </span>
+      <span className="font-mono text-[12px] text-base-content/50 truncate flex-1 min-w-0">
+        {url}
+      </span>
+      <button
+        onClick={handleCopy}
+        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-base-300/50"
+        aria-label="Copy endpoint URL"
+      >
+        {copied
+          ? <Check className="h-3 w-3 text-success" />
+          : <Copy className="h-3 w-3 text-base-content/30" />
+        }
+      </button>
+    </div>
+  );
+}
+
+function ProviderCard({ provider, onEdit, onDelete }: {
+  provider: Provider;
+  onEdit: (p: Provider) => void;
+  onDelete: (p: Provider) => void;
+}) {
+  const endpointEntries = provider.endpoints ? Object.entries(provider.endpoints) : [];
+  const hasEndpoints = endpointEntries.length > 0;
+
+  return (
+    <div className={`
+      rounded-2xl border transition-all duration-200 overflow-hidden
+      ${provider.enabled
+        ? 'bg-base-100 border-base-300/50 hover:border-primary/20 hover:shadow-[0_0_16px_-4px_rgba(var(--primary),0.08)]'
+        : 'bg-base-100/40 border-base-300/25'
+      }
+    `}>
+      {/* Top accent line */}
+      <div className={`h-[2px] w-full ${provider.enabled ? 'bg-gradient-to-r from-primary/60 via-primary/20 to-transparent' : 'bg-gradient-to-r from-base-300/30 to-transparent'}`} />
+
+      <div className="p-5">
+        {/* Header row */}
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className={`
+              w-9 h-9 rounded-xl flex items-center justify-center shrink-0
+              ${provider.enabled ? 'bg-primary/10 ring-1 ring-primary/20' : 'bg-base-200/60'}
+            `}>
+              <span className={`text-[11px] font-black tracking-tight ${provider.enabled ? 'text-primary' : 'text-base-content/30'}`}>
+                {provider.name.slice(0, 2).toUpperCase()}
+              </span>
+            </div>
+            <div className="min-w-0">
+              <div className={`font-mono text-[15px] font-bold leading-tight truncate ${provider.enabled ? 'text-base-content' : 'text-base-content/40'}`}>
+                {provider.name}
+              </div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={`w-1.5 h-1.5 rounded-full ${provider.enabled ? 'bg-success' : 'bg-base-content/20'}`} />
+                <span className={`text-[11px] ${provider.enabled ? 'text-base-content/50' : 'text-base-content/20'}`}>
+                  {provider.enabled ? 'Active' : 'Disabled'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            <button onClick={() => onEdit(provider)} className="btn btn-ghost btn-xs btn-circle" aria-label="Edit provider">
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={() => onDelete(provider)} className="btn btn-ghost btn-xs btn-circle text-error/60 hover:text-error" aria-label="Delete provider">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Protocol badges */}
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {endpointEntries.map(([protocol]) => {
+            const meta = PROTOCOL_META[protocol];
+            if (!meta) return <Badge key={protocol} variant="neutral">{protocol}</Badge>;
+            return <Badge key={protocol} variant={meta.badge}>{meta.label}</Badge>;
+          })}
+          {!hasEndpoints && (
+            <span className="text-[11px] text-base-content/25 italic">No endpoints</span>
+          )}
+        </div>
+
+        {/* Endpoint details */}
+        {hasEndpoints && (
+          <div className="rounded-xl border border-base-200/60 bg-base-200/20 overflow-hidden divide-y divide-base-200/40 mb-3">
+            {endpointEntries.map(([protocol, url]) => (
+              <EndpointRow key={protocol} protocol={protocol} url={url} />
+            ))}
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="pt-2 border-t border-base-200/40">
+          <span className="font-mono text-[11px] text-base-content/20">
+            {new Date(provider.created_at).toLocaleDateString()}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Providers() {
   const { data: providers, isLoading } = useProviders();
   const createMutation = useCreateProvider();
   const updateMutation = useUpdateProvider();
   const deleteMutation = useDeleteProvider();
-  const navigate = useNavigate();
 
   // Create modal state
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
-  const [baseUrl, setBaseUrl] = useState('');
   const [createEndpoints, setCreateEndpoints] = useState<Record<string, string>>({});
 
   // Edit modal state
   const [editOpen, setEditOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [editName, setEditName] = useState('');
-  const [editBaseUrl, setEditBaseUrl] = useState('');
   const [editEndpoints, setEditEndpoints] = useState<Record<string, string>>({});
   const [editEnabled, setEditEnabled] = useState(true);
 
@@ -42,26 +162,18 @@ export default function Providers() {
     });
     await createMutation.mutateAsync({
       name,
-      base_url: baseUrl || null,
       endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null,
     });
     setName('');
-    setBaseUrl('');
     setCreateEndpoints({});
     setCreateOpen(false);
   };
 
   const handleEdit = (provider: Provider) => {
-    let parsedEndpoints: Record<string, string> = {};
-    if (provider.endpoints) {
-      try {
-        parsedEndpoints = JSON.parse(provider.endpoints);
-      } catch {}
-    }
+    // endpoints is now already parsed as object
     setEditingProvider(provider);
     setEditName(provider.name);
-    setEditBaseUrl(provider.base_url || '');
-    setEditEndpoints(parsedEndpoints);
+    setEditEndpoints(provider.endpoints || {});
     setEditEnabled(provider.enabled);
     setEditOpen(true);
   };
@@ -77,7 +189,6 @@ export default function Providers() {
       id: editingProvider.id,
       input: {
         name: editName,
-        base_url: editBaseUrl || null,
         endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null,
         enabled: editEnabled,
       },
@@ -111,89 +222,27 @@ export default function Providers() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-12"><span className="loading loading-spinner loading-lg" /></div>
+        <div className="flex items-center justify-center py-20"><span className="loading loading-spinner loading-lg" /></div>
+      ) : providers?.length ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {providers.map((provider) => (
+            <ProviderCard
+              key={provider.id}
+              provider={provider}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
       ) : (
-        <div className="rounded-xl border border-base-300/50 bg-base-100/60 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="table table-sm">
-              <thead>
-                <tr className="border-b border-base-300/50">
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Name</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Protocols</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Status</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Created</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35 w-20">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {providers?.map((provider) => (
-                  <tr key={provider.id} className="border-b border-base-200/50 hover:bg-base-200/30 transition-colors">
-                    <td>
-                      <button
-                        onClick={() => navigate(`/console/providers/${provider.id}`)}
-                        className="link link-primary text-sm font-medium focus:outline-none focus:rounded-md focus:ring-2 focus:ring-primary/50 focus:ring-offset-1 focus:ring-offset-base-100"
-                      >
-                        {provider.name}
-                      </button>
-                    </td>
-                    <td>
-                      <div className="flex gap-1.5">
-                        {(() => {
-                          let hasOpenai = false;
-                          let hasAnthropic = false;
-                          if (provider.endpoints) {
-                            try {
-                              const parsed = JSON.parse(provider.endpoints);
-                              hasOpenai = !!parsed.openai;
-                              hasAnthropic = !!parsed.anthropic;
-                            } catch {}
-                          }
-                          return (
-                            <>
-                              {hasOpenai && <Badge variant="blue">OpenAI</Badge>}
-                              {hasAnthropic && <Badge variant="purple">Anthropic</Badge>}
-                            </>
-                          );
-                        })()}
-                      </div>
-                    </td>
-                    <td><Badge variant={provider.enabled ? 'green' : 'red'}>{provider.enabled ? 'Active' : 'Disabled'}</Badge></td>
-                    <td className="mono text-[13px] text-base-content/50">{new Date(provider.created_at).toLocaleDateString()}</td>
-                    <td>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleEdit(provider)}
-                          className="btn btn-ghost btn-xs btn-circle"
-                          aria-label="Edit provider"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(provider)}
-                          className="btn btn-ghost btn-xs btn-circle text-error hover:text-error"
-                          aria-label="Delete provider"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {(!providers?.length) && (
-                  <tr>
-                    <td colSpan={5} className="text-center py-16">
-                      <div className="flex flex-col items-center gap-2">
-                        <span className="text-base-content/25 text-sm">No providers configured</span>
-                        <button onClick={() => setCreateOpen(true)} className="link link-primary text-sm">
-                          Add your first provider
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        <div className="flex flex-col items-center justify-center py-24 rounded-2xl border border-dashed border-base-300/40">
+          <div className="w-12 h-12 rounded-2xl bg-base-200/60 flex items-center justify-center mb-4">
+            <span className="text-2xl opacity-30">⊞</span>
           </div>
+          <p className="text-base-content/30 text-sm mb-4">No providers configured</p>
+          <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>
+            Add your first provider
+          </Button>
         </div>
       )}
 
@@ -204,13 +253,6 @@ export default function Providers() {
               <span className="label-text font-medium">Name</span>
             </label>
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g., OpenAI" required className="input input-bordered w-full" />
-          </div>
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">Base URL (Fallback)</span>
-              <span className="label-text-alt">Optional</span>
-            </label>
-            <input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
           </div>
           <div className="form-control">
             <label className="label">
@@ -235,13 +277,6 @@ export default function Providers() {
               <span className="label-text font-medium">Name</span>
             </label>
             <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="e.g., OpenAI" required className="input input-bordered w-full" />
-          </div>
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">Base URL (Fallback)</span>
-              <span className="label-text-alt">Optional</span>
-            </label>
-            <input type="text" value={editBaseUrl} onChange={(e) => setEditBaseUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" />
           </div>
           <div className="form-control">
             <label className="label">

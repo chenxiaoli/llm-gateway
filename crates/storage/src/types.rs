@@ -72,26 +72,50 @@ pub struct Provider {
     pub id: String,
     pub name: String,
     pub slug: String,
-    pub base_url: Option<String>,           // single fallback URL
-    pub endpoints: Option<String>,      // JSON {"openai": "...", "anthropic": "..."}
+    pub endpoints: Option<String>,      // JSON string {"default": "...", "openai": "...", "anthropic": "..."}
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// Provider with endpoints parsed as JSON object
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderWithEndpoints {
+    pub id: String,
+    pub name: String,
+    pub slug: String,
+    pub endpoints: Option<std::collections::HashMap<String, String>>,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl From<Provider> for ProviderWithEndpoints {
+    fn from(p: Provider) -> Self {
+        let endpoints = p.endpoints.and_then(|e| serde_json::from_str(&e).ok());
+        ProviderWithEndpoints {
+            id: p.id,
+            name: p.name,
+            slug: p.slug,
+            endpoints,
+            enabled: p.enabled,
+            created_at: p.created_at,
+            updated_at: p.updated_at,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateProvider {
     pub name: String,
     pub slug: Option<String>,
-    pub base_url: Option<String>,
-    pub endpoints: Option<String>,
+    pub endpoints: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateProvider {
     pub name: Option<String>,
-    pub base_url: Option<Option<String>>,
-    pub endpoints: Option<Option<String>>,
+    pub endpoints: Option<Option<serde_json::Value>>,
     pub enabled: Option<bool>,
 }
 
@@ -103,14 +127,13 @@ pub struct Channel {
     pub provider_id: String,
     pub name: String,
     pub api_key: String,
-    pub base_url: Option<String>,
     pub priority: i32,
-    pub pricing_policy_id: Option<String>,  // NEW
-    pub markup_ratio: f64,                  // NEW, default 1.0
-    pub rpm_limit: Option<i64>,     // NEW: requests per minute
-    pub tpm_limit: Option<i64>,     // NEW: tokens per minute
-    pub balance: Option<f64>,       // NEW: remaining quota in USD
-    pub weight: Option<i32>,        // NEW: routing weight (default 100)
+    pub pricing_policy_id: Option<String>,
+    pub markup_ratio: f64,
+    pub rpm_limit: Option<i64>,
+    pub tpm_limit: Option<i64>,
+    pub balance: Option<f64>,
+    pub weight: Option<i32>,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -121,29 +144,36 @@ pub struct CreateChannel {
     pub provider_id: String,
     pub name: String,
     pub api_key: String,
-    pub base_url: Option<String>,
     pub priority: Option<i32>,
-    pub pricing_policy_id: Option<String>,  // NEW
-    pub markup_ratio: Option<f64>,          // NEW
-    pub rpm_limit: Option<i64>,    // NEW
-    pub tpm_limit: Option<i64>,    // NEW
-    pub balance: Option<f64>,      // NEW
-    pub weight: Option<i32>,       // NEW
+    pub pricing_policy_id: Option<String>,
+    pub markup_ratio: Option<f64>,
+    pub rpm_limit: Option<i64>,
+    pub tpm_limit: Option<i64>,
+    pub balance: Option<f64>,
+    pub weight: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateChannel {
     pub name: Option<String>,
-    pub api_key: Option<String>,
-    pub base_url: Option<Option<String>>,
+    // api_key intentionally omitted — use dedicated /api-key endpoint
+    // base_url removed — use provider.endpoints["default"] for fallback
     pub priority: Option<i32>,
-    pub pricing_policy_id: Option<Option<String>>,  // NEW
-    pub markup_ratio: Option<f64>,                  // NEW
+    pub pricing_policy_id: Option<Option<String>>,
+    pub markup_ratio: Option<f64>,
     pub enabled: Option<bool>,
-    pub rpm_limit: Option<Option<i64>>,  // NEW: None=keep, Some(None)=clear
-    pub tpm_limit: Option<Option<i64>>,  // NEW
-    pub balance: Option<Option<f64>>,    // NEW
-    pub weight: Option<Option<i32>>,     // NEW
+    pub rpm_limit: Option<Option<i64>>,
+    pub tpm_limit: Option<Option<i64>>,
+    pub balance: Option<Option<f64>>,
+    pub weight: Option<Option<i32>>,
+}
+
+/// Dedicated payload for updating a channel's API key.
+/// Using a separate type and endpoint prevents accidental key clearing
+/// when updating other channel fields.
+#[derive(Debug, Deserialize)]
+pub struct UpdateChannelApiKey {
+    pub api_key: String,
 }
 
 // --- Models ---
@@ -152,14 +182,8 @@ pub struct UpdateChannel {
 pub struct Model {
     pub id: String,           // primary key
     pub name: String,          // display name
-    pub provider_id: String,
     pub model_type: Option<String>,
-    pub pricing_policy_id: Option<String>,  // nullable FK to pricing_policies
-    pub billing_type: String,
-    pub input_price: f64,     // per 1M tokens
-    pub output_price: f64,    // per 1M tokens
-    pub request_price: f64,   // per request
-    pub enabled: bool,
+    pub pricing_policy_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -173,14 +197,123 @@ pub enum BillingType {
 
 // --- Pricing Policies ---
 
+/// Per-token pricing config: prices in $ per 1M tokens.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct PerTokenConfig {
+    /// Input token price per 1M tokens (e.g. 3.0 = $3.00/M).
+    #[serde(alias = "input_per_1m", alias = "input_per_1k", alias = "input_price")]
+    pub input_price_1m: Option<f64>,
+    /// Output token price per 1M tokens.
+    #[serde(alias = "output_per_1m", alias = "output_per_1k", alias = "output_price")]
+    pub output_price_1m: Option<f64>,
+    /// Cache read price per 1M tokens (cheaper than input).
+    #[serde(alias = "cache_read_price")]
+    pub cache_read_price_1m: Option<f64>,
+}
+
+impl PerTokenConfig {
+    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0) }
+    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0) }
+    pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0) }
+    pub fn divisor(&self) -> f64 { 1_000_000.0 }
+}
+
+/// Per-request pricing config: flat fee per API call.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PerRequestConfig {
+    #[serde(alias = "price_per_call")]
+    pub request_price: Option<f64>,
+}
+
+impl PerRequestConfig {
+    pub fn price_per_call(&self) -> f64 { self.request_price.unwrap_or(0.0) }
+}
+
+/// Per-character pricing config: prices in $ per 1M characters.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PerCharacterConfig {
+    #[serde(alias = "input_per_1m", alias = "input_per_1k", alias = "input_price")]
+    pub input_price_1m: Option<f64>,
+    #[serde(alias = "output_per_1m", alias = "output_per_1k", alias = "output_price")]
+    pub output_price_1m: Option<f64>,
+}
+
+impl PerCharacterConfig {
+    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0) }
+    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0) }
+    pub fn divisor(&self) -> f64 { 1_000_000.0 }
+}
+
+/// Single tier for tiered token pricing.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TierConfig {
+    /// Upper bound of this tier in tokens (null = final tier).
+    pub up_to: Option<i64>,
+    #[serde(alias = "input_per_1m", alias = "input_per_1k")]
+    pub input_price_1m: Option<f64>,
+    #[serde(alias = "output_per_1m", alias = "output_per_1k")]
+    pub output_price_1m: Option<f64>,
+}
+
+impl TierConfig {
+    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0) }
+    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0) }
+    pub fn divisor(&self) -> f64 {
+        if self.input_price_1m.is_some() || self.output_price_1m.is_some() {
+            1_000_000.0
+        } else {
+            1_000.0
+        }
+    }
+}
+
+/// Tiered token pricing config.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TieredTokenConfig {
+    pub tiers: Vec<TierConfig>,
+}
+
+impl TieredTokenConfig {
+    pub fn tier_divisor(&self) -> f64 { 1_000_000.0 }
+}
+
+/// Hybrid pricing config: base fee per call + per-token.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct HybridConfig {
+    #[serde(alias = "base_per_call")]
+    pub base_per_call: Option<f64>,
+    #[serde(alias = "input_per_1m", alias = "input_per_1k", alias = "input_price")]
+    pub input_price_1m: Option<f64>,
+    #[serde(alias = "output_per_1m", alias = "output_per_1k", alias = "output_price")]
+    pub output_price_1m: Option<f64>,
+    #[serde(alias = "cache_read_price")]
+    pub cache_read_price_1m: Option<f64>,
+}
+
+impl HybridConfig {
+    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0) }
+    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0) }
+    pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0) }
+    pub fn divisor(&self) -> f64 { 1_000_000.0 }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PricingPolicy {
     pub id: String,
     pub name: String,
-    pub billing_type: String,        // "per_token", "per_request", "per_character", "tiered_token", "hybrid"
-    pub config: serde_json::Value,   // billing-type-specific config
+    pub billing_type: String,
+    pub config: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PricingPolicyWithCounts {
+    #[serde(flatten)]
+    pub policy: PricingPolicy,
+    pub model_count: i64,
+    pub channel_model_count: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -206,6 +339,7 @@ pub struct Usage {
     pub input_chars: Option<i64>,
     pub output_chars: Option<i64>,
     pub request_count: i64,
+    pub cache_read_tokens: Option<i64>, // tokens read from cache (cheaper)
 }
 
 impl Usage {
@@ -216,6 +350,7 @@ impl Usage {
             input_chars: None,
             output_chars: None,
             request_count: requests,
+            cache_read_tokens: None,
         }
     }
 }
@@ -223,29 +358,20 @@ impl Usage {
 #[derive(Debug, Deserialize)]
 pub struct CreateModel {
     pub name: String,
-    pub pricing_policy_id: Option<String>,  // NEW
-    pub billing_type: Option<String>,
-    pub input_price: Option<f64>,
-    pub output_price: Option<f64>,
-    pub request_price: Option<f64>,
+    pub pricing_policy_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateModel {
     pub pricing_policy_id: Option<Option<String>>,  // None=keep, Some(None)=clear
-    pub billing_type: Option<Option<String>>,  // None=keep, Some(None)=clear
-    pub input_price: Option<f64>,
-    pub output_price: Option<f64>,
-    pub request_price: Option<f64>,
-    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ModelWithProvider {
     pub model: Model,
-    pub provider_name: String,
-    pub openai_compatible: bool,
-    pub anthropic_compatible: bool,
+    pub pricing_policy_name: Option<String>,
+    pub channel_ids: Vec<String>,
+    pub channel_names: Vec<String>,
 }
 
 // --- Channel Models (Junction Table) ---
@@ -255,14 +381,10 @@ pub struct ChannelModel {
     pub id: String,
     pub channel_id: String,
     pub model_id: String,
-    pub upstream_model_name: String,
+    pub upstream_model_name: Option<String>,
     pub priority_override: Option<i32>,
-    pub cost_policy_id: Option<String>,   // NEW: for upstream cost
-    pub markup_ratio: f64,                  // NEW, default 1.0
-    pub billing_type: Option<String>,       // NEW: billing_type
-    pub input_price: Option<f64>,            // NEW: input_price
-    pub output_price: Option<f64>,          // NEW: output_price
-    pub request_price: Option<f64>,         // NEW: request_price
+    pub pricing_policy_id: Option<String>,
+    pub markup_ratio: f64,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -270,28 +392,21 @@ pub struct ChannelModel {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateChannelModel {
-    pub channel_id: String,
+    pub channel_id: Option<String>,
     pub model_id: String,
-    pub upstream_model_name: String,
+    pub upstream_model_name: Option<String>,
     pub priority_override: Option<i32>,
-    pub cost_policy_id: Option<String>,   // NEW
-    pub markup_ratio: Option<f64>,         // NEW
-    pub billing_type: Option<String>,       // NEW: billing_type
-    pub input_price: Option<f64>,          // NEW: input_price
-    pub output_price: Option<f64>,         // NEW: output_price
-    pub request_price: Option<f64>,        // NEW: request_price
+    pub pricing_policy_id: Option<String>,
+    pub markup_ratio: Option<f64>,
+    pub enabled: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateChannelModel {
     pub upstream_model_name: Option<String>,
-    pub priority_override: Option<Option<i32>>,  // None=keep, Some(None)=clear
-    pub cost_policy_id: Option<Option<String>>,  // NEW
-    pub markup_ratio: Option<f64>,                // NEW
-    pub billing_type: Option<Option<String>>,     // NEW: None=keep, Some(None)=clear
-    pub input_price: Option<f64>,                // NEW
-    pub output_price: Option<f64>,               // NEW
-    pub request_price: Option<f64>,              // NEW
+    pub priority_override: Option<Option<i32>>,
+    pub pricing_policy_id: Option<Option<String>>,
+    pub markup_ratio: Option<f64>,
     pub enabled: Option<bool>,
 }
 
@@ -317,6 +432,7 @@ pub struct UsageRecord {
     pub protocol: Protocol,
     pub input_tokens: Option<i64>,
     pub output_tokens: Option<i64>,
+    pub cache_read_tokens: Option<i64>,
     pub cost: f64,
     pub created_at: DateTime<Utc>,
 }
@@ -326,6 +442,16 @@ pub struct UsageRecord {
 pub enum Protocol {
     Openai,
     Anthropic,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UsageSummaryRecord {
+    pub model_name: String,
+    pub total_input_tokens: i64,
+    pub total_cache_read_tokens: i64,
+    pub total_output_tokens: i64,
+    pub total_cost: f64,
+    pub request_count: i64,
 }
 
 fn deserialize_datetime_opt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<DateTime<Utc>>, D::Error> {
@@ -366,6 +492,11 @@ pub struct AuditLog {
     pub input_tokens: Option<i64>,
     pub output_tokens: Option<i64>,
     pub created_at: DateTime<Utc>,
+    pub original_model: Option<String>,
+    pub upstream_model: Option<String>,
+    pub model_override_reason: Option<String>,
+    pub request_path: Option<String>,
+    pub upstream_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

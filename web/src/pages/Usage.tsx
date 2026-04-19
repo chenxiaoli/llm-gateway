@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { DollarSign, MessageSquare } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { useUsage } from '../hooks/useUsage';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useUsage, useUsageSummary } from '../hooks/useUsage';
 import { useKeys } from '../hooks/useKeys';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import type { UsageSummaryRecord } from '../types';
 
 export default function Usage() {
   const [since, setSince] = useState('');
@@ -13,27 +14,37 @@ export default function Usage() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
 
-  const { data, isLoading } = useUsage(
-    { since: since || undefined, until: until || undefined, key_id: keyFilter || undefined },
-    page,
-    pageSize,
-  );
+  const filter = { since: since || undefined, until: until || undefined, key_id: keyFilter || undefined };
+
+  const { data, isLoading } = useUsage(filter, page, pageSize);
+  const { data: summaryData, isLoading: summaryLoading } = useUsageSummary(filter);
   const { data: keys } = useKeys();
 
   const usageItems = data?.items ?? [];
-  const totalCost = usageItems.reduce((sum, r) => sum + r.cost, 0);
-  const totalRequests = usageItems.length;
-  const totalInputTokens = usageItems.reduce((sum, r) => sum + (r.input_tokens ?? 0), 0);
-  const totalOutputTokens = usageItems.reduce((sum, r) => sum + (r.output_tokens ?? 0), 0);
-
-  const byModel: Record<string, { model: string; requests: number; cost: number }> = {};
-  usageItems.forEach((r) => {
-    if (!byModel[r.model_name]) { byModel[r.model_name] = { model: r.model_name, requests: 0, cost: 0 }; }
-    byModel[r.model_name].requests += 1;
-    byModel[r.model_name].cost += r.cost;
-  });
-  const chartData = Object.values(byModel).sort((a, b) => b.cost - a.cost);
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
+
+  // Aggregate totals from server-side summary (full filter range, not just current page)
+  const summary: UsageSummaryRecord[] = summaryData ?? [];
+  const grandTotals = summary.reduce<{ cost: number; requests: number; inputTokens: number; cacheReadTokens: number; outputTokens: number }>(
+    (acc, r) => ({
+      cost: acc.cost + r.total_cost,
+      requests: acc.requests + r.request_count,
+      inputTokens: acc.inputTokens + r.total_input_tokens,
+      cacheReadTokens: acc.cacheReadTokens + r.total_cache_read_tokens,
+      outputTokens: acc.outputTokens + r.total_output_tokens,
+    }),
+    { cost: 0, requests: 0, inputTokens: 0, cacheReadTokens: 0, outputTokens: 0 }
+  );
+
+  // Chart data: stacked bars per model (input / cache / output tokens)
+  const chartData = summary.map((r) => ({
+    model: r.model_name,
+    input: r.total_input_tokens,
+    cache: r.total_cache_read_tokens,
+    output: r.total_output_tokens,
+    cost: r.total_cost,
+    requests: r.request_count,
+  }));
 
   return (
     <div>
@@ -49,43 +60,59 @@ export default function Usage() {
         </select>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6 max-lg:grid-cols-2 max-sm:grid-cols-1">
-        <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
-          <div className="stat-title text-base-content/50"><DollarSign className="h-4 w-4 inline mr-1" />Total Cost</div>
-          <div className="stat-value text-2xl font-mono">${totalCost.toFixed(4)}</div>
+      {/* Stat Cards — fed from server-aggregated summary for full filter range */}
+      {!summaryLoading && (
+        <div className="grid grid-cols-5 gap-4 mb-6 max-lg:grid-cols-2 max-sm:grid-cols-1">
+          <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
+            <div className="stat-title text-base-content/50"><DollarSign className="h-4 w-4 inline mr-1" />Total Cost</div>
+            <div className="stat-value text-2xl font-mono">${grandTotals.cost.toFixed(4)}</div>
+          </div>
+          <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
+            <div className="stat-title text-base-content/50"><MessageSquare className="h-4 w-4 inline mr-1" />Requests</div>
+            <div className="stat-value text-2xl font-mono">{grandTotals.requests.toLocaleString()}</div>
+          </div>
+          <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
+            <div className="stat-title text-base-content/50">Input Tokens</div>
+            <div className="stat-value text-2xl font-mono">{grandTotals.inputTokens.toLocaleString()}</div>
+          </div>
+          <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
+            <div className="stat-title text-base-content/50">Cache Read</div>
+            <div className="stat-value text-2xl font-mono">{grandTotals.cacheReadTokens.toLocaleString()}</div>
+          </div>
+          <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
+            <div className="stat-title text-base-content/50">Output Tokens</div>
+            <div className="stat-value text-2xl font-mono">{grandTotals.outputTokens.toLocaleString()}</div>
+          </div>
         </div>
-        <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
-          <div className="stat-title text-base-content/50"><MessageSquare className="h-4 w-4 inline mr-1" />Total Requests</div>
-          <div className="stat-value text-2xl font-mono">{totalRequests.toLocaleString()}</div>
-        </div>
-        <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
-          <div className="stat-title text-base-content/50">Input Tokens</div>
-          <div className="stat-value text-2xl font-mono">{totalInputTokens.toLocaleString()}</div>
-        </div>
-        <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
-          <div className="stat-title text-base-content/50">Output Tokens</div>
-          <div className="stat-value text-2xl font-mono">{totalOutputTokens.toLocaleString()}</div>
-        </div>
-      </div>
+      )}
 
-      {/* Chart */}
-      {chartData.length > 0 && (
+      {/* Chart — stacked bar (input / cache / output tokens) for full filter range */}
+      {!summaryLoading && chartData.length > 0 && (
         <div className="mb-6 bg-base-100 rounded-box p-5 shadow-sm">
-          <h2 className="text-base font-semibold mb-4">Cost by Model</h2>
+          <h2 className="text-base font-semibold mb-4">Token Usage by Model</h2>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-base-300)" />
               <XAxis dataKey="model" tick={{ fill: 'var(--color-base-content)', fontSize: 12, opacity: 0.6 }} />
               <YAxis tick={{ fill: 'var(--color-base-content)', fontSize: 12, opacity: 0.6 }} />
-              <Tooltip contentStyle={{ background: 'var(--color-base-200)', border: '1px solid var(--color-base-300)', borderRadius: 8 }} />
-              <Bar dataKey="cost" fill="var(--color-primary)" name="Cost ($)" radius={[4, 4, 0, 0]} />
+              <Tooltip
+                contentStyle={{ background: 'var(--color-base-200)', border: '1px solid var(--color-base-300)', borderRadius: 8 }}
+                formatter={(value: number, name: string) => {
+                  if (name === 'cost') return [`$${value.toFixed(4)}`, 'Cost'];
+                  if (name === 'requests') return [value.toLocaleString(), 'Requests'];
+                  return [value.toLocaleString(), name.charAt(0).toUpperCase() + name.slice(1)];
+                }}
+              />
+              <Legend />
+              <Bar dataKey="input" stackId="a" fill="var(--color-primary)" name="Input" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="cache" stackId="a" fill="#60a5fa" name="Cache Read" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="output" stackId="a" fill="var(--color-secondary)" name="Output" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — paginated, unchanged */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12"><span className="loading loading-spinner loading-lg" /></div>
       ) : (
@@ -99,6 +126,7 @@ export default function Usage() {
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Model</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Protocol</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Input Tokens</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Cache Read</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Output Tokens</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Cost</th>
                 </tr>
@@ -111,6 +139,7 @@ export default function Usage() {
                     <td className="mono">{item.model_name}</td>
                     <td><Badge variant={item.protocol === 'openai' ? 'blue' : 'purple'}>{item.protocol}</Badge></td>
                     <td className="mono">{item.input_tokens ?? '-'}</td>
+                    <td className="mono">{item.cache_read_tokens ?? '-'}</td>
                     <td className="mono">{item.output_tokens ?? '-'}</td>
                     <td className="mono">${item.cost.toFixed(6)}</td>
                   </tr>

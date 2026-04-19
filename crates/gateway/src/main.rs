@@ -71,8 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = axum::Router::new()
         // OpenAI compatible endpoints (now unified through proxy)
         .route("/v1/chat/completions", post(api::proxy::proxy_with_protocol))
-        .route("/v1/models", get(api::openai::list_models))
-        // Anthropic compatible endpoints
+        .route("/v1/models", get(api::models::list_models))
         .route("/v1/messages", post(api::proxy::messages))
         // Management API
         .merge(api::management::management_router())

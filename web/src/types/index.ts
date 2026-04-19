@@ -35,8 +35,8 @@ export interface UpdateKeyRequest {
 export interface Provider {
   id: string;
   name: string;
-  base_url: string | null;
-  endpoints: string | null;
+  slug: string;
+  endpoints: Record<string, string> | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -44,13 +44,11 @@ export interface Provider {
 
 export interface CreateProviderRequest {
   name: string;
-  base_url?: string | null;
   endpoints?: string | null;
 }
 
 export interface UpdateProviderRequest {
   name?: string;
-  base_url?: string | null;
   endpoints?: string | null;
   enabled?: boolean;
 }
@@ -58,44 +56,29 @@ export interface UpdateProviderRequest {
 export interface Model {
   id: string;
   name: string;
-  provider_id: string;
-  billing_type: string;
+  model_type?: string | null;
   pricing_policy_id?: string | null;
-  input_price: number;
-  output_price: number;
-  request_price: number;
-  enabled: boolean;
   created_at: string;
 }
 
 export interface ModelWithProvider extends Model {
-  provider_name: string;
+  pricing_policy_name?: string | null;
+  channel_ids: string[];
+  channel_names: string[];
 }
 
 export interface CreateModelRequest {
   name: string;
-  billing_type: string;
-  input_price?: number;
-  output_price?: number;
-  request_price?: number;
+  pricing_policy_id?: string | null;
 }
 
 export interface CreateGlobalModelRequest {
-  provider_id: string;
   name: string;
-  billing_type: string;
-  input_price?: number;
-  output_price?: number;
-  request_price?: number;
-  enabled?: boolean;
+  pricing_policy_id?: string | null;
 }
 
 export interface UpdateModelRequest {
-  billing_type?: string;
-  input_price?: number;
-  output_price?: number;
-  request_price?: number;
-  enabled?: boolean;
+  pricing_policy_id?: string | null;
 }
 
 export interface UsageRecord {
@@ -107,8 +90,18 @@ export interface UsageRecord {
   protocol: 'openai' | 'anthropic';
   input_tokens: number | null;
   output_tokens: number | null;
+  cache_read_tokens: number | null;
   cost: number;
   created_at: string;
+}
+
+export interface UsageSummaryRecord {
+  model_name: string;
+  total_input_tokens: number;
+  total_cache_read_tokens: number;
+  total_output_tokens: number;
+  total_cost: number;
+  request_count: number;
 }
 
 export interface UsageFilter {
@@ -133,6 +126,11 @@ export interface AuditLog {
   input_tokens: number | null;
   output_tokens: number | null;
   created_at: string;
+  original_model?: string;
+  upstream_model?: string;
+  model_override_reason?: string;
+  request_path?: string;
+  upstream_url?: string;
 }
 
 export interface LogFilter {
@@ -220,7 +218,6 @@ export interface Channel {
   provider_id: string;
   name: string;
   api_key: string;
-  base_url: string | null;
   priority: number;
   enabled: boolean;
   created_at: string;
@@ -231,16 +228,19 @@ export interface CreateChannelRequest {
   provider_id: string;
   name: string;
   api_key: string;
-  base_url?: string | null;
   priority?: number;
 }
 
 export interface UpdateChannelRequest {
   name?: string;
-  api_key?: string;
-  base_url?: string | null;
+  // api_key intentionally omitted — use dedicated updateChannelApiKey
+  // base_url removed — use provider.endpoints["default"]
   priority?: number;
   enabled?: boolean;
+}
+
+export interface UpdateChannelApiKeyRequest {
+  api_key: string;
 }
 
 // --- Channel Models ---
@@ -249,31 +249,29 @@ export interface ChannelModel {
   id: string;
   channel_id: string;
   model_id: string;
-  upstream_model_name: string;
+  upstream_model_name: string | null;
   priority_override: number | null;
-  billing_type?: string | null;
-  input_price?: number | null;
-  output_price?: number | null;
-  request_price?: number | null;
+  pricing_policy_id?: string | null;
+  markup_ratio: number;
   enabled: boolean;
   created_at: string;
   updated_at: string;
 }
 
 export interface CreateChannelModelRequest {
-  channel_id: string;
   model_id: string;
-  upstream_model_name: string;
+  upstream_model_name?: string | null;
   priority_override?: number | null;
-  billing_type?: string | null;
-  input_price?: number | null;
-  output_price?: number | null;
-  request_price?: number | null;
+  pricing_policy_id?: string | null;
+  markup_ratio?: number;
+  enabled?: boolean;
 }
 
 export interface UpdateChannelModelRequest {
-  upstream_model_name?: string;
+  upstream_model_name?: string | null;
   priority_override?: number | null;
+  pricing_policy_id?: string | null;
+  markup_ratio?: number;
   enabled?: boolean;
 }
 
@@ -288,6 +286,32 @@ export interface SyncedModel {
   name: string;
   model_type: string | null;
   created: boolean;
+}
+
+export interface PricingPolicy {
+  id: string;
+  name: string;
+  billing_type: string;
+  config: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PricingPolicyWithCounts extends PricingPolicy {
+  model_count: number;
+  channel_model_count: number;
+}
+
+export interface CreatePricingPolicy {
+  name: string;
+  billing_type: string;
+  config: Record<string, unknown>;
+}
+
+export interface UpdatePricingPolicy {
+  name?: string;
+  billing_type?: string;
+  config?: Record<string, unknown>;
 }
 
 export interface SyncModelsResponse {

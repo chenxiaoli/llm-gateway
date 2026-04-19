@@ -1,123 +1,174 @@
 use llm_gateway_audit::AuditLogger;
-use llm_gateway_billing::{PricingCalculator, Usage};
-use llm_gateway_storage::{Protocol, UsageRecord};
+use llm_gateway_billing::PricingCalculator;
+use llm_gateway_storage::{PricingPolicy, Protocol, Usage, UsageRecord};
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::debug;
 
 use crate::AuditTask;
 
-/// Background worker: listens to audit channel and logs to database
-/// Does NOT block proxy response - fire-and-forget via MPSC channel
+/// Parse usage from response bytes.
+/// Returns (input_tokens, output_tokens, cache_read_tokens).
+/// For streaming (SSE): extract from last JSON chunk before "data: [DONE]"
+/// For non-streaming (JSON): extract from "usage" field.
+fn parse_usage(bytes: &[u8], stream: bool, proto: Protocol) -> (Option<i64>, Option<i64>, Option<i64>) {
+    let parse_value = |usage: Option<&serde_json::Value>| -> (Option<i64>, Option<i64>, Option<i64>) {
+        match proto {
+            Protocol::Openai => {
+                let input = usage.and_then(|u| u.get("prompt_tokens").and_then(|t| t.as_i64()));
+                let output = usage.and_then(|u| u.get("completion_tokens").and_then(|t| t.as_i64()));
+                // OpenAI o1 series: usage.prompt_tokens_details.cache_read_tokens
+                let cache_read = usage
+                    .and_then(|u| u.get("prompt_tokens_details"))
+                    .and_then(|d| d.get("cache_read_tokens"))
+                    .and_then(|t| t.as_i64());
+                (input, output, cache_read)
+            }
+            Protocol::Anthropic => {
+                let input = usage.and_then(|u| u.get("input_tokens").and_then(|t| t.as_i64()));
+                let output = usage.and_then(|u| u.get("output_tokens").and_then(|t| t.as_i64()));
+                // Anthropic: usage.cache_read_input_tokens
+                let cache_read = usage
+                    .and_then(|u| u.get("cache_read_input_tokens"))
+                    .and_then(|t| t.as_i64());
+                (input, output, cache_read)
+            }
+        }
+    };
+
+    if stream {
+        let text = match std::str::from_utf8(bytes) {
+            Ok(t) => t,
+            Err(_) => return (None, None, None),
+        };
+        let mut last_usage: Option<&str> = None;
+        for line in text.lines() {
+            let line = line.trim();
+            if !line.starts_with("data: ") {
+                continue;
+            }
+            let json_str = &line["data: ".len()..];
+            if json_str == "[DONE]" {
+                break;
+            }
+            if json_str.contains("\"usage\"") {
+                last_usage = Some(json_str);
+            }
+        }
+        if let Some(json_str) = last_usage {
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(json_str) {
+                return parse_value(v.get("usage"));
+            }
+        }
+        (None, None, None)
+    } else {
+        let text = match std::str::from_utf8(bytes) {
+            Ok(t) => t,
+            Err(_) => return (None, None, None),
+        };
+        let v: serde_json::Value = match serde_json::from_str(text) {
+            Ok(v) => v,
+            Err(_) => return (None, None, None),
+        };
+        parse_value(v.get("usage"))
+    }
+}
+
+/// Background worker: receives audit tasks, parses usage, calculates cost, writes DB
 pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, mut rx: mpsc::Receiver<AuditTask>) {
     tracing::info!("[AUDIT-WORKER] Starting audit worker");
-    let audit_logger = Arc::new(AuditLogger::new(storage));
+    let audit_logger = Arc::new(AuditLogger::new(storage.clone()));
+
     while let Some(task) = rx.recv().await {
-        tracing::debug!("[AUDIT-WORKER] Received task: key_id={}, model={}, stream={}", task.key_id, task.model_name, task.stream);
-        let _ = audit_worker(
-            audit_logger.clone(),
-            task.key_id,
-            task.model_name,
-            task.provider_id,
-            task.protocol,
-            task.stream,
-            task.request_body,
-            task.response_body,
-            task.status_code,
-            task.latency_ms,
-            task.input_tokens,
-            task.output_tokens,
-        ).await;
-        tracing::debug!("[AUDIT-WORKER] Task completed");
-    }
-    tracing::info!("[AUDIT-WORKER] Worker exiting, channel closed");
-}
+        tracing::info!(
+            "[AUDIT-WORKER] Task received: key_id={}, model={}, stream={}, response_bytes_len={}",
+            task.key_id, task.model_name, task.stream, task.response_bytes.len()
+        );
 
-/// Async worker: calculates usage and writes to usage_records
-/// Runs independently - does NOT block proxy response
-pub async fn usage_worker(
-    storage: Arc<dyn llm_gateway_storage::Storage>,
-    key_id: String,
-    model_name: String,
-    provider_id: String,
-    channel_id: Option<String>,
-    protocol: Protocol,
-    input_tokens: Option<i64>,
-    output_tokens: Option<i64>,
-    pricing_policy_id: Option<String>,
-    model_input_price: f64,
-    model_output_price: f64,
-    model_request_price: f64,
-) {
-    let usage = Usage::from_tokens(input_tokens, output_tokens, 1);
-    let calculator = PricingCalculator;
+        // Parse usage from response bytes
+        let proto = task.protocol.clone();
+        let (input_tokens, output_tokens, cache_read_tokens) =
+            parse_usage(&task.response_bytes, task.stream, proto);
 
-    let cost = if let Some(policy_id) = &pricing_policy_id {
-        match storage.get_pricing_policy(policy_id).await {
-            Ok(Some(policy)) => calculator.calculate_cost(&policy, &usage),
-            _ => 0.0,
-        }
-    } else {
-        llm_gateway_billing::calculate_cost(
-            &llm_gateway_storage::BillingType::Token,
+        // Calculate cost using PricingCalculator with policy config
+        let cost = if let Some(config) = &task.pricing_policy_config {
+            let policy = PricingPolicy {
+                id: String::new(),
+                name: String::new(),
+                billing_type: task.pricing_policy_billing_type.clone(),
+                config: config.clone(),
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            };
+            let usage = Usage {
+                input_tokens: input_tokens.unwrap_or(0),
+                output_tokens: output_tokens.unwrap_or(0),
+                input_chars: None,
+                output_chars: None,
+                request_count: 1,
+                cache_read_tokens,
+            };
+            let raw_cost = PricingCalculator.calculate_cost(&policy, &usage);
+            raw_cost * task.markup_ratio
+        } else {
+            0.0
+        };
+
+        tracing::info!(
+            "[AUDIT-WORKER] Parsed: input={:?}, output={:?}, cache_read={:?}, cost={}",
+            input_tokens, output_tokens, cache_read_tokens, cost
+        );
+
+        // Write usage record
+        let record = UsageRecord {
+            id: uuid::Uuid::new_v4().to_string(),
+            key_id: task.key_id.clone(),
+            model_name: task.model_name.clone(),
+            provider_id: task.provider_id.clone(),
+            channel_id: task.channel_id.clone(),
+            protocol: task.protocol.clone(),
             input_tokens,
             output_tokens,
-            model_input_price,
-            model_output_price,
-            model_request_price,
-        ).cost
-    };
+            cache_read_tokens,
+            cost,
+            created_at: chrono::Utc::now(),
+        };
+        if let Err(e) = storage.record_usage(&record).await {
+            tracing::error!("[AUDIT-WORKER] Failed to record usage: {}", e);
+        }
 
-    let record = UsageRecord {
-        id: uuid::Uuid::new_v4().to_string(),
-        key_id,
-        model_name,
-        provider_id,
-        channel_id,
-        protocol,
-        input_tokens,
-        output_tokens,
-        cost,
-        created_at: chrono::Utc::now(),
-    };
+        // Write audit log (only if not streaming, since full SSE response can be large)
+        let response_body = if task.stream {
+            if task.response_bytes.len() < 100_000 {
+                String::from_utf8_lossy(&task.response_bytes).to_string()
+            } else {
+                "[streaming response truncated]".to_string()
+            }
+        } else {
+            String::from_utf8_lossy(&task.response_bytes).to_string()
+        };
 
-    if let Err(e) = storage.record_usage(&record).await {
-        debug!("Failed to record usage: {}", e);
+        if let Err(e) = audit_logger.log_request(
+            &task.key_id,
+            &task.model_name,
+            &task.provider_id,
+            task.protocol,
+            task.stream,
+            &task.request_body,
+            &response_body,
+            task.status_code,
+            task.latency_ms,
+            input_tokens,
+            output_tokens,
+            task.original_model.as_deref(),
+            task.upstream_model.as_deref(),
+            task.model_override_reason.as_deref(),
+            task.request_path.as_deref(),
+            task.upstream_url.as_deref(),
+        ).await {
+            tracing::error!("[AUDIT-WORKER] Failed to log audit request: {}", e);
+        }
+
+        tracing::info!("[AUDIT-WORKER] Task completed: key_id={}, model={}", task.key_id, task.model_name);
     }
-}
-
-/// Async worker: logs audit record
-/// Runs independently - does NOT block proxy response
-pub async fn audit_worker(
-    audit_logger: Arc<AuditLogger>,
-    key_id: String,
-    model_name: String,
-    provider_id: String,
-    protocol: Protocol,
-    stream: bool,
-    request_body: String,
-    response_body: String,
-    status_code: i32,
-    latency_ms: i64,
-    input_tokens: Option<i64>,
-    output_tokens: Option<i64>,
-) {
-    tracing::debug!("[AUDIT-WORKER] Calling log_request: key_id={}, stream={}", key_id, stream);
-    let result = audit_logger.log_request(
-        &key_id,
-        &model_name,
-        &provider_id,
-        protocol,
-        stream,
-        &request_body,
-        &response_body,
-        status_code,
-        latency_ms,
-        input_tokens,
-        output_tokens,
-    ).await;
-    match result {
-        Ok(()) => tracing::debug!("[AUDIT-WORKER] log_request success"),
-        Err(e) => tracing::warn!("[AUDIT-WORKER] log_request failed: {}", e),
-    }
+    tracing::info!("[AUDIT-WORKER] Worker exiting, channel closed");
 }

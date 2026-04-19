@@ -17,8 +17,12 @@ pub async fn create_channel_model(
 ) -> Result<Json<ChannelModel>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
+    // channel_id is required when creating by provider
+    let channel_id = input.channel_id.as_ref()
+        .ok_or(ApiError::BadRequest("channel_id is required".to_string()))?;
+
     // Verify channel belongs to provider
-    let channel = state.storage.get_channel(&input.channel_id).await
+    let channel = state.storage.get_channel(channel_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("Channel not found".to_string()))?;
 
@@ -27,24 +31,58 @@ pub async fn create_channel_model(
     }
 
     // Verify model exists
-    let _model = state.storage.get_model(&input.model_id).await
+    let _model = state.storage.get_model_by_id(&input.model_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("Model not found".to_string()))?;
 
     let now = chrono::Utc::now();
     let cm = ChannelModel {
         id: uuid::Uuid::new_v4().to_string(),
-        channel_id: input.channel_id,
+        channel_id: channel_id.clone(),
         model_id: input.model_id,
         upstream_model_name: input.upstream_model_name,
         priority_override: input.priority_override,
-        cost_policy_id: input.cost_policy_id,
+        pricing_policy_id: input.pricing_policy_id,
         markup_ratio: input.markup_ratio.unwrap_or(1.0),
-        billing_type: input.billing_type,
-        input_price: input.input_price,
-        output_price: input.output_price,
-        request_price: input.request_price,
-        enabled: true,
+        enabled: input.enabled.unwrap_or(true),
+        created_at: now,
+        updated_at: now,
+    };
+
+    let created = state.storage.create_channel_model(&cm).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(created))
+}
+
+pub async fn create_channel_model_by_channel(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(channel_id): Path<String>,
+    Json(input): Json<CreateChannelModel>,
+) -> Result<Json<ChannelModel>, ApiError> {
+    require_admin(&headers, &state.jwt_secret)?;
+
+    // Verify channel exists
+    let _channel = state.storage.get_channel(&channel_id).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound("Channel not found".to_string()))?;
+
+    // Verify model exists by ID
+    let _model = state.storage.get_model_by_id(&input.model_id).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound("Model not found".to_string()))?;
+
+    let now = chrono::Utc::now();
+    let cm = ChannelModel {
+        id: uuid::Uuid::new_v4().to_string(),
+        channel_id: channel_id.clone(),
+        model_id: input.model_id,
+        upstream_model_name: input.upstream_model_name,
+        priority_override: input.priority_override,
+        pricing_policy_id: input.pricing_policy_id,
+        markup_ratio: input.markup_ratio.unwrap_or(1.0),
+        enabled: input.enabled.unwrap_or(true),
         created_at: now,
         updated_at: now,
     };
@@ -106,22 +144,16 @@ pub async fn update_channel_model(
         .ok_or(ApiError::NotFound("ChannelModel not found".to_string()))?;
 
     if let Some(upstream) = input.upstream_model_name {
-        cm.upstream_model_name = upstream;
+        cm.upstream_model_name = Some(upstream);
     }
     if let Some(priority) = input.priority_override {
         cm.priority_override = priority;
     }
-    if let Some(Some(billing_type)) = input.billing_type {
-        cm.billing_type = Some(billing_type);
+    if let Some(pricing_policy_id) = input.pricing_policy_id {
+        cm.pricing_policy_id = pricing_policy_id;
     }
-    if let Some(input_price) = input.input_price {
-        cm.input_price = Some(input_price);
-    }
-    if let Some(output_price) = input.output_price {
-        cm.output_price = Some(output_price);
-    }
-    if let Some(request_price) = input.request_price {
-        cm.request_price = Some(request_price);
+    if let Some(markup_ratio) = input.markup_ratio {
+        cm.markup_ratio = markup_ratio;
     }
     if let Some(enabled) = input.enabled {
         cm.enabled = enabled;
@@ -145,4 +177,17 @@ pub async fn delete_channel_model(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+pub async fn list_channel_models_by_channel(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(channel_id): Path<String>,
+) -> Result<Json<Vec<ChannelModel>>, ApiError> {
+    require_admin(&headers, &state.jwt_secret)?;
+
+    let models = state.storage.list_channel_models_by_channel(&channel_id).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(models))
 }

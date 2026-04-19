@@ -54,20 +54,16 @@ pub fn management_router() -> Router<Arc<AppState>> {
             get(channels::get_channel).patch(channels::update_channel).delete(channels::delete_channel),
         )
         .route(
+            "/api/v1/admin/channels/{id}/api-key",
+            patch(channels::update_channel_api_key),
+        )
+        .route(
             "/api/v1/admin/models",
             get(models::list_all_models).post(models::create_model_global),
         )
         .route(
-            "/api/v1/admin/providers/{id}/models",
-            get(models::list_models).post(models::create_model),
-        )
-        .route(
-            "/api/v1/admin/providers/{id}/models/{model_name}",
+            "/api/v1/admin/models/{model_name}",
             patch(models::update_model).delete(models::delete_model),
-        )
-        .route(
-            "/api/v1/admin/providers/{id}/sync-models",
-            post(models::sync_models),
         )
         // ChannelModels (admin)
         .route(
@@ -75,11 +71,20 @@ pub fn management_router() -> Router<Arc<AppState>> {
             post(channel_models::create_channel_model).get(channel_models::list_channel_models),
         )
         .route(
+            "/api/v1/admin/channels/{channel_id}/channel-models",
+            get(channel_models::list_channel_models_by_channel),
+        )
+        .route(
+            "/api/v1/admin/channels/{channel_id}/channel-models",
+            post(channel_models::create_channel_model_by_channel),
+        )
+        .route(
             "/api/v1/admin/channel-models/{id}",
             get(channel_models::get_channel_model).patch(channel_models::update_channel_model).delete(channel_models::delete_channel_model),
         )
         // Usage (authenticated)
         .route("/api/v1/usage", get(usage::get_usage))
+        .route("/api/v1/usage/summary", get(usage::get_usage_summary))
         // Logs (admin)
         .route("/api/v1/admin/logs", get(logs::get_logs))
         // Users (admin)

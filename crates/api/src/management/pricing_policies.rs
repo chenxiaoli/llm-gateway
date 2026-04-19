@@ -3,7 +3,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
 use std::sync::Arc;
 
-use llm_gateway_storage::{CreatePricingPolicy, PricingPolicy, UpdatePricingPolicy};
+use llm_gateway_storage::{CreatePricingPolicy, PricingPolicy, PricingPolicyWithCounts, UpdatePricingPolicy};
 
 use crate::error::ApiError;
 use crate::extractors::require_admin;
@@ -38,12 +38,12 @@ pub async fn create(
 pub async fn list(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-) -> Result<Json<Vec<PricingPolicy>>, ApiError> {
+) -> Result<Json<Vec<PricingPolicyWithCounts>>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     let policies = state
         .storage
-        .list_pricing_policies()
+        .list_pricing_policies_with_counts()
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 

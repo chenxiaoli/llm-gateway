@@ -4,7 +4,7 @@ use axum::Json;
 use serde::Serialize;
 use std::sync::Arc;
 
-use llm_gateway_storage::{CreateModel as StorageCreateModel, Model, UpdateModel as StorageUpdateModel};
+use llm_gateway_storage::{Model, UpdateModel};
 
 use crate::error::ApiError;
 use crate::extractors::require_admin;
@@ -24,29 +24,6 @@ pub struct SyncedModel {
     pub created: bool,
 }
 
-pub async fn list_models(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(provider_id): Path<String>,
-) -> Result<Json<Vec<Model>>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
-
-    state
-        .storage
-        .get_provider(&provider_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
-
-    let models = state
-        .storage
-        .list_models_by_provider(&provider_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    Ok(Json(models))
-}
-
 pub async fn list_all_models(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -64,14 +41,8 @@ pub async fn list_all_models(
 
 #[derive(serde::Deserialize)]
 pub struct CreateModelRequest {
-    pub provider_id: String,
     pub name: String,
     pub pricing_policy_id: Option<String>,
-    pub billing_type: Option<String>,
-    pub input_price: Option<f64>,
-    pub output_price: Option<f64>,
-    pub request_price: Option<f64>,
-    pub enabled: Option<bool>,
 }
 
 pub async fn create_model_global(
@@ -81,68 +52,11 @@ pub async fn create_model_global(
 ) -> Result<Json<Model>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
-    // Verify provider exists
-    let _provider = state
-        .storage
-        .get_provider(&input.provider_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or(ApiError::NotFound(format!("Provider '{}' not found", input.provider_id)))?;
-
-    let billing_type = input.billing_type.clone().unwrap_or_else(|| "per_token".to_string());
-
     let model = Model {
         id: input.name.clone(),
         name: input.name,
-        provider_id: input.provider_id,
         model_type: None,
         pricing_policy_id: input.pricing_policy_id,
-        billing_type,
-        input_price: input.input_price.unwrap_or(0.0),
-        output_price: input.output_price.unwrap_or(0.0),
-        request_price: input.request_price.unwrap_or(0.0),
-        enabled: input.enabled.unwrap_or(true),
-        created_at: chrono::Utc::now(),
-    };
-
-    let created = state
-        .storage
-        .create_model(&model)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    Ok(Json(created))
-}
-
-pub async fn create_model(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(provider_id): Path<String>,
-    Json(input): Json<StorageCreateModel>,
-) -> Result<Json<Model>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
-
-    // Verify provider exists
-    let _provider = state
-        .storage
-        .get_provider(&provider_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
-
-    let billing_type = input.billing_type.clone().unwrap_or_else(|| "per_token".to_string());
-
-    let model = Model {
-        id: input.name.clone(),
-        name: input.name,
-        provider_id,
-        model_type: None,
-        pricing_policy_id: input.pricing_policy_id,
-        billing_type,
-        input_price: input.input_price.unwrap_or(0.0),
-        output_price: input.output_price.unwrap_or(0.0),
-        request_price: input.request_price.unwrap_or(0.0),
-        enabled: true,
         created_at: chrono::Utc::now(),
     };
 
@@ -158,8 +72,8 @@ pub async fn create_model(
 pub async fn update_model(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path((provider_id, model_name)): Path<(String, String)>,
-    Json(input): Json<StorageUpdateModel>,
+    Path(model_name): Path<String>,
+    Json(input): Json<UpdateModel>,
 ) -> Result<Json<Model>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
@@ -170,32 +84,9 @@ pub async fn update_model(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?;
 
-    // Verify the model belongs to the specified provider
-    if model.provider_id != provider_id {
-        return Err(ApiError::NotFound(format!(
-            "Model '{}' not found under provider '{}'",
-            model_name, provider_id
-        )));
-    }
-
     // Apply partial updates
     if let Some(pricing_policy_id) = input.pricing_policy_id {
         model.pricing_policy_id = pricing_policy_id;
-    }
-    if let Some(billing_type) = input.billing_type {
-        model.billing_type = billing_type.unwrap_or_else(|| "per_token".to_string());
-    }
-    if let Some(input_price) = input.input_price {
-        model.input_price = input_price;
-    }
-    if let Some(output_price) = input.output_price {
-        model.output_price = output_price;
-    }
-    if let Some(request_price) = input.request_price {
-        model.request_price = request_price;
-    }
-    if let Some(enabled) = input.enabled {
-        model.enabled = enabled;
     }
 
     let updated = state
@@ -210,24 +101,17 @@ pub async fn update_model(
 pub async fn delete_model(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    Path((provider_id, model_name)): Path<(String, String)>,
+    Path(model_name): Path<String>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
-    // Verify the model belongs to the specified provider
-    let model = state
+    // Verify the model exists
+    let _model = state
         .storage
         .get_model(&model_name)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?;
-
-    if model.provider_id != provider_id {
-        return Err(ApiError::NotFound(format!(
-            "Model '{}' not found under provider '{}'",
-            model_name, provider_id
-        )));
-    }
 
     state
         .storage
@@ -279,7 +163,7 @@ pub async fn sync_models(
     if let Some(base_url) = openai_endpoints
         .get("openai")
         .and_then(|v| v.as_str())
-        .or(provider.base_url.as_deref())
+        .or_else(|| openai_endpoints.get("default").and_then(|v| v.as_str()))
     {
         let url = format!("{}/models", base_url.trim_end_matches('/'));
         match client
@@ -301,8 +185,8 @@ pub async fn sync_models(
                                 .and_then(|v| v.as_str())
                                 .map(|s| s.to_string());
 
-                            // Check if model exists for this provider
-                            let existing = state.storage.get_model_by_provider(&provider_id, &name).await.map_err(|e| ApiError::Internal(e.to_string()))?;
+                            // Check if model exists
+                            let existing = state.storage.get_model(&name).await.map_err(|e| ApiError::Internal(e.to_string()))?;
 
                             if existing.is_some() {
                                 updated_count += 1;
@@ -312,18 +196,12 @@ pub async fn sync_models(
                                     created: false,
                                 });
                             } else {
-                                // Create new model (disabled by default - requires admin review)
+                                // Create new model
                                 let model = Model {
                                     id: name.clone(),
                                     name: name.clone(),
-                                    provider_id: provider_id.clone(),
                                     model_type: model_type.clone(),
                                     pricing_policy_id: None,
-                                    billing_type: "per_token".to_string(),
-                                    input_price: 0.0,
-                                    output_price: 0.0,
-                                    request_price: 0.0,
-                                    enabled: false,
                                     created_at: chrono::Utc::now(),
                                 };
                                 let _ = state.storage.create_model(&model).await.map_err(|e| ApiError::Internal(e.to_string()));
@@ -353,7 +231,7 @@ pub async fn sync_models(
     if let Some(base_url) = anthropic_endpoints
         .get("anthropic")
         .and_then(|v| v.as_str())
-        .or(provider.base_url.as_deref())
+        .or_else(|| anthropic_endpoints.get("default").and_then(|v| v.as_str()))
     {
         let url = format!("{}/models", base_url.trim_end_matches('/'));
         match client
@@ -381,8 +259,8 @@ pub async fn sync_models(
                                 continue;
                             }
 
-                            // Check if model exists for this provider
-                            let existing = state.storage.get_model_by_provider(&provider_id, &name).await.map_err(|e| ApiError::Internal(e.to_string()))?;
+                            // Check if model exists
+                            let existing = state.storage.get_model(&name).await.map_err(|e| ApiError::Internal(e.to_string()))?;
 
                             if existing.is_some() {
                                 updated_count += 1;
@@ -392,18 +270,12 @@ pub async fn sync_models(
                                     created: false,
                                 });
                             } else {
-                                // Create new model (disabled by default - requires admin review)
+                                // Create new model
                                 let model = Model {
                                     id: name.clone(),
                                     name: name.clone(),
-                                    provider_id: provider_id.clone(),
                                     model_type: model_type.clone(),
                                     pricing_policy_id: None,
-                                    billing_type: "per_token".to_string(),
-                                    input_price: 0.0,
-                                    output_price: 0.0,
-                                    request_price: 0.0,
-                                    enabled: false,
                                     created_at: chrono::Utc::now(),
                                 };
                                 let _ = state.storage.create_model(&model).await.map_err(|e| ApiError::Internal(e.to_string()));

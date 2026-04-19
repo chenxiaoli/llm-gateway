@@ -9,6 +9,7 @@ import {
   Users,
   Settings,
   FileText,
+  DollarSign,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -28,7 +29,9 @@ const consoleItems = [
 
 const adminItems = [
   { key: '/console/channels', icon: Globe, label: 'Channels' },
+  { key: '/console/providers', icon: Globe, label: 'Providers' },
   { key: '/console/models', icon: Cpu, label: 'Models' },
+  { key: '/console/pricing-policies', icon: DollarSign, label: 'Pricing Policies' },
   { key: '/console/users', icon: Users, label: 'Users' },
   { key: '/console/settings', icon: Settings, label: 'Settings' },
   { key: '/console/logs', icon: FileText, label: 'Logs' },
@@ -42,6 +45,7 @@ const routeLabels: Record<string, string> = {
   providers: 'Providers',
   channels: 'Channels',
   models: 'Models',
+  'pricing-policies': 'Pricing Policies',
   users: 'Users',
   settings: 'Settings',
   logs: 'Audit Logs',

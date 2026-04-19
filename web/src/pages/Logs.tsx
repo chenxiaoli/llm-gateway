@@ -188,7 +188,7 @@ export default function Logs() {
         </>
       )}
 
-      <Drawer open={!!selectedLog} onClose={() => setSelectedLog(null)} title="Log Detail" width={700}>
+      <Drawer open={!!selectedLog} onClose={() => setSelectedLog(null)} title="Log Detail" width={720}>
         {selectedLog && (
           <div className="space-y-5">
             {/* Metadata grid */}
@@ -221,7 +221,54 @@ export default function Logs() {
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Tokens</div>
                 <div className="mono text-[13px]">{selectedLog.input_tokens ?? 0} in / {selectedLog.output_tokens ?? 0} out</div>
               </div>
+              <div className="bg-base-200/60 rounded-lg p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Provider</div>
+                <div className="mono text-[13px] text-base-content/70">{selectedLog.provider_id.slice(0, 8)}…</div>
+              </div>
+              <div className="bg-base-200/60 rounded-lg p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Channel</div>
+                <div className="mono text-[13px] text-base-content/70">{selectedLog.channel_id ? `${selectedLog.channel_id.slice(0, 8)}…` : '-'}</div>
+              </div>
             </div>
+
+            {/* Routing info */}
+            {(selectedLog.request_path || selectedLog.upstream_url || selectedLog.original_model || selectedLog.upstream_model) && (
+              <div className="bg-base-200/60 rounded-lg p-4">
+                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-3">Routing</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {selectedLog.request_path && (
+                    <div>
+                      <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">Request Path</div>
+                      <div className="mono text-[13px] font-medium">{selectedLog.request_path}</div>
+                    </div>
+                  )}
+                  {selectedLog.upstream_url && (
+                    <div>
+                      <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">Upstream URL</div>
+                      <div className="mono text-[13px] text-wrap break-all">{selectedLog.upstream_url}</div>
+                    </div>
+                  )}
+                  {selectedLog.original_model && selectedLog.original_model !== selectedLog.model_name && (
+                    <>
+                      <div>
+                        <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">Original Model</div>
+                        <div className="mono text-[13px]">{selectedLog.original_model}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">Upstream Model</div>
+                        <div className="mono text-[13px]">{selectedLog.upstream_model ?? selectedLog.model_name}</div>
+                      </div>
+                      {selectedLog.model_override_reason && (
+                        <div className="sm:col-span-2">
+                          <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">Override Reason</div>
+                          <div className="mono text-[13px]">{selectedLog.model_override_reason}</div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Request body */}
             <div>
