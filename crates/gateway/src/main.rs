@@ -31,23 +31,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     storage.seed_data().await?;
     let storage: Arc<dyn Storage> = Arc::new(storage);
 
+    // Derive encryption key (32 bytes via SHA256)
+    let encryption_key: [u8; 32] = {
+        use sha2::Sha256;
+        let key = config.server.encryption_key.as_bytes();
+        let mut hasher = Sha256::new();
+        hasher.update(key);
+        let result = hasher.finalize();
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(&result);
+        bytes
+    };
+
     // Init channel registry with in-memory cache
     let refresh_interval = std::time::Duration::from_secs(30); // 默认 30 秒
     let registry: Arc<dyn llm_gateway_api::ChannelRegistry> = Arc::new(
-        InMemoryChannelRegistry::new(
-            storage.clone(),
-            {
-                use sha2::Sha256;
-                let key = config.server.encryption_key.as_bytes();
-                let mut hasher = Sha256::new();
-                hasher.update(key);
-                let result = hasher.finalize();
-                let mut bytes = [0u8; 32];
-                bytes.copy_from_slice(&result);
-                bytes
-            },
-            refresh_interval,
-        )
+        InMemoryChannelRegistry::new(storage.clone(), encryption_key, refresh_interval)
     );
     // Start background refresh loop
     let registry_for_loop = registry.clone();
@@ -72,17 +71,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         rate_limiter,
         audit_logger,
         jwt_secret: config.auth.jwt_secret.clone(),
-        encryption_key: {
-            use sha2::Sha256;
-            let key = config.server.encryption_key.as_bytes();
-            // Derive exactly 32 bytes using SHA256
-            let mut hasher = Sha256::new();
-            hasher.update(key);
-            let result = hasher.finalize();
-            let mut bytes = [0u8; 32];
-            bytes.copy_from_slice(&result);
-            bytes
-        },
+        encryption_key,
         audit_tx,
         registry,
     });
