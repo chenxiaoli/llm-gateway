@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSettings, useUpdateSettings } from '../hooks/useSettings';
 import { changePassword } from '../api/auth';
 import { Button } from '../components/ui/Button';
@@ -15,6 +15,26 @@ export default function Settings() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [serverHost, setServerHost] = useState('');
+  const [serverHostLoading, setServerHostLoading] = useState(false);
+
+  useEffect(() => {
+    if (settings?.server_host !== undefined) {
+      setServerHost(settings.server_host ?? '');
+    }
+  }, [settings?.server_host]);
+
+  const handleServerHostSave = async () => {
+    setServerHostLoading(true);
+    try {
+      await updateMutation.mutateAsync({ server_host: serverHost });
+      toast.success('Server host updated');
+    } catch {
+      toast.error('Failed to update server host');
+    } finally {
+      setServerHostLoading(false);
+    }
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,20 +127,31 @@ export default function Settings() {
               <div className="py-3 space-y-2">
                 <div className="text-sm font-medium text-base-content">Server Host</div>
                 <div className="text-xs text-base-content/40">Gateway base URL used by the proxy endpoint</div>
-                <input
-                  type="text"
-                  value={settings?.server_host ?? ''}
-                  onChange={(e) => updateMutation.mutate({ server_host: e.target.value })}
-                  placeholder="http://localhost:8080"
-                  spellCheck={false}
-                  className="
-                    w-full rounded-md border border-base-300 bg-base-200/50
-                    px-3 py-1.5 text-sm text-base-content
-                    placeholder:text-base-content/25
-                    focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30
-                    transition-colors
-                  "
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={serverHost}
+                    onChange={(e) => setServerHost(e.target.value)}
+                    placeholder="http://localhost:8080"
+                    spellCheck={false}
+                    className="
+                      flex-1 rounded-md border border-base-300 bg-base-200/50
+                      px-3 py-1.5 text-sm text-base-content
+                      placeholder:text-base-content/25
+                      focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30
+                      transition-colors
+                    "
+                  />
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    loading={serverHostLoading}
+                    disabled={serverHost === (settings?.server_host ?? '')}
+                    onClick={handleServerHostSave}
+                  >
+                    Save
+                  </Button>
+                </div>
               </div>
             </div>
           </motion.div>
