@@ -21,6 +21,7 @@ pub struct AppState {
     pub jwt_secret: String,
     pub encryption_key: [u8; 32],
     pub audit_tx: mpsc::Sender<AuditTask>,
+    pub registry: Arc<dyn ChannelRegistry>,
 }
 
 /// Task sent to background worker for async processing.

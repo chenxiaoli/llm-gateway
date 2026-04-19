@@ -2,7 +2,7 @@ use axum::middleware;
 use axum::routing::{get, post};
 use axum::http::{header, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
-use llm_gateway_api::{self as api, AppState};
+use llm_gateway_api::{self as api, AppState, InMemoryChannelRegistry};
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
@@ -30,6 +30,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     storage.run_migrations().await?;
     storage.seed_data().await?;
     let storage: Arc<dyn Storage> = Arc::new(storage);
+
+    // Init channel registry with in-memory cache
+    let refresh_interval = std::time::Duration::from_secs(30); // 默认 30 秒
+    let registry: Arc<dyn llm_gateway_api::ChannelRegistry> = Arc::new(
+        InMemoryChannelRegistry::new(
+            storage.clone(),
+            {
+                use sha2::Sha256;
+                let key = config.server.encryption_key.as_bytes();
+                let mut hasher = Sha256::new();
+                hasher.update(key);
+                let result = hasher.finalize();
+                let mut bytes = [0u8; 32];
+                bytes.copy_from_slice(&result);
+                bytes
+            },
+            refresh_interval,
+        )
+    );
+    // Start background refresh loop
+    let registry_for_loop = registry.clone();
+    tokio::spawn(async move {
+        registry_for_loop.start_refresh_loop().await;
+    });
 
     // Init rate limiter
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.window_size_secs));
@@ -60,6 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             bytes
         },
         audit_tx,
+        registry,
     });
 
     // Build router
