@@ -60,6 +60,20 @@ export default function Settings() {
 
               <div className="flex items-center justify-between py-3 border-b border-base-200">
                 <div>
+                  <span className="text-sm text-base-content/70">Server Host</span>
+                  <p className="text-xs text-base-content/40">Gateway base URL for proxy requests</p>
+                </div>
+                <input
+                  type="text"
+                  value={settings?.server_host ?? ''}
+                  onChange={(e) => updateMutation.mutate({ server_host: e.target.value })}
+                  placeholder="http://localhost:8080"
+                  className="input input-bordered input-sm w-52 text-right font-mono text-xs text-base-content"
+                />
+              </div>
+
+              <div className="flex items-center justify-between py-3 border-b border-base-200">
+                <div>
                   <span className="text-sm text-base-content/70">Log Request Body</span>
                   <p className="text-xs text-base-content/40">Store request body in audit logs</p>
                 </div>
