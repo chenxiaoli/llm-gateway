@@ -43,4 +43,6 @@ pub struct AuditTask {
     pub model_override_reason: Option<String>,
     pub request_path: Option<String>,
     pub upstream_url: Option<String>,
+    pub request_headers: Option<String>,
+    pub response_headers: Option<String>,
 }

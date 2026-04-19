@@ -244,6 +244,8 @@ struct PgAuditRow {
     model_override_reason: Option<String>,
     request_path: Option<String>,
     upstream_url: Option<String>,
+    request_headers: Option<String>,
+    response_headers: Option<String>,
 }
 
 impl From<PgAuditRow> for AuditLog {
@@ -268,6 +270,8 @@ impl From<PgAuditRow> for AuditLog {
             model_override_reason: r.model_override_reason,
             request_path: r.request_path,
             upstream_url: r.upstream_url,
+            request_headers: r.request_headers,
+            response_headers: r.response_headers,
         }
     }
 }
@@ -1074,8 +1078,8 @@ impl crate::Storage for PostgresStorage {
         sqlx::query(
             "INSERT INTO audit_logs (id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
-             request_path, upstream_url)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
+             request_path, upstream_url, request_headers, response_headers)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)",
         )
         .bind(&log.id)
         .bind(&log.key_id)
@@ -1096,6 +1100,8 @@ impl crate::Storage for PostgresStorage {
         .bind(&log.model_override_reason)
         .bind(&log.request_path)
         .bind(&log.upstream_url)
+        .bind(&log.request_headers)
+        .bind(&log.response_headers)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -1105,7 +1111,7 @@ impl crate::Storage for PostgresStorage {
         let mut sql = String::from(
             "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
-             request_path, upstream_url
+             request_path, upstream_url, request_headers, response_headers
              FROM audit_logs WHERE 1=1",
         );
 
@@ -1143,7 +1149,7 @@ impl crate::Storage for PostgresStorage {
         let rows: Vec<PgAuditRow> = sqlx::query_as(
             "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
-             request_path, upstream_url
+             request_path, upstream_url, request_headers, response_headers
              FROM audit_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2",
         )
         .bind(page_size)

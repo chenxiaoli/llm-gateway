@@ -254,8 +254,35 @@ pub async fn proxy(
 
         tracing::debug!("[PROXY] Upstream success response: status={}, is_stream={}", status, is_stream);
 
+        // Build request headers JSON (for audit log — only forwarded headers, exclude sensitive ones)
+        let request_headers_for_worker: String = {
+            let mut map = serde_json::Map::new();
+            for (name, value) in headers.iter() {
+                match name.as_str() {
+                    "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
+                    _ => {
+                        if let Ok(v) = value.to_str() {
+                            map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
+                        }
+                    }
+                }
+            }
+            serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
+        };
+
         // === Handle streaming: accumulate SSE → forward to client → audit worker parses & calculates cost ===
         if is_stream {
+            // Capture response headers before consuming resp
+            let response_headers_for_worker: String = {
+                let mut map = serde_json::Map::new();
+                for (name, value) in resp.headers().iter() {
+                    if let Ok(v) = value.to_str() {
+                        map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
+                    }
+                }
+                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
+            };
+
             let audit_tx = state.audit_tx.clone();
             let (tx, rx) = mpsc::channel::<bytes::Bytes>(100);
 
@@ -293,6 +320,8 @@ pub async fn proxy(
             let markup_ratio_for_worker = channel_model.markup_ratio;
             let request_path_for_worker = path.to_string();
             let upstream_url_for_worker = upstream_url.clone();
+            let request_headers_for_worker = request_headers_for_worker.clone();
+            let response_headers_for_worker = response_headers_for_worker.clone();
 
             // Spawn: read upstream SSE → forward to client → accumulate decoded text → send to audit worker
             tokio::spawn(async move {
@@ -369,6 +398,8 @@ pub async fn proxy(
                     model_override_reason,
                     request_path: Some(request_path_for_worker),
                     upstream_url: Some(upstream_url_for_worker),
+                    request_headers: Some(request_headers_for_worker),
+                    response_headers: Some(response_headers_for_worker),
                 };
                 if let Err(e) = audit_tx.send(task).await {
                     tracing::warn!("[PROXY] Failed to send audit task: {}", e);
@@ -390,6 +421,16 @@ pub async fn proxy(
         }
 
         // Non-streaming: send to audit worker (it parses JSON, calculates cost, writes DB)
+        // Capture response headers before consuming resp
+        let response_headers_for_worker: String = {
+            let mut map = serde_json::Map::new();
+            for (name, value) in resp.headers().iter() {
+                if let Ok(v) = value.to_str() {
+                    map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
+                }
+            }
+            serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
+        };
         let response_bytes = resp.bytes().await.unwrap_or_default().to_vec();
 
         // Resolve pricing policy for cost calculation
@@ -432,6 +473,8 @@ pub async fn proxy(
             model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
             request_path: Some(path.to_string()),
             upstream_url: Some(upstream_url.clone()),
+            request_headers: Some(request_headers_for_worker.clone()),
+            response_headers: Some(response_headers_for_worker),
         };
         let _ = state.audit_tx.try_send(task);
 

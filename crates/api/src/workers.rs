@@ -164,6 +164,8 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
             task.model_override_reason.as_deref(),
             task.request_path.as_deref(),
             task.upstream_url.as_deref(),
+            task.request_headers.as_deref(),
+            task.response_headers.as_deref(),
         ).await {
             tracing::error!("[AUDIT-WORKER] Failed to log audit request: {}", e);
         }
