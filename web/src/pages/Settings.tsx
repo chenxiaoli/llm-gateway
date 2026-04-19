@@ -104,11 +104,9 @@ export default function Settings() {
               </div>
 
               {/* Server Host */}
-              <div className="flex items-center justify-between gap-6 py-3">
-                <div>
-                  <div className="text-sm font-medium text-base-content">Server Host</div>
-                  <div className="text-xs text-base-content/40 mt-0.5">Gateway base URL used by the proxy endpoint</div>
-                </div>
+              <div className="py-3 space-y-2">
+                <div className="text-sm font-medium text-base-content">Server Host</div>
+                <div className="text-xs text-base-content/40">Gateway base URL used by the proxy endpoint</div>
                 <input
                   type="text"
                   value={settings?.server_host ?? ''}
@@ -116,7 +114,7 @@ export default function Settings() {
                   placeholder="http://localhost:8080"
                   spellCheck={false}
                   className="
-                    w-52 rounded-md border border-base-300 bg-base-200/50
+                    w-full rounded-md border border-base-300 bg-base-200/50
                     px-3 py-1.5 text-sm text-base-content
                     placeholder:text-base-content/25
                     focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30
