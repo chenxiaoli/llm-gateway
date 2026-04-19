@@ -6,6 +6,8 @@ pub mod proxy;
 pub mod workers;
 pub mod management;
 
+pub use crate::proxy::{ChannelRegistry, InMemoryChannelRegistry, ResolvedChannel};
+
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::Storage;
