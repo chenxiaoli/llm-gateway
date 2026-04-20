@@ -845,3 +845,111 @@ pub async fn messages(
 ) -> Result<axum::response::Response, ApiError> {
     proxy(State(state), headers, body, ProxyProtocol::Anthropic).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Stub registry that always returns fixed channels
+    pub struct StubRegistry(pub Vec<ResolvedChannel>);
+
+    #[async_trait::async_trait]
+    impl ChannelRegistry for StubRegistry {
+        async fn resolve(&self, channel_id: &str) -> Option<ResolvedChannel> {
+            self.0.iter().find(|c| c.channel_id.to_string() == channel_id).cloned()
+        }
+        async fn resolve_by_model(&self, _model: &str) -> Vec<ResolvedChannel> {
+            self.0.clone()
+        }
+        async fn reload(&self) {}
+    }
+
+    #[test]
+    fn resolved_channel_carries_all_fields() {
+        let model_key = "gpt-4o".to_lowercase();
+        let rc = ResolvedChannel {
+            channel_id: Uuid::new_v4(),
+            provider_id: "prov-1".into(),
+            name: "test-channel".into(),
+            upstream_base_url: "https://api.openai.com/v1".into(),
+            upstream_api_key: "sk-test".into(),
+            adapter: ProxyProtocol::OpenAI,
+            timeout_ms: 30_000,
+            priority: 1,
+            model_overrides: HashMap::from([(
+                model_key.clone(),
+                ChannelModelEnriched {
+                    upstream_model_name: Some("gpt-4o".into()),
+                    pricing_policy_id: Some("policy-1".into()),
+                    markup_ratio: 1.5,
+                },
+            )]),
+        };
+        let enriched = rc.model_overrides.get(&model_key).expect("should have model override");
+        assert_eq!(enriched.markup_ratio, 1.5);
+        assert_eq!(enriched.upstream_model_name.as_deref(), Some("gpt-4o"));
+        assert_eq!(enriched.pricing_policy_id.as_deref(), Some("policy-1"));
+        assert_eq!(rc.adapter, ProxyProtocol::OpenAI);
+        assert_eq!(rc.provider_id, "prov-1");
+        assert_eq!(rc.name, "test-channel");
+    }
+
+    #[tokio::test]
+    async fn stub_registry_resolve_by_model() {
+        let rc = ResolvedChannel {
+            channel_id: Uuid::new_v4(),
+            provider_id: "prov-1".into(),
+            name: "test-channel".into(),
+            upstream_base_url: "https://api.openai.com/v1".into(),
+            upstream_api_key: "sk-test".into(),
+            adapter: ProxyProtocol::OpenAI,
+            timeout_ms: 30_000,
+            priority: 1,
+            model_overrides: HashMap::new(),
+        };
+        let registry = StubRegistry(vec![rc.clone()]);
+        let result = registry.resolve_by_model("any-model").await;
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].provider_id, "prov-1");
+    }
+
+    #[tokio::test]
+    async fn stub_registry_resolve_by_id() {
+        let channel_id = Uuid::new_v4();
+        let rc = ResolvedChannel {
+            channel_id,
+            provider_id: "prov-2".into(),
+            name: "channel-by-id".into(),
+            upstream_base_url: "https://api.anthropic.com".into(),
+            upstream_api_key: "sk-ant".into(),
+            adapter: ProxyProtocol::Anthropic,
+            timeout_ms: 60_000,
+            priority: 5,
+            model_overrides: HashMap::from([(
+                "claude-3-5-sonnet".to_lowercase(),
+                ChannelModelEnriched {
+                    upstream_model_name: Some("claude-3-5-sonnet".into()),
+                    pricing_policy_id: Some("policy-2".into()),
+                    markup_ratio: 2.0,
+                },
+            )]),
+        };
+        let registry = StubRegistry(vec![rc.clone()]);
+        let result = registry.resolve(&channel_id.to_string()).await;
+        assert!(result.is_some());
+        let resolved = result.unwrap();
+        assert_eq!(resolved.provider_id, "prov-2");
+        assert_eq!(resolved.adapter, ProxyProtocol::Anthropic);
+        let enriched = resolved.model_overrides.get("claude-3-5-sonnet").expect("should have model override");
+        assert_eq!(enriched.markup_ratio, 2.0);
+    }
+
+    #[test]
+    fn proxy_protocol_variants() {
+        assert_ne!(ProxyProtocol::OpenAI, ProxyProtocol::Anthropic);
+        let openai = ProxyProtocol::OpenAI;
+        let anthropic = ProxyProtocol::Anthropic;
+        assert!(matches!(openai, ProxyProtocol::OpenAI));
+        assert!(matches!(anthropic, ProxyProtocol::Anthropic));
+    }
+}
