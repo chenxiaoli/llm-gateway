@@ -647,6 +647,9 @@ pub async fn proxy(
                     .header("Content-Type", "application/json");
             }
         }
+        // Disable upstream compression — we forward raw bytes directly so downstream
+        // clients receive the exact stream format without double-decompression.
+        req = req.header("Accept-Encoding", "identity");
 
         req = req.header("Authorization", format!("Bearer {}", api_key_value));
 
@@ -778,17 +781,13 @@ pub async fn proxy(
                 .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).text("keep-alive"))
                 .into_response();
 
-            // Forward upstream headers (except content-length which is dynamic for streams,
-            // and content-encoding which reqwest auto-decompresses — forwarding it would
-            // cause downstream clients to attempt decompression on already-decompressed data)
+            // Forward upstream headers (except content-length which is dynamic for streams)
             let mut response = sse_response;
             for (name, value) in upstream_resp_headers {
-                match name.as_str() {
-                    "content-length" | "content-encoding" | "transfer-encoding" => continue,
-                    _ => {
-                        response.headers_mut().insert(name.clone(), value.clone());
-                    }
+                if name.as_str() == "content-length" {
+                    continue;
                 }
+                response.headers_mut().insert(name.clone(), value.clone());
             }
             response.headers_mut().insert(
                 axum::http::header::CONTENT_TYPE,
