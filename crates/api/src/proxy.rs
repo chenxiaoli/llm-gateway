@@ -453,7 +453,7 @@ pub async fn proxy(
         if candidates.is_empty() {
             return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
         }
-        candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
+        candidates.sort_by(|a, b| b.0.priority.cmp(&a.0.priority));
         candidates
     } else {
         // Cache miss: use original DB routing logic
@@ -535,7 +535,7 @@ pub async fn proxy(
                 }
             }
         }
-        candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
+        candidates.sort_by(|a, b| b.0.priority.cmp(&a.0.priority));
         if candidates.is_empty() {
             return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
         }
