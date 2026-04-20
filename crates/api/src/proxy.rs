@@ -11,7 +11,6 @@ use uuid::Uuid;
 use async_trait::async_trait;
 
 use llm_gateway_auth::hash_api_key;
-use llm_gateway_encryption::decrypt;
 use llm_gateway_storage::Protocol;
 
 use crate::error::ApiError;
@@ -25,6 +24,7 @@ use crate::AuditTask;
 pub struct ResolvedChannel {
     pub channel_id: Uuid,
     pub provider_id: String,
+    pub name: String,
     pub upstream_base_url: String,
     pub upstream_api_key: String, // decrypted
     pub adapter: ProxyProtocol,
@@ -143,6 +143,7 @@ impl InMemoryChannelRegistry {
             let resolved = ResolvedChannel {
                 channel_id: Uuid::parse_str(&channel.id).unwrap_or_else(|_| Uuid::new_v4()),
                 provider_id: channel.provider_id.clone(),
+                name: channel.name.clone(),
                 upstream_base_url: endpoint_openai.unwrap_or_default(),
                 upstream_api_key: api_key,
                 adapter: ProxyProtocol::OpenAI,
@@ -429,72 +430,122 @@ pub async fn proxy(
 
     tracing::debug!("[PROXY] Found model: {} (id: {})", model_entry.model.name, model_entry.model.id);
 
-    // === Step 3: Route via ChannelModel (sole routing source) ===
-    // Get channel_models for this model, filter enabled, get channels, sort by priority
-    let channel_models = state
-        .storage
-        .get_channel_models_for_model(&model_entry.model.id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    // === Step 3: Route via ChannelRegistry (cache-first) ===
+    let resolved_channels = state.registry.resolve_by_model(&model_name).await;
 
-    tracing::debug!("[PROXY] Found {} channel_models for model", channel_models.len());
+    let routing_candidates: Vec<(ResolvedChannel, llm_gateway_storage::ChannelModel)> = if !resolved_channels.is_empty() {
+        // Cache hit: enrich with channel_model data (upstream_model_name, pricing_policy_id, markup_ratio)
+        let channel_models = state
+            .storage
+            .get_channel_models_for_model(&model_entry.model.id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // Filter enabled channel_models and get their channel_ids
-    let enabled_channel_model_ids: Vec<&str> = channel_models
-        .iter()
-        .filter(|cm| cm.enabled)
-        .map(|cm| cm.channel_id.as_str())
-        .collect();
-
-    if enabled_channel_model_ids.is_empty() {
-        return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
-    }
-
-    tracing::debug!("[PROXY] Enabled channel_model ids: {:?}", enabled_channel_model_ids);
-
-    // Get all channels and filter to those in our channel_models
-    let all_channels = state
-        .storage
-        .list_channels()
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    // Build a map for quick channel lookup by id
-    let channel_map: std::collections::HashMap<&str, &llm_gateway_storage::Channel> = all_channels
-        .iter()
-        .map(|c| (c.id.as_str(), c))
-        .collect();
-
-    // Create routing candidates: (channel, channel_model) pairs
-    let mut routing_candidates: Vec<(&llm_gateway_storage::Channel, &llm_gateway_storage::ChannelModel)> = Vec::new();
-
-    for cm in channel_models.iter().filter(|cm| cm.enabled) {
-        if let Some(channel) = channel_map.get(cm.channel_id.as_str()) {
-            if channel.enabled {
-                routing_candidates.push((channel, cm));
+        let mut candidates = Vec::new();
+        for mut rc in resolved_channels {
+            if let Some(cm) = channel_models.iter().find(|cm| cm.channel_id == rc.channel_id.to_string() && cm.enabled) {
+                rc.upstream_model_name = cm.upstream_model_name.clone();
+                rc.pricing_policy_id = cm.pricing_policy_id.clone().or(rc.pricing_policy_id);
+                rc.markup_ratio = cm.markup_ratio;
+                candidates.push((rc, cm.clone()));
             }
         }
-    }
+        if candidates.is_empty() {
+            return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
+        }
+        candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
+        candidates
+    } else {
+        // Cache miss: use original DB routing logic
+        let channel_models = state
+            .storage
+            .get_channel_models_for_model(&model_entry.model.id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    if routing_candidates.is_empty() {
-        return Err(ApiError::NotFound("No enabled channels available for routing".to_string()));
-    }
+        let all_channels = state
+            .storage
+            .list_channels()
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // Sort by channel priority (lower number = higher priority)
-    routing_candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
+        let channel_map: std::collections::HashMap<&str, &llm_gateway_storage::Channel> = all_channels
+            .iter()
+            .map(|c| (c.id.as_str(), c))
+            .collect();
 
-    tracing::debug!("[PROXY] Routing candidates (sorted by priority): {}", routing_candidates.len());
+        // Find provider_id from first enabled channel_model + channel
+        let provider_id = {
+            let mut pid: Option<&str> = None;
+            for cm in channel_models.iter().filter(|cm| cm.enabled) {
+                if let Some(ch) = channel_map.get(cm.channel_id.as_str()) {
+                    if ch.enabled {
+                        pid = Some(ch.provider_id.as_str());
+                        break;
+                    }
+                }
+            }
+            pid.ok_or_else(|| ApiError::Internal("No provider ID available".to_string()))?
+        };
 
-    // Get provider from first channel (for endpoints lookup)
-    let provider_id = routing_candidates.first().map(|(c, _)| c.provider_id.clone())
+        let provider = state
+            .storage
+            .get_provider(provider_id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+            .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
+
+        let mut candidates: Vec<(ResolvedChannel, llm_gateway_storage::ChannelModel)> = Vec::new();
+        for cm in channel_models.iter().filter(|cm| cm.enabled) {
+            if let Some(channel) = channel_map.get(cm.channel_id.as_str()) {
+                if channel.enabled {
+                    let endpoints: serde_json::Value = provider
+                        .endpoints
+                        .as_ref()
+                        .and_then(|e| serde_json::from_str(e).ok())
+                        .unwrap_or(serde_json::Value::Null);
+                    let proto_key = match protocol {
+                        ProxyProtocol::OpenAI => "openai",
+                        ProxyProtocol::Anthropic => "anthropic",
+                    };
+                    let base_url = endpoints
+                        .get(proto_key)
+                        .and_then(|v| v.as_str())
+                        .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
+                        .map(|s| s.to_string())
+                        .unwrap_or_default();
+
+                    let api_key = llm_gateway_encryption::decrypt(&channel.api_key, &state.encryption_key)
+                        .unwrap_or_else(|_| channel.api_key.clone());
+
+                    let resolved = ResolvedChannel {
+                        channel_id: Uuid::parse_str(&channel.id).unwrap_or_else(|_| Uuid::new_v4()),
+                        provider_id: channel.provider_id.clone(),
+                        name: channel.name.clone(),
+                        upstream_base_url: base_url,
+                        upstream_api_key: api_key,
+                        adapter: protocol,
+                        timeout_ms: 60_000,
+                        priority: channel.priority,
+                        pricing_policy_id: channel.pricing_policy_id.clone(),
+                        markup_ratio: cm.markup_ratio,
+                        upstream_model_name: cm.upstream_model_name.clone(),
+                    };
+                    candidates.push((resolved, cm.clone()));
+                }
+            }
+        }
+        candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
+        if candidates.is_empty() {
+            return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
+        }
+        candidates
+    };
+
+    // Extract provider_id from resolved channel for audit/billing
+    let provider_id = routing_candidates.first()
+        .map(|(c, _)| c.provider_id.clone())
         .ok_or_else(|| ApiError::Internal("No channels available".to_string()))?;
-
-    let provider = state
-        .storage
-        .get_provider(&provider_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
 
     let client = reqwest::Client::new();
     let mut last_error = String::new();
@@ -514,34 +565,14 @@ pub async fn proxy(
             body.clone()
         };
 
-        let api_key_value = decrypt(&channel.api_key, &state.encryption_key)
-            .unwrap_or_else(|_| channel.api_key.clone());
+        let api_key_value = channel.upstream_api_key.clone();
 
-        // Get base_url: provider.endpoints[protocol] → provider.endpoints["default"]
-        let endpoints_map: serde_json::Value = provider
-            .endpoints
-            .as_ref()
-            .and_then(|e| serde_json::from_str(e).ok())
-            .unwrap_or(serde_json::Value::Null);
-        let proto_key = match protocol {
-            ProxyProtocol::OpenAI => "openai",
-            ProxyProtocol::Anthropic => "anthropic",
-        };
-        let base_url = endpoints_map
-            .get(proto_key)
-            .and_then(|v| v.as_str())
-            .or_else(|| endpoints_map.get("default").and_then(|v| v.as_str()))
-            .map(|s| s.to_string())
-            .ok_or_else(|| ApiError::Internal(format!("No endpoint for channel '{}' (check provider endpoints, need '{}' or 'default')", channel.name, proto_key)))?;
-
-        // endpoints is base URL - append path
-        // /v1/messages -> endpoint.anthropic + /v1/messages
-        // /v1/chat/completions -> endpoint.openai + /v1/chat/completions
+        // Use pre-resolved upstream_base_url from ResolvedChannel (registry or DB)
         let path = match protocol {
             ProxyProtocol::OpenAI => "/v1/chat/completions",
             ProxyProtocol::Anthropic => "/v1/messages",
         };
-        let upstream_url = format!("{}{}", base_url.trim_end_matches('/'), path);
+        let upstream_url = format!("{}{}", channel.upstream_base_url.trim_end_matches('/'), path);
 
         tracing::debug!("[PROXY] Upstream URL: {} -> {}", path, upstream_url);
         let mut req = client.post(&upstream_url);
@@ -659,7 +690,7 @@ pub async fn proxy(
                 pricing_policy_config,
                 pricing_policy_billing_type,
                 markup_ratio: channel_model.markup_ratio,
-                channel_id: channel.id.clone(),
+                channel_id: channel.channel_id.to_string(),
                 original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
                 upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
                 model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
@@ -752,7 +783,7 @@ pub async fn proxy(
             pricing_policy_config,
             pricing_policy_billing_type,
             markup_ratio: channel_model.markup_ratio,
-            channel_id: Some(channel.id.clone()),
+            channel_id: Some(channel.channel_id.to_string()),
             original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
             upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
             model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
