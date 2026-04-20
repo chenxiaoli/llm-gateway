@@ -143,7 +143,7 @@ impl InMemoryChannelRegistry {
                 .get("openai")
                 .and_then(|v| v.as_str())
                 .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
-                .map(|s| s.to_string());
+                .map(|s| s.trim_end_matches("/v1").to_string());
 
             let api_key = llm_gateway_encryption::decrypt(&channel.api_key, &self.encryption_key)
                 .unwrap_or_else(|_| channel.api_key.clone());
@@ -552,7 +552,7 @@ pub async fn proxy(
                         .get(proto_key)
                         .and_then(|v| v.as_str())
                         .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
-                        .map(|s| s.to_string())
+                        .map(|s| s.trim_end_matches("/v1").to_string())
                         .unwrap_or_default();
 
                     let api_key = llm_gateway_encryption::decrypt(&channel.api_key, &state.encryption_key)
