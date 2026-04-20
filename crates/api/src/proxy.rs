@@ -303,6 +303,7 @@ async fn process_sse_stream(
                                 full_block.push_str(dp);
                                 full_block.push('\n');
                             }
+                            full_block.push_str("\n\n");
                             accumulated.push_str(&full_block);
 
                             // Forward to client
