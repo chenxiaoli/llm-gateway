@@ -347,25 +347,9 @@ async fn process_sse_stream(
 
                             let data = data_parts.join("\n");
 
-                            // Build full event block for audit (preserve event/id lines)
-                            let mut full_block = String::new();
-                            if let Some(ref et) = event_type {
-                                full_block.push_str("event:");
-                                full_block.push_str(et);
-                                full_block.push('\n');
-                            }
-                            if let Some(ref id) = event_id {
-                                full_block.push_str("id:");
-                                full_block.push_str(id);
-                                full_block.push('\n');
-                            }
-                            for dp in &data_parts {
-                                full_block.push_str("data:");
-                                full_block.push_str(dp);
-                                full_block.push('\n');
-                            }
-                            full_block.push_str("\n\n");
-                            accumulated.push_str(&full_block);
+                            // Accumulate raw event block as-is for audit (exact upstream format)
+                            accumulated.push_str(&raw_event);
+                            accumulated.push_str("\n\n");
 
                             // Forward to client
                             let mut sse_event = Event::default().data(&data);
