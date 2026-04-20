@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { DollarSign, Plus, Cpu, Globe, Pencil, Trash2 } from 'lucide-react';
 import { usePricingPolicies, useCreatePricingPolicy, useUpdatePricingPolicy, useDeletePricingPolicy } from '../hooks/usePricingPolicies';
 import { Button } from '../components/ui/Button';
@@ -287,18 +287,17 @@ function EditPolicyModal({
   const [requestPrice, setRequestPrice] = useState('');
   const [cacheReadPrice, setCacheReadPrice] = useState('');
 
-  // Sync state when policy changes (e.g. modal opens with new policy)
-  if (policy) {
-    if (name !== policy.name) setName(policy.name);
-    if (billingType !== policy.billing_type) setBillingType(policy.billing_type);
+  // Sync form state when modal opens with a policy
+  useEffect(() => {
+    if (!policy) return;
+    setName(policy.name);
+    setBillingType(policy.billing_type);
     const cfg = policy.config as Record<string, unknown>;
-    const storedInput = cfg['input_price_1m'] as number | undefined;
-    if (inputPrice !== String(storedInput ?? '')) setInputPrice(String(storedInput ?? ''));
-    const storedOutput = cfg['output_price_1m'] as number | undefined;
-    if (outputPrice !== String(storedOutput ?? '')) setOutputPrice(String(storedOutput ?? ''));
-    if (requestPrice !== String(cfg['request_price'] ?? '')) setRequestPrice(String(cfg['request_price'] ?? ''));
-    if (cacheReadPrice !== String(cfg['cache_read_price_1m'] ?? '')) setCacheReadPrice(String(cfg['cache_read_price_1m'] ?? ''));
-  }
+    setInputPrice(cfg['input_price_1m'] != null ? String(cfg['input_price_1m']) : '');
+    setOutputPrice(cfg['output_price_1m'] != null ? String(cfg['output_price_1m']) : '');
+    setRequestPrice(cfg['request_price'] != null ? String(cfg['request_price']) : '');
+    setCacheReadPrice(cfg['cache_read_price_1m'] != null ? String(cfg['cache_read_price_1m']) : '');
+  }, [policy]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
