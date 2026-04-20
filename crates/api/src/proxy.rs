@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 use uuid::Uuid;
+use chrono::Utc;
 
 use async_trait::async_trait;
 
@@ -20,6 +21,14 @@ use crate::AuditTask;
 
 // ─── Resolved Channel ────────────────────────────────────────────────────────
 
+/// Per-model enrichment for a channel (upstream_model_name, pricing, markup).
+#[derive(Clone, Debug)]
+pub struct ChannelModelEnriched {
+    pub upstream_model_name: Option<String>,
+    pub pricing_policy_id: Option<String>,
+    pub markup_ratio: f64,
+}
+
 #[derive(Clone, Debug)]
 pub struct ResolvedChannel {
     pub channel_id: Uuid,
@@ -30,9 +39,8 @@ pub struct ResolvedChannel {
     pub adapter: ProxyProtocol,
     pub timeout_ms: u64,
     pub priority: i32,
-    pub pricing_policy_id: Option<String>,
-    pub markup_ratio: f64,
-    pub upstream_model_name: Option<String>,
+    /// Per-model overrides: keyed by lowercase model name.
+    pub model_overrides: HashMap<String, ChannelModelEnriched>,
 }
 
 // ─── Channel Registry ────────────────────────────────────────────────────────
@@ -99,7 +107,7 @@ impl InMemoryChannelRegistry {
         let channels = self.storage.list_channels().await?;
         let channel_models = self.storage.list_channel_models().await?;
         let providers = self.storage.list_providers().await?;
-        let models = self.storage.list_models().await?;
+        let all_storage_models = self.storage.list_models().await?;
 
         let mut cache = HashMap::new();
         let mut model_index: HashMap<String, Vec<String>> = HashMap::new();
@@ -140,6 +148,27 @@ impl InMemoryChannelRegistry {
             let api_key = llm_gateway_encryption::decrypt(&channel.api_key, &self.encryption_key)
                 .unwrap_or_else(|_| channel.api_key.clone());
 
+            // Pre-enrich with per-model overrides (upstream_model_name, pricing, markup)
+            let mut model_overrides: HashMap<String, ChannelModelEnriched> = HashMap::new();
+            if let Some(cms) = cm_by_channel.get(channel.id.as_str()) {
+                for cm in cms {
+                    if !cm.enabled {
+                        continue;
+                    }
+                    if let Some(model) = all_storage_models.iter().find(|m| m.model.id == cm.model_id) {
+                        let model_name_lower = model.model.name.to_lowercase();
+                        model_overrides.insert(
+                            model_name_lower,
+                            ChannelModelEnriched {
+                                upstream_model_name: cm.upstream_model_name.clone(),
+                                pricing_policy_id: cm.pricing_policy_id.clone().or_else(|| channel.pricing_policy_id.clone()),
+                                markup_ratio: cm.markup_ratio,
+                            },
+                        );
+                    }
+                }
+            }
+
             let resolved = ResolvedChannel {
                 channel_id: Uuid::parse_str(&channel.id).unwrap_or_else(|_| Uuid::new_v4()),
                 provider_id: channel.provider_id.clone(),
@@ -149,19 +178,18 @@ impl InMemoryChannelRegistry {
                 adapter: ProxyProtocol::OpenAI,
                 timeout_ms: 60_000,
                 priority: channel.priority,
-                pricing_policy_id: channel.pricing_policy_id.clone(),
-                markup_ratio: channel.markup_ratio,
-                upstream_model_name: None,
+                model_overrides,
             };
 
             cache.insert(channel.id.clone(), resolved);
 
+            // Build model_index: model_name -> channel_ids
             if let Some(cms) = cm_by_channel.get(channel.id.as_str()) {
                 for cm in cms {
                     if !cm.enabled {
                         continue;
                     }
-                    if let Some(model) = models.iter().find(|m| m.model.id == cm.model_id) {
+                    if let Some(model) = all_storage_models.iter().find(|m| m.model.id == cm.model_id) {
                         let model_name = model.model.name.to_lowercase();
                         model_index
                             .entry(model_name)
@@ -434,26 +462,30 @@ pub async fn proxy(
     let resolved_channels = state.registry.resolve_by_model(&model_name).await;
 
     let routing_candidates: Vec<(ResolvedChannel, llm_gateway_storage::ChannelModel)> = if !resolved_channels.is_empty() {
-        // Cache hit: enrich with channel_model data (upstream_model_name, pricing_policy_id, markup_ratio)
-        let channel_models = state
-            .storage
-            .get_channel_models_for_model(&model_entry.model.id)
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
-
+        // Cache hit: use pre-enriched per-model data (no DB call needed)
+        let model_key = model_name.to_lowercase();
         let mut candidates = Vec::new();
-        for mut rc in resolved_channels {
-            if let Some(cm) = channel_models.iter().find(|cm| cm.channel_id == rc.channel_id.to_string() && cm.enabled) {
-                rc.upstream_model_name = cm.upstream_model_name.clone();
-                rc.pricing_policy_id = cm.pricing_policy_id.clone().or(rc.pricing_policy_id);
-                rc.markup_ratio = cm.markup_ratio;
-                candidates.push((rc, cm.clone()));
+        for rc in resolved_channels {
+            if let Some(enriched) = rc.model_overrides.get(&model_key) {
+                let cm = llm_gateway_storage::ChannelModel {
+                    id: Uuid::new_v4().to_string(), // not used in routing path
+                    channel_id: rc.channel_id.to_string(),
+                    model_id: model_entry.model.id.clone(),
+                    enabled: true,
+                    upstream_model_name: enriched.upstream_model_name.clone(),
+                    pricing_policy_id: enriched.pricing_policy_id.clone(),
+                    markup_ratio: enriched.markup_ratio,
+                    priority_override: None,
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                };
+                candidates.push((rc, cm));
             }
         }
         if candidates.is_empty() {
             return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
         }
-        candidates.sort_by(|a, b| b.0.priority.cmp(&a.0.priority));
+        // Already sorted by priority in do_reload()
         candidates
     } else {
         // Cache miss: use original DB routing logic
@@ -527,9 +559,7 @@ pub async fn proxy(
                         adapter: protocol,
                         timeout_ms: 60_000,
                         priority: channel.priority,
-                        pricing_policy_id: channel.pricing_policy_id.clone(),
-                        markup_ratio: cm.markup_ratio,
-                        upstream_model_name: cm.upstream_model_name.clone(),
+                        model_overrides: HashMap::new(), // not used in cache-miss path
                     };
                     candidates.push((resolved, cm.clone()));
                 }
@@ -702,7 +732,6 @@ pub async fn proxy(
 
             let audit_tx = state.audit_tx.clone();
             let upstream_resp = resp;
-            let start = start;
 
             // mpsc channel for SSE events
             let (tx, rx) = mpsc::channel::<Result<Event, std::convert::Infallible>>(256);
