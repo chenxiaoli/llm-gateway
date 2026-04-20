@@ -109,7 +109,7 @@ impl PricingCalculator {
         let cache = usage.cache_read_tokens.unwrap_or(0);
         let thinking_input = usage.input_tokens.saturating_sub(cache);
 
-        let base = cfg.base_per_call.unwrap_or(0.0);
+        let base = cfg.base_per_call.unwrap_or(0.0).max(0.0);
         let input_cost = (thinking_input as f64 / div) * cfg.input_price();
         let cache_cost = (cache as f64 / div) * cfg.cache_read_price();
         let output_cost = (usage.output_tokens as f64 / div) * cfg.output_price();

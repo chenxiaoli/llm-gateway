@@ -213,9 +213,9 @@ pub struct PerTokenConfig {
 }
 
 impl PerTokenConfig {
-    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0) }
-    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0) }
-    pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0) }
+    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn divisor(&self) -> f64 { 1_000_000.0 }
 }
 
@@ -227,7 +227,7 @@ pub struct PerRequestConfig {
 }
 
 impl PerRequestConfig {
-    pub fn price_per_call(&self) -> f64 { self.request_price.unwrap_or(0.0) }
+    pub fn price_per_call(&self) -> f64 { self.request_price.unwrap_or(0.0).max(0.0) }
 }
 
 /// Per-character pricing config: prices in $ per 1M characters.
@@ -240,8 +240,8 @@ pub struct PerCharacterConfig {
 }
 
 impl PerCharacterConfig {
-    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0) }
-    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0) }
+    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn divisor(&self) -> f64 { 1_000_000.0 }
 }
 
@@ -257,8 +257,8 @@ pub struct TierConfig {
 }
 
 impl TierConfig {
-    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0) }
-    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0) }
+    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn divisor(&self) -> f64 {
         if self.input_price_1m.is_some() || self.output_price_1m.is_some() {
             1_000_000.0
@@ -292,9 +292,9 @@ pub struct HybridConfig {
 }
 
 impl HybridConfig {
-    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0) }
-    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0) }
-    pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0) }
+    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn divisor(&self) -> f64 { 1_000_000.0 }
 }
 
