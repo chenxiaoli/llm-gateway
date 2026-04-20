@@ -202,46 +202,40 @@ pub enum BillingType {
 #[serde(rename_all = "snake_case")]
 pub struct PerTokenConfig {
     /// Input token price per 1M tokens (e.g. 3.0 = $3.00/M).
-    #[serde(alias = "input_per_1m", alias = "input_per_1k", alias = "input_price")]
     pub input_price_1m: Option<f64>,
     /// Output token price per 1M tokens.
-    #[serde(alias = "output_per_1m", alias = "output_per_1k", alias = "output_price")]
     pub output_price_1m: Option<f64>,
     /// Cache read price per 1M tokens (cheaper than input).
-    #[serde(alias = "cache_read_price")]
     pub cache_read_price_1m: Option<f64>,
 }
 
 impl PerTokenConfig {
-    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0) }
-    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0) }
-    pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0) }
+    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn divisor(&self) -> f64 { 1_000_000.0 }
 }
 
 /// Per-request pricing config: flat fee per API call.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PerRequestConfig {
-    #[serde(alias = "price_per_call")]
     pub request_price: Option<f64>,
 }
 
 impl PerRequestConfig {
-    pub fn price_per_call(&self) -> f64 { self.request_price.unwrap_or(0.0) }
+    pub fn price_per_call(&self) -> f64 { self.request_price.unwrap_or(0.0).max(0.0) }
 }
 
 /// Per-character pricing config: prices in $ per 1M characters.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PerCharacterConfig {
-    #[serde(alias = "input_per_1m", alias = "input_per_1k", alias = "input_price")]
     pub input_price_1m: Option<f64>,
-    #[serde(alias = "output_per_1m", alias = "output_per_1k", alias = "output_price")]
     pub output_price_1m: Option<f64>,
 }
 
 impl PerCharacterConfig {
-    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0) }
-    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0) }
+    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn divisor(&self) -> f64 { 1_000_000.0 }
 }
 
@@ -250,15 +244,13 @@ impl PerCharacterConfig {
 pub struct TierConfig {
     /// Upper bound of this tier in tokens (null = final tier).
     pub up_to: Option<i64>,
-    #[serde(alias = "input_per_1m", alias = "input_per_1k")]
     pub input_price_1m: Option<f64>,
-    #[serde(alias = "output_per_1m", alias = "output_per_1k")]
     pub output_price_1m: Option<f64>,
 }
 
 impl TierConfig {
-    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0) }
-    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0) }
+    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn divisor(&self) -> f64 {
         if self.input_price_1m.is_some() || self.output_price_1m.is_some() {
             1_000_000.0
@@ -281,20 +273,16 @@ impl TieredTokenConfig {
 /// Hybrid pricing config: base fee per call + per-token.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HybridConfig {
-    #[serde(alias = "base_per_call")]
     pub base_per_call: Option<f64>,
-    #[serde(alias = "input_per_1m", alias = "input_per_1k", alias = "input_price")]
     pub input_price_1m: Option<f64>,
-    #[serde(alias = "output_per_1m", alias = "output_per_1k", alias = "output_price")]
     pub output_price_1m: Option<f64>,
-    #[serde(alias = "cache_read_price")]
     pub cache_read_price_1m: Option<f64>,
 }
 
 impl HybridConfig {
-    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0) }
-    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0) }
-    pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0) }
+    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn divisor(&self) -> f64 { 1_000_000.0 }
 }
 

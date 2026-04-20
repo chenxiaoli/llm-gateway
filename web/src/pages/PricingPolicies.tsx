@@ -27,47 +27,52 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
   const cfg = policy.config ?? {};
   const bt = policy.billing_type;
 
-  if (bt === 'per_token' || bt === 'tiered_token' || bt === 'hybrid') {
-    const input = cfg['input_per_1m'] ?? cfg['input_price'];
-    const output = cfg['output_per_1m'] ?? cfg['output_price'];
-    const cache = cfg['cache_read_price'];
+  if (bt === 'per_token' || bt === 'hybrid') {
+    const input = (cfg as Record<string, unknown>)['input_price_1m'] as number | undefined;
+    const output = (cfg as Record<string, unknown>)['output_price_1m'] as number | undefined;
+    const cache = (cfg as Record<string, unknown>)['cache_read_price_1m'] as number | undefined;
+    const base = (cfg as Record<string, unknown>)['base_per_call'] as number | undefined;
     return (
       <div className="flex flex-wrap gap-1.5">
-        {(input as number | null) != null && (
+        {input != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">In</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(input)}</span>
           </span>
         )}
-        {(output as number | null) != null && (
+        {output != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Out</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(output)}</span>
           </span>
         )}
-        {(cache as number | null) != null && (
+        {cache != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Cache</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(cache)}</span>
           </span>
         )}
-        {bt === 'hybrid' && (cfg['base_per_call'] ?? cfg['request_price']) != null && (
+        {bt === 'hybrid' && base != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Base</span>
-            <span className="text-xs font-mono font-bold text-base-content">{fmt(cfg['base_per_call'] ?? cfg['request_price'])}</span>
-          </span>
-        )}
-        {bt === 'tiered_token' && Array.isArray(cfg['tiers']) && (
-          <span className="inline-flex items-center gap-1 text-xs text-base-content/40 italic">
-            {(cfg['tiers'] as unknown[]).length} tier{((cfg['tiers'] as unknown[]).length !== 1) ? 's' : ''}
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(base)}</span>
           </span>
         )}
       </div>
     );
   }
 
+  if (bt === 'tiered_token') {
+    const tiers = (cfg as Record<string, unknown>)['tiers'] as Array<Record<string, unknown>> | undefined;
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-base-content/40 italic">
+        {tiers ? `${tiers.length} tier${tiers.length !== 1 ? 's' : ''}` : '—'}
+      </span>
+    );
+  }
+
   if (bt === 'per_request') {
-    const p = cfg['price_per_call'] ?? cfg['request_price'];
+    const p = (cfg as Record<string, unknown>)['request_price'] as number | undefined;
     return (
       <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30">
         <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Per Call</span>
@@ -77,17 +82,17 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
   }
 
   if (bt === 'per_character') {
-    const input = cfg['input_per_1m'] ?? cfg['input_price'];
-    const output = cfg['output_per_1m'] ?? cfg['output_price'];
+    const input = (cfg as Record<string, unknown>)['input_price_1m'] as number | undefined;
+    const output = (cfg as Record<string, unknown>)['output_price_1m'] as number | undefined;
     return (
       <div className="flex flex-wrap gap-1.5">
-        {(input as number | null) != null && (
+        {input != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">In/Char</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(input)}</span>
           </span>
         )}
-        {(output as number | null) != null && (
+        {output != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Out/Char</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(output)}</span>
@@ -205,10 +210,10 @@ function AddPolicyModal({
 
   const buildConfig = (): Record<string, unknown> => {
     const cfg: Record<string, unknown> = {};
-    if (inputPrice) cfg['input_per_1m'] = parseFloat(inputPrice);
-    if (outputPrice) cfg['output_per_1m'] = parseFloat(outputPrice);
+    if (inputPrice) cfg['input_price_1m'] = parseFloat(inputPrice);
+    if (outputPrice) cfg['output_price_1m'] = parseFloat(outputPrice);
     if (requestPrice) cfg['request_price'] = parseFloat(requestPrice);
-    if (cacheReadPrice) cfg['cache_read_price'] = parseFloat(cacheReadPrice);
+    if (cacheReadPrice) cfg['cache_read_price_1m'] = parseFloat(cacheReadPrice);
     return cfg;
   };
 
@@ -286,22 +291,23 @@ function EditPolicyModal({
   if (policy) {
     if (name !== policy.name) setName(policy.name);
     if (billingType !== policy.billing_type) setBillingType(policy.billing_type);
-    const storedInput = (policy.config['input_per_1m'] ?? policy.config['input_price']) as number | undefined;
+    const cfg = policy.config as Record<string, unknown>;
+    const storedInput = cfg['input_price_1m'] as number | undefined;
     if (inputPrice !== String(storedInput ?? '')) setInputPrice(String(storedInput ?? ''));
-    const storedOutput = (policy.config['output_per_1m'] ?? policy.config['output_price']) as number | undefined;
+    const storedOutput = cfg['output_price_1m'] as number | undefined;
     if (outputPrice !== String(storedOutput ?? '')) setOutputPrice(String(storedOutput ?? ''));
-    if (requestPrice !== String(policy.config['request_price'] ?? '')) setRequestPrice(String(policy.config['request_price'] ?? ''));
-    if (cacheReadPrice !== String(policy.config['cache_read_price'] ?? '')) setCacheReadPrice(String(policy.config['cache_read_price'] ?? ''));
+    if (requestPrice !== String(cfg['request_price'] ?? '')) setRequestPrice(String(cfg['request_price'] ?? ''));
+    if (cacheReadPrice !== String(cfg['cache_read_price_1m'] ?? '')) setCacheReadPrice(String(cfg['cache_read_price_1m'] ?? ''));
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!policy) return;
     const cfg: Record<string, unknown> = {};
-    if (inputPrice) cfg['input_per_1m'] = parseFloat(inputPrice);
-    if (outputPrice) cfg['output_per_1m'] = parseFloat(outputPrice);
+    if (inputPrice) cfg['input_price_1m'] = parseFloat(inputPrice);
+    if (outputPrice) cfg['output_price_1m'] = parseFloat(outputPrice);
     if (requestPrice) cfg['request_price'] = parseFloat(requestPrice);
-    if (cacheReadPrice) cfg['cache_read_price'] = parseFloat(cacheReadPrice);
+    if (cacheReadPrice) cfg['cache_read_price_1m'] = parseFloat(cacheReadPrice);
 
     await onSave(policy.id, {
       name,

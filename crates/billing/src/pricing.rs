@@ -22,13 +22,7 @@ impl PricingCalculator {
             Ok(c) => c,
             Err(_) => return 0.0,
         };
-        // Detect divisor from raw JSON keys — _per_1k keys use per-1K divisor (1000),
-        // _per_1m / _price_1m keys use per-1M divisor (1_000_000).
-        let div = if config.get("input_per_1k").or_else(|| config.get("output_per_1k")).is_some() {
-            1_000.0
-        } else {
-            1_000_000.0
-        };
+        let div = 1_000_000.0;
         let cache = usage.cache_read_tokens.unwrap_or(0);
         let thinking_input = usage.input_tokens.saturating_sub(cache);
 
@@ -109,7 +103,7 @@ impl PricingCalculator {
         let cache = usage.cache_read_tokens.unwrap_or(0);
         let thinking_input = usage.input_tokens.saturating_sub(cache);
 
-        let base = cfg.base_per_call.unwrap_or(0.0);
+        let base = cfg.base_per_call.unwrap_or(0.0).max(0.0);
         let input_cost = (thinking_input as f64 / div) * cfg.input_price();
         let cache_cost = (cache as f64 / div) * cfg.cache_read_price();
         let output_cost = (usage.output_tokens as f64 / div) * cfg.output_price();
@@ -235,24 +229,5 @@ mod tests {
         assert!((cost - 2.51).abs() < 0.001);
     }
 
-    #[test]
-    fn test_backward_compat_legacy_keys() {
-        let calc = PricingCalculator;
-        // Old-style keys from before the refactor
-        let policy = make_policy("per_token", json!({"input_per_1m": 3.0, "output_per_1m": 15.0}));
-        let cost = calc.calculate_cost(&policy, &usage());
-        assert!((cost - 10.5).abs() < 0.001);
     }
 
-    #[test]
-    fn test_backward_compat_per_1k_keys() {
-        let calc = PricingCalculator;
-        // Old _per_1k keys
-        let policy = make_policy("per_token", json!({"input_per_1k": 3.0, "output_per_1k": 15.0}));
-        let cost = calc.calculate_cost(&policy, &usage());
-        // 1M input * 3.0 / 1000 = 3000
-        // 500k output * 15.0 / 1000 = 7500
-        // total = 10500
-        assert!((cost - 10500.0).abs() < 0.001);
-    }
-}

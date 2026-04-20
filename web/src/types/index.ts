@@ -245,7 +245,48 @@ export interface UpdateChannelApiKeyRequest {
   api_key: string;
 }
 
-// --- Channel Models ---
+// ── Pricing Config Types ───────────────────────────────────────────────────────
+// Must match the Rust structs in crates/storage/src/types.rs exactly.
+// Keys: input_price_1m, output_price_1m, cache_read_price_1m (per 1M tokens).
+
+export interface PerTokenConfig {
+  input_price_1m?: number;
+  output_price_1m?: number;
+  cache_read_price_1m?: number;
+}
+
+export interface PerRequestConfig {
+  request_price?: number;
+}
+
+export interface PerCharacterConfig {
+  input_price_1m?: number;
+  output_price_1m?: number;
+}
+
+export interface TierConfig {
+  up_to: number | null;
+  input_price_1m: number;
+  output_price_1m: number;
+}
+
+export interface TieredTokenConfig {
+  tiers: TierConfig[];
+}
+
+export interface HybridConfig {
+  base_per_call?: number;
+  input_price_1m?: number;
+  output_price_1m?: number;
+  cache_read_price_1m?: number;
+}
+
+export type PricingConfig =
+  | PerTokenConfig
+  | PerRequestConfig
+  | PerCharacterConfig
+  | TieredTokenConfig
+  | HybridConfig;
 
 export interface ChannelModel {
   id: string;
@@ -294,7 +335,7 @@ export interface PricingPolicy {
   id: string;
   name: string;
   billing_type: string;
-  config: Record<string, unknown>;
+  config: PricingConfig;
   created_at: string;
   updated_at: string;
 }
@@ -307,13 +348,13 @@ export interface PricingPolicyWithCounts extends PricingPolicy {
 export interface CreatePricingPolicy {
   name: string;
   billing_type: string;
-  config: Record<string, unknown>;
+  config: PricingConfig;
 }
 
 export interface UpdatePricingPolicy {
   name?: string;
   billing_type?: string;
-  config?: Record<string, unknown>;
+  config?: PricingConfig;
 }
 
 export interface SyncModelsResponse {
