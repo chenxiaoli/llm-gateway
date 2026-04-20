@@ -1,6 +1,20 @@
 use llm_gateway_storage::{sqlite::SqliteStorage, Storage};
 use llm_gateway_auth::create_jwt;
+use llm_gateway_api::{ChannelRegistry, ResolvedChannel};
 use std::sync::Arc;
+
+pub struct MockChannelRegistry;
+
+#[async_trait::async_trait]
+impl ChannelRegistry for MockChannelRegistry {
+    async fn resolve(&self, _channel_id: &str) -> Option<ResolvedChannel> {
+        None
+    }
+    async fn resolve_by_model(&self, _model: &str) -> Vec<ResolvedChannel> {
+        Vec::new()
+    }
+    async fn reload(&self) {}
+}
 
 pub const TEST_JWT_SECRET: &str = "test-jwt-secret";
 
