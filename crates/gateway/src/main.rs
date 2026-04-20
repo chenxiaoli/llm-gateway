@@ -78,9 +78,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = axum::Router::new()
         // OpenAI compatible endpoints (now unified through proxy)
         // Use /*path to capture the remaining path after /v1
-        .route("/v1/chat/completions/*path", post(api::proxy::proxy_with_protocol))
+        .route("/v1/chat/completions", post(api::proxy::proxy_with_protocol))
         .route("/v1/models", get(api::models::list_models))
-        .route("/v1/messages/*path", post(api::proxy::messages))
+        .route("/v1/messages", post(api::proxy::messages))
         // Management API
         .merge(api::management::management_router())
         // Frontend static files (fallback for SPA)

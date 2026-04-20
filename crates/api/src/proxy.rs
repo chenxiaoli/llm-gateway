@@ -860,25 +860,19 @@ pub async fn proxy(
 /// Wrapper for /v1/chat/completions - uses OpenAI protocol
 pub async fn proxy_with_protocol(
     State(state): State<Arc<AppState>>,
-    axum::extract::Path(path): axum::extract::Path<String>,
     headers: HeaderMap,
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
-    // Prepend /v1 since the route only captures the suffix
-    let proxy_path = format!("/v1{}", if path.is_empty() { "/chat/completions" } else { &path });
-    proxy(State(state), headers, body, ProxyProtocol::OpenAI, proxy_path).await
+    proxy(State(state), headers, body, ProxyProtocol::OpenAI, "/v1/chat/completions".to_string()).await
 }
 
 /// Wrapper for /v1/messages - uses Anthropic protocol
 pub async fn messages(
     State(state): State<Arc<AppState>>,
-    axum::extract::Path(path): axum::extract::Path<String>,
     headers: HeaderMap,
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
-    // Prepend /v1 since the route only captures the suffix
-    let proxy_path = format!("/v1{}", if path.is_empty() { "/messages" } else { &path });
-    proxy(State(state), headers, body, ProxyProtocol::Anthropic, proxy_path).await
+    proxy(State(state), headers, body, ProxyProtocol::Anthropic, "/v1/messages".to_string()).await
 }
 
 #[cfg(test)]
