@@ -34,13 +34,30 @@ pub struct ResolvedChannel {
     pub channel_id: Uuid,
     pub provider_id: String,
     pub name: String,
-    pub upstream_base_url: String,
+    /// Per-protocol endpoint base URLs (already includes provider-specific path segments).
+    /// openai endpoint → append /chat/completions
+    /// anthropic endpoint → append /messages
+    pub endpoint_openai: Option<String>,
+    pub endpoint_anthropic: Option<String>,
     pub upstream_api_key: String, // decrypted
     pub adapter: ProxyProtocol,
     pub timeout_ms: u64,
     pub priority: i32,
     /// Per-model overrides: keyed by lowercase model name.
     pub model_overrides: HashMap<String, ChannelModelEnriched>,
+}
+
+impl ResolvedChannel {
+    /// Returns the upstream URL for the given protocol by appending
+    /// the request path to the appropriate endpoint.
+    pub fn upstream_url(&self, request_path: &str, protocol: ProxyProtocol) -> String {
+        let base = match protocol {
+            ProxyProtocol::OpenAI => self.endpoint_openai.as_deref(),
+            ProxyProtocol::Anthropic => self.endpoint_anthropic.as_deref(),
+        };
+        let base = base.unwrap_or_default().trim_end_matches('/');
+        format!("{}{}", base, request_path)
+    }
 }
 
 // ─── Channel Registry ────────────────────────────────────────────────────────
@@ -143,7 +160,13 @@ impl InMemoryChannelRegistry {
                 .get("openai")
                 .and_then(|v| v.as_str())
                 .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
-                .map(|s| s.trim_end_matches("/v1").to_string());
+                .map(|s| s.to_string());
+
+            let endpoint_anthropic = endpoints
+                .get("anthropic")
+                .and_then(|v| v.as_str())
+                .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
+                .map(|s| s.to_string());
 
             let api_key = llm_gateway_encryption::decrypt(&channel.api_key, &self.encryption_key)
                 .unwrap_or_else(|_| channel.api_key.clone());
@@ -173,7 +196,8 @@ impl InMemoryChannelRegistry {
                 channel_id: Uuid::parse_str(&channel.id).unwrap_or_else(|_| Uuid::new_v4()),
                 provider_id: channel.provider_id.clone(),
                 name: channel.name.clone(),
-                upstream_base_url: endpoint_openai.unwrap_or_default(),
+                endpoint_openai,
+                endpoint_anthropic,
                 upstream_api_key: api_key,
                 adapter: ProxyProtocol::OpenAI,
                 timeout_ms: 60_000,
@@ -410,6 +434,7 @@ pub async fn proxy(
     headers: HeaderMap,
     body: String,
     protocol: ProxyProtocol,
+    request_path: String,
 ) -> Result<axum::response::Response, ApiError> {
     // === Step 1: Auth ===
     let raw_token = extract_bearer_token(&headers)?;
@@ -544,16 +569,16 @@ pub async fn proxy(
                         .as_ref()
                         .and_then(|e| serde_json::from_str(e).ok())
                         .unwrap_or(serde_json::Value::Null);
-                    let proto_key = match protocol {
-                        ProxyProtocol::OpenAI => "openai",
-                        ProxyProtocol::Anthropic => "anthropic",
-                    };
-                    let base_url = endpoints
-                        .get(proto_key)
+                    let endpoint_openai = endpoints
+                        .get("openai")
                         .and_then(|v| v.as_str())
                         .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
-                        .map(|s| s.trim_end_matches("/v1").to_string())
-                        .unwrap_or_default();
+                        .map(|s| s.to_string());
+                    let endpoint_anthropic = endpoints
+                        .get("anthropic")
+                        .and_then(|v| v.as_str())
+                        .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
+                        .map(|s| s.to_string());
 
                     let api_key = llm_gateway_encryption::decrypt(&channel.api_key, &state.encryption_key)
                         .unwrap_or_else(|_| channel.api_key.clone());
@@ -562,7 +587,8 @@ pub async fn proxy(
                         channel_id: Uuid::parse_str(&channel.id).unwrap_or_else(|_| Uuid::new_v4()),
                         provider_id: channel.provider_id.clone(),
                         name: channel.name.clone(),
-                        upstream_base_url: base_url,
+                        endpoint_openai,
+                        endpoint_anthropic,
                         upstream_api_key: api_key,
                         adapter: protocol,
                         timeout_ms: 60_000,
@@ -605,14 +631,9 @@ pub async fn proxy(
 
         let api_key_value = channel.upstream_api_key.clone();
 
-        // Use pre-resolved upstream_base_url from ResolvedChannel (registry or DB)
-        let path = match protocol {
-            ProxyProtocol::OpenAI => "/v1/chat/completions",
-            ProxyProtocol::Anthropic => "/v1/messages",
-        };
-        let upstream_url = format!("{}{}", channel.upstream_base_url.trim_end_matches('/'), path);
+        let upstream_url = channel.upstream_url(&request_path, protocol);
 
-        tracing::debug!("[PROXY] Upstream URL: {} -> {}", path, upstream_url);
+        tracing::debug!("[PROXY] Upstream URL: {} -> {}", request_path, upstream_url);
         let mut req = client.post(&upstream_url);
 
         match protocol {
@@ -732,7 +753,7 @@ pub async fn proxy(
                 original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
                 upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
                 model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
-                request_path: path.to_string(),
+                request_path: request_path.clone(),
                 upstream_url: upstream_url.clone(),
                 request_headers: request_headers_for_worker.clone(),
                 response_headers: response_headers_for_worker,
@@ -824,7 +845,7 @@ pub async fn proxy(
             original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
             upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
             model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
-            request_path: Some(path.to_string()),
+            request_path: Some(request_path.clone()),
             upstream_url: Some(upstream_url.clone()),
             request_headers: Some(request_headers_for_worker.clone()),
             response_headers: Some(response_headers_for_worker),
@@ -839,19 +860,23 @@ pub async fn proxy(
 /// Wrapper for /v1/chat/completions - uses OpenAI protocol
 pub async fn proxy_with_protocol(
     State(state): State<Arc<AppState>>,
+    axum::extract::Path(path): axum::extract::Path<String>,
     headers: HeaderMap,
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
-    proxy(State(state), headers, body, ProxyProtocol::OpenAI).await
+    let path = if path.is_empty() { "/chat/completions".to_string() } else { path };
+    proxy(State(state), headers, body, ProxyProtocol::OpenAI, path).await
 }
 
 /// Wrapper for /v1/messages - uses Anthropic protocol
 pub async fn messages(
     State(state): State<Arc<AppState>>,
+    axum::extract::Path(path): axum::extract::Path<String>,
     headers: HeaderMap,
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
-    proxy(State(state), headers, body, ProxyProtocol::Anthropic).await
+    let path = if path.is_empty() { "/messages".to_string() } else { path };
+    proxy(State(state), headers, body, ProxyProtocol::Anthropic, path).await
 }
 
 #[cfg(test)]
@@ -879,7 +904,8 @@ mod tests {
             channel_id: Uuid::new_v4(),
             provider_id: "prov-1".into(),
             name: "test-channel".into(),
-            upstream_base_url: "https://api.openai.com/v1".into(),
+            endpoint_openai: Some("https://api.openai.com/v1".into()),
+            endpoint_anthropic: Some("https://api.anthropic.com".into()),
             upstream_api_key: "sk-test".into(),
             adapter: ProxyProtocol::OpenAI,
             timeout_ms: 30_000,
@@ -908,7 +934,8 @@ mod tests {
             channel_id: Uuid::new_v4(),
             provider_id: "prov-1".into(),
             name: "test-channel".into(),
-            upstream_base_url: "https://api.openai.com/v1".into(),
+            endpoint_openai: Some("https://api.openai.com/v1".into()),
+            endpoint_anthropic: None,
             upstream_api_key: "sk-test".into(),
             adapter: ProxyProtocol::OpenAI,
             timeout_ms: 30_000,
@@ -928,7 +955,8 @@ mod tests {
             channel_id,
             provider_id: "prov-2".into(),
             name: "channel-by-id".into(),
-            upstream_base_url: "https://api.anthropic.com".into(),
+            endpoint_openai: None,
+            endpoint_anthropic: Some("https://api.anthropic.com".into()),
             upstream_api_key: "sk-ant".into(),
             adapter: ProxyProtocol::Anthropic,
             timeout_ms: 60_000,
