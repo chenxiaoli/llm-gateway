@@ -1,5 +1,6 @@
 mod common;
 
+use common::MockChannelRegistry;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use llm_gateway_api::management;
@@ -25,6 +26,7 @@ fn make_state(db: Arc<llm_gateway_storage::sqlite::SqliteStorage>) -> Arc<AppSta
         jwt_secret: common::TEST_JWT_SECRET.to_string(),
         encryption_key: [0u8; 32],
         audit_tx,
+        registry: Arc::new(MockChannelRegistry),
     })
 }
 

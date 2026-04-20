@@ -6,6 +6,8 @@ pub mod proxy;
 pub mod workers;
 pub mod management;
 
+pub use crate::proxy::{ChannelRegistry, InMemoryChannelRegistry, ResolvedChannel, spawn_registry_refresh};
+
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::Storage;
@@ -19,6 +21,7 @@ pub struct AppState {
     pub jwt_secret: String,
     pub encryption_key: [u8; 32],
     pub audit_tx: mpsc::Sender<AuditTask>,
+    pub registry: Arc<dyn ChannelRegistry>,
 }
 
 /// Task sent to background worker for async processing.
@@ -43,4 +46,6 @@ pub struct AuditTask {
     pub model_override_reason: Option<String>,
     pub request_path: Option<String>,
     pub upstream_url: Option<String>,
+    pub request_headers: Option<String>,
+    pub response_headers: Option<String>,
 }

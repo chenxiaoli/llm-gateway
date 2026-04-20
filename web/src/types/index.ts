@@ -131,6 +131,8 @@ export interface AuditLog {
   model_override_reason?: string;
   request_path?: string;
   upstream_url?: string;
+  request_headers?: string;
+  response_headers?: string;
 }
 
 export interface LogFilter {

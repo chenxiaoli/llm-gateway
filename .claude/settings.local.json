@@ -169,7 +169,25 @@
       "Bash(timeout 5 ~/.cargo/bin/cargo run)",
       "Bash(cargo clean:*)",
       "Bash(timeout 8 ~/.cargo/bin/cargo run)",
-      "Bash(~/.cargo/bin/cargo build:*)"
+      "Bash(~/.cargo/bin/cargo build:*)",
+      "Bash(/usr/local/cargo/bin/cargo check:*)",
+      "WebFetch(domain:docs.rs)",
+      "WebSearch",
+      "Bash(export PATH=\"/usr/local/cargo/bin:$PATH\")",
+      "Bash(RUSTUP_HOME=/home/node/.rustup /home/node/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo check --workspace)",
+      "Bash(/home/node/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc:*)",
+      "Bash(export PATH=\"$PATH:/home/node/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin\")",
+      "Bash(rustup show:*)",
+      "Bash(export PATH=\"/home/node/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin:/home/node/.cargo/bin:$PATH\")",
+      "Bash(~/.cargo/bin/git -C /workspace add crates/api/src/proxy.rs crates/api/Cargo.toml)",
+      "Bash('~/.cargo/bin/git' -C /workspace commit -m ':*)",
+      "Bash(~/.cargo/bin/git -C /workspace status --short)",
+      "Bash(~/.cargo/bin/git -C /workspace diff)",
+      "Bash(env:*)",
+      "Bash(bash:*)",
+      "Bash(RUSTUP_HOME=/home/node/.rustup CARGO_HOME=/home/node/.cargo /home/node/.cargo/bin/cargo check:*)",
+      "Bash(~/.cargo/bin/git:*)",
+      "Bash(/usr/bin/git:*)"
     ]
   }
 }

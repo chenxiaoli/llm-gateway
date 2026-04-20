@@ -2,7 +2,7 @@ use axum::middleware;
 use axum::routing::{get, post};
 use axum::http::{header, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
-use llm_gateway_api::{self as api, AppState};
+use llm_gateway_api::{self as api, AppState, InMemoryChannelRegistry, spawn_registry_refresh};
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
@@ -25,16 +25,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config: AppConfig = toml::from_str(&config_str)?;
 
     // Init storage
-    let db_path = config
-        .database
-        .sqlite_path
-        .as_deref()
-        .unwrap_or("./data/gateway.db");
+    let db_path = config.database.url.as_deref().unwrap_or("./data/gateway.db");
     let storage = SqliteStorage::new(db_path).await?;
     storage.run_migrations().await?;
     storage.seed_data().await?;
-
     let storage: Arc<dyn Storage> = Arc::new(storage);
+
+    // Derive encryption key (32 bytes via SHA256)
+    let encryption_key: [u8; 32] = {
+        use sha2::Sha256;
+        let key = config.server.encryption_key.as_bytes();
+        let mut hasher = Sha256::new();
+        hasher.update(key);
+        let result = hasher.finalize();
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(&result);
+        bytes
+    };
+
+    // Init channel registry with in-memory cache
+    let refresh_interval = std::time::Duration::from_secs(30); // default 30 seconds
+    let registry_inner: Arc<InMemoryChannelRegistry> = Arc::new(
+        InMemoryChannelRegistry::new(storage.clone(), encryption_key, refresh_interval)
+    );
+    // Start background refresh loop
+    spawn_registry_refresh(registry_inner.clone());
+    let registry: Arc<dyn llm_gateway_api::ChannelRegistry> = registry_inner;
 
     // Init rate limiter
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.window_size_secs));
@@ -53,23 +69,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         rate_limiter,
         audit_logger,
         jwt_secret: config.auth.jwt_secret.clone(),
-        encryption_key: {
-            use sha2::Sha256;
-            let key = config.server.encryption_key.as_bytes();
-            // Derive exactly 32 bytes using SHA256
-            let mut hasher = Sha256::new();
-            hasher.update(key);
-            let result = hasher.finalize();
-            let mut bytes = [0u8; 32];
-            bytes.copy_from_slice(&result);
-            bytes
-        },
+        encryption_key,
         audit_tx,
+        registry,
     });
 
     // Build router
     let app = axum::Router::new()
         // OpenAI compatible endpoints (now unified through proxy)
+        // Use /*path to capture the remaining path after /v1
         .route("/v1/chat/completions", post(api::proxy::proxy_with_protocol))
         .route("/v1/models", get(api::models::list_models))
         .route("/v1/messages", post(api::proxy::messages))
