@@ -683,9 +683,82 @@ pub async fn proxy(
             continue;
         }
 
-        if status != 200 && status < 500 {
+if status != 200 && status < 500 {
+            // Capture response headers before consuming body
+            let response_headers_for_worker: String = {
+                let mut map = serde_json::Map::new();
+                for (name, value) in resp.headers().iter() {
+                    if let Ok(v) = value.to_str() {
+                        map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
+                    }
+                }
+                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
+            };
+
+            // Build request headers JSON (for audit log — only forwarded headers, exclude sensitive ones)
+            let request_headers_for_worker: String = {
+                let mut map = serde_json::Map::new();
+                for (name, value) in headers.iter() {
+                    match name.as_str() {
+                        "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
+                        _ => {
+                            if let Ok(v) = value.to_str() {
+                                map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
+                            }
+                        }
+                    }
+                }
+                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
+            };
+
+            let proto = match protocol {
+                ProxyProtocol::OpenAI => Protocol::Openai,
+                ProxyProtocol::Anthropic => Protocol::Anthropic,
+            };
+
+            let (pricing_policy_config, pricing_policy_billing_type) = {
+                let policy_id = channel_model.pricing_policy_id.as_deref()
+                    .or(model_entry.model.pricing_policy_id.as_deref());
+                match policy_id {
+                    Some(id) => {
+                        let opt = state.storage.get_pricing_policy(id).await
+                            .map_err(|e| ApiError::Internal(e.to_string()))?;
+                        match opt {
+                            Some(p) => (Some(p.config), p.billing_type),
+                            None => (None, "per_token".to_string()),
+                        }
+                    }
+                    None => (None, "per_token".to_string()),
+                }
+            };
+
             let error_body = resp.text().await.unwrap_or_default();
             tracing::debug!("[PROXY] Upstream error response: status={}, body_len={}", status, error_body.len());
+
+            let task = AuditTask {
+                key_id: api_key.id.clone(),
+                model_name: upstream_name.to_string(),
+                provider_id: provider_id.clone(),
+                protocol: proto,
+                stream: is_stream,
+                request_body: body.clone(),
+                response_bytes: error_body.clone().into_bytes(),
+                status_code: status as i32,
+                latency_ms,
+                pricing_policy_config,
+                pricing_policy_billing_type,
+                markup_ratio: channel_model.markup_ratio,
+                channel_id: Some(channel.channel_id.to_string()),
+                original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
+                upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
+                model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
+                request_path: Some(request_path.clone()),
+                upstream_url: Some(upstream_url.clone()),
+                request_headers: Some(request_headers_for_worker),
+                response_headers: Some(response_headers_for_worker),
+            };
+            let _ = state.audit_tx.try_send(task);
+
             return Ok((StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY), error_body).into_response());
         }
 
