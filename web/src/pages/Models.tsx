@@ -158,13 +158,11 @@ function ModelCard({ model, index, onEdit, policies }: ModelCardProps) {
                     ${isActive ? 'bg-base-100/50 border-accent/10' : 'bg-base-200/20 border-base-300/20'}
                   `}>
                     {[
-                      { label: 'Input', keys: ['input_per_1m', 'input_price'] },
-                      { label: 'Output', keys: ['output_per_1m', 'output_price'] },
-                      { label: 'Cache', keys: ['cache_read_price'] },
-                    ].map(({ label, keys }) => {
-                      const val = (keys.length > 1
-                        ? (config[keys[0]] ?? config[keys[1]])
-                        : config[keys[0]]) as number | undefined;
+                      { label: 'Input', key: 'input_price_1m' },
+                      { label: 'Output', key: 'output_price_1m' },
+                      { label: 'Cache', key: 'cache_read_price_1m' },
+                    ].map(({ label, key }) => {
+                      const val = (config as Record<string, unknown>)[key] as number | undefined;
                       return (
                         <div key={label} className="flex flex-col items-center text-center py-1">
                           <span className={`text-xs font-bold uppercase tracking-wider mb-1 ${isActive ? 'text-accent/50' : 'text-base-content/25'}`}>
