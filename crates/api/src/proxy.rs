@@ -247,6 +247,14 @@ impl ChannelRegistry for InMemoryChannelRegistry {
     }
 }
 
+/// Spawn the background refresh loop for a registry.
+/// Call this after constructing InMemoryChannelRegistry, before converting to Arc<dyn ChannelRegistry>.
+pub fn spawn_registry_refresh(registry: Arc<InMemoryChannelRegistry>) {
+    tokio::spawn(async move {
+        registry.start_refresh_loop().await;
+    });
+}
+
 /// Parameters for SSE AuditTask construction
 pub struct SseAuditParams {
     pub key_id: String,

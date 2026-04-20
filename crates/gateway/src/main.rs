@@ -2,7 +2,7 @@ use axum::middleware;
 use axum::routing::{get, post};
 use axum::http::{header, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
-use llm_gateway_api::{self as api, AppState, InMemoryChannelRegistry};
+use llm_gateway_api::{self as api, AppState, InMemoryChannelRegistry, spawn_registry_refresh};
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
@@ -44,15 +44,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
 
     // Init channel registry with in-memory cache
-    let refresh_interval = std::time::Duration::from_secs(30); // 默认 30 秒
-    let registry: Arc<dyn llm_gateway_api::ChannelRegistry> = Arc::new(
+    let refresh_interval = std::time::Duration::from_secs(30); // default 30 seconds
+    let registry_inner: Arc<InMemoryChannelRegistry> = Arc::new(
         InMemoryChannelRegistry::new(storage.clone(), encryption_key, refresh_interval)
     );
     // Start background refresh loop
-    let registry_for_loop = registry.clone();
-    tokio::spawn(async move {
-        registry_for_loop.start_refresh_loop().await;
-    });
+    spawn_registry_refresh(registry_inner.clone());
+    let registry: Arc<dyn llm_gateway_api::ChannelRegistry> = registry_inner;
 
     // Init rate limiter
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.window_size_secs));
