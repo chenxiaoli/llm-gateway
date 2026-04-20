@@ -778,13 +778,17 @@ pub async fn proxy(
                 .keep_alive(KeepAlive::new().interval(Duration::from_secs(15)).text("keep-alive"))
                 .into_response();
 
-            // Forward upstream headers (except content-length which is dynamic for streams)
+            // Forward upstream headers (except content-length which is dynamic for streams,
+            // and content-encoding which reqwest auto-decompresses — forwarding it would
+            // cause downstream clients to attempt decompression on already-decompressed data)
             let mut response = sse_response;
             for (name, value) in upstream_resp_headers {
-                if name.as_str() == "content-length" {
-                    continue;
+                match name.as_str() {
+                    "content-length" | "content-encoding" | "transfer-encoding" => continue,
+                    _ => {
+                        response.headers_mut().insert(name.clone(), value.clone());
+                    }
                 }
-                response.headers_mut().insert(name.clone(), value.clone());
             }
             response.headers_mut().insert(
                 axum::http::header::CONTENT_TYPE,
