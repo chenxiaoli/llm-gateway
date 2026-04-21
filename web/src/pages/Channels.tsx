@@ -29,14 +29,14 @@ function AddChannelDrawer({
   const [name, setName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [priority, setPriority] = useState('1');
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState(false);
 
   const reset = () => {
     setProviderId('');
     setName('');
     setApiKey('');
     setPriority('1');
-    setEnabled(true);
+    setEnabled(false);
   };
 
   const handleClose = () => { reset(); onClose(); };
