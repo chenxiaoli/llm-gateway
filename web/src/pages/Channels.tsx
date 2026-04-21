@@ -347,17 +347,17 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
 
         {/* Name + provider */}
         <div className="min-w-0 shrink-0" style={{ width: '160px' }}>
-          <p className="font-mono text-[12px] font-semibold text-base-content/90 truncate leading-tight">
+          <p className="font-mono text-[13px] font-semibold text-base-content/90 truncate leading-tight">
             {channel.name}
           </p>
-          <p className="text-[10px] text-base-content/35 truncate mt-0.5">{providerName}</p>
+          <p className="text-[11px] text-base-content/40 truncate mt-0.5">{providerName}</p>
         </div>
 
         {/* Priority */}
         <div className="shrink-0">
           <div className="flex items-center gap-1 px-2 py-1 rounded bg-base-200/50">
             <Hash className="h-3 w-3 text-base-content/35" />
-            <span className="text-[11px] font-mono font-semibold text-base-content/55">{channel.priority}</span>
+            <span className="text-[12px] font-mono font-semibold text-base-content/55">{channel.priority}</span>
           </div>
         </div>
 
@@ -368,33 +368,33 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
               {channelModels.slice(0, 6).map((cm) => (
                 <span
                   key={cm.id}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium ${
                     cm.enabled
                       ? 'bg-success/10 text-success/80 border border-success/15'
-                      : 'bg-base-200/50 text-base-content/35 border border-base-300/30'
+                      : 'bg-base-200/50 text-base-content/40 border border-base-300/30'
                   }`}
                 >
                   <Cpu className="h-2.5 w-2.5 shrink-0 opacity-60" />
                   {cm.upstream_model_name
-                    ? <><span className="font-mono">{cm.upstream_model_name}</span><span className="text-[9px] opacity-50 ml-0.5">({cm.model_name})</span></>
+                    ? <><span className="font-mono">{cm.upstream_model_name}</span><span className="text-[10px] opacity-50 ml-0.5">({cm.model_name})</span></>
                     : <span className="font-mono opacity-70">{cm.model_name}</span>
                   }
                 </span>
               ))}
               {channelModels.length > 6 && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-base-200/40 text-base-content/35">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-base-200/40 text-base-content/35">
                   +{channelModels.length - 6}
                 </span>
               )}
             </div>
           ) : (
-            <span className="text-[11px] text-base-content/25 italic">no models</span>
+            <span className="text-[11px] text-base-content/25">no models</span>
           )}
         </div>
 
         {/* Status badge */}
         <div
-          className={`shrink-0 text-[10px] font-semibold uppercase tracking-wider ${
+          className={`shrink-0 text-[11px] font-semibold uppercase tracking-wider ${
             channel.enabled ? 'text-success/80' : 'text-base-content/30'
           }`}
         >
@@ -405,7 +405,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
         <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
           <Link
             to={`/console/channels/${channel.id}`}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 transition-all duration-100 border border-transparent hover:border-base-300/40"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[12px] font-medium text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 transition-all duration-100 border border-transparent hover:border-base-300/40"
           >
             <Wifi className="h-3 w-3" />
             Configure
