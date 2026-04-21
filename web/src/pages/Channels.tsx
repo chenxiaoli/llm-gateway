@@ -368,14 +368,14 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
               {channelModels.slice(0, 6).map((cm) => (
                 <div
                   key={cm.id}
-                  className={`badge badge-sm ${cm.enabled ? 'badge-success badge-outline' : 'badge-ghost'}`}
+                  className={`badge badge-sm badge-neutral badge-outline ${!cm.enabled ? 'opacity-40' : ''}`}
                   title={cm.upstream_model_name ? `upstream: ${cm.upstream_model_name}` : undefined}
                 >
                   {cm.model_name}
                 </div>
               ))}
               {channelModels.length > 6 && (
-                <div className="badge badge-sm badge-ghost">
+                <div className="badge badge-sm badge-neutral badge-outline opacity-40">
                   +{channelModels.length - 6}
                 </div>
               )}
