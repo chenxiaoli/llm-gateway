@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAllChannels, useChannelModels } from '../hooks/useChannels';
+import { useAllChannels } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
 import { createChannel } from '../api/providers';
@@ -312,7 +312,7 @@ interface ChannelRowProps {
 }
 
 function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
-  const { data: channelModels } = useChannelModels(channel.id);
+  const channelModels = channel.models ?? [];
 
   return (
     <motion.div
@@ -376,12 +376,9 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
                 >
                   <Cpu className="h-2.5 w-2.5 shrink-0 opacity-60" />
                   {cm.upstream_model_name
-                    ? <span className="font-mono">{cm.upstream_model_name}</span>
-                    : <span className="font-mono opacity-70">{cm.model_id}</span>
+                    ? <><span className="font-mono">{cm.upstream_model_name}</span><span className="text-[9px] opacity-50 ml-0.5">({cm.model_name})</span></>
+                    : <span className="font-mono opacity-70">{cm.model_name}</span>
                   }
-                  {cm.upstream_model_name && (
-                    <span className="text-[9px] opacity-50 ml-0.5">({cm.model_id})</span>
-                  )}
                 </span>
               ))}
               {channelModels.length > 6 && (
