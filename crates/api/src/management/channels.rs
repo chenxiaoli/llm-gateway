@@ -48,7 +48,7 @@ pub async fn create_channel(
         tpm_limit: input.tpm_limit,
         balance: input.balance,
         weight: input.weight,
-        enabled: true,
+        enabled: input.enabled.unwrap_or(true),
         created_at: now,
         updated_at: now,
     };
