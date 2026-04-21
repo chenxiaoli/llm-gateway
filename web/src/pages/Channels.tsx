@@ -406,13 +406,6 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
             <Wifi className="h-3 w-3" />
             Configure
           </Link>
-          <Link
-            to={`/console/settings/models?channelId=${channel.id}`}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 transition-all duration-100 border border-transparent hover:border-base-300/40"
-          >
-            <Cpu className="h-3 w-3" />
-            Models
-          </Link>
         </div>
       </div>
     </motion.div>
