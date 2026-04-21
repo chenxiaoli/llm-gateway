@@ -39,6 +39,7 @@ pub trait Storage: Send + Sync {
 
     // Channels
     async fn create_channel(&self, channel: &Channel) -> Result<Channel, Box<dyn std::error::Error + Send + Sync>>;
+    async fn create_channel_with_models(&self, channel: &Channel, models: Vec<ChannelModel>) -> Result<Channel, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_channel(&self, id: &str) -> Result<Option<Channel>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_channels(&self) -> Result<Vec<Channel>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, Box<dyn std::error::Error + Send + Sync>>;

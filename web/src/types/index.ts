@@ -221,9 +221,27 @@ export interface Channel {
   name: string;
   api_key: string;
   priority: number;
+  pricing_policy_id?: string | null;
+  markup_ratio?: number;
+  rpm_limit?: number | null;
+  tpm_limit?: number | null;
+  balance?: number | null;
+  weight?: number | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;
+  models?: ChannelModelInfo[];
+}
+
+export interface ChannelModelInfo {
+  id: string;
+  model_id: string;
+  model_name: string;
+  upstream_model_name: string | null;
+  priority_override: number | null;
+  pricing_policy_id: string | null;
+  markup_ratio: number;
+  enabled: boolean;
 }
 
 export interface CreateChannelRequest {
@@ -232,6 +250,7 @@ export interface CreateChannelRequest {
   api_key: string;
   priority?: number;
   enabled?: boolean;
+  models?: CreateChannelModelRequest[];
 }
 
 export interface UpdateChannelRequest {
