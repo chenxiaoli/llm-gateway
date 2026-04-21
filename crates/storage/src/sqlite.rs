@@ -628,6 +628,55 @@ impl crate::Storage for SqliteStorage {
         Ok(channel.clone())
     }
 
+    async fn create_channel_with_models(&self, channel: &Channel, models: Vec<ChannelModel>) -> Result<Channel, DbErr> {
+        let mut tx = self.pool.begin().await?;
+        let channel_id = channel.id.clone();
+
+        sqlx::query(
+            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&channel.id)
+        .bind(&channel.provider_id)
+        .bind(&channel.name)
+        .bind(&channel.api_key)
+        .bind(None::<String>)
+        .bind(channel.priority)
+        .bind(&channel.pricing_policy_id)
+        .bind(channel.markup_ratio)
+        .bind(channel.enabled as i64)
+        .bind(channel.rpm_limit)
+        .bind(channel.tpm_limit)
+        .bind(channel.balance)
+        .bind(channel.weight.unwrap_or(100))
+        .bind(channel.created_at.to_rfc3339())
+        .bind(channel.updated_at.to_rfc3339())
+        .execute(&mut *tx)
+        .await?;
+
+        for cm in &models {
+            sqlx::query(
+                "INSERT INTO channel_models (id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(&cm.id)
+            .bind(&channel_id)
+            .bind(&cm.model_id)
+            .bind(&cm.upstream_model_name)
+            .bind(cm.priority_override)
+            .bind(&cm.pricing_policy_id)
+            .bind(cm.markup_ratio)
+            .bind(cm.enabled as i64)
+            .bind(cm.created_at.to_rfc3339())
+            .bind(cm.updated_at.to_rfc3339())
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(channel.clone())
+    }
+
     async fn get_channel(&self, id: &str) -> Result<Option<Channel>, DbErr> {
         let row: Option<SqliteChannelRow> = sqlx::query_as(
             "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at

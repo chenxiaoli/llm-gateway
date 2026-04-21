@@ -4,7 +4,7 @@ use axum::Json;
 use std::sync::Arc;
 
 use llm_gateway_encryption::{decrypt, encrypt};
-use llm_gateway_storage::{Channel, CreateChannel, UpdateChannel, UpdateChannelApiKey};
+use llm_gateway_storage::{Channel, ChannelModel, CreateChannel, UpdateChannel, UpdateChannelApiKey};
 
 use crate::error::ApiError;
 use crate::extractors::require_admin;
@@ -53,9 +53,39 @@ pub async fn create_channel(
         updated_at: now,
     };
 
+    let models: Vec<ChannelModel> = input
+        .models
+        .iter()
+        .map(|m| {
+            let now = chrono::Utc::now();
+            ChannelModel {
+                id: uuid::Uuid::new_v4().to_string(),
+                channel_id: channel.id.clone(),
+                model_id: m.model_id.clone(),
+                upstream_model_name: m.upstream_model_name.clone(),
+                priority_override: m.priority_override,
+                pricing_policy_id: m.pricing_policy_id.clone(),
+                markup_ratio: m.markup_ratio.unwrap_or(1.0),
+                enabled: m.enabled.unwrap_or(true),
+                created_at: now,
+                updated_at: now,
+            }
+        })
+        .collect();
+
+    // Validate all models exist before creating anything
+    for m in &models {
+        state
+            .storage
+            .get_model_by_id(&m.model_id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+            .ok_or(ApiError::NotFound(format!("Model '{}' not found", m.model_id)))?;
+    }
+
     let created = state
         .storage
-        .create_channel(&channel)
+        .create_channel_with_models(&channel, models)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 

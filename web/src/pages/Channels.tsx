@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAllChannels, useChannelModels } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
-import { createChannel, createChannelModelByChannel } from '../api/providers';
+import { createChannel } from '../api/providers';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
@@ -157,36 +157,20 @@ function AddChannelDrawer({
     if (!providerId) { toast.error('Select a provider'); return; }
     setIsPending(true);
     try {
+      const models = selectedModelIds.size > 0
+        ? Array.from(selectedModelIds).map((id) => ({ model_id: id, enabled }))
+        : undefined;
       const input: CreateChannelRequest = {
         provider_id: providerId,
         name,
         api_key: apiKey,
         priority: priority ? parseInt(priority) : 1,
         enabled,
+        models,
       };
-      const channel = await createChannel(input);
-
-      if (selectedModelIds.size > 0) {
-        const errors: string[] = [];
-        await Promise.all(
-          Array.from(selectedModelIds).map(async (modelId) => {
-            try {
-              await createChannelModelByChannel(channel.id, { model_id: modelId, enabled });
-            } catch {
-              errors.push(modelId);
-            }
-          })
-        );
-        if (errors.length > 0) {
-          toast.warning(`Channel created but ${errors.length} model(s) failed to link`);
-        } else {
-          toast.success('Channel created');
-        }
-      } else {
-        toast.success('Channel created');
-      }
-
+      await createChannel(input);
       queryClient.invalidateQueries({ queryKey: ['channels'] });
+      toast.success('Channel created');
       handleClose();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to create channel'));
