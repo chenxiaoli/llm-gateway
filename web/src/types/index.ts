@@ -231,6 +231,7 @@ export interface CreateChannelRequest {
   name: string;
   api_key: string;
   priority?: number;
+  enabled?: boolean;
 }
 
 export interface UpdateChannelRequest {

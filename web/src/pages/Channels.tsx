@@ -6,6 +6,7 @@ import { createChannel } from '../api/providers';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
+import { Toggle } from '../components/ui/Toggle';
 import { Globe, Plus, Radio, Hash, ShieldCheck, ChevronRight, Key, Wifi, Cpu } from 'lucide-react';
 import type { Channel, CreateChannelRequest } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -28,12 +29,14 @@ function AddChannelDrawer({
   const [name, setName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [priority, setPriority] = useState('1');
+  const [enabled, setEnabled] = useState(true);
 
   const reset = () => {
     setProviderId('');
     setName('');
     setApiKey('');
     setPriority('1');
+    setEnabled(true);
   };
 
   const handleClose = () => { reset(); onClose(); };
@@ -48,6 +51,7 @@ function AddChannelDrawer({
         name,
         api_key: apiKey,
         priority: priority ? parseInt(priority) : 1,
+        enabled,
       };
       await createChannel(input);
       queryClient.invalidateQueries({ queryKey: ['channels'] });
@@ -136,6 +140,15 @@ function AddChannelDrawer({
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-[13px] font-mono text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
           </div>
+        </div>
+
+        {/* Enabled */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <span className="text-[13px] font-medium text-base-content">Enabled</span>
+            <p className="text-[11px] text-base-content/40">Channels must be enabled to receive traffic</p>
+          </div>
+          <Toggle checked={enabled} onChange={setEnabled} />
         </div>
 
         {/* Actions */}
