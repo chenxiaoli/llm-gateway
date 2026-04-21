@@ -8,7 +8,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
 import { Toggle } from '../components/ui/Toggle';
-import { Globe, Plus, Radio, Hash, ShieldCheck, ChevronRight, Key, Wifi, Cpu, Search, X } from 'lucide-react';
+import { Globe, Plus, Radio, Hash, ShieldCheck, Key, Wifi, Cpu, Search, X } from 'lucide-react';
 import type { Channel, CreateChannelRequest } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -312,169 +312,107 @@ interface ChannelRowProps {
 }
 
 function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
-  const [expanded, setExpanded] = useState(true); // 默认展开
   const { data: channelModels } = useChannelModels(channel.id);
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: -16 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.06, ease: [0.25, 0.1, 0.25, 1] }}
-      className="group"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: index * 0.06, ease: [0.25, 0.1, 0.25, 1] }}
     >
       <div
-        className={`relative rounded-xl border overflow-hidden transition-all duration-200 ${
+        className={`group relative flex items-center gap-4 px-5 py-3.5 rounded-xl border transition-all duration-200 ${
           channel.enabled
-            ? 'border-base-300/60 bg-base-100/60 hover:bg-base-100/80 hover:border-accent/25'
-            : 'border-base-300/30 bg-base-100/40 hover:bg-base-100/60 hover:border-base-300/50'
+            ? 'border-base-300/60 bg-base-100/50 hover:bg-base-100/80 hover:border-accent/30'
+            : 'border-base-300/30 bg-base-100/30 hover:bg-base-100/50 hover:border-base-300/50 opacity-80'
         }`}
       >
-        {/* Left accent bar */}
+        {/* Status indicator — left dot */}
         <div
-          className={`absolute left-0 top-0 bottom-0 w-[3px] transition-all duration-200 ${
-            channel.enabled
-              ? 'bg-gradient-to-b from-accent via-accent/60 to-accent/20'
-              : 'bg-base-300/40'
+          className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+            channel.enabled ? 'bg-success' : 'bg-base-content/20'
           }`}
         />
 
-        <div className="px-5 py-4 pl-6">
-          {/* Main row */}
-          <div className="flex items-center gap-4">
-            {/* Channel icon */}
-            <div
-              className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-colors duration-200 ${
-                channel.enabled
-                  ? 'bg-accent/10 text-accent'
-                  : 'bg-base-200/60 text-base-content/30'
-              }`}
-            >
-              <Radio className="h-4 w-4" />
-            </div>
+        {/* Icon */}
+        <div
+          className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+            channel.enabled
+              ? 'bg-accent/10 text-accent'
+              : 'bg-base-200/50 text-base-content/30'
+          }`}
+        >
+          <Radio className="h-3.5 w-3.5" />
+        </div>
 
-            {/* Name & provider */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="font-mono text-[13px] font-semibold text-base-content/90 truncate">
-                  {channel.name}
-                </span>
-                {channel.enabled && (
-                  <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-accent/10">
-                    <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-accent/80">Live</span>
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Globe className="h-3 w-3 text-base-content/30" />
-                <span className="text-[11px] text-base-content/40 font-medium truncate">{providerName}</span>
-              </div>
-            </div>
+        {/* Name + provider */}
+        <div className="min-w-0 shrink-0" style={{ width: '160px' }}>
+          <p className="font-mono text-[12px] font-semibold text-base-content/90 truncate leading-tight">
+            {channel.name}
+          </p>
+          <p className="text-[10px] text-base-content/35 truncate mt-0.5">{providerName}</p>
+        </div>
 
-            {/* Priority badge */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-base-200/50 shrink-0">
-              <Hash className="h-3 w-3 text-base-content/35" />
-              <span className="text-[12px] font-mono font-semibold text-base-content/60">{channel.priority}</span>
-            </div>
-
-            {/* Status */}
-            <div
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold tracking-wide uppercase shrink-0 transition-colors ${
-                channel.enabled
-                  ? 'bg-success/10 text-success'
-                  : 'bg-base-200/60 text-base-content/35'
-              }`}
-            >
-              <span
-                className={`w-1.5 h-1.5 rounded-full transition-colors ${
-                  channel.enabled ? 'bg-success' : 'bg-base-content/25'
-                }`}
-              />
-              {channel.enabled ? 'Active' : 'Disabled'}
-            </div>
-
-            {/* Expand / Actions */}
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-base-content/30 hover:text-base-content/60 hover:bg-base-200/60 transition-all duration-150 cursor-pointer shrink-0"
-            >
-              <ChevronRight
-                className={`h-4 w-4 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
-              />
-            </button>
+        {/* Priority */}
+        <div className="shrink-0">
+          <div className="flex items-center gap-1 px-2 py-1 rounded bg-base-200/50">
+            <Hash className="h-3 w-3 text-base-content/35" />
+            <span className="text-[11px] font-mono font-semibold text-base-content/55">{channel.priority}</span>
           </div>
+        </div>
 
-          {/* Expanded details */}
-          <AnimatePresence>
-            {expanded && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-                className="overflow-hidden"
-              >
-                <div className="pt-4 mt-4 border-t border-base-300/30">
-                  <div className="grid grid-cols-2 gap-3 mb-4">
-                    {/* API Key */}
-                    <div className="rounded-lg bg-base-200/40 px-3 py-2.5">
-                      <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1.5 flex items-center gap-1.5">
-                        <ShieldCheck className="h-3 w-3" />
-                        API Key
-                      </div>
-                      <div className="font-mono text-[11px] text-base-content/50 truncate">
-                        {channel.api_key ? `${channel.api_key.substring(0, 8)}••••••••${channel.api_key.substring(channel.api_key.length - 4)}` : '—'}
-                      </div>
-                    </div>
+        {/* Models */}
+        <div className="flex-1 min-w-0">
+          {channelModels && channelModels.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {channelModels.slice(0, 6).map((cm) => (
+                <span
+                  key={cm.id}
+                  className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
+                    cm.enabled
+                      ? 'bg-success/10 text-success/80 border border-success/15'
+                      : 'bg-base-200/50 text-base-content/35 border border-base-300/30'
+                  }`}
+                >
+                  {cm.upstream_model_name ?? cm.model_id}
+                </span>
+              ))}
+              {channelModels.length > 6 && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-base-200/40 text-base-content/35">
+                  +{channelModels.length - 6}
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="text-[11px] text-base-content/25 italic">no models</span>
+          )}
+        </div>
 
-                    {/* Base URL */}
-                    <div className="rounded-lg bg-base-200/40 px-3 py-2.5">
-                    </div>
-                  </div>
+        {/* Status badge */}
+        <div
+          className={`shrink-0 text-[10px] font-semibold uppercase tracking-wider ${
+            channel.enabled ? 'text-success/80' : 'text-base-content/30'
+          }`}
+        >
+          {channel.enabled ? 'Active' : 'Off'}
+        </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 mb-4">
-                    <Link
-                      to={`/console/channels/${channel.id}`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-base-200/60 hover:bg-base-300/60 text-[11px] font-medium text-base-content/60 hover:text-base-content transition-all duration-150 cursor-pointer"
-                    >
-                      Configure
-                    </Link>
-                    <span
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-base-200/40 text-[11px] font-medium text-base-content/35 cursor-default"
-                    >
-                      <Globe className="h-3 w-3" />
-                      {providerName || channel.provider_id}
-                    </span>
-                  </div>
-
-                  {/* Channel Models */}
-                  {channelModels && channelModels.length > 0 && (
-                    <div className="pt-3 border-t border-base-300/30">
-                      <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-2 flex items-center gap-1.5">
-                        <Cpu className="h-3 w-3" />
-                        Models ({channelModels.length})
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {channelModels.map((cm) => (
-                          <span
-                            key={cm.id}
-                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium ${
-                              cm.enabled
-                                ? 'bg-success/10 text-success/80'
-                                : 'bg-base-300/30 text-base-content/40'
-                            }`}
-                          >
-                            {cm.upstream_model_name || cm.model_id}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {/* Quick actions */}
+        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          <Link
+            to={`/channels/${channel.id}`}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 transition-all duration-100 border border-transparent hover:border-base-300/40"
+          >
+            <Wifi className="h-3 w-3" />
+            Configure
+          </Link>
+          <Link
+            to={`/settings/models?channelId=${channel.id}`}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 transition-all duration-100 border border-transparent hover:border-base-300/40"
+          >
+            <Cpu className="h-3 w-3" />
+            Models
+          </Link>
         </div>
       </div>
     </motion.div>
