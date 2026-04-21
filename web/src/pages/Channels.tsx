@@ -368,13 +368,20 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
               {channelModels.slice(0, 6).map((cm) => (
                 <span
                   key={cm.id}
-                  className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium ${
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${
                     cm.enabled
                       ? 'bg-success/10 text-success/80 border border-success/15'
                       : 'bg-base-200/50 text-base-content/35 border border-base-300/30'
                   }`}
                 >
-                  {cm.upstream_model_name ?? cm.model_id}
+                  <Cpu className="h-2.5 w-2.5 shrink-0 opacity-60" />
+                  {cm.upstream_model_name
+                    ? <span className="font-mono">{cm.upstream_model_name}</span>
+                    : <span className="font-mono opacity-70">{cm.model_id}</span>
+                  }
+                  {cm.upstream_model_name && (
+                    <span className="text-[9px] opacity-50 ml-0.5">({cm.model_id})</span>
+                  )}
                 </span>
               ))}
               {channelModels.length > 6 && (
