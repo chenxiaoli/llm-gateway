@@ -366,25 +366,18 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
           {channelModels && channelModels.length > 0 ? (
             <div className="flex flex-wrap gap-1">
               {channelModels.slice(0, 6).map((cm) => (
-                <span
+                <div
                   key={cm.id}
-                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
-                    cm.enabled
-                      ? 'bg-success/10 text-success/80 border border-success/15'
-                      : 'bg-base-200/50 text-base-content/40 border border-base-300/30'
-                  }`}
+                  className={`badge badge-sm ${cm.enabled ? 'badge-success badge-outline' : 'badge-ghost'}`}
+                  title={cm.upstream_model_name ? `upstream: ${cm.upstream_model_name}` : undefined}
                 >
-                  <Cpu className="h-2.5 w-2.5 shrink-0 opacity-60" />
-                  {cm.upstream_model_name
-                    ? <><span className="font-mono">{cm.upstream_model_name}</span><span className="text-[10px] opacity-50 ml-0.5">({cm.model_name})</span></>
-                    : <span className="font-mono opacity-70">{cm.model_name}</span>
-                  }
-                </span>
+                  {cm.model_name}
+                </div>
               ))}
               {channelModels.length > 6 && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-base-200/40 text-base-content/35">
+                <div className="badge badge-sm badge-ghost">
                   +{channelModels.length - 6}
-                </span>
+                </div>
               )}
             </div>
           ) : (
