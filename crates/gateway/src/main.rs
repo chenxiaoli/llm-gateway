@@ -20,6 +20,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Init tracing
     tracing_subscriber::fmt::init();
 
+    // Bootstrap: create data directory and default config.toml if missing
+    bootstrap().await?;
+
     // Load config
     let config_str = std::fs::read_to_string("config.toml")?;
     let config: AppConfig = toml::from_str(&config_str)?;
@@ -98,6 +101,53 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
+    Ok(())
+}
+
+/// Bootstrap: create ./data/ directory and default config.toml if missing.
+/// Safe to call repeatedly — skips creation if already present.
+async fn bootstrap() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let config_path = std::path::Path::new("config.toml");
+    if config_path.exists() {
+        return Ok(());
+    }
+
+    tracing::info!("config.toml not found, creating ./data/ and default config.toml");
+
+    // Create data directory
+    tokio::fs::create_dir_all("./data").await?;
+
+    // Write default config.toml
+    let default_config = r#"# LLM Gateway Configuration
+# Generated automatically on first startup.
+
+[server]
+host = "0.0.0.0"
+port = 8080
+# IMPORTANT: Change this to a random 32-byte secret in production
+encryption_key = "change-me-32-byte-secret-here!"
+
+[auth]
+# IMPORTANT: Change this to a random JWT secret in production
+jwt_secret = "change-me-jwt-secret!"
+allow_registration = true
+
+[database]
+driver = "sqlite"
+url = "./data/gateway.db"
+
+[rate_limit]
+flush_interval_secs = 30
+window_size_secs = 60
+
+[upstream]
+timeout_secs = 30
+
+[audit]
+retention_days = 90
+"#;
+    tokio::fs::write(config_path, default_config).await?;
+    tracing::info!("Created config.toml — please edit it with your secrets before restarting");
     Ok(())
 }
 
