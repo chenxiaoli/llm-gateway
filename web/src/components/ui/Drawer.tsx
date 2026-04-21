@@ -7,11 +7,9 @@ export interface DrawerProps {
   title?: string;
   children: React.ReactNode;
   width?: number;
-  /** Render inside a portal (default true). Set false to render inline. */
-  portal?: boolean;
 }
 
-export function Drawer({ open, onClose, title, children, width = 480, portal = true }: DrawerProps) {
+export function Drawer({ open, onClose, title, children, width = 480 }: DrawerProps) {
   const [phase, setPhase] = useState<'closed' | 'entering' | 'open' | 'exiting'>('closed');
 
   useEffect(() => {
@@ -41,7 +39,7 @@ export function Drawer({ open, onClose, title, children, width = 480, portal = t
 
   if (phase === 'closed') return null;
 
-  const panel = (
+  return createPortal(
     <div
       onClick={onClose}
       className={`fixed inset-0 z-[110] ${
@@ -86,9 +84,7 @@ export function Drawer({ open, onClose, title, children, width = 480, portal = t
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
-
-  if (!portal) return panel;
-  return createPortal(panel, document.body);
 }
