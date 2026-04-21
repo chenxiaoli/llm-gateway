@@ -89,6 +89,7 @@ pub async fn create_channel(
 
     let models: Vec<ChannelModel> = input
         .models
+        .unwrap_or_default()
         .iter()
         .map(|m| {
             let now = chrono::Utc::now();

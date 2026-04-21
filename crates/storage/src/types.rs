@@ -152,7 +152,7 @@ pub struct CreateChannel {
     pub balance: Option<f64>,
     pub weight: Option<i32>,
     pub enabled: Option<bool>,
-    pub models: Vec<CreateChannelModel>,
+    pub models: Option<Vec<CreateChannelModel>>,
 }
 
 #[derive(Debug, Deserialize)]
