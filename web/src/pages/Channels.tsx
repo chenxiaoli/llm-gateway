@@ -2,16 +2,122 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAllChannels, useChannelModels } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
-import { createChannel } from '../api/providers';
+import { useAllModels } from '../hooks/useModels';
+import { createChannel, createChannelModelByChannel } from '../api/providers';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
 import { Toggle } from '../components/ui/Toggle';
-import { Globe, Plus, Radio, Hash, ShieldCheck, ChevronRight, Key, Wifi, Cpu } from 'lucide-react';
+import { Globe, Plus, Radio, Hash, ShieldCheck, ChevronRight, Key, Wifi, Cpu, Search, X } from 'lucide-react';
 import type { Channel, CreateChannelRequest } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
+
+// ── Searchable Model Multi-Select ─────────────────────────────────────────────
+function ModelMultiSelect({
+  selected,
+  onToggle,
+  onRemove,
+}: {
+  selected: Array<{ id: string; name: string }>;
+  onToggle: (id: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  const { data: allModels } = useAllModels();
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+
+  const filtered = (allModels ?? []).filter(
+    (m) =>
+      m.name.toLowerCase().includes(query.toLowerCase()) &&
+      !selected.some((s) => s.id === m.id)
+  );
+
+  return (
+    <div className="space-y-2">
+      <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
+        <Cpu className="h-3.5 w-3.5" />
+        Models
+        {selected.length > 0 && (
+          <span className="normal-case font-normal tracking-normal text-base-content/30">
+            ({selected.length} selected)
+          </span>
+        )}
+      </label>
+
+      {/* Selected chips */}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 p-2.5 rounded-lg border border-base-300 bg-base-200/30 min-h-[44px]">
+          {selected.map((m) => (
+            <span
+              key={m.id}
+              className="inline-flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-md bg-accent/10 border border-accent/25 text-[11px] font-mono text-accent/80"
+            >
+              {m.name}
+              <button
+                type="button"
+                onClick={() => onRemove(m.id)}
+                className="w-3.5 h-3.5 rounded flex items-center justify-center hover:bg-accent/20 transition-colors cursor-pointer"
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Search input */}
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-base-content/30 pointer-events-none" />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder="search models..."
+          className="w-full h-9 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-[13px] text-base-content placeholder:text-base-content/25 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+        />
+      </div>
+
+      {/* Dropdown */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.12 }}
+            className="overflow-hidden"
+          >
+            <div
+              className="border border-base-300 rounded-lg bg-base-100 shadow-lg overflow-y-auto"
+              style={{ maxHeight: '180px' }}
+            >
+              {filtered.length === 0 ? (
+                <p className="text-[12px] text-base-content/30 text-center py-4">
+                  {query ? 'no match' : 'no models'}
+                </p>
+              ) : (
+                filtered.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => { onToggle(m.id); setQuery(''); setOpen(false); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-base-200/60 transition-colors cursor-pointer border-b border-base-300/30 last:border-0"
+                  >
+                    <Cpu className="h-3.5 w-3.5 text-base-content/30 shrink-0" />
+                    <span className="text-[12px] font-mono text-base-content/80 truncate">{m.name}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 // ── Add Channel Drawer ────────────────────────────────────────────────────────
 function AddChannelDrawer({
@@ -24,12 +130,14 @@ function AddChannelDrawer({
   providers?: Array<{ id: string; name: string }>;
 }) {
   const queryClient = useQueryClient();
+  const { data: allModels } = useAllModels();
   const [isPending, setIsPending] = useState(false);
   const [providerId, setProviderId] = useState('');
   const [name, setName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [priority, setPriority] = useState('1');
   const [enabled, setEnabled] = useState(false);
+  const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
 
   const reset = () => {
     setProviderId('');
@@ -37,9 +145,12 @@ function AddChannelDrawer({
     setApiKey('');
     setPriority('1');
     setEnabled(false);
+    setSelectedModelIds(new Set());
   };
 
   const handleClose = () => { reset(); onClose(); };
+
+  const selectedModels = (allModels ?? []).filter((m) => selectedModelIds.has(m.id));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,9 +164,29 @@ function AddChannelDrawer({
         priority: priority ? parseInt(priority) : 1,
         enabled,
       };
-      await createChannel(input);
+      const channel = await createChannel(input);
+
+      if (selectedModelIds.size > 0) {
+        const errors: string[] = [];
+        await Promise.all(
+          Array.from(selectedModelIds).map(async (modelId) => {
+            try {
+              await createChannelModelByChannel(channel.id, { model_id: modelId, enabled });
+            } catch {
+              errors.push(modelId);
+            }
+          })
+        );
+        if (errors.length > 0) {
+          toast.warning(`Channel created but ${errors.length} model(s) failed to link`);
+        } else {
+          toast.success('Channel created');
+        }
+      } else {
+        toast.success('Channel created');
+      }
+
       queryClient.invalidateQueries({ queryKey: ['channels'] });
-      toast.success('Channel created');
       handleClose();
     } catch (err) {
       toast.error(getErrorMessage(err, 'Failed to create channel'));
@@ -141,6 +272,25 @@ function AddChannelDrawer({
             />
           </div>
         </div>
+
+        {/* Models */}
+        <ModelMultiSelect
+          selected={selectedModels}
+          onToggle={(id) => {
+            setSelectedModelIds((prev) => {
+              const next = new Set(prev);
+              next.has(id) ? next.delete(id) : next.add(id);
+              return next;
+            });
+          }}
+          onRemove={(id) => {
+            setSelectedModelIds((prev) => {
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            });
+          }}
+        />
 
         {/* Enabled */}
         <div className="flex items-center justify-between">
