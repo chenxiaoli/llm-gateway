@@ -434,7 +434,27 @@ pub async fn proxy(
         return Err(ApiError::Forbidden);
     }
 
-    // === Step 2: Parse model ===
+    // === Step 2: Balance check ===
+    // Keys with created_by = None (e.g. admin-created test keys) skip balance checks.
+    // A threshold of 0 means "no limit" — skip the check in that case.
+    if let Some(ref created_by) = api_key.created_by {
+        if let Some(account) = state
+            .storage
+            .get_account_by_user_id(created_by)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+        {
+            if account.threshold > 0.0 && account.balance < account.threshold {
+                tracing::warn!(
+                    "[PROXY] Balance check failed: user={}, balance={}, threshold={}",
+                    created_by, account.balance, account.threshold
+                );
+                return Err(ApiError::PaymentRequired);
+            }
+        }
+    }
+
+    // === Step 3: Parse model ===
     let req_json: serde_json::Value = serde_json::from_str(&body)
         .map_err(|e| ApiError::BadRequest(format!("Invalid JSON: {}", e)))?;
 

@@ -1,7 +1,7 @@
 use crate::types::*;
 use async_trait::async_trait;
 use sqlx::postgres::PgPool;
-use sqlx::FromRow;
+use sqlx::{Acquire, FromRow};
 
 pub struct PostgresStorage {
     pool: PgPool,
@@ -394,6 +394,69 @@ impl From<PgPricingPolicyRow> for PricingPolicy {
             config: serde_json::from_str(&r.config).unwrap_or(serde_json::Value::Null),
             created_at: r.created_at,
             updated_at: r.updated_at,
+        }
+    }
+}
+
+// ── Account rows ────────────────────────────────────────────────────────────────
+
+#[derive(FromRow)]
+struct PgAccountRow {
+    id: String,
+    user_id: String,
+    balance: f64,
+    threshold: f64,
+    currency: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<PgAccountRow> for Account {
+    fn from(r: PgAccountRow) -> Self {
+        Account {
+            id: r.id,
+            user_id: r.user_id,
+            balance: r.balance,
+            threshold: r.threshold,
+            currency: r.currency,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }
+    }
+}
+
+// ── Transaction rows ───────────────────────────────────────────────────────────
+
+#[derive(FromRow)]
+struct PgTransactionRow {
+    id: String,
+    account_id: String,
+    transaction_type: String,
+    amount: f64,
+    balance_after: f64,
+    description: Option<String>,
+    reference_id: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<PgTransactionRow> for Transaction {
+    fn from(r: PgTransactionRow) -> Self {
+        let tt = match r.transaction_type.as_str() {
+            "credit" => TransactionType::Credit,
+            "debit" => TransactionType::Debit,
+            "credit_adjustment" => TransactionType::CreditAdjustment,
+            "debit_refund" => TransactionType::DebitRefund,
+            _ => TransactionType::Debit,
+        };
+        Transaction {
+            id: r.id,
+            account_id: r.account_id,
+            transaction_type: tt,
+            amount: r.amount,
+            balance_after: r.balance_after,
+            description: r.description,
+            reference_id: r.reference_id,
+            created_at: r.created_at,
         }
     }
 }
@@ -1519,6 +1582,129 @@ impl crate::Storage for PostgresStorage {
         Ok(())
     }
 
+    // ─── Atomic Balance Operations ───────────────────────────────────────────────
+
+    async fn deduct_balance(&self, req: &DeductBalance) -> Result<DeductBalanceResult, Box<dyn std::error::Error + Send + Sync>> {
+        let mut conn = self.pool.acquire().await?;
+        let mut tx = conn.begin().await?;
+
+        // Lock the account row and get current balance
+        let row: Option<(f64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE")
+            .bind(&req.account_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+        let current_balance = match row {
+            Some((b,)) => b,
+            None => return Ok(DeductBalanceResult::AccountNotFound),
+        };
+
+        if current_balance < req.amount {
+            return Ok(DeductBalanceResult::InsufficientBalance {
+                current_balance,
+                requested: req.amount,
+            });
+        }
+
+        let new_balance = current_balance - req.amount;
+        let now = chrono::Utc::now();
+
+        // Update account balance
+        sqlx::query("UPDATE accounts SET balance = $1, updated_at = $2 WHERE id = $3")
+            .bind(new_balance)
+            .bind(now)
+            .bind(&req.account_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Create transaction record
+        let tx_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO transactions (id, account_id, type, amount, balance_after, description, reference_id, created_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+        )
+        .bind(&tx_id)
+        .bind(&req.account_id)
+        .bind(req.transaction_type.as_str())
+        .bind(req.amount)
+        .bind(new_balance)
+        .bind(&req.description)
+        .bind(&req.reference_id)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(DeductBalanceResult::Success(Transaction {
+            id: tx_id,
+            account_id: req.account_id.clone(),
+            transaction_type: req.transaction_type,
+            amount: req.amount,
+            balance_after: new_balance,
+            description: req.description.clone(),
+            reference_id: req.reference_id.clone(),
+            created_at: now,
+        }))
+    }
+
+    async fn add_balance(&self, req: &AddBalance) -> Result<AddBalanceResult, Box<dyn std::error::Error + Send + Sync>> {
+        let mut conn = self.pool.acquire().await?;
+        let mut tx = conn.begin().await?;
+
+        // Lock the account row and get current balance
+        let row: Option<(f64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE")
+            .bind(&req.account_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+        let current_balance = match row {
+            Some((b,)) => b,
+            None => return Ok(AddBalanceResult::AccountNotFound),
+        };
+
+        let new_balance = current_balance + req.amount;
+        let now = chrono::Utc::now();
+
+        // Update account balance
+        sqlx::query("UPDATE accounts SET balance = $1, updated_at = $2 WHERE id = $3")
+            .bind(new_balance)
+            .bind(now)
+            .bind(&req.account_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Create transaction record
+        let tx_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO transactions (id, account_id, type, amount, balance_after, description, reference_id, created_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+        )
+        .bind(&tx_id)
+        .bind(&req.account_id)
+        .bind(req.transaction_type.as_str())
+        .bind(req.amount)
+        .bind(new_balance)
+        .bind(&req.description)
+        .bind(&req.reference_id)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(AddBalanceResult::Success(Transaction {
+            id: tx_id,
+            account_id: req.account_id.clone(),
+            transaction_type: req.transaction_type,
+            amount: req.amount,
+            balance_after: new_balance,
+            description: req.description.clone(),
+            reference_id: req.reference_id.clone(),
+            created_at: now,
+        }))
+    }
+
     // ---- Seed Data ----
 
     async fn seed_data(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -1644,5 +1830,124 @@ impl crate::Storage for PostgresStorage {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    // ─── Accounts ────────────────────────────────────────────────────────────────
+
+    async fn create_account(&self, account: &Account) -> Result<Account, Box<dyn std::error::Error + Send + Sync>> {
+        sqlx::query(
+            "INSERT INTO accounts (id, user_id, balance, threshold, currency, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)"
+        )
+        .bind(&account.id)
+        .bind(&account.user_id)
+        .bind(account.balance)
+        .bind(account.threshold)
+        .bind(&account.currency)
+        .bind(account.created_at)
+        .bind(account.updated_at)
+        .execute(self.pool())
+        .await?;
+        Ok(account.clone())
+    }
+
+    async fn get_account(&self, id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>> {
+        let row: Option<PgAccountRow> = sqlx::query_as(
+            "SELECT id, user_id, balance, threshold, currency, created_at, updated_at FROM accounts WHERE id = $1"
+        )
+        .bind(id)
+        .fetch_optional(self.pool())
+        .await?;
+        Ok(row.map(Account::from))
+    }
+
+    async fn get_account_by_user_id(&self, user_id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>> {
+        let row: Option<PgAccountRow> = sqlx::query_as(
+            "SELECT id, user_id, balance, threshold, currency, created_at, updated_at FROM accounts WHERE user_id = $1"
+        )
+        .bind(user_id)
+        .fetch_optional(self.pool())
+        .await?;
+        Ok(row.map(Account::from))
+    }
+
+    async fn update_account(&self, account: &Account) -> Result<Account, Box<dyn std::error::Error + Send + Sync>> {
+        sqlx::query(
+            "UPDATE accounts SET balance = $1, threshold = $2, updated_at = $3 WHERE id = $4"
+        )
+        .bind(account.balance)
+        .bind(account.threshold)
+        .bind(account.updated_at)
+        .bind(&account.id)
+        .execute(self.pool())
+        .await?;
+        Ok(account.clone())
+    }
+
+    // ─── Transactions ───────────────────────────────────────────────────────────
+
+    async fn create_transaction(&self, transaction: &Transaction) -> Result<Transaction, Box<dyn std::error::Error + Send + Sync>> {
+        sqlx::query(
+            "INSERT INTO transactions (id, account_id, type, amount, balance_after, description, reference_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+        )
+        .bind(&transaction.id)
+        .bind(&transaction.account_id)
+        .bind(transaction.transaction_type.as_str())
+        .bind(transaction.amount)
+        .bind(transaction.balance_after)
+        .bind(&transaction.description)
+        .bind(&transaction.reference_id)
+        .bind(transaction.created_at)
+        .execute(self.pool())
+        .await?;
+        Ok(transaction.clone())
+    }
+
+    async fn get_transaction(&self, id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
+        let row: Option<PgTransactionRow> = sqlx::query_as(
+            "SELECT id, account_id, type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE id = $1"
+        )
+        .bind(id)
+        .fetch_optional(self.pool())
+        .await?;
+        Ok(row.map(Transaction::from))
+    }
+
+    async fn get_transaction_by_reference(&self, account_id: &str, reference_id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
+        let row: Option<PgTransactionRow> = sqlx::query_as(
+            "SELECT id, account_id, type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = $1 AND reference_id = $2"
+        )
+        .bind(account_id)
+        .bind(reference_id)
+        .fetch_optional(self.pool())
+        .await?;
+        Ok(row.map(Transaction::from))
+    }
+
+    async fn list_transactions(&self, account_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
+        let offset = (page - 1) * page_size;
+
+        let rows: Vec<PgTransactionRow> = sqlx::query_as(
+            "SELECT id, account_id, type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+        )
+        .bind(account_id)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(self.pool())
+        .await?;
+
+        let count_row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM transactions WHERE account_id = $1"
+        )
+        .bind(account_id)
+        .fetch_one(self.pool())
+        .await?;
+
+        let transactions: Vec<Transaction> = rows.into_iter().map(Transaction::from).collect();
+        Ok(PaginatedResponse {
+            items: transactions,
+            total: count_row.0,
+            page,
+            page_size,
+        })
     }
 }

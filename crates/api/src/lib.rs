@@ -3,10 +3,12 @@ pub mod error;
 pub mod extractors;
 pub mod models;
 pub mod proxy;
+pub mod settlement;
 pub mod workers;
 pub mod management;
 
 pub use crate::proxy::{ChannelRegistry, InMemoryChannelRegistry, ResolvedChannel, spawn_registry_refresh};
+pub use settlement::{start_settlement_worker, SettlementTrigger};
 
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
@@ -22,6 +24,7 @@ pub struct AppState {
     pub encryption_key: [u8; 32],
     pub audit_tx: mpsc::Sender<AuditTask>,
     pub registry: Arc<dyn ChannelRegistry>,
+    pub settlement_tx: mpsc::Sender<settlement::SettlementTrigger>,
 }
 
 /// Task sent to background worker for async processing.

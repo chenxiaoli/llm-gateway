@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod auth;
 pub mod channels;
 pub mod keys;
@@ -24,6 +25,7 @@ pub fn management_router() -> Router<Arc<AppState>> {
         .route("/api/v1/auth/register", post(auth::register))
         .route("/api/v1/auth/config", get(auth::auth_config))
         .route("/api/v1/auth/me", get(auth::me))
+        .route("/api/v1/auth/me/balance", get(auth::me_balance))
         .route("/api/v1/auth/refresh", post(auth::refresh))
         .route("/api/v1/auth/change-password", post(auth::change_password))
         // Keys (authenticated)
@@ -92,6 +94,23 @@ pub fn management_router() -> Router<Arc<AppState>> {
         .route(
             "/api/v1/admin/users/{id}",
             patch(users::update_user).delete(users::delete_user),
+        )
+        // Account / Balance (admin)
+        .route(
+            "/api/v1/admin/users/{id}/balance",
+            get(accounts::get_balance),
+        )
+        .route(
+            "/api/v1/admin/users/{id}/recharge",
+            post(accounts::recharge),
+        )
+        .route(
+            "/api/v1/admin/users/{id}/adjust",
+            post(accounts::adjust),
+        )
+        .route(
+            "/api/v1/admin/users/{id}/threshold",
+            patch(accounts::update_threshold),
         )
         // Settings (admin)
         .route("/api/v1/admin/settings", get(settings::get_settings).patch(settings::update_settings))

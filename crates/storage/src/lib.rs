@@ -5,7 +5,14 @@ pub mod sqlite;
 #[cfg(feature = "postgres")]
 pub mod postgres;
 
-pub use types::*;
+pub use types::{
+    *,
+    Account, Transaction, TransactionType,
+    AccountResponse, TransactionResponse,
+    CreateTransaction, UpdateAccountThreshold,
+    DeductBalance, DeductBalanceResult,
+    AddBalance, AddBalanceResult,
+};
 pub use seed::{SeedData, SeedProvider, SeedModel, get_available_providers, get_available_models};
 
 #[async_trait::async_trait]
@@ -103,6 +110,22 @@ pub trait Storage: Send + Sync {
     // Settings
     async fn get_setting(&self, key: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
     async fn set_setting(&self, key: &str, value: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    // Accounts
+    async fn create_account(&self, account: &Account) -> Result<Account, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_account(&self, id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_account_by_user_id(&self, user_id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn update_account(&self, account: &Account) -> Result<Account, Box<dyn std::error::Error + Send + Sync>>;
+
+    // Transactions
+    async fn create_transaction(&self, transaction: &Transaction) -> Result<Transaction, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_transaction(&self, id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_transaction_by_reference(&self, account_id: &str, reference_id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_transactions(&self, account_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<Transaction>, Box<dyn std::error::Error + Send + Sync>>;
+
+    // Atomic balance operations
+    async fn deduct_balance(&self, req: &DeductBalance) -> Result<DeductBalanceResult, Box<dyn std::error::Error + Send + Sync>>;
+    async fn add_balance(&self, req: &AddBalance) -> Result<AddBalanceResult, Box<dyn std::error::Error + Send + Sync>>;
 
     // Seed data
     async fn seed_data(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;

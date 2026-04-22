@@ -382,3 +382,49 @@ export interface SyncModelsResponse {
   updated: number;
   models: SyncedModel[];
 }
+
+// ── Account & Transaction Types ───────────────────────────────────────────────
+
+export interface Account {
+  id: string;
+  user_id: string;
+  balance: number;
+  threshold: number;
+  currency: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Transaction {
+  id: string;
+  account_id: string;
+  type: 'credit' | 'debit' | 'credit_adjustment' | 'debit_refund';
+  amount: number;
+  balance_after: number;
+  description: string | null;
+  reference_id: string | null;
+  created_at: string;
+}
+
+export interface AccountBalanceResponse {
+  account: Account;
+  transactions: PaginatedResponse<Transaction>;
+}
+
+export interface MeBalanceResponse {
+  balance: number;
+  threshold: number;
+  currency: string;
+  transactions: PaginatedResponse<Transaction>;
+}
+
+export interface CreateTransactionRequest {
+  type: 'credit' | 'credit_adjustment' | 'debit_refund';
+  amount: number;
+  description?: string;
+  reference_id?: string;
+}
+
+export interface UpdateThresholdRequest {
+  threshold: number;
+}
