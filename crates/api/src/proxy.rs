@@ -435,6 +435,8 @@ pub async fn proxy(
     }
 
     // === Step 2: Balance check ===
+    // Keys with created_by = None (e.g. admin-created test keys) skip balance checks.
+    // A threshold of 0 means "no limit" — skip the check in that case.
     if let Some(ref created_by) = api_key.created_by {
         if let Some(account) = state
             .storage
@@ -442,7 +444,7 @@ pub async fn proxy(
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?
         {
-            if account.balance < account.threshold {
+            if account.threshold > 0.0 && account.balance < account.threshold {
                 tracing::warn!(
                     "[PROXY] Balance check failed: user={}, balance={}, threshold={}",
                     created_by, account.balance, account.threshold

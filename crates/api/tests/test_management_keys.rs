@@ -4,7 +4,7 @@ use common::MockChannelRegistry;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use llm_gateway_api::management;
-use llm_gateway_api::AppState;
+use llm_gateway_api::{AppState, SettlementTrigger};
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::Storage;
@@ -19,6 +19,7 @@ fn build_app(state: Arc<AppState>) -> axum::Router {
 
 fn make_state(db: Arc<llm_gateway_storage::sqlite::SqliteStorage>) -> Arc<AppState> {
     let (audit_tx, _rx) = mpsc::channel(100);
+    let (settlement_tx, _rx2) = mpsc::channel(1);
     Arc::new(AppState {
         storage: db.clone() as Arc<dyn Storage>,
         rate_limiter: Arc::new(RateLimiter::new(60)),
@@ -27,6 +28,7 @@ fn make_state(db: Arc<llm_gateway_storage::sqlite::SqliteStorage>) -> Arc<AppSta
         encryption_key: [0u8; 32],
         audit_tx,
         registry: Arc::new(MockChannelRegistry),
+        settlement_tx,
     })
 }
 

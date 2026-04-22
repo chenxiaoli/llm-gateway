@@ -1,7 +1,7 @@
 -- Accounts andTransactions tables
 CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL UNIQUE REFERENCES users(id),
+    user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     balance REAL NOT NULL DEFAULT 0,
     threshold REAL NOT NULL DEFAULT 1.0,
     currency TEXT NOT NULL DEFAULT 'USD',
@@ -12,7 +12,7 @@ CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);
 
 CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
-    account_id TEXT NOT NULL REFERENCES accounts(id),
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     type TEXT NOT NULL CHECK(type IN ('credit','debit','credit_adjustment','debit_refund')),
     amount REAL NOT NULL CHECK(amount > 0),
     balance_after REAL NOT NULL,

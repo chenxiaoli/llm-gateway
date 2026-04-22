@@ -5,8 +5,9 @@ use serde::Serialize;
 use std::sync::Arc;
 
 use llm_gateway_storage::{
-    AccountResponse, CreateTransaction, PaginatedResponse,
-    PaginationParams, TransactionResponse, UpdateAccountThreshold,
+    Account, AccountResponse, AddBalance, AddBalanceResult, CreateTransaction,
+    PaginatedResponse, PaginationParams, TransactionResponse,
+    TransactionType, UpdateAccountThreshold,
 };
 
 use crate::error::ApiError;
@@ -60,47 +61,43 @@ pub async fn recharge(
 ) -> Result<Json<AccountResponse>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
-    let mut account = state
+    if input.amount <= 0.0 {
+        return Err(ApiError::BadRequest("Amount must be positive".to_string()));
+    }
+
+    // Look up account for account_id
+    let account = state
         .storage
         .get_account_by_user_id(&user_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))?;
 
-    if input.amount <= 0.0 {
-        return Err(ApiError::BadRequest("Amount must be positive".to_string()));
-    }
-
-    let now = chrono::Utc::now();
-    let new_balance = account.balance + input.amount;
-
-    let transaction = llm_gateway_storage::Transaction {
-        id: uuid::Uuid::new_v4().to_string(),
+    let req = AddBalance {
         account_id: account.id.clone(),
-        transaction_type: llm_gateway_storage::TransactionType::Credit,
         amount: input.amount,
-        balance_after: new_balance,
+        transaction_type: TransactionType::Credit,
         description: input.description.or_else(|| Some("Recharge".to_string())),
         reference_id: input.reference_id,
-        created_at: now,
     };
 
-    account.balance = new_balance;
-    account.updated_at = now;
-
-    state
-        .storage
-        .create_transaction(&transaction)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let updated = state
-        .storage
-        .update_account(&account)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    Ok(Json(AccountResponse::from(&updated)))
+    match state.storage.add_balance(&req).await {
+        Ok(AddBalanceResult::Success(tx)) => {
+            Ok(Json(AccountResponse::from(&Account {
+                id: tx.account_id,
+                user_id,
+                balance: tx.balance_after,
+                threshold: account.threshold,
+                currency: account.currency,
+                created_at: account.created_at,
+                updated_at: tx.created_at,
+            })))
+        }
+        Ok(AddBalanceResult::AccountNotFound) => {
+            Err(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))
+        }
+        Err(e) => Err(ApiError::Internal(e.to_string())),
+    }
 }
 
 pub async fn adjust(
@@ -111,20 +108,13 @@ pub async fn adjust(
 ) -> Result<Json<AccountResponse>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
-    let mut account = state
-        .storage
-        .get_account_by_user_id(&user_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))?;
-
     if input.amount <= 0.0 {
         return Err(ApiError::BadRequest("Amount must be positive".to_string()));
     }
 
     let tx_type = match input.transaction_type.as_str() {
-        "credit_adjustment" => llm_gateway_storage::TransactionType::CreditAdjustment,
-        "debit_refund" => llm_gateway_storage::TransactionType::DebitRefund,
+        "credit_adjustment" => TransactionType::CreditAdjustment,
+        "debit_refund" => TransactionType::DebitRefund,
         _ => {
             return Err(ApiError::BadRequest(
                 "type must be 'credit_adjustment' or 'debit_refund'".to_string(),
@@ -132,40 +122,47 @@ pub async fn adjust(
         }
     };
 
-    let now = chrono::Utc::now();
-    let new_balance = if tx_type == llm_gateway_storage::TransactionType::CreditAdjustment {
-        account.balance + input.amount
-    } else {
-        account.balance - input.amount
-    };
+    // Look up account
+    let account = state
+        .storage
+        .get_account_by_user_id(&user_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))?;
 
-    let transaction = llm_gateway_storage::Transaction {
-        id: uuid::Uuid::new_v4().to_string(),
+    // Guard: DebitRefund must not result in negative balance
+    if tx_type == TransactionType::DebitRefund && account.balance < input.amount {
+        return Err(ApiError::BadRequest(format!(
+            "Insufficient balance for debit refund: balance={}, requested={}",
+            account.balance, input.amount
+        )));
+    }
+
+    let req = AddBalance {
         account_id: account.id.clone(),
-        transaction_type: tx_type,
         amount: input.amount,
-        balance_after: new_balance,
+        transaction_type: tx_type,
         description: input.description.or_else(|| Some("Manual adjustment".to_string())),
         reference_id: input.reference_id,
-        created_at: now,
     };
 
-    account.balance = new_balance;
-    account.updated_at = now;
-
-    state
-        .storage
-        .create_transaction(&transaction)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let updated = state
-        .storage
-        .update_account(&account)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    Ok(Json(AccountResponse::from(&updated)))
+    match state.storage.add_balance(&req).await {
+        Ok(AddBalanceResult::Success(tx)) => {
+            Ok(Json(AccountResponse::from(&Account {
+                id: tx.account_id,
+                user_id,
+                balance: tx.balance_after,
+                threshold: account.threshold,
+                currency: account.currency,
+                created_at: account.created_at,
+                updated_at: tx.created_at,
+            })))
+        }
+        Ok(AddBalanceResult::AccountNotFound) => {
+            Err(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))
+        }
+        Err(e) => Err(ApiError::Internal(e.to_string())),
+    }
 }
 
 pub async fn update_threshold(

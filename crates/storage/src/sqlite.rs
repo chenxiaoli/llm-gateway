@@ -1,7 +1,7 @@
 use crate::types::*;
 use crate::seed;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use sqlx::{FromRow, SqlitePool};
+use sqlx::{Acquire, FromRow, SqlitePool};
 use std::str::FromStr;
 
 pub struct SqliteStorage {
@@ -1782,6 +1782,129 @@ impl crate::Storage for SqliteStorage {
             page,
             page_size,
         })
+    }
+
+    // ─── Atomic Balance Operations ───────────────────────────────────────────────
+
+    async fn deduct_balance(&self, req: &DeductBalance) -> Result<DeductBalanceResult, Box<dyn std::error::Error + Send + Sync>> {
+        let mut conn = self.pool.acquire().await?;
+        let mut tx = conn.begin().await?;
+
+        // Lock the account row and get current balance
+        let row: Option<(f64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = ? FOR UPDATE")
+            .bind(&req.account_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+        let current_balance = match row {
+            Some((b,)) => b,
+            None => return Ok(DeductBalanceResult::AccountNotFound),
+        };
+
+        if current_balance < req.amount {
+            return Ok(DeductBalanceResult::InsufficientBalance {
+                current_balance,
+                requested: req.amount,
+            });
+        }
+
+        let new_balance = current_balance - req.amount;
+        let now = chrono::Utc::now();
+
+        // Update account balance
+        sqlx::query("UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?")
+            .bind(new_balance)
+            .bind(now.to_rfc3339())
+            .bind(&req.account_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Create transaction record
+        let tx_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO transactions (id, account_id, type, amount, balance_after, description, reference_id, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(&tx_id)
+        .bind(&req.account_id)
+        .bind(req.transaction_type.as_str())
+        .bind(req.amount)
+        .bind(new_balance)
+        .bind(&req.description)
+        .bind(&req.reference_id)
+        .bind(now.to_rfc3339())
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(DeductBalanceResult::Success(Transaction {
+            id: tx_id,
+            account_id: req.account_id.clone(),
+            transaction_type: req.transaction_type,
+            amount: req.amount,
+            balance_after: new_balance,
+            description: req.description.clone(),
+            reference_id: req.reference_id.clone(),
+            created_at: now,
+        }))
+    }
+
+    async fn add_balance(&self, req: &AddBalance) -> Result<AddBalanceResult, Box<dyn std::error::Error + Send + Sync>> {
+        let mut conn = self.pool.acquire().await?;
+        let mut tx = conn.begin().await?;
+
+        // Lock the account row and get current balance
+        let row: Option<(f64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = ? FOR UPDATE")
+            .bind(&req.account_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+        let current_balance = match row {
+            Some((b,)) => b,
+            None => return Ok(AddBalanceResult::AccountNotFound),
+        };
+
+        let new_balance = current_balance + req.amount;
+        let now = chrono::Utc::now();
+
+        // Update account balance
+        sqlx::query("UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?")
+            .bind(new_balance)
+            .bind(now.to_rfc3339())
+            .bind(&req.account_id)
+            .execute(&mut *tx)
+            .await?;
+
+        // Create transaction record
+        let tx_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO transactions (id, account_id, type, amount, balance_after, description, reference_id, created_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(&tx_id)
+        .bind(&req.account_id)
+        .bind(req.transaction_type.as_str())
+        .bind(req.amount)
+        .bind(new_balance)
+        .bind(&req.description)
+        .bind(&req.reference_id)
+        .bind(now.to_rfc3339())
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(AddBalanceResult::Success(Transaction {
+            id: tx_id,
+            account_id: req.account_id.clone(),
+            transaction_type: req.transaction_type,
+            amount: req.amount,
+            balance_after: new_balance,
+            description: req.description.clone(),
+            reference_id: req.reference_id.clone(),
+            created_at: now,
+        }))
     }
 
     // ---- Seed Data ----

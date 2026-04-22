@@ -2,7 +2,7 @@
 //! Runs every N minutes (default 1 min), summarizes usage cost per user, creates debit transactions.
 
 use llm_gateway_storage::{
-    Account, Transaction, TransactionType, UsageRecord,
+    TransactionType, UsageRecord,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -90,10 +90,10 @@ async fn run_settlement(storage: &Arc<dyn llm_gateway_storage::Storage>) {
         return;
     }
 
-    let batch_reference = format!("batch_{}", now.timestamp());
+    let batch_reference = format!("batch_{}", now.timestamp_micros());
 
-    for (account_id, total_cost) in account_charges {
-        if total_cost <= 0.0 {
+    for (account_id, total_cost) in &account_charges {
+        if *total_cost <= 0.0 {
             continue;
         }
 
@@ -112,45 +112,36 @@ async fn run_settlement(storage: &Arc<dyn llm_gateway_storage::Storage>) {
             continue;
         }
 
-        let account = match storage.get_account(&account_id).await.unwrap_or(None) {
-            Some(a) => a,
-            None => continue,
+        let req = llm_gateway_storage::DeductBalance {
+            account_id: account_id.clone(),
+            amount: *total_cost,
+            transaction_type: TransactionType::Debit,
+            description: Some("Usage settlement".to_string()),
+            reference_id: Some(batch_reference.clone()),
         };
 
-        if account.balance >= total_cost {
-            let new_balance = account.balance - total_cost;
-            let mut updated_account = account.clone();
-            updated_account.balance = new_balance;
-            updated_account.updated_at = chrono::Utc::now();
-
-            let transaction = Transaction {
-                id: uuid::Uuid::new_v4().to_string(),
-                account_id: account_id.clone(),
-                transaction_type: TransactionType::Debit,
-                amount: total_cost,
-                balance_after: new_balance,
-                description: Some("Usage settlement".to_string()),
-                reference_id: Some(batch_reference.clone()),
-                created_at: chrono::Utc::now(),
-            };
-
-            if storage.create_transaction(&transaction).await.is_ok() {
-                let _ = storage.update_account(&updated_account).await;
+        match storage.deduct_balance(&req).await {
+            Ok(llm_gateway_storage::DeductBalanceResult::Success(tx)) => {
                 tracing::info!(
-                    "[SETTLEMENT] Deducted ${:.6f} from account {} (balance: {} -> {})",
-                    total_cost,
-                    account_id,
-                    account.balance,
-                    new_balance
+                    "[SETTLEMENT] Deducted ${:.6} from account {} (new balance: ${:.6})",
+                    total_cost, account_id, tx.balance_after
                 );
             }
-        } else {
-            tracing::warn!(
-                "[SETTLEMENT] Insufficient balance for account {}: balance=${:.6f}, cost=${:.6f}",
-                account_id,
-                account.balance,
-                total_cost
-            );
+            Ok(llm_gateway_storage::DeductBalanceResult::InsufficientBalance { current_balance, requested: _ }) => {
+                tracing::warn!(
+                    "[SETTLEMENT] Insufficient balance for account {}: balance=${:.6}, cost=${:.6}",
+                    account_id, current_balance, total_cost
+                );
+            }
+            Ok(llm_gateway_storage::DeductBalanceResult::AccountNotFound) => {
+                tracing::warn!("[SETTLEMENT] Account {} not found", account_id);
+            }
+            Err(e) => {
+                tracing::error!(
+                    "[SETTLEMENT] Failed to deduct from account {}: {}",
+                    account_id, e
+                );
+            }
         }
     }
 

@@ -599,6 +599,39 @@ pub struct UpdateAccountThreshold {
     pub threshold: f64,
 }
 
+/// Request to atomically deduct balance from an account.
+pub struct DeductBalance {
+    pub account_id: String,
+    pub amount: f64,
+    pub transaction_type: TransactionType,
+    pub description: Option<String>,
+    pub reference_id: Option<String>,
+}
+
+/// Result of a deduct_balance operation.
+#[derive(Debug)]
+pub enum DeductBalanceResult {
+    Success(Transaction),
+    InsufficientBalance { current_balance: f64, requested: f64 },
+    AccountNotFound,
+}
+
+/// Request to atomically add balance to an account (credits, refunds).
+pub struct AddBalance {
+    pub account_id: String,
+    pub amount: f64,
+    pub transaction_type: TransactionType,
+    pub description: Option<String>,
+    pub reference_id: Option<String>,
+}
+
+/// Result of an add_balance operation.
+#[derive(Debug)]
+pub enum AddBalanceResult {
+    Success(Transaction),
+    AccountNotFound,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct AccountResponse {
     pub id: String,
