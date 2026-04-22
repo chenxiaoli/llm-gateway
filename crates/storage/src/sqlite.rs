@@ -1721,7 +1721,7 @@ impl crate::Storage for SqliteStorage {
             TransactionType::DebitRefund => "debit_refund",
         };
         sqlx::query(
-            "INSERT INTO transactions (id, account_id, transaction_type, amount, balance_after, description, reference_id, created_at)
+            "INSERT INTO transactions (id, account_id, type, amount, balance_after, description, reference_id, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&transaction.id)
@@ -1740,7 +1740,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_transaction(&self, id: &str) -> Result<Option<Transaction>, DbErr> {
         let row: Option<SqliteTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, transaction_type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE id = ?",
+            "SELECT id, account_id, type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE id = ?",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -1751,7 +1751,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_transaction_by_reference(&self, account_id: &str, reference_id: &str) -> Result<Option<Transaction>, DbErr> {
         let row: Option<SqliteTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, transaction_type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = ? AND reference_id = ?",
+            "SELECT id, account_id, type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = ? AND reference_id = ?",
         )
         .bind(account_id)
         .bind(reference_id)
@@ -1768,7 +1768,7 @@ impl crate::Storage for SqliteStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<SqliteTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, transaction_type, amount, balance_after, description, reference_id, created_at \
+            "SELECT id, account_id, type, amount, balance_after, description, reference_id, created_at \
              FROM transactions WHERE account_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
         )
         .bind(account_id)
