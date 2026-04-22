@@ -359,6 +359,31 @@ impl From<SqlitePricingPolicyRow> for PricingPolicy {
     }
 }
 
+#[derive(FromRow)]
+struct SqliteAccountRow { id: String, user_id: String, balance: f64, threshold: f64, currency: String, created_at: String, updated_at: String }
+
+impl From<SqliteAccountRow> for Account {
+    fn from(r: SqliteAccountRow) -> Self {
+        Account { id: r.id, user_id: r.user_id, balance: r.balance, threshold: r.threshold, currency: r.currency, created_at: parse_rfc3339(&r.created_at), updated_at: parse_rfc3339(&r.updated_at) }
+    }
+}
+
+#[derive(FromRow)]
+struct SqliteTransactionRow { id: String, account_id: String, transaction_type: String, amount: f64, balance_after: f64, description: Option<String>, reference_id: Option<String>, created_at: String }
+
+impl From<SqliteTransactionRow> for Transaction {
+    fn from(r: SqliteTransactionRow) -> Self {
+        let tt = match r.transaction_type.as_str() {
+            "credit" => TransactionType::Credit,
+            "debit" => TransactionType::Debit,
+            "credit_adjustment" => TransactionType::CreditAdjustment,
+            "debit_refund" => TransactionType::DebitRefund,
+            _ => TransactionType::Debit,
+        };
+        Transaction { id: r.id, account_id: r.account_id, transaction_type: tt, amount: r.amount, balance_after: r.balance_after, description: r.description, reference_id: r.reference_id, created_at: parse_rfc3339(&r.created_at) }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -1628,6 +1653,135 @@ impl crate::Storage for SqliteStorage {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    // ---- Accounts ----
+
+    async fn create_account(&self, account: &Account) -> Result<Account, DbErr> {
+        sqlx::query(
+            "INSERT INTO accounts (id, user_id, balance, threshold, currency, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&account.id)
+        .bind(&account.user_id)
+        .bind(account.balance)
+        .bind(account.threshold)
+        .bind(&account.currency)
+        .bind(account.created_at.to_rfc3339())
+        .bind(account.updated_at.to_rfc3339())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(account.clone())
+    }
+
+    async fn get_account(&self, id: &str) -> Result<Option<Account>, DbErr> {
+        let row: Option<SqliteAccountRow> = sqlx::query_as(
+            "SELECT id, user_id, balance, threshold, currency, created_at, updated_at FROM accounts WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(Account::from))
+    }
+
+    async fn get_account_by_user_id(&self, user_id: &str) -> Result<Option<Account>, DbErr> {
+        let row: Option<SqliteAccountRow> = sqlx::query_as(
+            "SELECT id, user_id, balance, threshold, currency, created_at, updated_at FROM accounts WHERE user_id = ?",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(Account::from))
+    }
+
+    async fn update_account(&self, account: &Account) -> Result<Account, DbErr> {
+        sqlx::query(
+            "UPDATE accounts SET balance = ?, threshold = ?, updated_at = ? WHERE id = ?",
+        )
+        .bind(account.balance)
+        .bind(account.threshold)
+        .bind(account.updated_at.to_rfc3339())
+        .bind(&account.id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(account.clone())
+    }
+
+    // ---- Transactions ----
+
+    async fn create_transaction(&self, transaction: &Transaction) -> Result<Transaction, DbErr> {
+        let type_str = match transaction.transaction_type {
+            TransactionType::Credit => "credit",
+            TransactionType::Debit => "debit",
+            TransactionType::CreditAdjustment => "credit_adjustment",
+            TransactionType::DebitRefund => "debit_refund",
+        };
+        sqlx::query(
+            "INSERT INTO transactions (id, account_id, transaction_type, amount, balance_after, description, reference_id, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&transaction.id)
+        .bind(&transaction.account_id)
+        .bind(type_str)
+        .bind(transaction.amount)
+        .bind(transaction.balance_after)
+        .bind(&transaction.description)
+        .bind(&transaction.reference_id)
+        .bind(transaction.created_at.to_rfc3339())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(transaction.clone())
+    }
+
+    async fn get_transaction(&self, id: &str) -> Result<Option<Transaction>, DbErr> {
+        let row: Option<SqliteTransactionRow> = sqlx::query_as(
+            "SELECT id, account_id, transaction_type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(Transaction::from))
+    }
+
+    async fn get_transaction_by_reference(&self, account_id: &str, reference_id: &str) -> Result<Option<Transaction>, DbErr> {
+        let row: Option<SqliteTransactionRow> = sqlx::query_as(
+            "SELECT id, account_id, transaction_type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = ? AND reference_id = ?",
+        )
+        .bind(account_id)
+        .bind(reference_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(Transaction::from))
+    }
+
+    async fn list_transactions(&self, account_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM transactions WHERE account_id = ?")
+            .bind(account_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let offset = (page - 1) * page_size;
+        let rows: Vec<SqliteTransactionRow> = sqlx::query_as(
+            "SELECT id, account_id, transaction_type, amount, balance_after, description, reference_id, created_at \
+             FROM transactions WHERE account_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        )
+        .bind(account_id)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(PaginatedResponse {
+            items: rows.into_iter().map(Transaction::from).collect(),
+            total: total.0,
+            page,
+            page_size,
+        })
     }
 
     // ---- Seed Data ----
