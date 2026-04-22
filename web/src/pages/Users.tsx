@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useUsers, useUpdateUser, useDeleteUser } from '../hooks/useUsers';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -6,6 +7,7 @@ import { Select } from '../components/ui/Select';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 export default function Users() {
+  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const { data, isLoading } = useUsers(page, pageSize);
@@ -52,6 +54,13 @@ export default function Users() {
                     </td>
                     <td className="mono">{new Date(user.created_at).toLocaleDateString()}</td>
                     <td>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate(`/console/users/${user.id}/balance`)}
+                      >
+                        Balance
+                      </Button>
                       <ConfirmDialog title="Delete this user?" onConfirm={() => deleteMutation.mutate(user.id)} okText="Delete">
                         <Button variant="danger" size="sm">Delete</Button>
                       </ConfirmDialog>
