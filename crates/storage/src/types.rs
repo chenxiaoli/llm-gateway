@@ -531,6 +531,127 @@ pub struct UpdateUser {
     pub enabled: Option<bool>,
 }
 
+// --- Accounts ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Account {
+    pub id: String,
+    pub user_id: String,
+    pub balance: f64,
+    pub threshold: f64,
+    pub currency: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Transaction {
+    pub id: String,
+    pub account_id: String,
+    #[serde(rename = "type")]
+    pub transaction_type: TransactionType,
+    pub amount: f64,
+    pub balance_after: f64,
+    pub description: Option<String>,
+    pub reference_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TransactionType {
+    Credit,
+    Debit,
+    CreditAdjustment,
+    DebitRefund,
+}
+
+impl TransactionType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TransactionType::Credit => "credit",
+            TransactionType::Debit => "debit",
+            TransactionType::CreditAdjustment => "credit_adjustment",
+            TransactionType::DebitRefund => "debit_refund",
+        }
+    }
+}
+
+impl std::fmt::Display for TransactionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+// --- Account API Request/Response types ---
+
+#[derive(Debug, Deserialize)]
+pub struct CreateTransaction {
+    #[serde(rename = "type")]
+    pub transaction_type: String,
+    pub amount: f64,
+    pub description: Option<String>,
+    pub reference_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateAccountThreshold {
+    pub threshold: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AccountResponse {
+    pub id: String,
+    pub user_id: String,
+    pub balance: f64,
+    pub threshold: f64,
+    pub currency: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<&Account> for AccountResponse {
+    fn from(a: &Account) -> Self {
+        AccountResponse {
+            id: a.id.clone(),
+            user_id: a.user_id.clone(),
+            balance: a.balance,
+            threshold: a.threshold,
+            currency: a.currency.clone(),
+            created_at: a.created_at.to_rfc3339(),
+            updated_at: a.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TransactionResponse {
+    pub id: String,
+    pub account_id: String,
+    #[serde(rename = "type")]
+    pub transaction_type: String,
+    pub amount: f64,
+    pub balance_after: f64,
+    pub description: Option<String>,
+    pub reference_id: Option<String>,
+    pub created_at: String,
+}
+
+impl From<&Transaction> for TransactionResponse {
+    fn from(t: &Transaction) -> Self {
+        TransactionResponse {
+            id: t.id.clone(),
+            account_id: t.account_id.clone(),
+            transaction_type: t.transaction_type.as_str().to_string(),
+            amount: t.amount,
+            balance_after: t.balance_after,
+            description: t.description.clone(),
+            reference_id: t.reference_id.clone(),
+            created_at: t.created_at.to_rfc3339(),
+        }
+    }
+}
+
 // --- Settings ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
