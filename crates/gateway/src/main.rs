@@ -66,6 +66,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Spawn background audit worker
     tokio::spawn(llm_gateway_api::workers::start_audit_worker(storage.clone(), audit_rx));
 
+    // Create settlement channel and spawn background worker
+    let (settlement_tx, settlement_rx) = tokio::sync::mpsc::channel::<llm_gateway_api::SettlementTrigger>(1);
+    let settlement_interval_secs = 60u64;
+    tokio::spawn(llm_gateway_api::start_settlement_worker(
+        storage.clone(),
+        settlement_rx,
+        settlement_interval_secs,
+    ));
+
     // App state
     let state = Arc::new(AppState {
         storage,
@@ -75,6 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         encryption_key,
         audit_tx,
         registry,
+        settlement_tx,
     });
 
     // Build router
