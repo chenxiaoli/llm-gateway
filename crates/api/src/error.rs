@@ -7,6 +7,7 @@ pub enum ApiError {
     Unauthorized,
     Forbidden,
     RateLimited,
+    PaymentRequired,
     NotFound(String),
     BadRequest(String),
     UpstreamError(u16, String),
@@ -19,6 +20,7 @@ impl IntoResponse for ApiError {
             ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized"),
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden"),
             ApiError::RateLimited => (StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded"),
+            ApiError::PaymentRequired => (StatusCode::PAYMENT_REQUIRED, "Insufficient balance"),
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str()),
             ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
             ApiError::UpstreamError(code, msg) => (
