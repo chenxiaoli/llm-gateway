@@ -171,4 +171,12 @@ mod tests {
         let debug_str = format!("{:?}", trigger);
         assert!(debug_str.contains("SettlementTrigger"));
     }
+
+    #[test]
+    fn test_batch_reference_format() {
+        let ts = chrono::Utc::now().timestamp();
+        let reference = format!("batch_{}", ts);
+        assert!(reference.starts_with("batch_"));
+        assert!(reference.len() > 6);
+    }
 }

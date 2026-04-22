@@ -652,6 +652,37 @@ impl From<&Transaction> for TransactionResponse {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_transaction_type_as_str() {
+        assert_eq!(TransactionType::Credit.as_str(), "credit");
+        assert_eq!(TransactionType::Debit.as_str(), "debit");
+        assert_eq!(TransactionType::CreditAdjustment.as_str(), "credit_adjustment");
+        assert_eq!(TransactionType::DebitRefund.as_str(), "debit_refund");
+    }
+
+    #[test]
+    fn test_account_response_from() {
+        let now = chrono::Utc::now();
+        let account = Account {
+            id: "acc-1".to_string(),
+            user_id: "user-1".to_string(),
+            balance: 100.5,
+            threshold: 1.0,
+            currency: "USD".to_string(),
+            created_at: now,
+            updated_at: now,
+        };
+        let response = AccountResponse::from(&account);
+        assert_eq!(response.id, "acc-1");
+        assert_eq!(response.balance, 100.5);
+        assert_eq!(response.currency, "USD");
+    }
+}
+
 // --- Settings ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
