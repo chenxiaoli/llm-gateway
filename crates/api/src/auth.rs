@@ -186,6 +186,22 @@ pub async fn register(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    // Auto-create account for new user
+    let account = llm_gateway_storage::Account {
+        id: uuid::Uuid::new_v4().to_string(),
+        user_id: user.id.clone(),
+        balance: 0.0,
+        threshold: 1.0,
+        currency: "USD".to_string(),
+        created_at: now,
+        updated_at: now,
+    };
+    state
+        .storage
+        .create_account(&account)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
     let token = create_jwt(&user.id, &user.role, &state.jwt_secret)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
