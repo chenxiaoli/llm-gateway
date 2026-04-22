@@ -240,6 +240,42 @@ pub async fn me(
     }))
 }
 
+use llm_gateway_storage::{PaginatedResponse, TransactionResponse};
+
+pub async fn me_balance(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(pagination): Query<llm_gateway_storage::PaginationParams>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+
+    let account = state
+        .storage
+        .get_account_by_user_id(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound("Account not found".to_string()))?;
+
+    let (page, page_size) = pagination.normalized();
+    let transactions = state
+        .storage
+        .list_transactions(&account.id, page, page_size)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(serde_json::json!({
+        "balance": account.balance,
+        "threshold": account.threshold,
+        "currency": account.currency,
+        "transactions": PaginatedResponse {
+            items: transactions.items.iter().map(TransactionResponse::from).collect(),
+            total: transactions.total,
+            page: transactions.page,
+            page_size: transactions.page_size,
+        }
+    })))
+}
+
 pub async fn auth_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<AuthConfigResponse>, ApiError> {
