@@ -36,7 +36,7 @@ function ModelMultiSelect({
 
   return (
     <div className="space-y-2">
-      <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
+      <label className="text-base font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
         <Cpu className="h-3.5 w-3.5" />
         Models
         {selected.length > 0 && (
@@ -52,7 +52,7 @@ function ModelMultiSelect({
           {selected.map((m) => (
             <span
               key={m.id}
-              className="inline-flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-md bg-accent/10 border border-accent/25 text-[11px] font-mono text-accent/80"
+              className="inline-flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-md bg-accent/10 border border-accent/25 text-base font-mono text-accent/80"
             >
               {m.name}
               <button
@@ -76,7 +76,7 @@ function ModelMultiSelect({
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           placeholder="search models..."
-          className="w-full h-9 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-[13px] text-base-content placeholder:text-base-content/25 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+          className="w-full h-9 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-md text-base-content placeholder:text-base-content/25 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
         />
       </div>
 
@@ -95,7 +95,7 @@ function ModelMultiSelect({
               style={{ maxHeight: '180px' }}
             >
               {filtered.length === 0 ? (
-                <p className="text-[12px] text-base-content/30 text-center py-4">
+                <p className="text-md text-base-content/30 text-center py-4">
                   {query ? 'no match' : 'no models'}
                 </p>
               ) : (
@@ -107,7 +107,7 @@ function ModelMultiSelect({
                     className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-base-200/60 transition-colors cursor-pointer border-b border-base-300/30 last:border-0"
                   >
                     <Cpu className="h-3.5 w-3.5 text-base-content/30 shrink-0" />
-                    <span className="text-[12px] font-mono text-base-content/80 truncate">{m.name}</span>
+                    <span className="text-md font-mono text-base-content/80 truncate">{m.name}</span>
                   </button>
                 ))
               )}
@@ -184,7 +184,7 @@ function AddChannelDrawer({
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Provider */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
+          <label className="text-base font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
             <Globe className="h-3.5 w-3.5" />
             Provider
           </label>
@@ -192,7 +192,7 @@ function AddChannelDrawer({
             value={providerId}
             onChange={(e) => setProviderId(e.target.value)}
             required
-            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-[13px] text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-md text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
           >
             <option value="">Select a provider...</option>
             {providers?.map((p) => (
@@ -203,7 +203,7 @@ function AddChannelDrawer({
 
         {/* Channel name */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
+          <label className="text-base font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
             <Radio className="h-3.5 w-3.5" />
             Channel Name
           </label>
@@ -214,14 +214,14 @@ function AddChannelDrawer({
               onChange={(e) => setName(e.target.value)}
               required
               placeholder="e.g. openai-primary, anthropic-failover"
-              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-md font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
           </div>
         </div>
 
         {/* Base URL */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
+          <label className="text-base font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
             <Key className="h-3.5 w-3.5" />
             API Key
           </label>
@@ -232,7 +232,7 @@ function AddChannelDrawer({
               onChange={(e) => setApiKey(e.target.value)}
               required
               placeholder="sk-..."
-              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-[13px] font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-md font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
             <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/25" />
           </div>
@@ -240,10 +240,10 @@ function AddChannelDrawer({
 
         {/* Priority */}
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
+          <label className="text-base font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
             <Hash className="h-3.5 w-3.5" />
             Priority
-            <span className="text-base-content/20 normal-case font-normal tracking-normal text-[10px]">(lower = higher priority)</span>
+            <span className="text-base-content/20 normal-case font-normal tracking-normal text-base">(lower = higher priority)</span>
           </label>
           <div className="relative">
             <input
@@ -252,7 +252,7 @@ function AddChannelDrawer({
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
               required
-              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-[13px] font-mono text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-md font-mono text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
           </div>
         </div>
@@ -279,8 +279,8 @@ function AddChannelDrawer({
         {/* Enabled */}
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-[13px] font-medium text-base-content">Enabled</span>
-            <p className="text-[11px] text-base-content/40">Channels must be enabled to receive traffic</p>
+            <span className="text-md font-medium text-base-content">Enabled</span>
+            <p className="text-base text-base-content/40">Channels must be enabled to receive traffic</p>
           </div>
           <Toggle checked={enabled} onChange={setEnabled} />
         </div>
@@ -347,17 +347,17 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
 
         {/* Name + provider */}
         <div className="min-w-0 shrink-0" style={{ width: '160px' }}>
-          <p className="font-mono text-sm font-semibold text-base-content/90 truncate leading-tight">
+          <p className="font-mono text-md font-semibold text-base-content/90 truncate leading-tight">
             {channel.name}
           </p>
-          <p className="text-xs text-base-content/40 truncate mt-0.5">{providerName}</p>
+          <p className="text-base text-base-content/40 truncate mt-0.5">{providerName}</p>
         </div>
 
         {/* Priority */}
         <div className="shrink-0">
           <div className="flex items-center gap-1 px-2 py-1 rounded bg-base-200/50">
             <Hash className="h-3 w-3 text-base-content/35" />
-            <span className="text-sm font-mono font-semibold text-base-content/55">{channel.priority}</span>
+            <span className="text-md font-mono font-semibold text-base-content/55">{channel.priority}</span>
           </div>
         </div>
 
@@ -381,13 +381,13 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
               )}
             </div>
           ) : (
-            <span className="text-xs text-base-content/25">no models</span>
+            <span className="text-base text-base-content/25">no models</span>
           )}
         </div>
 
         {/* Status badge */}
         <div
-          className={`shrink-0 text-xs font-semibold uppercase tracking-wider ${
+          className={`shrink-0 text-base font-semibold uppercase tracking-wider ${
             channel.enabled ? 'text-success/80' : 'text-base-content/30'
           }`}
         >
@@ -398,7 +398,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
         <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
           <Link
             to={`/console/channels/${channel.id}`}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 transition-all duration-100 border border-transparent hover:border-base-300/40"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-md font-medium text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 transition-all duration-100 border border-transparent hover:border-base-300/40"
           >
             <Wifi className="h-3 w-3" />
             Configure
@@ -430,14 +430,14 @@ function EmptyState({ onAddClick }: { onAddClick: () => void }) {
         </div>
       </div>
 
-      <h3 className="text-[15px] font-semibold text-base-content/50 mb-1.5">No channels configured</h3>
-      <p className="text-[13px] text-base-content/25 mb-8 text-center max-w-xs leading-relaxed">
+      <h3 className="text-lg font-semibold text-base-content/50 mb-1.5">No channels configured</h3>
+      <p className="text-md text-base-content/25 mb-8 text-center max-w-xs leading-relaxed">
         Channels connect your providers to route traffic through the gateway.
       </p>
 
       <button
         onClick={onAddClick}
-        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent/10 hover:bg-accent/15 border border-accent/20 text-accent text-[13px] font-semibold transition-all duration-200 cursor-pointer"
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent/10 hover:bg-accent/15 border border-accent/20 text-accent text-md font-semibold transition-all duration-200 cursor-pointer"
       >
         <Plus className="h-4 w-4" />
         Add First Channel
@@ -460,16 +460,16 @@ function StatsBar({ channels }: { channels: Channel[] }) {
       className="grid grid-cols-3 gap-3 mb-7"
     >
       <div className="rounded-xl border border-base-300/50 bg-base-100/50 px-4 py-3">
-        <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Total Channels</div>
-        <div className="text-[22px] font-bold text-base-content font-mono">{total}</div>
+        <div className="text-base uppercase tracking-widest text-base-content/30 font-semibold mb-1">Total Channels</div>
+        <div className="text-xl font-bold text-base-content font-mono">{total}</div>
       </div>
       <div className="rounded-xl border border-success/20 bg-success/5 px-4 py-3">
-        <div className="text-[10px] uppercase tracking-widest text-success/70 font-semibold mb-1">Active</div>
-        <div className="text-[22px] font-bold text-success font-mono">{active}</div>
+        <div className="text-base uppercase tracking-widest text-success/70 font-semibold mb-1">Active</div>
+        <div className="text-xl font-bold text-success font-mono">{active}</div>
       </div>
       <div className="rounded-xl border border-base-300/50 bg-base-100/50 px-4 py-3">
-        <div className="text-[10px] uppercase tracking-widest text-base-content/30 font-semibold mb-1">Disabled</div>
-        <div className="text-[22px] font-bold text-base-content/40 font-mono">{disabled}</div>
+        <div className="text-base uppercase tracking-widest text-base-content/30 font-semibold mb-1">Disabled</div>
+        <div className="text-xl font-bold text-base-content/40 font-mono">{disabled}</div>
       </div>
     </motion.div>
   );
@@ -489,7 +489,7 @@ export default function Channels() {
       <div className="flex items-center justify-center py-24">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 rounded-full border-2 border-accent/30 border-t-accent animate-spin" />
-          <span className="text-[12px] text-base-content/35 font-medium">Loading channels...</span>
+          <span className="text-md text-base-content/35 font-medium">Loading channels...</span>
         </div>
       </div>
     );
@@ -509,14 +509,14 @@ export default function Channels() {
       >
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-[22px] font-bold tracking-tight text-base-content">Channels</h1>
+            <h1 className="text-xl font-bold tracking-tight text-base-content">Channels</h1>
             {totalChannels > 0 && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-base-200/70 text-base-content/40 border border-base-300/50">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-base font-bold uppercase tracking-widest bg-base-200/70 text-base-content/40 border border-base-300/50">
                 {totalChannels}
               </span>
             )}
           </div>
-          <p className="text-[13px] text-base-content/35">
+          <p className="text-md text-base-content/35">
             {totalChannels === 0
               ? 'Configure provider failover endpoints'
               : `${activeChannels} active · ${totalChannels - activeChannels} disabled`}

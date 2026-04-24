@@ -144,7 +144,7 @@ export default function ProviderDetail() {
   return (
     <div>
       <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/console/providers')} className="mb-4">Back to Providers</Button>
-      <div className="mb-6"><h1 className="text-2xl font-bold">Provider: {provider.name}</h1></div>
+      <div className="mb-6"><h1 className="text-4xl font-bold">Provider: {provider.name}</h1></div>
 
       <form onSubmit={handleUpdateProvider} className="mb-8 max-w-lg bg-base-100 rounded-box p-5 shadow-sm space-y-4">
         <div className="form-control"><label className="label"><span className="label-text">Name</span></label><input type="text" value={provName} onChange={(e) => setProvName(e.target.value)} required className="input input-bordered w-full" /></div>
@@ -167,7 +167,7 @@ export default function ProviderDetail() {
       {activeTab === 'models' && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-semibold">Channel Models</h2>
+            <h2 className="text-lg font-semibold">Channel Models</h2>
             <div className="flex gap-2">
               <Button variant="ghost" icon={<RotateCcw className="h-4 w-4" />} onClick={() => syncModelsMutation.mutate()} loading={syncModelsMutation.isPending}>Sync Models</Button>
               <Button variant="ghost" icon={<Plus className="h-4 w-4" />} onClick={openAddModel}>Add Model</Button>
@@ -176,21 +176,21 @@ export default function ProviderDetail() {
           <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
             <table className="table table-sm">
               <thead><tr className="border-b border-base-300">
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Model ID</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Upstream Name</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Priority</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Markup</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50 w-20">Actions</th>
+                <th className="text-base font-semibold uppercase tracking-wider text-base-content/50">Model ID</th>
+                <th className="text-base font-semibold uppercase tracking-wider text-base-content/50">Upstream Name</th>
+                <th className="text-base font-semibold uppercase tracking-wider text-base-content/50">Priority</th>
+                <th className="text-base font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</th>
+                <th className="text-base font-semibold uppercase tracking-wider text-base-content/50">Markup</th>
+                <th className="text-base font-semibold uppercase tracking-wider text-base-content/50">Status</th>
+                <th className="text-base font-semibold uppercase tracking-wider text-base-content/50 w-20">Actions</th>
               </tr></thead>
               <tbody>
                 {channelModels?.map((cm) => (
                   <tr key={cm.id} className="border-b border-base-200 hover">
-                    <td className="mono text-xs">{cm.model_id}</td>
-                    <td className="mono text-xs">{cm.upstream_model_name ?? '—'}</td>
+                    <td className="mono text-base">{cm.model_id}</td>
+                    <td className="mono text-base">{cm.upstream_model_name ?? '—'}</td>
                     <td className="mono">{cm.priority_override ?? '—'}</td>
-                    <td className="mono text-xs">{cm.pricing_policy_id ?? '—'}</td>
+                    <td className="mono text-base">{cm.pricing_policy_id ?? '—'}</td>
                     <td className="mono">{cm.markup_ratio.toFixed(2)}x</td>
                     <td><Badge variant={cm.enabled ? 'green' : 'red'}>{cm.enabled ? 'Active' : 'Disabled'}</Badge></td>
                     <td>
@@ -211,8 +211,8 @@ export default function ProviderDetail() {
                   <tr>
                     <td colSpan={7} className="text-center py-12">
                       <div className="flex flex-col items-center gap-2">
-                        <span className="text-base-content/25 text-sm">No models configured</span>
-                        <button onClick={openAddModel} className="link link-primary text-sm">Add your first model</button>
+                        <span className="text-base-content/25 text-md">No models configured</span>
+                        <button onClick={openAddModel} className="link link-primary text-md">Add your first model</button>
                       </div>
                     </td>
                   </tr>
@@ -226,10 +226,10 @@ export default function ProviderDetail() {
       {/* Channels Tab */}
       {activeTab === 'channels' && (
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-3"><h2 className="text-base font-semibold">Channels</h2><Button icon={<Plus className="h-4 w-4" />} onClick={openAddChannel}>Add Channel</Button></div>
+          <div className="flex items-center justify-between mb-3"><h2 className="text-lg font-semibold">Channels</h2><Button icon={<Plus className="h-4 w-4" />} onClick={openAddChannel}>Add Channel</Button></div>
           <div className="overflow-x-auto bg-base-100 rounded-box shadow-sm">
             <table className="table table-sm">
-              <thead><tr className="border-b border-base-300"><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Priority</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Status</th><th className="text-xs font-semibold uppercase tracking-wider text-base-content/50 w-20">Actions</th></tr></thead>
+              <thead><tr className="border-b border-base-300"><th className="text-base font-semibold uppercase tracking-wider text-base-content/50">Name</th><th className="text-base font-semibold uppercase tracking-wider text-base-content/50">Priority</th><th className="text-base font-semibold uppercase tracking-wider text-base-content/50">Status</th><th className="text-base font-semibold uppercase tracking-wider text-base-content/50 w-20">Actions</th></tr></thead>
               <tbody>
                 {channels?.map((channel) => (
                   <tr key={channel.id} className="border-b border-base-200 hover">
@@ -254,8 +254,8 @@ export default function ProviderDetail() {
                   <tr>
                     <td colSpan={4} className="text-center py-12">
                       <div className="flex flex-col items-center gap-2">
-                        <span className="text-base-content/25 text-sm">No channels configured</span>
-                        <button onClick={openAddChannel} className="link link-primary text-sm">Add your first channel</button>
+                        <span className="text-base-content/25 text-md">No channels configured</span>
+                        <button onClick={openAddChannel} className="link link-primary text-md">Add your first channel</button>
                       </div>
                     </td>
                   </tr>

@@ -78,10 +78,10 @@ export default function AppLayout() {
           className="flex h-14 items-center gap-3 border-b border-base-300/60 px-4 cursor-pointer overflow-hidden whitespace-nowrap"
           onClick={() => navigate('/')}
         >
-          <div className="h-8 w-8 shrink-0 rounded-lg bg-primary flex items-center justify-center font-semibold text-[13px] text-primary-content tracking-tight">
+          <div className="h-8 w-8 shrink-0 rounded-lg bg-primary flex items-center justify-center font-semibold text-md text-primary-content tracking-tight">
             GW
           </div>
-          <span className={`font-semibold text-[15px] transition-opacity duration-200 ${collapsed ? 'opacity-0' : 'opacity-100'}`}>
+          <span className={`font-semibold text-lg transition-opacity duration-200 ${collapsed ? 'opacity-0' : 'opacity-100'}`}>
             LLM Gateway
           </span>
         </div>
@@ -89,7 +89,7 @@ export default function AppLayout() {
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 flex flex-col gap-0.5">
           {!collapsed && (
-            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-1 pb-2">
+            <div className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-1 pb-2">
               Console
             </div>
           )}
@@ -99,7 +99,7 @@ export default function AppLayout() {
             return (
               <div
                 key={item.key}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer text-sm font-medium transition-all duration-150 whitespace-nowrap overflow-hidden select-none relative ${
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer text-lg font-medium transition-all duration-150 whitespace-nowrap overflow-hidden select-none relative ${
                   active
                     ? 'bg-primary/10 text-primary'
                     : 'text-base-content/50 hover:bg-base-200 hover:text-base-content/80'
@@ -119,7 +119,7 @@ export default function AppLayout() {
           {isAdmin && (
             <>
               {!collapsed && (
-                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-5 pb-2">
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-5 pb-2">
                   Admin
                 </div>
               )}
@@ -129,7 +129,7 @@ export default function AppLayout() {
                 return (
                   <div
                     key={item.key}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer text-sm font-medium transition-all duration-150 whitespace-nowrap overflow-hidden select-none relative ${
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer text-lg font-medium transition-all duration-150 whitespace-nowrap overflow-hidden select-none relative ${
                       active
                         ? 'bg-primary/10 text-primary'
                         : 'text-base-content/50 hover:bg-base-200 hover:text-base-content/80'
@@ -153,7 +153,7 @@ export default function AppLayout() {
           <div className="p-2 flex flex-col gap-1">
             {!collapsed && version && (
               <div className="flex items-center justify-between px-3 py-1.5">
-                <span className="mono text-[10px] text-base-content/20 truncate">v{version}</span>
+                <span className="mono text-xs text-base-content/20 truncate">v{version}</span>
                 <a
                   href="https://github.com/chenxiaoli/llm-gateway"
                   target="_blank"
@@ -173,7 +173,7 @@ export default function AppLayout() {
               {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : (
                 <>
                   <PanelLeftClose className="h-4 w-4 text-base-content/30" />
-                  <span className="text-xs text-base-content/30">Collapse</span>
+                  <span className="text-lg text-base-content/30">Collapse</span>
                 </>
               )}
             </button>
