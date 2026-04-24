@@ -43,7 +43,7 @@ export default function Dashboard() {
       {/* Page Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-sm text-base-content/40 mt-1">Real-time overview of your LLM gateway activity</p>
+        <p className="text-sm text-base-content/55 mt-1">Real-time overview of your LLM gateway activity</p>
       </div>
 
       {/* Metrics Grid */}
@@ -51,8 +51,8 @@ export default function Dashboard() {
         {/* Today's Requests */}
         <div className="stat-card rounded-xl border border-base-300/50 bg-base-100/60 p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Today's Requests</span>
-            <MessageSquare className="h-4 w-4 text-base-content/20" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Today's Requests</span>
+            <MessageSquare className="h-4 w-4 text-base-content/35" />
           </div>
           <div className="font-mono text-2xl font-bold">{todayRequests.toLocaleString()}</div>
         </div>
@@ -60,8 +60,8 @@ export default function Dashboard() {
         {/* Today's Cost */}
         <div className="stat-card rounded-xl border border-base-300/50 bg-base-100/60 p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Today's Cost</span>
-            <DollarSign className="h-4 w-4 text-base-content/20" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Today's Cost</span>
+            <DollarSign className="h-4 w-4 text-base-content/35" />
           </div>
           <div className="font-mono text-2xl font-bold">${todayCost.toFixed(4)}</div>
         </div>
@@ -69,8 +69,8 @@ export default function Dashboard() {
         {/* Monthly Cost */}
         <div className="stat-card rounded-xl border border-base-300/50 bg-base-100/60 p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Monthly Cost</span>
-            <TrendingUp className="h-4 w-4 text-base-content/20" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Monthly Cost</span>
+            <TrendingUp className="h-4 w-4 text-base-content/35" />
           </div>
           <div className="font-mono text-2xl font-bold">${monthCost.toFixed(2)}</div>
         </div>
@@ -78,8 +78,8 @@ export default function Dashboard() {
         {/* Active Models */}
         <div className="stat-card rounded-xl border border-base-300/50 bg-base-100/60 p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Active Models</span>
-            <Zap className="h-4 w-4 text-base-content/20" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Active Models</span>
+            <Zap className="h-4 w-4 text-base-content/35" />
           </div>
           <div className="font-mono text-2xl font-bold">{totalModels}</div>
         </div>
@@ -89,18 +89,18 @@ export default function Dashboard() {
       <div className="flex flex-wrap gap-3 mb-8">
         <div className="flex items-center gap-2.5 rounded-lg border border-base-300/50 bg-base-100/60 px-4 py-2.5">
           <Activity className="h-4 w-4 text-primary/70" />
-          <span className="text-[11px] uppercase tracking-wider text-base-content/35 font-semibold">Avg Latency</span>
-          <span className="font-mono text-sm font-bold">{avgLatency}<span className="text-base-content/30 ml-0.5">ms</span></span>
+          <span className="text-[11px] uppercase tracking-wider text-base-content/50 font-semibold">Avg Latency</span>
+          <span className="font-mono text-sm font-bold">{avgLatency}<span className="text-base-content/45 ml-0.5">ms</span></span>
         </div>
         <div className="flex items-center gap-2.5 rounded-lg border border-base-300/50 bg-base-100/60 px-4 py-2.5">
           <TrendingUp className="h-4 w-4 text-primary/70" />
-          <span className="text-[11px] uppercase tracking-wider text-base-content/35 font-semibold">Success Rate</span>
-          <span className="font-mono text-sm font-bold">{successRate}<span className="text-base-content/30 ml-0.5">%</span></span>
+          <span className="text-[11px] uppercase tracking-wider text-base-content/50 font-semibold">Success Rate</span>
+          <span className="font-mono text-sm font-bold">{successRate}<span className="text-base-content/45 ml-0.5">%</span></span>
         </div>
         <div className="flex items-center gap-2.5 rounded-lg border border-base-300/50 bg-base-100/60 px-4 py-2.5">
           <Clock className="h-4 w-4 text-primary/70" />
-          <span className="text-[11px] uppercase tracking-wider text-base-content/35 font-semibold">Recent</span>
-          <span className="font-mono text-sm font-bold">{recentLogs?.items?.length ?? 0}<span className="text-base-content/30 ml-0.5">reqs</span></span>
+          <span className="text-[11px] uppercase tracking-wider text-base-content/50 font-semibold">Recent</span>
+          <span className="font-mono text-sm font-bold">{recentLogs?.items?.length ?? 0}<span className="text-base-content/45 ml-0.5">reqs</span></span>
         </div>
       </div>
 
@@ -108,7 +108,7 @@ export default function Dashboard() {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold">Recent Requests</h2>
-          <span className="text-xs font-mono text-base-content/25">{recentLogs?.items?.length ?? 0}</span>
+          <span className="text-xs font-mono text-base-content/45">{recentLogs?.items?.length ?? 0}</span>
         </div>
 
         <div className="rounded-xl border border-base-300/50 bg-base-100/60 overflow-hidden">
@@ -116,12 +116,12 @@ export default function Dashboard() {
             <table className="table table-sm">
               <thead>
                 <tr className="border-b border-base-300/50">
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Time</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Model</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Protocol</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Status</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Tokens</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Latency</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Time</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Model</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Protocol</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Status</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Tokens</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Latency</th>
                 </tr>
               </thead>
               <tbody>
@@ -141,7 +141,7 @@ export default function Dashboard() {
                 ))}
                 {(!recentLogs?.items?.length) && (
                   <tr>
-                    <td colSpan={6} className="text-center py-16 text-base-content/25 text-sm">
+                    <td colSpan={6} className="text-center py-16 text-base-content/45 text-sm">
                       No requests yet
                     </td>
                   </tr>

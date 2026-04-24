@@ -127,7 +127,7 @@ const message = await client.messages.create({
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-50" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
               </span>
-              <span className="text-xs font-mono text-base-content/40">Open Source API Gateway</span>
+              <span className="text-xs font-mono text-base-content/55">Open Source API Gateway</span>
             </div>
           </div>
 
@@ -142,7 +142,7 @@ const message = await client.messages.create({
 
           {/* Subtitle */}
           <p
-            className="mt-6 text-lg text-base-content/40 max-w-lg leading-relaxed animate-fade-in-up"
+            className="mt-6 text-lg text-base-content/55 max-w-lg leading-relaxed animate-fade-in-up"
             style={{ animationDelay: '160ms' }}
           >
             A unified API gateway for LLM providers. Manage keys, enforce rate limits,
@@ -182,7 +182,7 @@ const message = await client.messages.create({
 
         {/* ── Features ── */}
         <div className="max-w-5xl mx-auto px-6 py-24">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/25 text-center mb-14">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45 text-center mb-14">
             Features
           </h2>
 
@@ -198,7 +198,7 @@ const message = await client.messages.create({
                     <Icon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                   </div>
                   <h3 className="text-sm font-semibold tracking-tight mb-1.5">{f.title}</h3>
-                  <p className="text-[13px] text-base-content/40 leading-relaxed">{f.desc}</p>
+                  <p className="text-[13px] text-base-content/55 leading-relaxed">{f.desc}</p>
                 </div>
               );
             })}
@@ -210,7 +210,7 @@ const message = await client.messages.create({
 
         {/* ── Quick Start ── */}
         <div className="max-w-3xl mx-auto px-6 py-24">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/25 text-center mb-14">
+          <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-base-content/45 text-center mb-14">
             Quick Start
           </h2>
 
@@ -224,7 +224,7 @@ const message = await client.messages.create({
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     activeProtocol === p
                       ? 'bg-base-100 text-base-content shadow-sm'
-                      : 'text-base-content/40 hover:text-base-content/60 hover:bg-base-100/50'
+                      : 'text-base-content/55 hover:text-base-content/70 hover:bg-base-100/50'
                   }`}
                 >
                   {p === 'openai' ? 'OpenAI Compatible' : 'Anthropic Compatible'}
@@ -236,7 +236,7 @@ const message = await client.messages.create({
             <div className="p-5">
               <div className="flex items-center gap-2 mb-4">
                 <Terminal className="h-4 w-4 text-base-content/30" />
-                <span className="text-[11px] font-mono text-base-content/40">cURL</span>
+                <span className="text-[11px] font-mono text-base-content/55">cURL</span>
               </div>
               <div className="font-mono text-[13px] leading-7 mb-6">
                 {activeExample.curl.map((line, i) => (
@@ -249,7 +249,7 @@ const message = await client.messages.create({
 
               <div className="flex items-center gap-2 mb-4">
                 <Terminal className="h-4 w-4 text-base-content/30" />
-                <span className="text-[11px] font-mono text-base-content/40">SDK</span>
+                <span className="text-[11px] font-mono text-base-content/55">SDK</span>
               </div>
               <pre className="font-mono text-[12px] leading-6 text-base-content/60 bg-base-200/30 p-4 rounded-lg overflow-x-auto">
                 <code>{activeExample.sdk}</code>
@@ -257,7 +257,7 @@ const message = await client.messages.create({
             </div>
           </div>
 
-          <p className="mt-6 text-center text-sm text-base-content/40">
+          <p className="mt-6 text-center text-sm text-base-content/55">
             Create an API key in the dashboard, then use it as a drop-in replacement
           </p>
         </div>
