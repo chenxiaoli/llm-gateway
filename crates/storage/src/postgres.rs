@@ -59,6 +59,7 @@ struct PgProviderRow {
     #[allow(dead_code)]
     base_url: Option<String>,
     endpoints: Option<String>,
+    proxy_url: Option<String>,
     enabled: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -71,6 +72,7 @@ impl From<PgProviderRow> for Provider {
             name: r.name,
             slug: r.slug,
             endpoints: r.endpoints,
+            proxy_url: r.proxy_url,
             enabled: r.enabled,
             created_at: r.created_at,
             updated_at: r.updated_at,
@@ -628,14 +630,15 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
         sqlx::query(
-            "INSERT INTO providers (id, name, slug, base_url, endpoints, enabled, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            "INSERT INTO providers (id, name, slug, base_url, endpoints, proxy_url, enabled, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
         )
         .bind(&provider.id)
         .bind(&provider.name)
         .bind(&provider.slug)
         .bind(None::<String>)
         .bind(&provider.endpoints)
+        .bind(&provider.proxy_url)
         .bind(provider.enabled)
         .bind(provider.created_at)
         .bind(provider.updated_at)
@@ -647,7 +650,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_provider(&self, id: &str) -> Result<Option<Provider>, DbErr> {
         let row: Option<PgProviderRow> = sqlx::query_as(
-            "SELECT id, name, slug, base_url, endpoints, enabled, created_at, updated_at
+            "SELECT id, name, slug, base_url, endpoints, proxy_url, enabled, created_at, updated_at
              FROM providers WHERE id = $1",
         )
         .bind(id)
@@ -659,7 +662,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_providers(&self) -> Result<Vec<Provider>, DbErr> {
         let rows: Vec<PgProviderRow> = sqlx::query_as(
-            "SELECT id, name, slug, base_url, endpoints, enabled, created_at, updated_at
+            "SELECT id, name, slug, base_url, endpoints, proxy_url, enabled, created_at, updated_at
              FROM providers",
         )
         .fetch_all(&self.pool)
@@ -671,12 +674,13 @@ impl crate::Storage for PostgresStorage {
     async fn update_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
         sqlx::query(
             "UPDATE providers SET name = $1, slug = $2, base_url = $3, endpoints = $4,
-             enabled = $5, updated_at = $6 WHERE id = $7",
+             proxy_url = $5, enabled = $6, updated_at = $7 WHERE id = $8",
         )
         .bind(&provider.name)
         .bind(&provider.slug)
         .bind(None::<String>)
         .bind(&provider.endpoints)
+        .bind(&provider.proxy_url)
         .bind(provider.enabled)
         .bind(provider.updated_at)
         .bind(&provider.id)
