@@ -37,6 +37,7 @@ export interface Provider {
   name: string;
   slug: string;
   endpoints: Record<string, string> | null;
+  proxy_url: string | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -45,11 +46,13 @@ export interface Provider {
 export interface CreateProviderRequest {
   name: string;
   endpoints?: Record<string, string | null> | null;
+  proxy_url?: string | null;
 }
 
 export interface UpdateProviderRequest {
   name?: string;
   endpoints?: Record<string, string | null> | null;
+  proxy_url?: string | null;
   enabled?: boolean;
 }
 
