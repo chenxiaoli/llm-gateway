@@ -45,6 +45,7 @@ pub struct ResolvedChannel {
     pub priority: i32,
     /// Per-model overrides: keyed by lowercase model name.
     pub model_overrides: HashMap<String, ChannelModelEnriched>,
+    pub proxy_url: Option<String>,
 }
 
 impl ResolvedChannel {
@@ -168,6 +169,8 @@ impl InMemoryChannelRegistry {
                 .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
                 .map(|s| s.to_string());
 
+            let proxy_url = provider.proxy_url.clone();
+
             let api_key = llm_gateway_encryption::decrypt(&channel.api_key, &self.encryption_key)
                 .unwrap_or_else(|_| channel.api_key.clone());
 
@@ -203,6 +206,7 @@ impl InMemoryChannelRegistry {
                 timeout_ms: 60_000,
                 priority: channel.priority,
                 model_overrides,
+                proxy_url,
             };
 
             cache.insert(channel.id.clone(), resolved);
@@ -584,6 +588,8 @@ pub async fn proxy(
                         .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
                         .map(|s| s.to_string());
 
+                    let proxy_url = provider.proxy_url.clone();
+
                     let api_key = llm_gateway_encryption::decrypt(&channel.api_key, &state.encryption_key)
                         .unwrap_or_else(|_| channel.api_key.clone());
 
@@ -598,6 +604,7 @@ pub async fn proxy(
                         timeout_ms: 60_000,
                         priority: channel.priority,
                         model_overrides: HashMap::new(), // not used in cache-miss path
+                        proxy_url,
                     };
                     candidates.push((resolved, cm.clone()));
                 }
@@ -615,7 +622,7 @@ pub async fn proxy(
         .map(|(c, _)| c.provider_id.clone())
         .ok_or_else(|| ApiError::Internal("No channels available".to_string()))?;
 
-    let client = reqwest::Client::new();
+    let default_client = reqwest::Client::new();
     let mut last_error = String::new();
 
     // === Route with failover ===
@@ -638,6 +645,28 @@ pub async fn proxy(
         let upstream_url = channel.upstream_url(&request_path, protocol);
 
         tracing::debug!("[PROXY] Upstream URL: {} -> {}", request_path, upstream_url);
+        let client: reqwest::Client = match &channel.proxy_url {
+            Some(proxy_url) => {
+                match reqwest::Proxy::all(proxy_url) {
+                    Ok(proxy) => {
+                        match reqwest::Client::builder().proxy(proxy).build() {
+                            Ok(c) => c,
+                            Err(e) => {
+                                tracing::warn!("[PROXY] Failed to build proxied client for channel '{}': {}", channel.name, e);
+                                last_error = format!("Proxy client error on channel '{}': {}", channel.name, e);
+                                continue;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("[PROXY] Invalid proxy URL '{}' for channel '{}': {}", proxy_url, channel.name, e);
+                        last_error = format!("Invalid proxy URL on channel '{}': {}", channel.name, e);
+                        continue;
+                    }
+                }
+            }
+            None => default_client.clone(),
+        };
         let mut req = client.post(&upstream_url);
 
         match protocol {
@@ -994,6 +1023,7 @@ mod tests {
                     markup_ratio: 1.5,
                 },
             )]),
+            proxy_url: None,
         };
         let enriched = rc.model_overrides.get(&model_key).expect("should have model override");
         assert_eq!(enriched.markup_ratio, 1.5);
@@ -1017,6 +1047,7 @@ mod tests {
             timeout_ms: 30_000,
             priority: 1,
             model_overrides: HashMap::new(),
+            proxy_url: None,
         };
         let registry = StubRegistry(vec![rc.clone()]);
         let result = registry.resolve_by_model("any-model").await;
@@ -1045,6 +1076,7 @@ mod tests {
                     markup_ratio: 2.0,
                 },
             )]),
+            proxy_url: None,
         };
         let registry = StubRegistry(vec![rc.clone()]);
         let result = registry.resolve(&channel_id.to_string()).await;
