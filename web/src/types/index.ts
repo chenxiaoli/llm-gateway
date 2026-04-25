@@ -44,12 +44,12 @@ export interface Provider {
 
 export interface CreateProviderRequest {
   name: string;
-  endpoints?: string | null;
+  endpoints?: Record<string, string | null> | null;
 }
 
 export interface UpdateProviderRequest {
   name?: string;
-  endpoints?: string | null;
+  endpoints?: Record<string, string | null> | null;
   enabled?: boolean;
 }
 

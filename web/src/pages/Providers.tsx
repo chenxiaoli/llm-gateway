@@ -334,7 +334,7 @@ export default function Providers() {
     });
     await createMutation.mutateAsync({
       name,
-      endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null,
+      endpoints: Object.keys(endpoints).length > 0 ? endpoints : null,
     });
     setName('');
     setCreateEndpoints({});
@@ -360,7 +360,7 @@ export default function Providers() {
       id: editingProvider.id,
       input: {
         name: editName,
-        endpoints: Object.keys(endpoints).length > 0 ? JSON.stringify(endpoints) : null,
+        endpoints: Object.keys(endpoints).length > 0 ? endpoints : null,
         enabled: editEnabled,
       },
     });

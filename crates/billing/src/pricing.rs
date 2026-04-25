@@ -23,11 +23,8 @@ impl PricingCalculator {
             Err(_) => return 0.0,
         };
         let div = 1_000_000.0;
-        let cache = usage.cache_read_tokens.unwrap_or(0);
-        let thinking_input = usage.input_tokens.saturating_sub(cache);
-
-        let input_cost = (thinking_input as f64 / div) * cfg.input_price();
-        let cache_cost = (cache as f64 / div) * cfg.cache_read_price();
+        let input_cost = (usage.input_tokens as f64 / div) * cfg.input_price();
+        let cache_cost = (usage.cache_read_tokens.unwrap_or(0) as f64 / div) * cfg.cache_read_price();
         let output_cost = (usage.output_tokens as f64 / div) * cfg.output_price();
         input_cost + cache_cost + output_cost
     }
@@ -100,12 +97,9 @@ impl PricingCalculator {
             Err(_) => return 0.0,
         };
         let div = cfg.divisor();
-        let cache = usage.cache_read_tokens.unwrap_or(0);
-        let thinking_input = usage.input_tokens.saturating_sub(cache);
-
         let base = cfg.base_per_call.unwrap_or(0.0).max(0.0);
-        let input_cost = (thinking_input as f64 / div) * cfg.input_price();
-        let cache_cost = (cache as f64 / div) * cfg.cache_read_price();
+        let input_cost = (usage.input_tokens as f64 / div) * cfg.input_price();
+        let cache_cost = (usage.cache_read_tokens.unwrap_or(0) as f64 / div) * cfg.cache_read_price();
         let output_cost = (usage.output_tokens as f64 / div) * cfg.output_price();
 
         (usage.request_count as f64 * base) + input_cost + cache_cost + output_cost
@@ -173,7 +167,8 @@ mod tests {
     fn test_per_token_with_cache() {
         let calc = PricingCalculator;
         let policy = make_policy("per_token", json!({"input_price_1m": 3.0, "output_price_1m": 15.0, "cache_read_price_1m": 1.0}));
-        let usage_with_cache = Usage { input_tokens: 1_000_000, output_tokens: 500_000, input_chars: None, output_chars: None, request_count: 1, cache_read_tokens: Some(200_000) };
+        // input_tokens = non-cache input (800k), cache_read_tokens = 200k
+        let usage_with_cache = Usage { input_tokens: 800_000, output_tokens: 500_000, input_chars: None, output_chars: None, request_count: 1, cache_read_tokens: Some(200_000) };
         let cost = calc.calculate_cost(&policy, &usage_with_cache);
         // input_cost: (800k / 1M) * 3.0 = 2.4
         // cache_cost: (200k / 1M) * 1.0 = 0.2

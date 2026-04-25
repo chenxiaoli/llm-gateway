@@ -75,10 +75,10 @@ export default function ProviderDetail() {
 
   const handleUpdateProvider = async (e: React.FormEvent) => {
     e.preventDefault();
-    const endpoints = JSON.stringify({
+    const endpoints: Record<string, string | null> = {
       openai: provOpenaiUrl || null,
       anthropic: provAnthropicUrl || null
-    });
+    };
     await updateMutation.mutateAsync({ id: provider.id, input: { name: provName, endpoints, enabled: provEnabled } });
   };
 

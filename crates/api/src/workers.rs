@@ -14,19 +14,20 @@ fn parse_usage(bytes: &[u8], stream: bool, proto: Protocol) -> (Option<i64>, Opt
     let parse_value = |usage: Option<&serde_json::Value>| -> (Option<i64>, Option<i64>, Option<i64>) {
         match proto {
             Protocol::Openai => {
-                let input = usage.and_then(|u| u.get("prompt_tokens").and_then(|t| t.as_i64()));
-                let output = usage.and_then(|u| u.get("completion_tokens").and_then(|t| t.as_i64()));
-                // OpenAI o1 series: usage.prompt_tokens_details.cache_read_tokens
+                let prompt_tokens = usage.and_then(|u| u.get("prompt_tokens")).and_then(|t| t.as_i64());
+                let output = usage.and_then(|u| u.get("completion_tokens")).and_then(|t| t.as_i64());
                 let cache_read = usage
                     .and_then(|u| u.get("prompt_tokens_details"))
                     .and_then(|d| d.get("cache_read_tokens"))
                     .and_then(|t| t.as_i64());
-                (input, output, cache_read)
+                // OpenAI prompt_tokens includes cache; store non-cache input only
+                let input = prompt_tokens.unwrap_or(0) - cache_read.unwrap_or(0);
+                (Some(input), output, cache_read)
             }
             Protocol::Anthropic => {
-                let input = usage.and_then(|u| u.get("input_tokens").and_then(|t| t.as_i64()));
-                let output = usage.and_then(|u| u.get("output_tokens").and_then(|t| t.as_i64()));
-                // Anthropic: usage.cache_read_input_tokens
+                // Anthropic input_tokens already excludes cache; store as-is
+                let input = usage.and_then(|u| u.get("input_tokens")).and_then(|t| t.as_i64());
+                let output = usage.and_then(|u| u.get("output_tokens")).and_then(|t| t.as_i64());
                 let cache_read = usage
                     .and_then(|u| u.get("cache_read_input_tokens"))
                     .and_then(|t| t.as_i64());
