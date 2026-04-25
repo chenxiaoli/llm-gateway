@@ -37,6 +37,7 @@ pub async fn create_provider(
         endpoints: input.endpoints.and_then(|v| {
             if v.is_null() { None } else { Some(v.to_string()) }
         }),
+        proxy_url: input.proxy_url,
         enabled: true,
         created_at: now,
         updated_at: now,
@@ -107,6 +108,9 @@ pub async fn update_provider(
         provider.endpoints = endpoints.and_then(|v| {
             if v.is_null() { None } else { Some(v.to_string()) }
         });
+    }
+    if let Some(proxy_url) = input.proxy_url {
+        provider.proxy_url = proxy_url;
     }
     if let Some(enabled) = input.enabled {
         provider.enabled = enabled;
