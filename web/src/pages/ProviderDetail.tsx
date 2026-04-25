@@ -36,6 +36,7 @@ export default function ProviderDetail() {
   const [provOpenaiUrl, setProvOpenaiUrl] = useState('');
   const [provAnthropicUrl, setProvAnthropicUrl] = useState('');
   const [provEnabled, setProvEnabled] = useState(false);
+  const [provProxyUrl, setProvProxyUrl] = useState('');
 
   const [modelModalOpen, setModelModalOpen] = useState(false);
   const [editingChannelModel, setEditingChannelModel] = useState<ChannelModel | null>(null);
@@ -67,6 +68,7 @@ export default function ProviderDetail() {
       setProvOpenaiUrl(openaiUrl);
       setProvAnthropicUrl(anthropicUrl);
       setProvEnabled(provider.enabled);
+      setProvProxyUrl(provider.proxy_url || '');
     }
   }, [provider]);
 
@@ -79,7 +81,7 @@ export default function ProviderDetail() {
       openai: provOpenaiUrl || null,
       anthropic: provAnthropicUrl || null
     };
-    await updateMutation.mutateAsync({ id: provider.id, input: { name: provName, endpoints, enabled: provEnabled } });
+    await updateMutation.mutateAsync({ id: provider.id, input: { name: provName, endpoints, proxy_url: provProxyUrl || null, enabled: provEnabled } });
   };
 
   const handleDeleteProvider = async () => {
@@ -150,6 +152,7 @@ export default function ProviderDetail() {
         <div className="form-control"><label className="label"><span className="label-text">Name</span></label><input type="text" value={provName} onChange={(e) => setProvName(e.target.value)} required className="input input-bordered w-full" /></div>
         <div className="form-control"><label className="label"><span className="label-text">OpenAI Endpoint</span></label><input type="text" value={provOpenaiUrl} onChange={(e) => setProvOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" /></div>
         <div className="form-control"><label className="label"><span className="label-text">Anthropic Endpoint</span></label><input type="text" value={provAnthropicUrl} onChange={(e) => setProvAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" /></div>
+        <div className="form-control"><label className="label"><span className="label-text">Proxy URL</span></label><input type="text" value={provProxyUrl} onChange={(e) => setProvProxyUrl(e.target.value)} placeholder="http://proxy:8080" className="input input-bordered w-full" /></div>
         <div className="flex items-center justify-between"><label className="label-text">Enabled</label><Toggle checked={provEnabled} onChange={setProvEnabled} /></div>
         <div className="flex gap-2">
           <Button variant="primary" type="submit" loading={updateMutation.isPending}>Save</Button>
