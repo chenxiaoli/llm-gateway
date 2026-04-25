@@ -73,6 +73,7 @@ pub struct Provider {
     pub name: String,
     pub slug: String,
     pub endpoints: Option<String>,      // JSON string {"default": "...", "openai": "...", "anthropic": "..."}
+    pub proxy_url: Option<String>,      // HTTP/SOCKS proxy URL, e.g. "http://user:pass@proxy:8080"
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -85,6 +86,7 @@ pub struct ProviderWithEndpoints {
     pub name: String,
     pub slug: String,
     pub endpoints: Option<std::collections::HashMap<String, String>>,
+    pub proxy_url: Option<String>,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -98,6 +100,7 @@ impl From<Provider> for ProviderWithEndpoints {
             name: p.name,
             slug: p.slug,
             endpoints,
+            proxy_url: p.proxy_url,
             enabled: p.enabled,
             created_at: p.created_at,
             updated_at: p.updated_at,
@@ -110,12 +113,14 @@ pub struct CreateProvider {
     pub name: String,
     pub slug: Option<String>,
     pub endpoints: Option<serde_json::Value>,
+    pub proxy_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateProvider {
     pub name: Option<String>,
     pub endpoints: Option<Option<serde_json::Value>>,
+    pub proxy_url: Option<Option<String>>,
     pub enabled: Option<bool>,
 }
 

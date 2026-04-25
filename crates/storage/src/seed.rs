@@ -19,6 +19,8 @@ pub struct SeedProvider {
     pub name: String,
     #[serde(default)]
     pub endpoints: Option<HashMap<String, String>>,
+    #[serde(default)]
+    pub proxy_url: Option<String>,
     pub enabled: Option<bool>,
 }
 
@@ -79,6 +81,7 @@ pub fn get_seed_providers() -> Vec<Provider> {
                 name: p.name.clone(),
                 slug,
                 endpoints,
+                proxy_url: None,
                 enabled: p.enabled.unwrap_or(true),
                 created_at: Utc::now(),
                 updated_at: Utc::now(),
