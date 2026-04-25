@@ -76,6 +76,7 @@ struct SqliteProviderRow {
     #[allow(dead_code)]
     base_url: Option<String>,
     endpoints: Option<String>,
+    proxy_url: Option<String>,
     enabled: i64,
     created_at: String,
     updated_at: String,
@@ -88,6 +89,7 @@ impl From<SqliteProviderRow> for Provider {
             name: r.name,
             slug: r.slug,
             endpoints: r.endpoints,
+            proxy_url: r.proxy_url,
             enabled: r.enabled != 0,
             created_at: parse_rfc3339(&r.created_at),
             updated_at: parse_rfc3339(&r.updated_at),
@@ -559,14 +561,15 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
         sqlx::query(
-            "INSERT INTO providers (id, name, slug, base_url, endpoints, enabled, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO providers (id, name, slug, base_url, endpoints, proxy_url, enabled, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&provider.id)
         .bind(&provider.name)
         .bind(&provider.slug)
         .bind(None::<String>)
         .bind(&provider.endpoints)
+        .bind(&provider.proxy_url)
         .bind(provider.enabled as i64)
         .bind(provider.created_at.to_rfc3339())
         .bind(provider.updated_at.to_rfc3339())
@@ -578,7 +581,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_provider(&self, id: &str) -> Result<Option<Provider>, DbErr> {
         let row: Option<SqliteProviderRow> = sqlx::query_as(
-            "SELECT id, name, slug, base_url, endpoints, enabled, created_at, updated_at
+            "SELECT id, name, slug, base_url, endpoints, proxy_url, enabled, created_at, updated_at
              FROM providers WHERE id = ?",
         )
         .bind(id)
@@ -590,7 +593,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_providers(&self) -> Result<Vec<Provider>, DbErr> {
         let rows: Vec<SqliteProviderRow> = sqlx::query_as(
-            "SELECT id, name, slug, base_url, endpoints, enabled, created_at, updated_at
+            "SELECT id, name, slug, base_url, endpoints, proxy_url, enabled, created_at, updated_at
              FROM providers",
         )
         .fetch_all(&self.pool)
@@ -602,12 +605,13 @@ impl crate::Storage for SqliteStorage {
     async fn update_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
         sqlx::query(
             "UPDATE providers SET name = ?, slug = ?, base_url = ?, endpoints = ?,
-             enabled = ?, updated_at = ? WHERE id = ?",
+             proxy_url = ?, enabled = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&provider.name)
         .bind(&provider.slug)
         .bind(None::<String>)
         .bind(&provider.endpoints)
+        .bind(&provider.proxy_url)
         .bind(provider.enabled as i64)
         .bind(provider.updated_at.to_rfc3339())
         .bind(&provider.id)
