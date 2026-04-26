@@ -114,7 +114,7 @@ export interface UsageFilter {
   until?: string;
 }
 
-export interface AuditLog {
+export interface AuditLogSummary {
   id: string;
   key_id: string;
   model_name: string;
@@ -122,8 +122,6 @@ export interface AuditLog {
   channel_id: string | null;
   protocol: 'openai' | 'anthropic';
   stream: boolean;
-  request_body: string;
-  response_body: string;
   status_code: number;
   latency_ms: number;
   input_tokens: number | null;
@@ -136,6 +134,11 @@ export interface AuditLog {
   upstream_url?: string;
   request_headers?: string;
   response_headers?: string;
+}
+
+export interface AuditLog extends AuditLogSummary {
+  request_body: string;
+  response_body: string;
 }
 
 export interface LogFilter {

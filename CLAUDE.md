@@ -82,6 +82,33 @@ Backend config via `config.toml` in the working directory (server, admin token, 
 - **Model and Provider**: N:N relationship via `channel_models` junction table. Model does NOT have `provider_id` field.
 - **Channel belongs to Provider**: 1:N relationship (Channel has `provider_id`)
 
+## Token Storage Convention
+
+All token counts are normalized at parse time so DB columns have one unambiguous meaning regardless of protocol:
+
+| Column | Meaning |
+|--------|---------|
+| `input_tokens` | Non-cache input tokens only |
+| `cache_read_tokens` | Cache read tokens |
+| `output_tokens` | Output tokens |
+
+Total input for display = `input_tokens + cache_read_tokens`.
+
+### Parse-time normalization (`crates/api/src/workers.rs`)
+
+- **OpenAI**: `prompt_tokens` includes cache → `input = prompt_tokens - cache_read`
+- **Anthropic**: `input_tokens` already excludes cache → store as-is
+
+### Pricing formula (`crates/billing/src/pricing.rs`)
+
+No protocol awareness needed:
+
+```
+cost = input_tokens × input_price + cache_read × cache_read_price + output_tokens × output_price
+```
+
+Applies to `per_token` and `hybrid` billing types.
+
 ## Development Workflow
 
 1. Run backend: `cargo run` (port 8080)

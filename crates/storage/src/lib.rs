@@ -89,7 +89,8 @@ pub trait Storage: Send + Sync {
     // Audit
     async fn insert_log(&self, log: &AuditLog) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn query_logs(&self, filter: &LogFilter) -> Result<Vec<AuditLog>, Box<dyn std::error::Error + Send + Sync>>;
-    async fn query_logs_paginated(&self, filter: &LogFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<AuditLog>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn query_logs_paginated(&self, filter: &LogFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<AuditLogSummary>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_log(&self, id: &str) -> Result<Option<AuditLog>, Box<dyn std::error::Error + Send + Sync>>;
 
     // Rate Limit Counters
     async fn increment_rate_limit_counter(&self, key_id: &str, model_name: &str, window: &str) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;

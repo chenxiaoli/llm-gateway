@@ -1,18 +1,18 @@
 import { useState } from 'react';
 import { Search, RotateCcw, FileText, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useLogs } from '../hooks/useLogs';
+import { useLogs, useLog } from '../hooks/useLogs';
 import { useKeys } from '../hooks/useKeys';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Drawer } from '../components/ui/Drawer';
 import JsonViewer from '../components/JsonViewer';
-import type { AuditLog } from '../types';
+import type { AuditLogSummary } from '../types';
 
 export default function Logs() {
   const [since, setSince] = useState('');
   const [until, setUntil] = useState('');
   const [keyFilter, setKeyFilter] = useState('');
-  const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
 
@@ -22,6 +22,7 @@ export default function Logs() {
     pageSize,
   );
   const { data: keys } = useKeys();
+  const { data: selectedLog, isLoading: isLoadingDetail } = useLog(selectedLogId);
 
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
 
@@ -33,6 +34,10 @@ export default function Logs() {
   };
 
   const hasFilters = since || until || keyFilter;
+
+  const handleView = (log: AuditLogSummary) => {
+    setSelectedLogId(log.id);
+  };
 
   return (
     <div>
@@ -146,7 +151,7 @@ export default function Logs() {
                     <td className="mono text-base-content/60">{log.input_tokens ?? '-'}</td>
                     <td className="mono text-base-content/60">{log.output_tokens ?? '-'}</td>
                     <td>
-                      <button onClick={() => setSelectedLog(log)} className="btn btn-ghost btn-xs gap-1 text-primary">
+                      <button onClick={() => handleView(log)} className="btn btn-ghost btn-xs gap-1 text-primary">
                         <FileText className="h-3.5 w-3.5" />
                         View
                       </button>
@@ -188,7 +193,12 @@ export default function Logs() {
         </>
       )}
 
-      <Drawer open={!!selectedLog} onClose={() => setSelectedLog(null)} title="Log Detail" width={720}>
+      <Drawer open={!!selectedLogId} onClose={() => setSelectedLogId(null)} title="Log Detail" width={720}>
+        {isLoadingDetail && (
+          <div className="flex justify-center py-12">
+            <span className="loading loading-spinner loading-md" />
+          </div>
+        )}
         {selectedLog && (
           <div className="space-y-5">
             {/* Metadata grid */}

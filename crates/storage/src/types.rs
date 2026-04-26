@@ -496,6 +496,29 @@ pub struct AuditLog {
     pub response_headers: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditLogSummary {
+    pub id: String,
+    pub key_id: String,
+    pub model_name: String,
+    pub provider_id: String,
+    pub channel_id: Option<String>,
+    pub protocol: Protocol,
+    pub stream: bool,
+    pub status_code: i32,
+    pub latency_ms: i64,
+    pub input_tokens: Option<i64>,
+    pub output_tokens: Option<i64>,
+    pub created_at: DateTime<Utc>,
+    pub original_model: Option<String>,
+    pub upstream_model: Option<String>,
+    pub model_override_reason: Option<String>,
+    pub request_path: Option<String>,
+    pub upstream_url: Option<String>,
+    pub request_headers: Option<String>,
+    pub response_headers: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct LogFilter {
     pub key_id: Option<String>,

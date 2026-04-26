@@ -226,6 +226,56 @@ impl From<PgUsageSummaryRow> for UsageSummaryRecord {
 }
 
 #[derive(FromRow)]
+#[derive(FromRow)]
+struct PgAuditSummaryRow {
+    id: String,
+    key_id: String,
+    model_name: String,
+    provider_id: String,
+    channel_id: Option<String>,
+    protocol: String,
+    stream: bool,
+    status_code: i32,
+    latency_ms: i64,
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    original_model: Option<String>,
+    upstream_model: Option<String>,
+    model_override_reason: Option<String>,
+    request_path: Option<String>,
+    upstream_url: Option<String>,
+    request_headers: Option<String>,
+    response_headers: Option<String>,
+}
+
+impl From<PgAuditSummaryRow> for AuditLogSummary {
+    fn from(r: PgAuditSummaryRow) -> Self {
+        AuditLogSummary {
+            id: r.id,
+            key_id: r.key_id,
+            model_name: r.model_name,
+            provider_id: r.provider_id,
+            channel_id: r.channel_id,
+            protocol: parse_protocol(&r.protocol),
+            stream: r.stream,
+            status_code: r.status_code,
+            latency_ms: r.latency_ms,
+            input_tokens: r.input_tokens,
+            output_tokens: r.output_tokens,
+            created_at: r.created_at,
+            original_model: r.original_model,
+            upstream_model: r.upstream_model,
+            model_override_reason: r.model_override_reason,
+            request_path: r.request_path,
+            upstream_url: r.upstream_url,
+            request_headers: r.request_headers,
+            response_headers: r.response_headers,
+        }
+    }
+}
+
+#[derive(FromRow)]
 struct PgAuditRow {
     id: String,
     key_id: String,
@@ -1257,13 +1307,13 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(AuditLog::from).collect())
     }
 
-    async fn query_logs_paginated(&self, filter: &LogFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<AuditLog>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn query_logs_paginated(&self, filter: &LogFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<AuditLogSummary>, Box<dyn std::error::Error + Send + Sync>> {
         let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM audit_logs")
             .fetch_one(&self.pool)
             .await?;
         let offset = (page - 1) * page_size;
-        let rows: Vec<PgAuditRow> = sqlx::query_as(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
+        let rows: Vec<PgAuditSummaryRow> = sqlx::query_as(
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
              request_path, upstream_url, request_headers, response_headers
              FROM audit_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2",
@@ -1273,11 +1323,24 @@ impl crate::Storage for PostgresStorage {
         .fetch_all(&self.pool)
         .await?;
         Ok(PaginatedResponse {
-            items: rows.into_iter().map(AuditLog::from).collect(),
+            items: rows.into_iter().map(AuditLogSummary::from).collect(),
             total: total.0,
             page,
             page_size,
         })
+    }
+
+    async fn get_log(&self, id: &str) -> Result<Option<AuditLog>, Box<dyn std::error::Error + Send + Sync>> {
+        let row: Option<PgAuditRow> = sqlx::query_as(
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
+             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
+             request_path, upstream_url, request_headers, response_headers
+             FROM audit_logs WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(AuditLog::from))
     }
 
     async fn increment_rate_limit_counter(
