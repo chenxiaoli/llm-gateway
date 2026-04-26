@@ -10,9 +10,6 @@ const PROTOCOL_OPTIONS = [
   { value: 'default', label: 'Default' },
   { value: 'openai', label: 'OpenAI' },
   { value: 'anthropic', label: 'Anthropic' },
-  { value: 'azure', label: 'Azure' },
-  { value: 'google', label: 'Google' },
-  { value: 'custom', label: 'Custom' },
 ];
 
 export function EndpointsEditor({ value, onChange }: EndpointsEditorProps) {
