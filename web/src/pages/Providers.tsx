@@ -316,6 +316,7 @@ export default function Providers() {
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const [createEndpoints, setCreateEndpoints] = useState<Record<string, string>>({});
+  const [createProxyUrl, setCreateProxyUrl] = useState('');
 
   const [editOpen, setEditOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
@@ -336,9 +337,11 @@ export default function Providers() {
     await createMutation.mutateAsync({
       name,
       endpoints: Object.keys(endpoints).length > 0 ? endpoints : null,
+      proxy_url: createProxyUrl || null,
     });
     setName('');
     setCreateEndpoints({});
+    setCreateProxyUrl('');
     setCreateOpen(false);
   };
 
@@ -483,6 +486,18 @@ export default function Providers() {
               Endpoints
             </label>
             <EndpointsEditor value={createEndpoints} onChange={setCreateEndpoints} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">
+              Proxy URL
+            </label>
+            <input
+              type="text"
+              value={createProxyUrl}
+              onChange={(e) => setCreateProxyUrl(e.target.value)}
+              placeholder="http://proxy:8080"
+              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-base font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+            />
           </div>
           <div className="flex items-center gap-2 pt-2">
             <Button type="submit" variant="primary" loading={createMutation.isPending} className="flex-1">
