@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, Copy, Check, Globe, Zap, Radio, Layers } from 'lucide-react';
+import { Plus, Pencil, Trash2, Copy, Check, Globe, Zap, Radio, Layers, Shield } from 'lucide-react';
 import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider } from '../hooks/useProviders';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
@@ -217,6 +217,14 @@ function ProviderModule({ provider, onEdit, onDelete, index }: {
           ) : (
             <div className="rounded-lg border border-dashed border-base-300/25 py-4 flex items-center justify-center">
               <span className="text-base text-base-content/35 italic">No endpoints configured</span>
+            </div>
+          )}
+
+          {/* Proxy URL */}
+          {provider.proxy_url && (
+            <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-base-200/40 border border-base-300/20">
+              <Shield className="h-3.5 w-3.5 text-base-content/40 shrink-0" />
+              <span className="text-xs font-mono text-base-content/50 truncate">{provider.proxy_url}</span>
             </div>
           )}
 
