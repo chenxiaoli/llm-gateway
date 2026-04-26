@@ -114,3 +114,13 @@ Applies to `per_token` and `hybrid` billing types.
 1. Run backend: `cargo run` (port 8080)
 2. Run frontend: `cd web && npm run dev` (port 5173, proxies `/api` to 8080)
 3. Frontend hot-reloads independently; API calls route to backend in dev
+
+## Git Flow
+
+Use git flow branching model:
+- `main` — production-ready code only
+- `develop` — integration branch, feature branches start here
+- `feature/*` — branched from `develop`, merged back to `develop`
+- `release/*` — branched from `develop`, merged to both `main` and `develop`
+- `hotfix/*` — branched from `main`, merged to both `main` and `develop`
+- Never commit directly to `main`
