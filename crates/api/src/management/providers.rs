@@ -25,7 +25,7 @@ pub async fn create_provider(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(input): Json<StorageCreateProvider>,
-) -> Result<Json<Provider>, ApiError> {
+) -> Result<Json<ProviderWithEndpoints>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     let now = chrono::Utc::now();
@@ -49,7 +49,7 @@ pub async fn create_provider(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(Json(created))
+    Ok(Json(created.into()))
 }
 
 pub async fn list_providers(
@@ -90,7 +90,7 @@ pub async fn update_provider(
     headers: HeaderMap,
     Path(id): Path<String>,
     Json(input): Json<StorageUpdateProvider>,
-) -> Result<Json<Provider>, ApiError> {
+) -> Result<Json<ProviderWithEndpoints>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     let mut provider = state
@@ -123,7 +123,7 @@ pub async fn update_provider(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(Json(updated))
+    Ok(Json(updated.into()))
 }
 
 pub async fn delete_provider(

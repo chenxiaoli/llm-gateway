@@ -321,6 +321,7 @@ export default function Providers() {
   const [editingProvider, setEditingProvider] = useState<Provider | null>(null);
   const [editName, setEditName] = useState('');
   const [editEndpoints, setEditEndpoints] = useState<Record<string, string>>({});
+  const [editProxyUrl, setEditProxyUrl] = useState('');
   const [editEnabled, setEditEnabled] = useState(true);
 
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -345,6 +346,7 @@ export default function Providers() {
     setEditingProvider(provider);
     setEditName(provider.name);
     setEditEndpoints(provider.endpoints || {});
+    setEditProxyUrl(provider.proxy_url || '');
     setEditEnabled(provider.enabled);
     setEditOpen(true);
   };
@@ -361,6 +363,7 @@ export default function Providers() {
       input: {
         name: editName,
         endpoints: Object.keys(endpoints).length > 0 ? endpoints : null,
+        proxy_url: editProxyUrl || null,
         enabled: editEnabled,
       },
     });
@@ -515,6 +518,18 @@ export default function Providers() {
               Endpoints
             </label>
             <EndpointsEditor value={editEndpoints} onChange={setEditEndpoints} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">
+              Proxy URL
+            </label>
+            <input
+              type="text"
+              value={editProxyUrl}
+              onChange={(e) => setEditProxyUrl(e.target.value)}
+              placeholder="http://proxy:8080"
+              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-base font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+            />
           </div>
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">

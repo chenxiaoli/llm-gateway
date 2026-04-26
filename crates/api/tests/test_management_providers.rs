@@ -63,7 +63,7 @@ async fn test_create_provider() {
     )
     .unwrap();
     assert_eq!(body["name"], "OpenAI");
-    let endpoints: Value = serde_json::from_str(body["endpoints"].as_str().unwrap()).unwrap();
+    let endpoints = &body["endpoints"];
     assert_eq!(endpoints["default"], "https://api.openai.com/v1");
 }
 
@@ -97,7 +97,7 @@ async fn test_create_provider_dual_protocol() {
         &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
-    let endpoints: serde_json::Value = serde_json::from_str(body["endpoints"].as_str().unwrap()).unwrap();
+    let endpoints = &body["endpoints"];
     assert!(endpoints.get("openai").and_then(|v| v.as_str()).is_some());
     assert!(endpoints.get("anthropic").and_then(|v| v.as_str()).is_some());
 }

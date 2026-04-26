@@ -8,7 +8,9 @@ import type { Provider, ChannelModel } from '../types';
 const mockProvider: Provider = {
   id: 'prov-1',
   name: 'openai',
-  endpoints: { openai: 'https://api.openai.com', anthropic: null } as unknown as Record<string, string> | null,
+  slug: 'openai',
+  endpoints: { openai: 'https://api.openai.com' } as Record<string, string>,
+  proxy_url: null,
   enabled: true,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
@@ -52,14 +54,16 @@ describe('providers API', () => {
           ...mockProvider,
           id: 'prov-2',
           name: 'anthropic',
-          endpoints: { openai: null, anthropic: 'https://api.anthropic.com' } as unknown as Record<string, string> | null,
+          slug: 'anthropic',
+          endpoints: { anthropic: 'https://api.anthropic.com' },
+          proxy_url: null,
         });
       }),
     );
 
     const result = await createProvider({
       name: 'anthropic',
-      endpoints: '{"openai":null,"anthropic":"https://api.anthropic.com"}',
+      endpoints: { openai: null, anthropic: 'https://api.anthropic.com' },
     });
     expect(result.name).toBe('anthropic');
     expect(result.endpoints?.anthropic).toBe('https://api.anthropic.com');
