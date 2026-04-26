@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 llm-gateway-api = { path = "../api" }
-llm-gateway-storage = { path = "../storage" }
+llm-gateway-storage = { path = "../storage", features = ["sqlite", "postgres"] }
 llm-gateway-audit = { path = "../audit" }
 llm-gateway-ratelimit = { path = "../ratelimit" }
 tokio = { workspace = true }

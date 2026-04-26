@@ -118,12 +118,7 @@ struct PgModelWithProviderRow {
     id: String,
     name: String,
     model_type: Option<String>,
-    billing_type: String,
-    input_price: f64,
-    output_price: f64,
-    request_price: f64,
     pricing_policy_id: Option<String>,
-    enabled: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     provider_name: String,
     #[allow(dead_code)]
@@ -133,38 +128,17 @@ struct PgModelWithProviderRow {
 
 impl From<PgModelWithProviderRow> for ModelWithProvider {
     fn from(r: PgModelWithProviderRow) -> Self {
-        // Parse endpoints JSON to determine compatibility
-        // If provider name is "Anthropic", it's natively compatible with Anthropic API
-        // If provider name is "OpenAI", it's natively compatible with OpenAI API
-        let provider_name_lower = r.provider_name.to_lowercase();
-        let is_native_anthropic = provider_name_lower == "anthropic";
-        let is_native_openai = provider_name_lower == "openai";
-
-        let openai_compatible = r.endpoints.as_ref()
-            .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
-            .map(|v| v.get("openai").is_some())
-            .unwrap_or(is_native_openai);
-        let anthropic_compatible = r.endpoints.as_ref()
-            .and_then(|e| serde_json::from_str::<serde_json::Value>(e).ok())
-            .map(|v| v.get("anthropic").is_some())
-            .unwrap_or(is_native_anthropic);
-
         ModelWithProvider {
             model: Model {
                 id: r.id,
                 name: r.name,
                 model_type: r.model_type,
-                billing_type: r.billing_type,
-                input_price: r.input_price,
-                output_price: r.output_price,
-                request_price: r.request_price,
                 pricing_policy_id: r.pricing_policy_id,
-                enabled: r.enabled,
                 created_at: r.created_at,
             },
-            provider_name: r.provider_name,
-            openai_compatible,
-            anthropic_compatible,
+            pricing_policy_name: None,
+            channel_ids: Vec::new(),
+            channel_names: Vec::new(),
         }
     }
 }
@@ -225,7 +199,6 @@ impl From<PgUsageSummaryRow> for UsageSummaryRecord {
     }
 }
 
-#[derive(FromRow)]
 #[derive(FromRow)]
 struct PgAuditSummaryRow {
     id: String,
