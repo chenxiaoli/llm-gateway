@@ -33,6 +33,7 @@ export default function ProviderDetail() {
   const { data: policies } = usePricingPolicies();
 
   const [provName, setProvName] = useState('');
+  const [provDefaultUrl, setProvDefaultUrl] = useState('');
   const [provOpenaiUrl, setProvOpenaiUrl] = useState('');
   const [provAnthropicUrl, setProvAnthropicUrl] = useState('');
   const [provEnabled, setProvEnabled] = useState(false);
@@ -59,12 +60,15 @@ export default function ProviderDetail() {
   useEffect(() => {
     if (provider) {
       setProvName(provider.name);
+      let defaultUrl = '';
       let openaiUrl = '';
       let anthropicUrl = '';
       if (provider.endpoints) {
+        defaultUrl = provider.endpoints.default || '';
         openaiUrl = provider.endpoints.openai || '';
         anthropicUrl = provider.endpoints.anthropic || '';
       }
+      setProvDefaultUrl(defaultUrl);
       setProvOpenaiUrl(openaiUrl);
       setProvAnthropicUrl(anthropicUrl);
       setProvEnabled(provider.enabled);
@@ -78,8 +82,9 @@ export default function ProviderDetail() {
   const handleUpdateProvider = async (e: React.FormEvent) => {
     e.preventDefault();
     const endpoints: Record<string, string | null> = {
+      default: provDefaultUrl || null,
       openai: provOpenaiUrl || null,
-      anthropic: provAnthropicUrl || null
+      anthropic: provAnthropicUrl || null,
     };
     await updateMutation.mutateAsync({ id: provider.id, input: { name: provName, endpoints, proxy_url: provProxyUrl || null, enabled: provEnabled } });
   };
@@ -150,6 +155,7 @@ export default function ProviderDetail() {
 
       <form onSubmit={handleUpdateProvider} className="mb-8 max-w-lg bg-base-100 rounded-box p-5 shadow-sm space-y-4">
         <div className="form-control"><label className="label"><span className="label-text">Name</span></label><input type="text" value={provName} onChange={(e) => setProvName(e.target.value)} required className="input input-bordered w-full" /></div>
+        <div className="form-control"><label className="label"><span className="label-text">Default Endpoint</span></label><input type="text" value={provDefaultUrl} onChange={(e) => setProvDefaultUrl(e.target.value)} placeholder="https://api.example.com/v1" className="input input-bordered w-full" /></div>
         <div className="form-control"><label className="label"><span className="label-text">OpenAI Endpoint</span></label><input type="text" value={provOpenaiUrl} onChange={(e) => setProvOpenaiUrl(e.target.value)} placeholder="https://api.openai.com/v1" className="input input-bordered w-full" /></div>
         <div className="form-control"><label className="label"><span className="label-text">Anthropic Endpoint</span></label><input type="text" value={provAnthropicUrl} onChange={(e) => setProvAnthropicUrl(e.target.value)} placeholder="https://api.anthropic.com" className="input input-bordered w-full" /></div>
         <div className="form-control"><label className="label"><span className="label-text">Proxy URL</span></label><input type="text" value={provProxyUrl} onChange={(e) => setProvProxyUrl(e.target.value)} placeholder="http://proxy:8080" className="input input-bordered w-full" /></div>
