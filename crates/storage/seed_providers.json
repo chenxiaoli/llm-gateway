@@ -28,7 +28,9 @@
     {
       "name": "GLM",
       "endpoints": {
-        "default": "https://open.bigmodel.cn/api/paas/v4"
+        "default": "https://open.bigmodel.cn/api/paas/v4",
+        "openai": "https://open.bigmodel.cn/api/paas/v4",
+        "anthropic": "https://open.bigmodel.cn/api/anthropic"
       },
       "enabled": true
     },

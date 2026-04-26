@@ -7,6 +7,7 @@ use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
 use llm_gateway_storage::sqlite::SqliteStorage;
+use llm_gateway_storage::postgres::PostgresStorage;
 use rust_embed::Embed;
 use sha2::Digest;
 use std::sync::Arc;
@@ -28,11 +29,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config: AppConfig = toml::from_str(&config_str)?;
 
     // Init storage
-    let db_path = config.database.url.as_deref().unwrap_or("./data/gateway.db");
-    let storage = SqliteStorage::new(db_path).await?;
-    storage.run_migrations().await?;
-    storage.seed_data().await?;
-    let storage: Arc<dyn Storage> = Arc::new(storage);
+    let storage: Arc<dyn Storage> = match config.database.driver.as_str() {
+        "postgres" => {
+            let url = config.database.url.as_deref().ok_or("database.url is required for postgres")?;
+            tracing::info!("Using PostgreSQL: {}", url.split('@').last().unwrap_or("***"));
+            let db = PostgresStorage::new(url).await?;
+            db.run_migrations().await?;
+            db.seed_data().await?;
+            Arc::new(db)
+        }
+        _ => {
+            let db_path = config.database.url.as_deref().unwrap_or("./data/gateway.db");
+            tracing::info!("Using SQLite: {}", db_path);
+            let db = SqliteStorage::new(db_path).await?;
+            db.run_migrations().await?;
+            db.seed_data().await?;
+            Arc::new(db)
+        }
+    };
 
     // Derive encryption key (32 bytes via SHA256)
     let encryption_key: [u8; 32] = {
