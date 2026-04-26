@@ -17,7 +17,7 @@ describe('EndpointsEditor', () => {
   it('adds new endpoint row when add button clicked', () => {
     render(<EndpointsEditor value={{}} onChange={mockOnChange} />);
     fireEvent.click(screen.getByRole('button', { name: /add endpoint/i }));
-    expect(mockOnChange).toHaveBeenCalledWith({ openai: '' });
+    expect(mockOnChange).toHaveBeenCalledWith({ default: '' });
   });
 
   it('displays existing endpoints', () => {
