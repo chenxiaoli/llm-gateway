@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.0] - 2026-04-27
+
+### Added
+- Runtime database driver selection (PostgreSQL or SQLite via `config.toml`)
+- Docker image build and push on CI release (GHCR with semver tags)
+- Production docker-compose with PostgreSQL 18
+- `useReducedMotion` hook — respects `prefers-reduced-motion` system preference
+- Global CSS reduced-motion media query
+- GLM seed data with Anthropic and OpenAI endpoint URLs
+- Keyboard navigation and focus-visible rings on model cards
+
+### Changed
+- **Home page redesign**: fixed nav, value-driven hero, 3-step flow, terminal-style quick start, CTA section
+- **Dashboard redesign**: animated metric cards, server-side usage summary (replaces client-side aggregation), loading skeletons, status pills
+- **Models page**: active card redesign — clean neutral styling, emerald status badge, clickable cards with keyboard support, form label accessibility
+- Body text across Home/Dashboard/Models bumped to 16px for readability
+
+### Fixed
+- PostgreSQL storage module synced with current data model (removed stale fields)
+- Removed background glow animations that bypassed reduced-motion
+
 ## [0.6.1] - 2026-04-26
 
 ### Fixed
