@@ -1,8 +1,10 @@
-import { MessageSquare, DollarSign, Zap, TrendingUp, Activity, Clock, ArrowRight } from 'lucide-react';
+import { MessageSquare, DollarSign, Zap, TrendingUp, Activity, Clock, ArrowRight, Wallet, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useLogs } from '../hooks/useLogs';
 import { useUsageSummary } from '../hooks/useUsage';
+import { useMyBalance } from '../hooks/useAccounts';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useAuthStore } from '../stores/authStore';
 import { Badge } from '../components/ui/Badge';
 import { motion } from 'framer-motion';
 
@@ -69,9 +71,11 @@ function StatusPill({ icon, label, value, unit }: StatusPillProps) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
+  const user = useAuthStore((s) => s.user);
   const { data: todaySummary } = useUsageSummary({ since: startOfDay() });
   const { data: monthSummary } = useUsageSummary({ since: startOfMonth() });
   const { data: recentLogs, isLoading: logsLoading } = useLogs({}, 1, 10);
+  const { data: myBalance } = useMyBalance(1, 1);
 
   const todayRequests = todaySummary?.reduce((sum, r) => sum + r.request_count, 0) ?? 0;
   const todayCost = todaySummary?.reduce((sum, r) => sum + r.total_cost, 0) ?? 0;
@@ -101,6 +105,50 @@ export default function Dashboard() {
           Real-time overview of your LLM gateway activity
         </p>
       </motion.div>
+
+      {/* Account Balance */}
+      {myBalance && (
+        <motion.div
+          initial={reducedMotion ? false : { opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={reducedMotion ? { duration: 0 } : { duration: 0.35, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
+          className="mb-6 rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden"
+        >
+          <div className="p-5 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                myBalance.balance <= myBalance.threshold ? 'bg-amber-500/10' : 'bg-primary/10'
+              }`}>
+                {myBalance.balance <= myBalance.threshold
+                  ? <AlertTriangle className="h-5 w-5 text-amber-500" />
+                  : <Wallet className="h-5 w-5 text-primary" />
+                }
+              </div>
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Account Balance</span>
+                <div className="font-mono text-3xl font-bold tracking-tight mt-0.5">
+                  ${myBalance.balance.toFixed(4)}
+                  <span className="text-sm text-base-content/40 ml-2 font-normal">{myBalance.currency}</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {myBalance.balance <= myBalance.threshold && (
+                <Badge variant="amber">Low Balance</Badge>
+              )}
+              {user && (
+                <button
+                  onClick={() => navigate(`/console/users/${user.id}/balance`)}
+                  className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer"
+                >
+                  View Details
+                  <ArrowRight className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
