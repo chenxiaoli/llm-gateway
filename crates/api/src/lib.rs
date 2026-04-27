@@ -31,6 +31,7 @@ pub struct AppState {
 /// Worker parses response_bytes for usage, calculates cost, and writes to DB.
 pub struct AuditTask {
     pub key_id: String,
+    pub user_id: Option<String>,
     pub model_name: String,
     pub provider_id: String,
     pub protocol: llm_gateway_storage::Protocol,

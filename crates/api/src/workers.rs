@@ -123,6 +123,7 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
         let record = UsageRecord {
             id: uuid::Uuid::new_v4().to_string(),
             key_id: task.key_id.clone(),
+            user_id: task.user_id.clone(),
             model_name: task.model_name.clone(),
             provider_id: task.provider_id.clone(),
             channel_id: task.channel_id.clone(),
@@ -150,6 +151,7 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
 
         if let Err(e) = audit_logger.log_request(
             &task.key_id,
+            task.user_id.as_deref(),
             &task.model_name,
             &task.provider_id,
             task.protocol,

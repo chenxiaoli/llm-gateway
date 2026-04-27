@@ -286,6 +286,7 @@ pub fn spawn_registry_refresh(registry: Arc<InMemoryChannelRegistry>) {
 /// Parameters for SSE AuditTask construction
 pub struct SseAuditParams {
     pub key_id: String,
+    pub user_id: Option<String>,
     pub model_name: String,
     pub provider_id: String,
     pub protocol: llm_gateway_storage::Protocol,
@@ -390,6 +391,7 @@ async fn process_sse_stream(
 
     let task = AuditTask {
         key_id: audit_params.key_id,
+        user_id: audit_params.user_id,
         model_name: audit_params.model_name,
         provider_id: audit_params.provider_id,
         protocol: audit_params.protocol,
@@ -770,6 +772,7 @@ if status != 200 && status < 500 {
 
             let task = AuditTask {
                 key_id: api_key.id.clone(),
+                user_id: api_key.created_by.clone(),
                 model_name: upstream_name.to_string(),
                 provider_id: provider_id.clone(),
                 protocol: proto,
@@ -851,6 +854,7 @@ if status != 200 && status < 500 {
 
             let audit_params = SseAuditParams {
                 key_id: api_key.id.clone(),
+                user_id: api_key.created_by.clone(),
                 model_name: upstream_name.to_string(),
                 provider_id: provider_id.clone(),
                 protocol: proto,
@@ -939,6 +943,7 @@ if status != 200 && status < 500 {
         };
         let task = AuditTask {
             key_id: api_key.id.clone(),
+            user_id: api_key.created_by.clone(),
             model_name: upstream_name.to_string(),
             provider_id: provider_id.clone(),
             protocol: proto,

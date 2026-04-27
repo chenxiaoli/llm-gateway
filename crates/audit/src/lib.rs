@@ -34,6 +34,7 @@ impl AuditLogger {
     pub async fn log_request(
         &self,
         key_id: &str,
+        user_id: Option<&str>,
         model_name: &str,
         provider_id: &str,
         protocol: Protocol,
@@ -66,6 +67,7 @@ impl AuditLogger {
         let log = AuditLog {
             id: uuid::Uuid::new_v4().to_string(),
             key_id: key_id.to_string(),
+            user_id: user_id.map(String::from),
             model_name: model_name.to_string(),
             provider_id: provider_id.to_string(),
             channel_id: None,
