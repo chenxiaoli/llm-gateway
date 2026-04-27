@@ -1194,6 +1194,19 @@ impl crate::Storage for SqliteStorage {
         Ok(rows.into_iter().map(UsageSummaryRecord::from).collect())
     }
 
+    async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, f64)>, Box<dyn std::error::Error + Send + Sync>> {
+        let rows: Vec<(String, f64)> = sqlx::query_as(
+            "SELECT user_id, SUM(cost) FROM usage_records \
+             WHERE user_id IS NOT NULL AND created_at >= ? AND created_at < ? \
+             GROUP BY user_id"
+        )
+        .bind(since.to_rfc3339())
+        .bind(until.to_rfc3339())
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
     // ---- Audit ----
 
     async fn insert_log(&self, log: &AuditLog) -> Result<(), DbErr> {
