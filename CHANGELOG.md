@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.0] - 2026-04-27
+
+### Added
+- `user_id` column on `usage_records` and `audit_logs` tables (denormalized from `api_keys.created_by`)
+- Account balance card on Dashboard with low-balance warning
+- User-scoped audit log queries (non-admin users can now view their own logs)
+- `query_usage_cost_by_user` storage method for efficient settlement
+
+### Changed
+- Usage API (`/api/v1/usage`, `/api/v1/usage/summary`) now properly scopes data to the current user for non-admin requests (was returning all users' data)
+- Settlement worker replaced N+1 key-lookup loop with single `GROUP BY user_id` query
+- Usage page key filter dropdown now only shows keys belonging to the current user
+
 ## [0.7.0] - 2026-04-27
 
 ### Added

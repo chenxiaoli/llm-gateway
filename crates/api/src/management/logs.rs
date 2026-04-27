@@ -7,7 +7,7 @@ use std::sync::Arc;
 use llm_gateway_storage::{AuditLog, AuditLogSummary, LogFilter, PaginatedResponse, PaginationParams};
 
 use crate::error::ApiError;
-use crate::extractors::require_admin;
+use crate::extractors::{require_admin, require_auth};
 use crate::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -23,12 +23,17 @@ pub async fn get_logs(
     headers: HeaderMap,
     Query(query): Query<LogsQuery>,
 ) -> Result<Json<PaginatedResponse<AuditLogSummary>>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
 
     let (page, page_size) = query.pagination.normalized();
+    let mut filter = query.filter;
+    if claims.role != "admin" {
+        filter.user_id = Some(claims.sub);
+    }
+
     let logs = state
         .storage
-        .query_logs_paginated(&query.filter, page, page_size)
+        .query_logs_paginated(&filter, page, page_size)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 

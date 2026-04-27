@@ -155,6 +155,7 @@ struct PgUsageRow {
     output_tokens: Option<i64>,
     cache_read_tokens: Option<i64>,
     cost: f64,
+    user_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -171,6 +172,7 @@ impl From<PgUsageRow> for UsageRecord {
             output_tokens: r.output_tokens,
             cache_read_tokens: r.cache_read_tokens,
             cost: r.cost,
+            user_id: r.user_id,
             created_at: r.created_at,
         }
     }
@@ -220,6 +222,7 @@ struct PgAuditSummaryRow {
     upstream_url: Option<String>,
     request_headers: Option<String>,
     response_headers: Option<String>,
+    user_id: Option<String>,
 }
 
 impl From<PgAuditSummaryRow> for AuditLogSummary {
@@ -244,6 +247,7 @@ impl From<PgAuditSummaryRow> for AuditLogSummary {
             upstream_url: r.upstream_url,
             request_headers: r.request_headers,
             response_headers: r.response_headers,
+            user_id: r.user_id,
         }
     }
 }
@@ -271,6 +275,7 @@ struct PgAuditRow {
     upstream_url: Option<String>,
     request_headers: Option<String>,
     response_headers: Option<String>,
+    user_id: Option<String>,
 }
 
 impl From<PgAuditRow> for AuditLog {
@@ -297,6 +302,7 @@ impl From<PgAuditRow> for AuditLog {
             upstream_url: r.upstream_url,
             request_headers: r.request_headers,
             response_headers: r.response_headers,
+            user_id: r.user_id,
         }
     }
 }
@@ -1074,8 +1080,8 @@ impl crate::Storage for PostgresStorage {
 
     async fn record_usage(&self, usage: &UsageRecord) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO usage_records (id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+            "INSERT INTO usage_records (id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, user_id, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
         )
         .bind(&usage.id)
         .bind(&usage.key_id)
@@ -1087,6 +1093,7 @@ impl crate::Storage for PostgresStorage {
         .bind(usage.output_tokens)
         .bind(usage.cache_read_tokens)
         .bind(usage.cost)
+        .bind(usage.user_id.clone())
         .bind(usage.created_at)
         .execute(&self.pool)
         .await?;
@@ -1096,7 +1103,7 @@ impl crate::Storage for PostgresStorage {
     async fn query_usage(&self, filter: &UsageFilter) -> Result<Vec<UsageRecord>, DbErr> {
         // Build query dynamically based on filter - for now, just fetch all
         let rows: Vec<PgUsageRow> = sqlx::query_as(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, user_id, created_at
              FROM usage_records ORDER BY created_at DESC",
         )
         .fetch_all(&self.pool)
@@ -1108,7 +1115,10 @@ impl crate::Storage for PostgresStorage {
         let mut conditions = Vec::new();
         let mut bind_vals: Vec<String> = Vec::new();
 
-        if let Some(ref key_id) = filter.key_id {
+        if let Some(ref user_id) = filter.user_id {
+            conditions.push(format!("user_id = ${}", bind_vals.len() + 1));
+            bind_vals.push(user_id.clone());
+        } else if let Some(ref key_id) = filter.key_id {
             conditions.push(format!("key_id = ${}", bind_vals.len() + 1));
             bind_vals.push(key_id.clone());
         }
@@ -1140,7 +1150,7 @@ impl crate::Storage for PostgresStorage {
 
         let offset = (page - 1) * page_size;
         let data_sql = format!(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at \
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, user_id, created_at \
              FROM usage_records{} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
             where_clause,
             bind_vals.len() + 1,
@@ -1165,7 +1175,10 @@ impl crate::Storage for PostgresStorage {
         let mut conditions = Vec::new();
         let mut bind_vals: Vec<String> = Vec::new();
 
-        if let Some(ref key_id) = filter.key_id {
+        if let Some(ref user_id) = filter.user_id {
+            conditions.push(format!("user_id = ${}", bind_vals.len() + 1));
+            bind_vals.push(user_id.clone());
+        } else if let Some(ref key_id) = filter.key_id {
             conditions.push(format!("key_id = ${}", bind_vals.len() + 1));
             bind_vals.push(key_id.clone());
         }
@@ -1211,14 +1224,27 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(UsageSummaryRecord::from).collect())
     }
 
+    async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, f64)>, Box<dyn std::error::Error + Send + Sync>> {
+        let rows: Vec<(String, f64)> = sqlx::query_as(
+            "SELECT user_id, SUM(cost) FROM usage_records \
+             WHERE user_id IS NOT NULL AND created_at >= $1 AND created_at < $2 \
+             GROUP BY user_id"
+        )
+        .bind(since.to_rfc3339())
+        .bind(until.to_rfc3339())
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
     // ---- Audit ----
 
     async fn insert_log(&self, log: &AuditLog) -> Result<(), DbErr> {
         sqlx::query(
             "INSERT INTO audit_logs (id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
-             request_path, upstream_url, request_headers, response_headers)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)",
+             request_path, upstream_url, request_headers, response_headers, user_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)",
         )
         .bind(&log.id)
         .bind(&log.key_id)
@@ -1241,6 +1267,7 @@ impl crate::Storage for PostgresStorage {
         .bind(&log.upstream_url)
         .bind(&log.request_headers)
         .bind(&log.response_headers)
+        .bind(log.user_id.clone())
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -1281,23 +1308,88 @@ impl crate::Storage for PostgresStorage {
     }
 
     async fn query_logs_paginated(&self, filter: &LogFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<AuditLogSummary>, Box<dyn std::error::Error + Send + Sync>> {
-        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM audit_logs")
-            .fetch_one(&self.pool)
-            .await?;
+        let mut where_sql = String::from("WHERE 1=1");
+        let mut bind_vals: Vec<String> = Vec::new();
+
+        if let Some(ref user_id) = filter.user_id {
+            where_sql.push_str(" AND user_id = $");
+            // We'll use a simple approach with numbered params
+            bind_vals.push(user_id.clone());
+        }
+        if let Some(ref key_id) = filter.key_id {
+            where_sql.push_str(" AND key_id = $");
+            bind_vals.push(key_id.clone());
+        }
+        if let Some(ref model_name) = filter.model_name {
+            where_sql.push_str(" AND model_name = $");
+            bind_vals.push(model_name.clone());
+        }
+        if let Some(since) = filter.since {
+            where_sql.push_str(" AND created_at >= $");
+            bind_vals.push(since.to_rfc3339());
+        }
+        if let Some(until) = filter.until {
+            where_sql.push_str(" AND created_at <= $");
+            bind_vals.push(until.to_rfc3339());
+        }
+
+        // Rebuild where clause with proper parameter numbers
+        let mut conditions = Vec::new();
+        let mut bind_vals_final: Vec<String> = Vec::new();
+        if let Some(ref user_id) = filter.user_id {
+            conditions.push(format!("user_id = ${}", bind_vals_final.len() + 1));
+            bind_vals_final.push(user_id.clone());
+        }
+        if let Some(ref key_id) = filter.key_id {
+            conditions.push(format!("key_id = ${}", bind_vals_final.len() + 1));
+            bind_vals_final.push(key_id.clone());
+        }
+        if let Some(ref model_name) = filter.model_name {
+            conditions.push(format!("model_name = ${}", bind_vals_final.len() + 1));
+            bind_vals_final.push(model_name.clone());
+        }
+        if let Some(since) = filter.since {
+            conditions.push(format!("created_at >= ${}", bind_vals_final.len() + 1));
+            bind_vals_final.push(since.to_rfc3339());
+        }
+        if let Some(until) = filter.until {
+            conditions.push(format!("created_at <= ${}", bind_vals_final.len() + 1));
+            bind_vals_final.push(until.to_rfc3339());
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!(" WHERE {}", conditions.join(" AND "))
+        };
+
+        let count_sql = format!("SELECT COUNT(*) FROM audit_logs{}", where_clause);
+        let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
+        for val in &bind_vals_final {
+            count_query = count_query.bind(val);
+        }
+        let total = count_query.fetch_one(&self.pool).await?.0;
+
         let offset = (page - 1) * page_size;
-        let rows: Vec<PgAuditSummaryRow> = sqlx::query_as(
+        let data_sql = format!(
             "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
-             request_path, upstream_url, request_headers, response_headers
-             FROM audit_logs ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-        )
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await?;
+             request_path, upstream_url, request_headers, response_headers, user_id
+             FROM audit_logs{} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
+            where_clause,
+            bind_vals_final.len() + 1,
+            bind_vals_final.len() + 2
+        );
+        let mut data_query = sqlx::query_as::<_, PgAuditSummaryRow>(&data_sql);
+        for val in bind_vals_final {
+            data_query = data_query.bind(val);
+        }
+        data_query = data_query.bind(page_size).bind(offset);
+        let rows = data_query.fetch_all(&self.pool).await?;
+
         Ok(PaginatedResponse {
             items: rows.into_iter().map(AuditLogSummary::from).collect(),
-            total: total.0,
+            total,
             page,
             page_size,
         })
@@ -1307,7 +1399,7 @@ impl crate::Storage for PostgresStorage {
         let row: Option<PgAuditRow> = sqlx::query_as(
             "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
-             request_path, upstream_url, request_headers, response_headers
+             request_path, upstream_url, request_headers, response_headers, user_id
              FROM audit_logs WHERE id = $1",
         )
         .bind(id)

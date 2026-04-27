@@ -1,9 +1,7 @@
 //! Background settlement worker — deducts balance from accounts based on usage records.
 //! Runs every N minutes (default 1 min), summarizes usage cost per user, creates debit transactions.
 
-use llm_gateway_storage::{
-    TransactionType, UsageRecord,
-};
+use llm_gateway_storage::TransactionType;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -50,37 +48,28 @@ async fn run_settlement(storage: &Arc<dyn llm_gateway_storage::Storage>) {
         _ => now - Duration::from_secs(300),
     };
 
-    // Query usage records in the time window
-    let records: Vec<UsageRecord> = storage
-        .query_usage(&llm_gateway_storage::UsageFilter {
-            key_id: None,
-            model_name: None,
-            since: Some(last_time),
-            until: Some(now),
-        })
+    // Query usage costs grouped by user_id (single query instead of N+1)
+    let user_costs = storage
+        .query_usage_cost_by_user(last_time, now)
         .await
         .unwrap_or_default();
 
-    if records.is_empty() {
+    if user_costs.is_empty() {
         tracing::debug!("[SETTLEMENT] No usage records in window, skipping");
         let _ = storage.set_setting(checkpoint_key, &now.to_rfc3339()).await;
         return;
     }
 
-    // Group usage by account_id
+    // Resolve user_id → account_id
     let mut account_charges: HashMap<String, f64> = HashMap::new();
 
-    for record in &records {
-        if let Some(key) = storage.get_key(&record.key_id).await.unwrap_or(None) {
-            if let Some(ref user_id) = key.created_by {
-                if let Some(account) = storage
-                    .get_account_by_user_id(user_id)
-                    .await
-                    .unwrap_or(None)
-                {
-                    *account_charges.entry(account.id.clone()).or_insert(0.0) += record.cost;
-                }
-            }
+    for (user_id, cost) in &user_costs {
+        if let Some(account) = storage
+            .get_account_by_user_id(user_id)
+            .await
+            .unwrap_or(None)
+        {
+            *account_charges.entry(account.id.clone()).or_insert(0.0) += cost;
         }
     }
 
