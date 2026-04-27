@@ -165,6 +165,7 @@ struct SqliteUsageRow {
     output_tokens: Option<i64>,
     cache_read_tokens: Option<i64>,
     cost: f64,
+    user_id: Option<String>,
     created_at: String,
 }
 
@@ -181,6 +182,7 @@ impl From<SqliteUsageRow> for UsageRecord {
             output_tokens: r.output_tokens,
             cache_read_tokens: r.cache_read_tokens,
             cost: r.cost,
+            user_id: r.user_id,
             created_at: parse_rfc3339(&r.created_at),
         }
     }
@@ -207,6 +209,7 @@ struct SqliteAuditSummaryRow {
     upstream_url: Option<String>,
     request_headers: Option<String>,
     response_headers: Option<String>,
+    user_id: Option<String>,
 }
 
 impl From<SqliteAuditSummaryRow> for AuditLogSummary {
@@ -231,6 +234,7 @@ impl From<SqliteAuditSummaryRow> for AuditLogSummary {
             upstream_url: r.upstream_url,
             request_headers: r.request_headers,
             response_headers: r.response_headers,
+            user_id: r.user_id,
         }
     }
 }
@@ -258,6 +262,7 @@ struct SqliteAuditRow {
     upstream_url: Option<String>,
     request_headers: Option<String>,
     response_headers: Option<String>,
+    user_id: Option<String>,
 }
 
 impl From<SqliteAuditRow> for AuditLog {
@@ -284,6 +289,7 @@ impl From<SqliteAuditRow> for AuditLog {
             upstream_url: r.upstream_url,
             request_headers: r.request_headers,
             response_headers: r.response_headers,
+            user_id: r.user_id,
         }
     }
 }
@@ -1031,8 +1037,8 @@ impl crate::Storage for SqliteStorage {
 
     async fn record_usage(&self, usage: &UsageRecord) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO usage_records (id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO usage_records (id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, user_id, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&usage.id)
         .bind(&usage.key_id)
@@ -1044,6 +1050,7 @@ impl crate::Storage for SqliteStorage {
         .bind(usage.output_tokens)
         .bind(usage.cache_read_tokens)
         .bind(usage.cost)
+        .bind(usage.user_id.clone())
         .bind(usage.created_at.to_rfc3339())
         .execute(&self.pool)
         .await?;
@@ -1052,12 +1059,15 @@ impl crate::Storage for SqliteStorage {
 
     async fn query_usage(&self, filter: &UsageFilter) -> Result<Vec<UsageRecord>, DbErr> {
         let mut sql = String::from(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, user_id, created_at
              FROM usage_records WHERE 1=1",
         );
         let mut bind_vars: Vec<String> = Vec::new();
 
-        if let Some(ref key_id) = filter.key_id {
+        if let Some(ref user_id) = filter.user_id {
+            sql.push_str(" AND user_id = ?");
+            bind_vars.push(user_id.clone());
+        } else if let Some(ref key_id) = filter.key_id {
             sql.push_str(" AND key_id = ?");
             bind_vars.push(key_id.clone());
         }
@@ -1089,7 +1099,10 @@ impl crate::Storage for SqliteStorage {
         let mut where_sql = String::from("WHERE 1=1");
         let mut bind_vars: Vec<String> = Vec::new();
 
-        if let Some(ref key_id) = filter.key_id {
+        if let Some(ref user_id) = filter.user_id {
+            where_sql.push_str(" AND user_id = ?");
+            bind_vars.push(user_id.clone());
+        } else if let Some(ref key_id) = filter.key_id {
             where_sql.push_str(" AND key_id = ?");
             bind_vars.push(key_id.clone());
         }
@@ -1115,7 +1128,7 @@ impl crate::Storage for SqliteStorage {
 
         let offset = (page - 1) * page_size;
         let data_sql = format!(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, created_at \
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, user_id, created_at \
              FROM usage_records {} ORDER BY created_at DESC LIMIT ? OFFSET ?",
             where_sql
         );
@@ -1138,7 +1151,10 @@ impl crate::Storage for SqliteStorage {
         let mut where_sql = String::from("WHERE 1=1");
         let mut bind_vars: Vec<String> = Vec::new();
 
-        if let Some(ref key_id) = filter.key_id {
+        if let Some(ref user_id) = filter.user_id {
+            where_sql.push_str(" AND user_id = ?");
+            bind_vars.push(user_id.clone());
+        } else if let Some(ref key_id) = filter.key_id {
             where_sql.push_str(" AND key_id = ?");
             bind_vars.push(key_id.clone());
         }
@@ -1184,8 +1200,8 @@ impl crate::Storage for SqliteStorage {
         sqlx::query(
             "INSERT INTO audit_logs (id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
-             request_path, upstream_url, request_headers, response_headers)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             request_path, upstream_url, request_headers, response_headers, user_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&log.id)
         .bind(&log.key_id)
@@ -1208,6 +1224,7 @@ impl crate::Storage for SqliteStorage {
         .bind(&log.upstream_url)
         .bind(&log.request_headers)
         .bind(&log.response_headers)
+        .bind(log.user_id.clone())
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -1261,6 +1278,10 @@ impl crate::Storage for SqliteStorage {
         let mut where_sql = String::from("WHERE 1=1");
         let mut bind_vars: Vec<String> = Vec::new();
 
+        if let Some(ref user_id) = filter.user_id {
+            where_sql.push_str(" AND user_id = ?");
+            bind_vars.push(user_id.clone());
+        }
         if let Some(ref key_id) = filter.key_id {
             where_sql.push_str(" AND key_id = ?");
             bind_vars.push(key_id.clone());
@@ -1289,7 +1310,7 @@ impl crate::Storage for SqliteStorage {
         let data_sql = format!(
             "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, \
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason, \
-             request_path, upstream_url, request_headers, response_headers \
+             request_path, upstream_url, request_headers, response_headers, user_id \
              FROM audit_logs {} ORDER BY created_at DESC LIMIT ? OFFSET ?",
             where_sql
         );
@@ -1311,7 +1332,7 @@ impl crate::Storage for SqliteStorage {
     async fn get_log(&self, id: &str) -> Result<Option<AuditLog>, Box<dyn std::error::Error + Send + Sync>> {
         let sql = "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body, \
                    status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason, \
-                   request_path, upstream_url, request_headers, response_headers \
+                   request_path, upstream_url, request_headers, response_headers, user_id \
                    FROM audit_logs WHERE id = ?";
         let row: Option<SqliteAuditRow> = sqlx::query_as(sql)
             .bind(id)

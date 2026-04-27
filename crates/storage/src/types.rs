@@ -429,6 +429,7 @@ pub struct UsageRecord {
     pub output_tokens: Option<i64>,
     pub cache_read_tokens: Option<i64>,
     pub cost: f64,
+    pub user_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -462,6 +463,8 @@ fn deserialize_datetime_opt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Op
 #[derive(Debug, Deserialize)]
 pub struct UsageFilter {
     pub key_id: Option<String>,
+    #[serde(skip)]
+    pub user_id: Option<String>,
     pub model_name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_datetime_opt")]
     pub since: Option<DateTime<Utc>>,
@@ -494,6 +497,7 @@ pub struct AuditLog {
     pub upstream_url: Option<String>,
     pub request_headers: Option<String>,
     pub response_headers: Option<String>,
+    pub user_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -517,11 +521,14 @@ pub struct AuditLogSummary {
     pub upstream_url: Option<String>,
     pub request_headers: Option<String>,
     pub response_headers: Option<String>,
+    pub user_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct LogFilter {
     pub key_id: Option<String>,
+    #[serde(skip)]
+    pub user_id: Option<String>,
     pub model_name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_datetime_opt")]
     pub since: Option<DateTime<Utc>>,
