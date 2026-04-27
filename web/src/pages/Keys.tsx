@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { useKeys, useCreateKey } from '../hooks/useKeys';
+import { useModelFallbacks } from '../hooks/useModelFallbacks';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
@@ -14,11 +15,13 @@ export default function Keys() {
   const { data, isLoading } = useKeys(page, pageSize);
   const createKeyMutation = useCreateKey();
   const navigate = useNavigate();
+  const { data: fallbacks } = useModelFallbacks();
   const [createOpen, setCreateOpen] = useState(false);
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [rateLimit, setRateLimit] = useState('');
   const [budget, setBudget] = useState('');
+  const [fallbackId, setFallbackId] = useState('');
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,11 +29,13 @@ export default function Keys() {
       name,
       rate_limit: rateLimit ? Number(rateLimit) : null,
       budget_monthly: budget ? Number(budget) : null,
+      model_fallback_id: fallbackId || null,
     });
     setCreatedKey(result.key);
     setName('');
     setRateLimit('');
     setBudget('');
+    setFallbackId('');
   };
 
   const copyKey = () => {
@@ -160,6 +165,13 @@ export default function Keys() {
                   className="input input-bordered w-full"
                 />
               </div>
+            </div>
+            <div className="form-control">
+              <label className="label"><span className="label-text font-medium">Model Fallback</span></label>
+              <select value={fallbackId} onChange={(e) => setFallbackId(e.target.value)} className="select select-bordered w-full">
+                <option value="">None</option>
+                {fallbacks?.map((fb) => (<option key={fb.id} value={fb.id}>{fb.name}</option>))}
+              </select>
             </div>
             <Button variant="primary" loading={createKeyMutation.isPending}>Create</Button>
           </form>

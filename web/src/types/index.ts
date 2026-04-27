@@ -5,6 +5,7 @@ export interface ApiKey {
   rate_limit: number | null;
   budget_monthly: number | null;
   enabled: boolean;
+  model_fallback_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -13,6 +14,7 @@ export interface CreateKeyRequest {
   name: string;
   rate_limit?: number | null;
   budget_monthly?: number | null;
+  model_fallback_id?: string | null;
 }
 
 export interface CreateKeyResponse {
@@ -30,6 +32,7 @@ export interface UpdateKeyRequest {
   rate_limit?: number | null;
   budget_monthly?: number | null;
   enabled?: boolean;
+  model_fallback_id?: string | null;
 }
 
 export interface Provider {
@@ -269,6 +272,31 @@ export interface UpdateChannelRequest {
 
 export interface UpdateChannelApiKeyRequest {
   api_key: string;
+}
+
+// ── Model Fallback Types ──────────────────────────────────────────────────
+
+export interface ModelFallbackGroup {
+  models: string[];
+  priorities: number[];
+}
+
+export interface ModelFallbackConfig {
+  id: string;
+  name: string;
+  config: ModelFallbackGroup[];
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface CreateModelFallbackRequest {
+  name: string;
+  config: ModelFallbackGroup[];
+}
+
+export interface UpdateModelFallbackRequest {
+  name?: string;
+  config?: ModelFallbackGroup[];
 }
 
 // ── Pricing Config Types ───────────────────────────────────────────────────────

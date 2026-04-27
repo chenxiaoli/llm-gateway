@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   KeyRound,
+  ArrowRightLeft,
   BarChart3,
   Globe,
   Cpu,
@@ -24,6 +25,7 @@ import { apiClient } from '../api/client';
 const consoleItems = [
   { key: '/console/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { key: '/console/keys', icon: KeyRound, label: 'API Keys' },
+  { key: '/console/model-fallbacks', icon: ArrowRightLeft, label: 'Model Fallbacks' },
   { key: '/console/usage', icon: BarChart3, label: 'Usage' },
 ];
 
@@ -41,6 +43,7 @@ const adminItems = [
 const routeLabels: Record<string, string> = {
   dashboard: 'Dashboard',
   keys: 'API Keys',
+  'model-fallbacks': 'Model Fallbacks',
   usage: 'Usage',
   providers: 'Providers',
   channels: 'Channels',

@@ -9,6 +9,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Keys from './pages/Keys';
 import KeyDetail from './pages/KeyDetail';
+import ModelFallbacks from './pages/ModelFallbacks';
 import Channels from './pages/Channels';
 import ChannelDetail from './pages/ChannelDetail';
 import Models from './pages/Models';
@@ -50,6 +51,7 @@ function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="keys" element={<Keys />} />
             <Route path="keys/:id" element={<KeyDetail />} />
+            <Route path="model-fallbacks" element={<ModelFallbacks />} />
             <Route path="usage" element={<Usage />} />
           </Route>
           <Route element={<RequireAdmin />}>
