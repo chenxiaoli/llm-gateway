@@ -48,6 +48,7 @@ struct SqliteKeyRow {
     budget_monthly: Option<f64>,
     enabled: i64,
     created_by: Option<String>,
+    model_fallback_id: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -62,6 +63,7 @@ impl From<SqliteKeyRow> for ApiKey {
             budget_monthly: r.budget_monthly,
             enabled: r.enabled != 0,
             created_by: r.created_by,
+            model_fallback_id: r.model_fallback_id,
             created_at: parse_rfc3339(&r.created_at),
             updated_at: parse_rfc3339(&r.updated_at),
         }
@@ -441,6 +443,27 @@ impl From<SqliteTransactionRow> for Transaction {
     }
 }
 
+#[derive(FromRow)]
+struct SqliteModelFallbackRow {
+    id: String,
+    name: String,
+    config: String,
+    created_by: Option<String>,
+    created_at: String,
+}
+
+impl From<SqliteModelFallbackRow> for ModelFallbackConfig {
+    fn from(r: SqliteModelFallbackRow) -> Self {
+        ModelFallbackConfig {
+            id: r.id,
+            name: r.name,
+            config: serde_json::from_str(&r.config).unwrap_or_default(),
+            created_by: r.created_by,
+            created_at: parse_rfc3339(&r.created_at),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -488,8 +511,8 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_key(&self, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
-            "INSERT INTO api_keys (id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO api_keys (id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&key.id)
         .bind(&key.name)
@@ -498,6 +521,7 @@ impl crate::Storage for SqliteStorage {
         .bind(key.budget_monthly)
         .bind(key.enabled as i64)
         .bind(&key.created_by)
+        .bind(&key.model_fallback_id)
         .bind(key.created_at.to_rfc3339())
         .bind(key.updated_at.to_rfc3339())
         .execute(&self.pool)
@@ -508,7 +532,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_key(&self, id: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<SqliteKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys WHERE id = ?",
         )
         .bind(id)
@@ -520,7 +544,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_key_by_hash(&self, hash: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<SqliteKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys WHERE key_hash = ?",
         )
         .bind(hash)
@@ -532,7 +556,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_keys(&self) -> Result<Vec<ApiKey>, DbErr> {
         let rows: Vec<SqliteKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys",
         )
         .fetch_all(&self.pool)
@@ -547,7 +571,7 @@ impl crate::Storage for SqliteStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<SqliteKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys ORDER BY created_at DESC LIMIT ? OFFSET ?",
         )
         .bind(page_size)
@@ -569,7 +593,7 @@ impl crate::Storage for SqliteStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<SqliteKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys WHERE created_by = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
         )
         .bind(created_by)
@@ -588,7 +612,7 @@ impl crate::Storage for SqliteStorage {
     async fn update_key(&self, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
             "UPDATE api_keys SET name = ?, key_hash = ?, rate_limit = ?, budget_monthly = ?,
-             enabled = ?, created_by = ?, updated_at = ? WHERE id = ?",
+             enabled = ?, created_by = ?, model_fallback_id = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&key.name)
         .bind(&key.key_hash)
@@ -596,6 +620,7 @@ impl crate::Storage for SqliteStorage {
         .bind(key.budget_monthly)
         .bind(key.enabled as i64)
         .bind(&key.created_by)
+        .bind(&key.model_fallback_id)
         .bind(key.updated_at.to_rfc3339())
         .bind(&key.id)
         .execute(&self.pool)
@@ -2004,6 +2029,68 @@ impl crate::Storage for SqliteStorage {
             reference_id: req.reference_id.clone(),
             created_at: now,
         }))
+    }
+
+    // ---- Model Fallbacks ----
+
+    async fn create_model_fallback(&self, config: &ModelFallbackConfig) -> Result<ModelFallbackConfig, DbErr> {
+        let config_json = serde_json::to_string(&config.config).unwrap_or_default();
+        sqlx::query(
+            "INSERT INTO model_fallbacks (id, name, config, created_by, created_at)
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(&config.id)
+        .bind(&config.name)
+        .bind(&config_json)
+        .bind(&config.created_by)
+        .bind(config.created_at.to_rfc3339())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(config.clone())
+    }
+
+    async fn get_model_fallback(&self, id: &str) -> Result<Option<ModelFallbackConfig>, DbErr> {
+        let row: Option<SqliteModelFallbackRow> = sqlx::query_as(
+            "SELECT id, name, config, created_by, created_at FROM model_fallbacks WHERE id = ?",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(ModelFallbackConfig::from))
+    }
+
+    async fn list_model_fallbacks(&self) -> Result<Vec<ModelFallbackConfig>, DbErr> {
+        let rows: Vec<SqliteModelFallbackRow> = sqlx::query_as(
+            "SELECT id, name, config, created_by, created_at FROM model_fallbacks",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(ModelFallbackConfig::from).collect())
+    }
+
+    async fn update_model_fallback(&self, config: &ModelFallbackConfig) -> Result<ModelFallbackConfig, DbErr> {
+        let config_json = serde_json::to_string(&config.config).unwrap_or_default();
+        sqlx::query(
+            "UPDATE model_fallbacks SET name = ?, config = ? WHERE id = ?",
+        )
+        .bind(&config.name)
+        .bind(&config_json)
+        .bind(&config.id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(config.clone())
+    }
+
+    async fn delete_model_fallback(&self, id: &str) -> Result<(), DbErr> {
+        sqlx::query("DELETE FROM model_fallbacks WHERE id = ?")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     // ---- Seed Data ----

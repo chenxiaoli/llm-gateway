@@ -46,6 +46,7 @@ pub struct ApiKey {
     pub budget_monthly: Option<f64>,   // monthly budget cap, None = unlimited
     pub enabled: bool,
     pub created_by: Option<String>,
+    pub model_fallback_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -55,6 +56,7 @@ pub struct CreateApiKey {
     pub name: String,
     pub rate_limit: Option<i64>,
     pub budget_monthly: Option<f64>,
+    pub model_fallback_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,6 +65,7 @@ pub struct UpdateApiKey {
     pub rate_limit: Option<Option<i64>>,
     pub budget_monthly: Option<Option<f64>>,
     pub enabled: Option<bool>,
+    pub model_fallback_id: Option<Option<String>>,
 }
 
 // --- Providers ---
@@ -749,6 +752,35 @@ mod tests {
         assert_eq!(response.balance, 100.5);
         assert_eq!(response.currency, "USD");
     }
+}
+
+// --- Model Fallback ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelFallbackGroup {
+    pub models: Vec<String>,
+    pub priorities: Vec<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelFallbackConfig {
+    pub id: String,
+    pub name: String,
+    pub config: Vec<ModelFallbackGroup>,
+    pub created_by: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateModelFallback {
+    pub name: String,
+    pub config: Vec<ModelFallbackGroup>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateModelFallback {
+    pub name: Option<String>,
+    pub config: Option<Vec<ModelFallbackGroup>>,
 }
 
 // --- Settings ---
