@@ -34,15 +34,13 @@ describe('Settings page', () => {
     }, { timeout: 5000 });
   });
 
-  it('renders change password form', async () => {
+  it('does not render change password form (moved to dedicated page)', async () => {
     renderWithProviders(<Settings />, { route: '/admin/settings' });
 
     await waitFor(() => {
-      expect(screen.getByText('Current Password')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
     }, { timeout: 5000 });
 
-    expect(screen.getByText('New Password')).toBeInTheDocument();
-    expect(screen.getByText('Confirm Password')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Update Password' })).toBeInTheDocument();
+    expect(screen.queryByText('Current Password')).not.toBeInTheDocument();
   });
 });
