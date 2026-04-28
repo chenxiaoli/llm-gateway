@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.2] - 2026-04-28
+
+### Added
+- Admin Settings page rebuilt with tabbed layout (General, Security & Audit, System Info, About)
+- System Info tab showing infrastructure configuration reference
+- About tab with version and GitHub link
+
+### Fixed
+- Version display showing "vv0.8.0" instead of "v0.8.0" in sidebar, header footer, home page, and settings
+
 ## [0.8.0] - 2026-04-27
 
 ### Added
