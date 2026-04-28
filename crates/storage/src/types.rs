@@ -466,7 +466,6 @@ fn deserialize_datetime_opt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Op
 #[derive(Debug, Deserialize)]
 pub struct UsageFilter {
     pub key_id: Option<String>,
-    #[serde(skip)]
     pub user_id: Option<String>,
     pub model_name: Option<String>,
     #[serde(default, deserialize_with = "deserialize_datetime_opt")]
@@ -553,6 +552,18 @@ pub struct User {
     pub role: String,
     pub enabled: bool,
     pub refresh_token: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct UserWithBalance {
+    pub id: String,
+    pub username: String,
+    pub role: String,
+    pub enabled: bool,
+    pub balance: f64,
+    pub threshold: f64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

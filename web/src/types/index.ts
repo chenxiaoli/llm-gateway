@@ -112,6 +112,7 @@ export interface UsageSummaryRecord {
 
 export interface UsageFilter {
   key_id?: string;
+  user_id?: string;
   model_name?: string;
   since?: string;
   until?: string;
@@ -157,6 +158,8 @@ export interface User {
   id: string;
   username: string;
   role: 'admin' | 'user';
+  balance: number;
+  threshold: number;
 }
 
 export interface LoginRequest {

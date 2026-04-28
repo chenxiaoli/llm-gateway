@@ -102,7 +102,7 @@ pub trait Storage: Send + Sync {
     async fn get_user(&self, id: &str) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_user_by_username(&self, username: &str) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_users(&self) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>>;
-    async fn list_users_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<User>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_users_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<UserWithBalance>, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_user(&self, user: &User) -> Result<User, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_user(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn count_admin_users(&self) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;

@@ -365,6 +365,33 @@ impl From<SqliteUserRow> for User {
 }
 
 #[derive(FromRow)]
+struct SqliteUserWithBalanceRow {
+    id: String,
+    username: String,
+    role: String,
+    enabled: i64,
+    balance: Option<f64>,
+    threshold: Option<f64>,
+    created_at: String,
+    updated_at: String,
+}
+
+impl From<SqliteUserWithBalanceRow> for UserWithBalance {
+    fn from(r: SqliteUserWithBalanceRow) -> Self {
+        UserWithBalance {
+            id: r.id,
+            username: r.username,
+            role: r.role,
+            enabled: r.enabled != 0,
+            balance: r.balance.unwrap_or(0.0),
+            threshold: r.threshold.unwrap_or(1.0),
+            created_at: parse_rfc3339(&r.created_at),
+            updated_at: parse_rfc3339(&r.updated_at),
+        }
+    }
+}
+
+#[derive(FromRow)]
 struct SqliteChannelModelRow {
     id: String,
     channel_id: String,
@@ -969,10 +996,11 @@ impl crate::Storage for SqliteStorage {
 
     async fn update_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "UPDATE models SET pricing_policy_id = ? WHERE name = ?",
+            "UPDATE models SET name = ?, pricing_policy_id = ? WHERE id = ?",
         )
-        .bind(&model.pricing_policy_id)
         .bind(&model.name)
+        .bind(&model.pricing_policy_id)
+        .bind(&model.id)
         .execute(&self.pool)
         .await?;
 
@@ -1474,21 +1502,24 @@ impl crate::Storage for SqliteStorage {
         Ok(rows.into_iter().map(User::from).collect())
     }
 
-    async fn list_users_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<User>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn list_users_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<UserWithBalance>, Box<dyn std::error::Error + Send + Sync>> {
         let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
             .fetch_one(&self.pool)
             .await?;
         let offset = (page - 1) * page_size;
-        let rows: Vec<SqliteUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, refresh_token, created_at, updated_at \
-             FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        let rows: Vec<SqliteUserWithBalanceRow> = sqlx::query_as(
+            "SELECT u.id, u.username, u.role, u.enabled, \
+                    a.balance, a.threshold, u.created_at, u.updated_at \
+             FROM users u \
+             LEFT JOIN accounts a ON a.user_id = u.id \
+             ORDER BY u.created_at DESC LIMIT ? OFFSET ?",
         )
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.pool)
         .await?;
         Ok(PaginatedResponse {
-            items: rows.into_iter().map(User::from).collect(),
+            items: rows.into_iter().map(UserWithBalance::from).collect(),
             total: total.0,
             page,
             page_size,

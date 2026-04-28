@@ -378,6 +378,33 @@ impl From<PgUserRow> for User {
 }
 
 #[derive(FromRow)]
+struct PgUserWithBalanceRow {
+    id: String,
+    username: String,
+    role: String,
+    enabled: bool,
+    balance: Option<f64>,
+    threshold: Option<f64>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<PgUserWithBalanceRow> for UserWithBalance {
+    fn from(r: PgUserWithBalanceRow) -> Self {
+        UserWithBalance {
+            id: r.id,
+            username: r.username,
+            role: r.role,
+            enabled: r.enabled,
+            balance: r.balance.unwrap_or(0.0),
+            threshold: r.threshold.unwrap_or(1.0),
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }
+    }
+}
+
+#[derive(FromRow)]
 struct PgChannelModelRow {
     id: String,
     channel_id: String,
@@ -1012,10 +1039,11 @@ impl crate::Storage for PostgresStorage {
 
     async fn update_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "UPDATE models SET pricing_policy_id = $1 WHERE name = $2",
+            "UPDATE models SET name = $1, pricing_policy_id = $2 WHERE id = $3",
         )
-        .bind(&model.pricing_policy_id)
         .bind(&model.name)
+        .bind(&model.pricing_policy_id)
+        .bind(&model.id)
         .execute(&self.pool)
         .await?;
 
@@ -1528,21 +1556,24 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(User::from).collect())
     }
 
-    async fn list_users_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<User>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn list_users_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<UserWithBalance>, Box<dyn std::error::Error + Send + Sync>> {
         let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
             .fetch_one(&self.pool)
             .await?;
         let offset = (page - 1) * page_size;
-        let rows: Vec<PgUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, refresh_token, created_at, updated_at \
-             FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+        let rows: Vec<PgUserWithBalanceRow> = sqlx::query_as(
+            "SELECT u.id, u.username, u.role, u.enabled, \
+                    a.balance, a.threshold, u.created_at, u.updated_at \
+             FROM users u \
+             LEFT JOIN accounts a ON a.user_id = u.id \
+             ORDER BY u.created_at DESC LIMIT $1 OFFSET $2",
         )
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.pool)
         .await?;
         Ok(PaginatedResponse {
-            items: rows.into_iter().map(User::from).collect(),
+            items: rows.into_iter().map(UserWithBalance::from).collect(),
             total: total.0,
             page,
             page_size,
