@@ -32,10 +32,12 @@ pub async fn create_key(
 
     let now = chrono::Utc::now();
     let raw_key = generate_api_key();
+    let key_prefix = raw_key.chars().take(8).collect::<String>();
     let key = ApiKey {
         id: uuid::Uuid::new_v4().to_string(),
         name: input.name,
         key_hash: hash_api_key(&raw_key),
+        key_prefix: Some(key_prefix),
         rate_limit: input.rate_limit,
         budget_monthly: input.budget_monthly,
         enabled: true,

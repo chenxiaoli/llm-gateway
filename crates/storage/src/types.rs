@@ -42,6 +42,7 @@ pub struct ApiKey {
     pub id: String,
     pub name: String,
     pub key_hash: String,
+    pub key_prefix: Option<String>,
     pub rate_limit: Option<i64>,       // global RPM, None = unlimited
     pub budget_monthly: Option<f64>,   // monthly budget cap, None = unlimited
     pub enabled: bool,
@@ -217,12 +218,15 @@ pub struct PerTokenConfig {
     pub output_price_1m: Option<f64>,
     /// Cache read price per 1M tokens (cheaper than input).
     pub cache_read_price_1m: Option<f64>,
+    /// Cache creation price per 1M tokens.
+    pub cache_creation_price_1m: Option<f64>,
 }
 
 impl PerTokenConfig {
     pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn cache_creation_price(&self) -> f64 { self.cache_creation_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn divisor(&self) -> f64 { 1_000_000.0 }
 }
 
@@ -287,12 +291,14 @@ pub struct HybridConfig {
     pub input_price_1m: Option<f64>,
     pub output_price_1m: Option<f64>,
     pub cache_read_price_1m: Option<f64>,
+    pub cache_creation_price_1m: Option<f64>,
 }
 
 impl HybridConfig {
     pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0).max(0.0) }
+    pub fn cache_creation_price(&self) -> f64 { self.cache_creation_price_1m.unwrap_or(0.0).max(0.0) }
     pub fn divisor(&self) -> f64 { 1_000_000.0 }
 }
 
@@ -338,6 +344,7 @@ pub struct Usage {
     pub output_chars: Option<i64>,
     pub request_count: i64,
     pub cache_read_tokens: Option<i64>, // tokens read from cache (cheaper)
+    pub cache_creation_tokens: Option<i64>, // tokens written to cache
 }
 
 impl Usage {
@@ -349,6 +356,7 @@ impl Usage {
             output_chars: None,
             request_count: requests,
             cache_read_tokens: None,
+            cache_creation_tokens: None,
         }
     }
 }
@@ -431,6 +439,7 @@ pub struct UsageRecord {
     pub input_tokens: Option<i64>,
     pub output_tokens: Option<i64>,
     pub cache_read_tokens: Option<i64>,
+    pub cache_creation_tokens: Option<i64>,
     pub cost: f64,
     pub user_id: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -448,6 +457,7 @@ pub struct UsageSummaryRecord {
     pub model_name: String,
     pub total_input_tokens: i64,
     pub total_cache_read_tokens: i64,
+    pub total_cache_creation_tokens: i64,
     pub total_output_tokens: i64,
     pub total_cost: f64,
     pub request_count: i64,

@@ -19,6 +19,7 @@ const schema = z.object({
   input_price_1m: z.string().optional(),
   output_price_1m: z.string().optional(),
   cache_read_price_1m: z.string().optional(),
+  cache_creation_price_1m: z.string().optional(),
   request_price: z.string().optional(),
 });
 
@@ -27,7 +28,7 @@ type FormValues = z.infer<typeof schema>;
 const resolver = zodResolver(schema);
 
 function buildConfig(data: FormValues): PricingConfig {
-  const { billing_type, input_price_1m, output_price_1m, cache_read_price_1m, request_price } = data;
+  const { billing_type, input_price_1m, output_price_1m, cache_read_price_1m, cache_creation_price_1m, request_price } = data;
   const num = (v: string | undefined) => v ? parseFloat(v) : undefined;
   switch (billing_type) {
     case 'per_token':
@@ -35,6 +36,7 @@ function buildConfig(data: FormValues): PricingConfig {
         input_price_1m: num(input_price_1m),
         output_price_1m: num(output_price_1m),
         cache_read_price_1m: num(cache_read_price_1m),
+        cache_creation_price_1m: num(cache_creation_price_1m),
       };
     case 'per_request':
       return { request_price: num(request_price) };
@@ -55,6 +57,7 @@ function buildConfig(data: FormValues): PricingConfig {
         input_price_1m: num(input_price_1m),
         output_price_1m: num(output_price_1m),
         cache_read_price_1m: num(cache_read_price_1m),
+        cache_creation_price_1m: num(cache_creation_price_1m),
       };
   }
 }
@@ -82,6 +85,7 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
     const input = cfg['input_price_1m'] as number | undefined;
     const output = cfg['output_price_1m'] as number | undefined;
     const cache = cfg['cache_read_price_1m'] as number | undefined;
+    const cacheCreate = cfg['cache_creation_price_1m'] as number | undefined;
     const base = cfg['base_per_call'] as number | undefined;
     return (
       <div className="flex flex-wrap gap-1.5">
@@ -99,8 +103,14 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
         )}
         {cache != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Cache</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Cache Read</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(cache)}</span>
+          </span>
+        )}
+        {cacheCreate != null && (
+          <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Cache Create</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(cacheCreate)}</span>
           </span>
         )}
         {bt === 'hybrid' && base != null && (
@@ -182,6 +192,7 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
       input_price_1m: cfg?.['input_price_1m'] != null ? String(cfg['input_price_1m']) : '',
       output_price_1m: cfg?.['output_price_1m'] != null ? String(cfg['output_price_1m']) : '',
       cache_read_price_1m: cfg?.['cache_read_price_1m'] != null ? String(cfg['cache_read_price_1m']) : '',
+      cache_creation_price_1m: cfg?.['cache_creation_price_1m'] != null ? String(cfg['cache_creation_price_1m']) : '',
       request_price: cfg?.['request_price'] != null ? String(cfg['request_price']) : '',
     },
     resolver,
@@ -271,6 +282,18 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
                 step="0.0001"
                 {...register('cache_read_price_1m')}
                 placeholder="$0.00 (defaults to input price)"
+                className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+                Cache Creation Price ($ per 1M)
+              </label>
+              <input
+                type="number"
+                step="0.0001"
+                {...register('cache_creation_price_1m')}
+                placeholder="$0.00"
                 className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
               />
             </div>
@@ -369,6 +392,18 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
                 type="number"
                 step="0.0001"
                 {...register('cache_read_price_1m')}
+                placeholder="$0.00"
+                className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+                Cache Creation Price ($ per 1M)
+              </label>
+              <input
+                type="number"
+                step="0.0001"
+                {...register('cache_creation_price_1m')}
                 placeholder="$0.00"
                 className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
               />

@@ -24,9 +24,10 @@ impl PricingCalculator {
         };
         let div = 1_000_000.0;
         let input_cost = (usage.input_tokens as f64 / div) * cfg.input_price();
-        let cache_cost = (usage.cache_read_tokens.unwrap_or(0) as f64 / div) * cfg.cache_read_price();
+        let cache_read_cost = (usage.cache_read_tokens.unwrap_or(0) as f64 / div) * cfg.cache_read_price();
+        let cache_creation_cost = (usage.cache_creation_tokens.unwrap_or(0) as f64 / div) * cfg.cache_creation_price();
         let output_cost = (usage.output_tokens as f64 / div) * cfg.output_price();
-        input_cost + cache_cost + output_cost
+        input_cost + cache_read_cost + cache_creation_cost + output_cost
     }
 
     fn calculate_per_request(&self, config: &serde_json::Value, usage: &Usage) -> f64 {
@@ -99,10 +100,11 @@ impl PricingCalculator {
         let div = cfg.divisor();
         let base = cfg.base_per_call.unwrap_or(0.0).max(0.0);
         let input_cost = (usage.input_tokens as f64 / div) * cfg.input_price();
-        let cache_cost = (usage.cache_read_tokens.unwrap_or(0) as f64 / div) * cfg.cache_read_price();
+        let cache_read_cost = (usage.cache_read_tokens.unwrap_or(0) as f64 / div) * cfg.cache_read_price();
+        let cache_creation_cost = (usage.cache_creation_tokens.unwrap_or(0) as f64 / div) * cfg.cache_creation_price();
         let output_cost = (usage.output_tokens as f64 / div) * cfg.output_price();
 
-        (usage.request_count as f64 * base) + input_cost + cache_cost + output_cost
+        (usage.request_count as f64 * base) + input_cost + cache_read_cost + cache_creation_cost + output_cost
     }
 }
 
@@ -130,6 +132,7 @@ mod tests {
             output_chars: None,
             request_count: 1,
             cache_read_tokens: None,
+            cache_creation_tokens: None,
         }
     }
 
@@ -141,6 +144,7 @@ mod tests {
             output_chars: Some(500_000),
             request_count: 1,
             cache_read_tokens: None,
+            cache_creation_tokens: None,
         }
     }
 
@@ -152,6 +156,7 @@ mod tests {
             output_chars: None,
             request_count: 10,
             cache_read_tokens: None,
+            cache_creation_tokens: None,
         }
     }
 
@@ -168,7 +173,7 @@ mod tests {
         let calc = PricingCalculator;
         let policy = make_policy("per_token", json!({"input_price_1m": 3.0, "output_price_1m": 15.0, "cache_read_price_1m": 1.0}));
         // input_tokens = non-cache input (800k), cache_read_tokens = 200k
-        let usage_with_cache = Usage { input_tokens: 800_000, output_tokens: 500_000, input_chars: None, output_chars: None, request_count: 1, cache_read_tokens: Some(200_000) };
+        let usage_with_cache = Usage { input_tokens: 800_000, output_tokens: 500_000, input_chars: None, output_chars: None, request_count: 1, cache_read_tokens: Some(200_000), cache_creation_tokens: None };
         let cost = calc.calculate_cost(&policy, &usage_with_cache);
         // input_cost: (800k / 1M) * 3.0 = 2.4
         // cache_cost: (200k / 1M) * 1.0 = 0.2
@@ -181,7 +186,7 @@ mod tests {
     fn test_per_request() {
         let calc = PricingCalculator;
         let policy = make_policy("per_request", json!({"request_price": 0.05}));
-        let usage_req = Usage { input_tokens: 0, output_tokens: 0, input_chars: None, output_chars: None, request_count: 100, cache_read_tokens: None };
+        let usage_req = Usage { input_tokens: 0, output_tokens: 0, input_chars: None, output_chars: None, request_count: 100, cache_read_tokens: None, cache_creation_tokens: None };
         let cost = calc.calculate_cost(&policy, &usage_req);
         assert!((cost - 5.0).abs() < 0.001);
     }
@@ -206,7 +211,7 @@ mod tests {
                 {"up_to": null, "input_price_1m": 4.0, "output_price_1m": 12.0}
             ]
         }));
-        let usage_tier = Usage { input_tokens: 1_000_000, output_tokens: 0, input_chars: None, output_chars: None, request_count: 1, cache_read_tokens: None };
+        let usage_tier = Usage { input_tokens: 1_000_000, output_tokens: 0, input_chars: None, output_chars: None, request_count: 1, cache_read_tokens: None, cache_creation_tokens: None };
         let cost = calc.calculate_cost(&policy, &usage_tier);
         // 1M tokens at tier 1 (5.0 per 1M) = 5.0
         assert!((cost - 5.0).abs() < 0.001);

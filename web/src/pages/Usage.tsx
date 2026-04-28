@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DollarSign, MessageSquare, Zap, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
+import { DollarSign, MessageSquare, Zap, ArrowDownToLine, ArrowUpFromLine, BarChart3, Filter, RotateCcw, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { motion } from 'framer-motion';
 import { useUsage, useUsageSummary } from '../hooks/useUsage';
@@ -24,15 +24,15 @@ function MetricCard({ label, value, icon, index, reducedMotion }: MetricCardProp
       initial={reducedMotion ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={reducedMotion ? { duration: 0 } : { duration: 0.35, delay: index * 0.05, ease: EASE }}
-      className="relative rounded-2xl border border-base-300/40 bg-base-100 p-5 overflow-hidden"
+      className="relative rounded-2xl border border-base-300/40 bg-base-100 p-4 sm:p-5 overflow-hidden"
     >
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{label}</span>
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-base-200/60">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">{label}</span>
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-base-200/60 shrink-0">
           {icon}
         </div>
       </div>
-      <div className="font-mono text-3xl font-bold tracking-tight">{value}</div>
+      <div className="font-mono text-lg sm:text-2xl font-bold tracking-tight leading-tight break-all">{value}</div>
     </motion.div>
   );
 }
@@ -55,21 +55,23 @@ export default function Usage() {
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
 
   const summary = summaryData ?? [];
-  const grandTotals = summary.reduce<{ cost: number; requests: number; inputTokens: number; cacheReadTokens: number; outputTokens: number }>(
+  const grandTotals = summary.reduce<{ cost: number; requests: number; inputTokens: number; cacheReadTokens: number; cacheCreationTokens: number; outputTokens: number }>(
     (acc, r) => ({
       cost: acc.cost + r.total_cost,
       requests: acc.requests + r.request_count,
       inputTokens: acc.inputTokens + r.total_input_tokens,
       cacheReadTokens: acc.cacheReadTokens + r.total_cache_read_tokens,
+      cacheCreationTokens: acc.cacheCreationTokens + r.total_cache_creation_tokens,
       outputTokens: acc.outputTokens + r.total_output_tokens,
     }),
-    { cost: 0, requests: 0, inputTokens: 0, cacheReadTokens: 0, outputTokens: 0 }
+    { cost: 0, requests: 0, inputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, outputTokens: 0 }
   );
 
   const chartData = summary.map((r) => ({
     model: r.model_name,
     input: r.total_input_tokens,
     cache: r.total_cache_read_tokens,
+    cacheCreation: r.total_cache_creation_tokens,
     output: r.total_output_tokens,
     cost: r.total_cost,
     requests: r.request_count,
@@ -85,14 +87,23 @@ export default function Usage() {
         initial={reducedMotion ? false : { opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={reducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE }}
-        className="mb-8 pt-8"
+        className="mb-6 pt-8 flex items-center justify-between gap-4"
       >
-        <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
-          Usage
-        </h1>
-        <p className="text-base text-base-content/50">
-          Token consumption and cost breakdown
-        </p>
+        <div>
+          <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
+            Usage
+          </h1>
+          <p className="text-base text-base-content/50">
+            Token consumption and cost breakdown
+          </p>
+        </div>
+        {!isLoading && data && (
+          <div className="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-xl border border-base-300/40 bg-base-100 shrink-0">
+            <BarChart3 className="h-4 w-4 text-base-content/40" />
+            <span className="font-mono text-sm font-medium">{data.total.toLocaleString()}</span>
+            <span className="text-xs text-base-content/40">records</span>
+          </div>
+        )}
       </motion.div>
 
       {/* Filters */}
@@ -100,28 +111,61 @@ export default function Usage() {
         initial={reducedMotion ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={reducedMotion ? { duration: 0 } : { duration: 0.35, delay: 0.05, ease: EASE }}
-        className="mb-6 flex flex-wrap items-center gap-3"
+        className="mb-5"
       >
-        <input type="date" value={since} onChange={(e) => { setSince(e.target.value); setPage(1); }} className={inputStyle} />
-        <span className="text-base-content/30 text-xs">to</span>
-        <input type="date" value={until} onChange={(e) => { setUntil(e.target.value); setPage(1); }} className={inputStyle} />
-        <select value={keyFilter} onChange={(e) => { setKeyFilter(e.target.value); setPage(1); }} className={selectStyle}>
-          <option value="">All API Keys</option>
-          {keys?.items?.map((k) => (<option key={k.id} value={k.id}>{k.name}</option>))}
-        </select>
-        {(since || until || keyFilter) && (
-          <button
-            className="text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer"
-            onClick={() => { setSince(''); setUntil(''); setKeyFilter(''); setPage(1); }}
-          >
-            Clear filters
-          </button>
-        )}
+        <div className="rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden">
+          <div className="px-5 py-3 border-b border-base-300/60 bg-base-100/60 flex items-center justify-between">
+            <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25 flex items-center gap-1.5">
+              <Filter className="h-3 w-3" />
+              Filters
+              {[since, until, keyFilter].filter(Boolean).length > 0 && (
+                <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] font-bold">
+                  {[since, until, keyFilter].filter(Boolean).length}
+                </span>
+              )}
+            </span>
+            {(since || until || keyFilter) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<RotateCcw className="h-3.5 w-3.5" />}
+                onClick={() => { setSince(''); setUntil(''); setKeyFilter(''); setPage(1); }}
+              >
+                Clear
+              </Button>
+            )}
+          </div>
+          <div className="p-4 flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5">
+                <Clock className="h-3 w-3 inline mr-1" />
+                From
+              </label>
+              <input type="date" value={since} onChange={(e) => { setSince(e.target.value); setPage(1); }} className={inputStyle} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5">
+                <Clock className="h-3 w-3 inline mr-1" />
+                To
+              </label>
+              <input type="date" value={until} onChange={(e) => { setUntil(e.target.value); setPage(1); }} className={inputStyle} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5">
+                API Key
+              </label>
+              <select value={keyFilter} onChange={(e) => { setKeyFilter(e.target.value); setPage(1); }} className={selectStyle}>
+                <option value="">All API Keys</option>
+                {keys?.items?.map((k) => (<option key={k.id} value={k.id}>{k.name}</option>))}
+              </select>
+            </div>
+          </div>
+        </div>
       </motion.div>
 
       {/* Stat Cards */}
       {!summaryLoading && (
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
           <MetricCard
             label="Total Cost"
             value={`$${grandTotals.cost.toFixed(4)}`}
@@ -151,10 +195,17 @@ export default function Usage() {
             reducedMotion={reducedMotion}
           />
           <MetricCard
+            label="Cache Created"
+            value={grandTotals.cacheCreationTokens.toLocaleString()}
+            icon={<Zap className="h-4 w-4 text-orange-400" />}
+            index={4}
+            reducedMotion={reducedMotion}
+          />
+          <MetricCard
             label="Output Tokens"
             value={grandTotals.outputTokens.toLocaleString()}
             icon={<ArrowUpFromLine className="h-4 w-4 text-rose-400" />}
-            index={4}
+            index={5}
             reducedMotion={reducedMotion}
           />
         </div>
@@ -166,7 +217,7 @@ export default function Usage() {
           initial={reducedMotion ? false : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={reducedMotion ? { duration: 0 } : { duration: 0.35, delay: 0.15, ease: EASE }}
-          className="mb-6 rounded-2xl border border-base-300/40 bg-base-100 p-5"
+          className="mb-6 rounded-2xl border border-base-300/40 bg-base-100 p-4 sm:p-5 overflow-hidden"
         >
           <h2 className="text-sm font-bold text-base-content/70 mb-4">Token Usage by Model</h2>
           <ResponsiveContainer width="100%" height={300}>
@@ -185,6 +236,7 @@ export default function Usage() {
               <Legend wrapperStyle={{ fontSize: 12, opacity: 0.6 }} />
               <Bar dataKey="input" stackId="a" fill="var(--color-primary)" name="Input" />
               <Bar dataKey="cache" stackId="a" fill="#60a5fa" name="Cache Read" />
+              <Bar dataKey="cacheCreation" stackId="a" fill="#fb923c" name="Cache Created" />
               <Bar dataKey="output" stackId="a" fill="var(--color-secondary)" name="Output" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -212,7 +264,8 @@ export default function Usage() {
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Model</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Protocol</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">Input</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">Cache</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">Cache Read</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">Cache Created</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">Output</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">Cost</th>
                   </tr>
@@ -228,13 +281,14 @@ export default function Usage() {
                       <td><Badge variant={item.protocol === 'openai' ? 'blue' : 'purple'}>{item.protocol}</Badge></td>
                       <td className="font-mono text-sm text-right text-base-content/55">{(item.input_tokens ?? 0).toLocaleString()}</td>
                       <td className="font-mono text-sm text-right text-base-content/55">{(item.cache_read_tokens ?? 0).toLocaleString()}</td>
+                      <td className="font-mono text-sm text-right text-base-content/55">{(item.cache_creation_tokens ?? 0).toLocaleString()}</td>
                       <td className="font-mono text-sm text-right text-base-content/55">{(item.output_tokens ?? 0).toLocaleString()}</td>
                       <td className="font-mono text-sm text-right">${item.cost.toFixed(6)}</td>
                     </tr>
                   ))}
                   {usageItems.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="text-center py-12 text-base-content/40 text-sm">
+                      <td colSpan={9} className="text-center py-12 text-base-content/40 text-sm">
                         No usage data for the selected period
                       </td>
                     </tr>
