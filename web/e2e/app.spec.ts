@@ -68,12 +68,12 @@ test.describe('dashboard', () => {
 
   test('navigate to providers page', async ({ page }) => {
     await page.getByText('Providers').click();
-    await expect(page).toHaveURL(/\/console\/providers/);
+    await expect(page).toHaveURL(/\/admin\/providers/);
   });
 
   test('navigate to settings page', async ({ page }) => {
     await page.getByText('Settings').click();
-    await expect(page).toHaveURL(/\/console\/settings/);
+    await expect(page).toHaveURL(/\/admin\/settings/);
   });
 
   test('logout returns to login', async ({ page }) => {
@@ -114,7 +114,7 @@ test.describe('provider detail', () => {
   });
 
   test('shows provider detail page', async ({ page }) => {
-    await page.goto(`/console/providers/${providerId}`);
+    await page.goto(`/admin/providers/${providerId}`);
 
     // Back button visible
     await expect(page.getByText('Back to Providers')).toBeVisible();
@@ -137,13 +137,13 @@ test.describe('provider detail', () => {
   });
 
   test('navigates back to providers list', async ({ page }) => {
-    await page.goto(`/console/providers/${providerId}`);
+    await page.goto(`/admin/providers/${providerId}`);
     await page.getByText('Back to Providers').click();
-    await expect(page).toHaveURL(/\/console\/providers\/?$/);
+    await expect(page).toHaveURL(/\/admin\/providers\/?$/);
   });
 
   test('adds a model to the provider', async ({ page }) => {
-    await page.goto(`/console/providers/${providerId}`);
+    await page.goto(`/admin/providers/${providerId}`);
 
     await page.getByRole('button', { name: 'Add Model' }).click();
 
@@ -165,7 +165,7 @@ test.describe('provider detail', () => {
   });
 
   test('adds a channel to the provider', async ({ page }) => {
-    await page.goto(`/console/providers/${providerId}`);
+    await page.goto(`/admin/providers/${providerId}`);
 
     await page.getByRole('button', { name: 'Add Channel' }).click();
 

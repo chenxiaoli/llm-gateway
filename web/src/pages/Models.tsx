@@ -394,6 +394,15 @@ function EditModelModal({
     <Modal open={open} onClose={onClose} title={`Edit ${model?.name ?? 'Model'}`}>
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Model Name</label>
+          <div className="flex items-center gap-2 h-10 px-3 rounded-lg border border-base-300 bg-base-200/50">
+            <Sparkles className="h-4 w-4 text-base-content/40 shrink-0" />
+            <span className="text-sm font-mono text-base-content/60 truncate">{model?.name ?? '—'}</span>
+            <span className="ml-auto text-xs text-base-content/30">read-only</span>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
           <label htmlFor="edit-pricing-policy" className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</label>
           <select
             id="edit-pricing-policy"

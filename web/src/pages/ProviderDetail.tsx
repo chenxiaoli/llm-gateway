@@ -91,7 +91,7 @@ export default function ProviderDetail() {
 
   const handleDeleteProvider = async () => {
     await deleteMutation.mutateAsync(provider.id);
-    navigate('/console/providers');
+    navigate('/admin/providers');
   };
 
   const resetModelForm = () => {
@@ -150,7 +150,7 @@ export default function ProviderDetail() {
 
   return (
     <div>
-      <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/console/providers')} className="mb-4">Back to Providers</Button>
+      <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/admin/providers')} className="mb-4">Back to Providers</Button>
       <div className="mb-6"><h1 className="text-4xl font-bold">Provider: {provider.name}</h1></div>
 
       <form onSubmit={handleUpdateProvider} className="mb-8 max-w-lg bg-base-100 rounded-box p-5 shadow-sm space-y-4">

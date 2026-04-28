@@ -1,16 +1,20 @@
 import { useState } from 'react';
-import { Plus, Trash2, X, ArrowRight, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, X, ArrowRight, AlertCircle, ArrowRightLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useModelFallbacks, useCreateModelFallback, useUpdateModelFallback, useDeleteModelFallback } from '../hooks/useModelFallbacks';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import type { ModelFallbackGroup } from '../types';
+
+const EASE = [0.16, 1, 0.3, 1] as const;
 
 export default function ModelFallbacks() {
   const { data: fallbacks, isLoading } = useModelFallbacks();
   const createMutation = useCreateModelFallback();
   const updateMutation = useUpdateModelFallback();
   const deleteMutation = useDeleteModelFallback();
+  const reducedMotion = useReducedMotion();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -108,7 +112,6 @@ export default function ModelFallbacks() {
     setDeleteId(null);
   };
 
-  // Sort models within each group by priority for display
   const sortedGroupModels = (group: ModelFallbackGroup) => {
     return group.models
       .map((model, i) => ({ model, priority: group.priorities[i] ?? i + 1 }))
@@ -116,73 +119,93 @@ export default function ModelFallbacks() {
   };
 
   return (
-    <div>
-      <div className="mb-8 flex items-center justify-between">
+    <div className="px-6 pb-8">
+      {/* Header */}
+      <motion.div
+        initial={reducedMotion ? false : { opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={reducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE }}
+        className="mb-8 pt-8 flex items-end justify-between gap-6"
+      >
         <div>
-          <h1 className="text-2xl font-bold">Model Fallbacks</h1>
-          <p className="text-sm text-base-content/40 mt-1">
+          <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
+            Model Fallbacks
+          </h1>
+          <p className="text-base text-base-content/50">
             Configure fallback model chains for API keys
           </p>
         </div>
         <Button icon={<Plus className="h-4 w-4" />} onClick={openCreate}>
           Create Fallback
         </Button>
-      </div>
+      </motion.div>
 
+      {/* Content */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <span className="loading loading-spinner loading-lg" />
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-28 bg-base-200/40 rounded-2xl animate-pulse" />
+          ))}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {fallbacks?.map((fb, index) => (
             <motion.div
               key={fb.id}
-              initial={{ opacity: 0, y: 8 }}
+              initial={reducedMotion ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, delay: index * 0.05 }}
-              className="rounded-xl border border-base-300/50 bg-base-100/60 p-5"
+              transition={reducedMotion ? { duration: 0 } : { duration: 0.35, delay: index * 0.05, ease: EASE }}
+              className="rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden"
             >
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="font-semibold text-sm">{fb.name}</h3>
-                  <p className="text-xs text-base-content/40 mt-0.5">
-                    {fb.config.length} group{fb.config.length !== 1 ? 's' : ''}
-                  </p>
+              {/* Card header */}
+              <div className="p-5 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-base-200/60 shrink-0">
+                    <ArrowRightLeft className="h-5 w-5 text-violet-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold">{fb.name}</h3>
+                    <span className="text-xs text-base-content/45">
+                      {fb.config.length} group{fb.config.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex items-center gap-1">
                   <Button variant="ghost" size="sm" onClick={() => openEdit(fb.id)}>
                     Edit
                   </Button>
                   <button
                     type="button"
                     onClick={() => setDeleteId(fb.id)}
-                    className="btn btn-ghost btn-sm text-error/60 hover:text-error"
+                    className="btn btn-ghost btn-sm text-error/50 hover:text-error cursor-pointer"
                     aria-label={`Delete ${fb.name}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               </div>
-              <div className="space-y-2">
+
+              {/* Fallback groups */}
+              <div className="px-5 pb-5 space-y-2">
                 {fb.config.map((group, gi) => {
                   const sorted = sortedGroupModels(group);
                   return (
                     <div
                       key={gi}
-                      className="rounded-lg border border-base-200/50 bg-base-200/30 px-3 py-2.5"
+                      className="flex items-center gap-2 rounded-xl border border-base-300/40 bg-base-100/60 px-4 py-3"
                     >
+                      <span className="text-xs font-semibold uppercase tracking-wider text-base-content/40 shrink-0">
+                        G{gi + 1}
+                      </span>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {sorted.map((item, mi) => (
                           <span key={mi} className="contents">
-                            <span className="inline-flex items-center gap-1.5 rounded-md bg-base-200 px-2.5 py-1 text-xs font-mono">
-                              <span className="text-base-content/25 tabular-nums">
-                                P{item.priority}
-                              </span>
-                              <span>{item.model}</span>
+                            <span className="inline-flex items-center gap-1.5 rounded-lg bg-base-200/60 px-2.5 py-1 text-xs font-mono">
+                              <span className="text-base-content/30 tabular-nums">P{item.priority}</span>
+                              <span className="font-medium">{item.model}</span>
                             </span>
                             {mi < sorted.length - 1 && (
-                              <ArrowRight className="h-3 w-3 text-base-content/15 shrink-0" />
+                              <ArrowRight className="h-3 w-3 text-base-content/20 shrink-0" />
                             )}
                           </span>
                         ))}
@@ -193,15 +216,26 @@ export default function ModelFallbacks() {
               </div>
             </motion.div>
           ))}
+
           {(!fallbacks || fallbacks.length === 0) && (
-            <div className="text-center py-16">
-              <p className="text-base-content/25 text-sm mb-4">
-                No model fallback configs yet
-              </p>
-              <Button variant="secondary" size="sm" onClick={openCreate}>
-                Create your first fallback
-              </Button>
-            </div>
+            <motion.div
+              initial={reducedMotion ? false : { opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={reducedMotion ? { duration: 0 } : { duration: 0.35, ease: EASE }}
+              className="rounded-2xl border border-base-300/40 bg-base-100 p-5"
+            >
+              <div className="text-center py-12">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-base-200/60 mx-auto mb-4">
+                  <ArrowRightLeft className="h-6 w-6 text-base-content/30" />
+                </div>
+                <p className="text-sm text-base-content/40 mb-4">
+                  No model fallback configs yet
+                </p>
+                <Button variant="secondary" size="sm" onClick={openCreate}>
+                  Create your first fallback
+                </Button>
+              </div>
+            </motion.div>
           )}
         </div>
       )}
@@ -253,17 +287,17 @@ export default function ModelFallbacks() {
             {groups.map((group, gi) => (
               <div
                 key={gi}
-                className="rounded-lg border border-base-300/50 bg-base-200/30 p-3 space-y-2"
+                className="rounded-xl border border-base-300/40 bg-base-100/60 p-3 space-y-2"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-base-content/50">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-base-content/45">
                     Group {gi + 1}
                   </span>
                   {groups.length > 1 && (
                     <button
                       type="button"
                       onClick={() => removeGroup(gi)}
-                      className="text-error/60 hover:text-error cursor-pointer p-1 -m-1"
+                      className="text-error/50 hover:text-error cursor-pointer p-1 -m-1"
                       aria-label={`Remove group ${gi + 1}`}
                     >
                       <X className="h-4 w-4" />
@@ -272,7 +306,7 @@ export default function ModelFallbacks() {
                 </div>
                 {group.models.map((model, mi) => (
                   <div key={mi} className="flex gap-2 items-center">
-                    <span className="text-xs text-base-content/30 w-6 text-right shrink-0 tabular-nums">
+                    <span className="text-xs text-base-content/30 w-6 text-right shrink-0 tabular-nums font-mono">
                       P{group.priorities[mi]}
                     </span>
                     <input
