@@ -172,7 +172,7 @@ export default function AppLayout() {
           <div className="p-2 flex flex-col gap-1">
             {!collapsed && version && (
               <div className="flex items-center justify-between px-3 py-1.5">
-                <span className="mono text-xs text-base-content/20 truncate">v{version}</span>
+                <span className="mono text-xs text-base-content/20 truncate">{version}</span>
                 <a
                   href="https://github.com/chenxiaoli/llm-gateway"
                   target="_blank"
@@ -300,7 +300,7 @@ export default function AppLayout() {
               ) : (
                 <>
                   <span className="text-[11px] text-base-content/60 font-mono">
-                    LLM Gateway{version ? ` v${version}` : ''}
+                    LLM Gateway{version ? ` ${version}` : ''}
                   </span>
                   <span className="text-[11px] text-base-content/40 font-mono">•</span>
                   <span className="text-[11px] text-base-content/40 font-mono">{import.meta.env.VITE_COMMIT_SHA?.slice(0, 7) || ''}</span>
