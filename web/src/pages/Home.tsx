@@ -289,7 +289,7 @@ export default function Home() {
       <footer className="border-t border-base-300/40 py-8 px-6">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <span className="text-sm text-base-content/40 font-mono">
-            LLM Gateway{version ? ` v${version}` : ''}
+            LLM Gateway{version ? ` ${version}` : ''}
           </span>
           <span className="text-sm text-base-content/30">Open Source</span>
         </div>
