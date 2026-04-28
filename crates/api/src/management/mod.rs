@@ -2,6 +2,7 @@ pub mod accounts;
 pub mod auth;
 pub mod channels;
 pub mod keys;
+pub mod model_fallbacks;
 pub mod providers;
 pub mod models;
 pub mod usage;
@@ -33,6 +34,15 @@ pub fn management_router() -> Router<Arc<AppState>> {
         .route(
             "/api/v1/keys/{id}",
             get(keys::get_key).patch(keys::update_key).delete(keys::delete_key),
+        )
+        // Model Fallbacks (authenticated)
+        .route(
+            "/api/v1/model-fallbacks",
+            post(model_fallbacks::create_model_fallback).get(model_fallbacks::list_model_fallbacks),
+        )
+        .route(
+            "/api/v1/model-fallbacks/{id}",
+            get(model_fallbacks::get_model_fallback).patch(model_fallbacks::update_model_fallback).delete(model_fallbacks::delete_model_fallback),
         )
         // Providers (admin)
         .route(

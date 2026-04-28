@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useKey, useUpdateKey, useDeleteKey } from '../hooks/useKeys';
+import { useModelFallbacks } from '../hooks/useModelFallbacks';
 import { Button } from '../components/ui/Button';
 import { Toggle } from '../components/ui/Toggle';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
@@ -12,11 +13,13 @@ export default function KeyDetail() {
   const { data: key, isLoading } = useKey(id!);
   const updateMutation = useUpdateKey();
   const deleteMutation = useDeleteKey();
+  const { data: fallbacks } = useModelFallbacks();
 
   const [name, setName] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [rateLimit, setRateLimit] = useState('');
   const [budgetMonthly, setBudgetMonthly] = useState('');
+  const [fallbackId, setFallbackId] = useState('');
 
   useEffect(() => {
     if (key) {
@@ -24,6 +27,7 @@ export default function KeyDetail() {
       setEnabled(key.enabled);
       setRateLimit(key.rate_limit != null ? String(key.rate_limit) : '');
       setBudgetMonthly(key.budget_monthly != null ? String(key.budget_monthly) : '');
+      setFallbackId(key.model_fallback_id ?? '');
     }
   }, [key]);
 
@@ -39,6 +43,7 @@ export default function KeyDetail() {
         rate_limit: rateLimit ? Number(rateLimit) : null,
         budget_monthly: budgetMonthly ? Number(budgetMonthly) : null,
         enabled,
+        model_fallback_id: fallbackId || null,
       },
     });
   };
@@ -93,6 +98,13 @@ export default function KeyDetail() {
             step={0.01}
             className="input input-bordered w-full"
           />
+        </div>
+        <div className="form-control">
+          <label className="label"><span className="label-text">Model Fallback</span></label>
+          <select value={fallbackId} onChange={(e) => setFallbackId(e.target.value)} className="select select-bordered w-full">
+            <option value="">None</option>
+            {fallbacks?.map((fb) => (<option key={fb.id} value={fb.id}>{fb.name}</option>))}
+          </select>
         </div>
         <div className="flex gap-2">
           <Button variant="primary" type="submit" loading={updateMutation.isPending}>Save</Button>

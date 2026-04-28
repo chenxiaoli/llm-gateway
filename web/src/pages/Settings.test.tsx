@@ -11,7 +11,7 @@ beforeEach(() => {
 
 describe('Settings page', () => {
   it('renders settings page with Settings title', async () => {
-    renderWithProviders(<Settings />, { route: '/console/settings' });
+    renderWithProviders(<Settings />, { route: '/admin/settings' });
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
@@ -19,7 +19,7 @@ describe('Settings page', () => {
   });
 
   it('shows Allow Registration label', async () => {
-    renderWithProviders(<Settings />, { route: '/console/settings' });
+    renderWithProviders(<Settings />, { route: '/admin/settings' });
 
     await waitFor(() => {
       expect(screen.getByText('Allow Registration')).toBeInTheDocument();
@@ -27,22 +27,20 @@ describe('Settings page', () => {
   });
 
   it('renders settings toggles', async () => {
-    renderWithProviders(<Settings />, { route: '/console/settings' });
+    renderWithProviders(<Settings />, { route: '/admin/settings' });
 
     await waitFor(() => {
       expect(screen.getAllByRole('switch')).toHaveLength(3);
     }, { timeout: 5000 });
   });
 
-  it('renders change password form', async () => {
-    renderWithProviders(<Settings />, { route: '/console/settings' });
+  it('does not render change password form (moved to dedicated page)', async () => {
+    renderWithProviders(<Settings />, { route: '/admin/settings' });
 
     await waitFor(() => {
-      expect(screen.getByText('Current Password')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
     }, { timeout: 5000 });
 
-    expect(screen.getByText('New Password')).toBeInTheDocument();
-    expect(screen.getByText('Confirm Password')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Update Password' })).toBeInTheDocument();
+    expect(screen.queryByText('Current Password')).not.toBeInTheDocument();
   });
 });

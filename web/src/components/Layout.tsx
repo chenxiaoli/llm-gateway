@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   KeyRound,
+  ArrowRightLeft,
   BarChart3,
   Globe,
   Cpu,
@@ -16,6 +17,9 @@ import {
   Sun,
   Moon,
   ChevronRight,
+  User,
+  Lock,
+  ChevronDown,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useTheme } from '../hooks/useTheme';
@@ -24,23 +28,25 @@ import { apiClient } from '../api/client';
 const consoleItems = [
   { key: '/console/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { key: '/console/keys', icon: KeyRound, label: 'API Keys' },
+  { key: '/console/model-fallbacks', icon: ArrowRightLeft, label: 'Model Fallbacks' },
   { key: '/console/usage', icon: BarChart3, label: 'Usage' },
 ];
 
 const adminItems = [
-  { key: '/console/channels', icon: Globe, label: 'Channels' },
-  { key: '/console/providers', icon: Globe, label: 'Providers' },
-  { key: '/console/models', icon: Cpu, label: 'Models' },
-  { key: '/console/pricing-policies', icon: DollarSign, label: 'Pricing Policies' },
-  { key: '/console/users', icon: Users, label: 'Users' },
-  { key: '/console/settings', icon: Settings, label: 'Settings' },
-  { key: '/console/logs', icon: FileText, label: 'Logs' },
+  { key: '/admin/channels', icon: Globe, label: 'Channels' },
+  { key: '/admin/providers', icon: Globe, label: 'Providers' },
+  { key: '/admin/models', icon: Cpu, label: 'Models' },
+  { key: '/admin/pricing-policies', icon: DollarSign, label: 'Pricing Policies' },
+  { key: '/admin/users', icon: Users, label: 'Users' },
+  { key: '/admin/settings', icon: Settings, label: 'Settings' },
+  { key: '/admin/logs', icon: FileText, label: 'Logs' },
 ];
 
 // Map paths to display names for breadcrumbs
 const routeLabels: Record<string, string> = {
   dashboard: 'Dashboard',
   keys: 'API Keys',
+  'model-fallbacks': 'Model Fallbacks',
   usage: 'Usage',
   providers: 'Providers',
   channels: 'Channels',
@@ -54,6 +60,8 @@ const routeLabels: Record<string, string> = {
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [version, setVersion] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
@@ -65,9 +73,20 @@ export default function AppLayout() {
     apiClient.get<{ version: string }>('/version').then((r) => setVersion(r.data.version));
   }, []);
 
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [dropdownOpen]);
+
   const sidebarWidth = collapsed ? 'w-[68px]' : 'w-[232px]';
 
-  const breadcrumbSegment = location.pathname.replace('/console/', '');
+  const breadcrumbSegment = location.pathname.replace(/^\/(console|admin)\//, '');
 
   return (
     <div className="flex min-h-screen bg-base-200">
@@ -216,25 +235,47 @@ export default function AppLayout() {
 
               <div className="h-4 w-px bg-base-300/60 mx-1" />
 
-              <div className="flex items-center gap-2 text-sm">
-                <div className="avatar placeholder">
-                  <div className="bg-primary/15 text-primary w-7 rounded-md flex items-center justify-center">
-                    <span className="text-xs font-semibold">{user?.username?.charAt(0).toUpperCase()}</span>
+              <div ref={dropdownRef} className="relative">
+                <button
+                  className="flex items-center gap-2 text-sm cursor-pointer rounded-lg px-2 py-1 hover:bg-base-200/60 transition-colors"
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
+                >
+                  <div className="avatar placeholder">
+                    <div className="bg-primary/15 text-primary w-7 rounded-md flex items-center justify-center">
+                      <span className="text-xs font-semibold">{user?.username?.charAt(0).toUpperCase()}</span>
+                    </div>
                   </div>
-                </div>
-                <span className="hidden sm:inline text-[13px] font-medium text-base-content/60">{user?.username}</span>
+                  <span className="hidden sm:inline text-[13px] font-medium text-base-content/60">{user?.username}</span>
+                  <ChevronDown className={`h-3 w-3 text-base-content/30 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {dropdownOpen && (
+                  <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl border border-base-300/60 bg-base-100 shadow-lg shadow-black/10 py-1.5 z-50">
+                    <button
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors cursor-pointer"
+                      onClick={() => { setDropdownOpen(false); navigate('/console/account'); }}
+                    >
+                      <User className="h-4 w-4 text-base-content/40" />
+                      Account
+                    </button>
+                    <button
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors cursor-pointer"
+                      onClick={() => { setDropdownOpen(false); navigate('/console/change-password'); }}
+                    >
+                      <Lock className="h-4 w-4 text-base-content/40" />
+                      Change Password
+                    </button>
+                    <div className="my-1.5 border-t border-base-300/40" />
+                    <button
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-red-500/80 hover:bg-red-500/5 transition-colors cursor-pointer"
+                      onClick={() => { setDropdownOpen(false); logout(); }}
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Logout
+                    </button>
+                  </div>
+                )}
               </div>
-
-              <div className="h-4 w-px bg-base-300/60 mx-1" />
-
-              <button
-                className="btn btn-ghost btn-sm btn-circle"
-                onClick={logout}
-                aria-label="Logout"
-                title="Logout"
-              >
-                <LogOut className="h-3.5 w-3.5 text-base-content/30" />
-              </button>
             </div>
           </div>
         </header>

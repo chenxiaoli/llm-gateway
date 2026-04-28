@@ -29,3 +29,5 @@ Thumbs.db
 # Misc
 *.tmp
 *.temp
+web/tsconfig.tsbuildinfo
+web/config.toml

@@ -7,8 +7,11 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import Account from './pages/Account';
+import ChangePassword from './pages/ChangePassword';
 import Keys from './pages/Keys';
 import KeyDetail from './pages/KeyDetail';
+import ModelFallbacks from './pages/ModelFallbacks';
 import Channels from './pages/Channels';
 import ChannelDetail from './pages/ChannelDetail';
 import Models from './pages/Models';
@@ -47,12 +50,19 @@ function App() {
         <Route path="/console/register" element={<Register />} />
         <Route path="/console" element={<Layout />}>
           <Route element={<RequireAuth />}>
+            <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
+            <Route path="account" element={<Account />} />
+            <Route path="change-password" element={<ChangePassword />} />
             <Route path="keys" element={<Keys />} />
             <Route path="keys/:id" element={<KeyDetail />} />
+            <Route path="model-fallbacks" element={<ModelFallbacks />} />
             <Route path="usage" element={<Usage />} />
           </Route>
+        </Route>
+        <Route path="/admin" element={<Layout />}>
           <Route element={<RequireAdmin />}>
+            <Route index element={<Navigate to="channels" replace />} />
             <Route path="channels" element={<Channels />} />
             <Route path="channels/:id" element={<ChannelDetail />} />
             <Route path="providers" element={<Providers />} />
@@ -64,7 +74,6 @@ function App() {
             <Route path="settings" element={<Settings />} />
             <Route path="logs" element={<Logs />} />
           </Route>
-          <Route index element={<Navigate to="/console/dashboard" replace />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

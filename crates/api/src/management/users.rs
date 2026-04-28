@@ -4,7 +4,7 @@ use axum::Json;
 use serde::Serialize;
 use std::sync::Arc;
 
-use llm_gateway_storage::{PaginatedResponse, PaginationParams, UpdateUser as StorageUpdateUser, User};
+use llm_gateway_storage::{PaginatedResponse, PaginationParams, UpdateUser as StorageUpdateUser, User, UserWithBalance};
 
 use crate::error::ApiError;
 use crate::extractors::require_admin;
@@ -16,8 +16,25 @@ pub struct UserResponse {
     pub username: String,
     pub role: String,
     pub enabled: bool,
+    pub balance: f64,
+    pub threshold: f64,
     pub created_at: String,
     pub updated_at: String,
+}
+
+impl From<UserWithBalance> for UserResponse {
+    fn from(u: UserWithBalance) -> Self {
+        UserResponse {
+            id: u.id,
+            username: u.username,
+            role: u.role,
+            enabled: u.enabled,
+            balance: u.balance,
+            threshold: u.threshold,
+            created_at: u.created_at.to_rfc3339(),
+            updated_at: u.updated_at.to_rfc3339(),
+        }
+    }
 }
 
 impl From<&User> for UserResponse {
@@ -27,6 +44,8 @@ impl From<&User> for UserResponse {
             username: u.username.clone(),
             role: u.role.clone(),
             enabled: u.enabled,
+            balance: 0.0,
+            threshold: 1.0,
             created_at: u.created_at.to_rfc3339(),
             updated_at: u.updated_at.to_rfc3339(),
         }
@@ -42,7 +61,7 @@ pub async fn list_users(
     let (page, page_size) = pagination.normalized();
     let result = state.storage.list_users_paginated(page, page_size).await.map_err(|e| ApiError::Internal(e.to_string()))?;
     Ok(Json(PaginatedResponse {
-        items: result.items.iter().map(UserResponse::from).collect(),
+        items: result.items.into_iter().map(UserResponse::from).collect(),
         total: result.total,
         page: result.page,
         page_size: result.page_size,

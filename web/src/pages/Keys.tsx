@@ -1,12 +1,17 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { Plus, KeyRound } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useKeys, useCreateKey } from '../hooks/useKeys';
+import { useModelFallbacks } from '../hooks/useModelFallbacks';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
 import { toast } from 'sonner';
 import type { CreateKeyResponse } from '../types';
+
+const EASE = [0.16, 1, 0.3, 1] as const;
 
 export default function Keys() {
   const [page, setPage] = useState(1);
@@ -14,11 +19,15 @@ export default function Keys() {
   const { data, isLoading } = useKeys(page, pageSize);
   const createKeyMutation = useCreateKey();
   const navigate = useNavigate();
+  const { data: fallbacks } = useModelFallbacks();
+  const reducedMotion = useReducedMotion();
+
   const [createOpen, setCreateOpen] = useState(false);
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [rateLimit, setRateLimit] = useState('');
   const [budget, setBudget] = useState('');
+  const [fallbackId, setFallbackId] = useState('');
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,11 +35,13 @@ export default function Keys() {
       name,
       rate_limit: rateLimit ? Number(rateLimit) : null,
       budget_monthly: budget ? Number(budget) : null,
+      model_fallback_id: fallbackId || null,
     });
     setCreatedKey(result.key);
     setName('');
     setRateLimit('');
     setBudget('');
+    setFallbackId('');
   };
 
   const copyKey = () => {
@@ -43,70 +54,120 @@ export default function Keys() {
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
 
   return (
-    <div>
-      <div className="mb-8 flex items-center justify-between">
+    <div className="px-6 pb-8">
+      {/* Header */}
+      <motion.div
+        initial={reducedMotion ? false : { opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={reducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE }}
+        className="mb-8 pt-8 flex items-end justify-between gap-6"
+      >
         <div>
-          <h1 className="text-2xl font-bold">API Keys</h1>
-          <p className="text-sm text-base-content/40 mt-1">Manage access keys for API authentication</p>
+          <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
+            API Keys
+          </h1>
+          <p className="text-base text-base-content/50">
+            Manage access keys for API authentication
+          </p>
         </div>
         <Button icon={<Plus className="h-4 w-4" />} onClick={() => setCreateOpen(true)}>
           Create Key
         </Button>
-      </div>
+      </motion.div>
 
+      {/* Table */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-12"><span className="loading loading-spinner loading-lg" /></div>
+        <motion.div
+          initial={reducedMotion ? false : { opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={reducedMotion ? { duration: 0 } : { duration: 0.35, delay: 0.05, ease: EASE }}
+          className="rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden"
+        >
+          <div className="p-5 space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="h-10 bg-base-200/40 rounded-lg animate-pulse" />
+            ))}
+          </div>
+        </motion.div>
       ) : (
-        <div className="rounded-xl border border-base-300/50 bg-base-100/60 overflow-hidden">
+        <motion.div
+          initial={reducedMotion ? false : { opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={reducedMotion ? { duration: 0 } : { duration: 0.35, delay: 0.05, ease: EASE }}
+          className="rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden"
+        >
           <div className="overflow-x-auto">
             <table className="table table-sm">
               <thead>
-                <tr className="border-b border-base-300/50">
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Name</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Status</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Rate Limit (RPM)</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Monthly Budget</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/35">Created</th>
+                <tr className="border-b border-base-300/40">
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Name</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Status</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Rate Limit (RPM)</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Monthly Budget</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Fallback</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Created</th>
                 </tr>
               </thead>
               <tbody>
-                {data?.items?.map((key) => (
-                  <tr key={key.id} className="border-b border-base-200/50 hover:bg-base-200/30 transition-colors">
+                {data?.items?.map((key, index) => (
+                  <motion.tr
+                    key={key.id}
+                    initial={reducedMotion ? false : { opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={reducedMotion ? { duration: 0 } : { duration: 0.25, delay: 0.1 + index * 0.03, ease: EASE }}
+                    className="border-b border-base-200/40 hover:bg-base-200/20 transition-colors"
+                  >
                     <td>
                       <button onClick={() => navigate(`/console/keys/${key.id}`)} className="link link-primary text-sm font-medium">
                         {key.name}
                       </button>
                     </td>
                     <td><Badge variant={key.enabled ? 'green' : 'red'}>{key.enabled ? 'Active' : 'Disabled'}</Badge></td>
-                    <td className="mono text-[13px] text-base-content/60">{key.rate_limit ?? 'Unlimited'}</td>
-                    <td className="mono text-[13px] text-base-content/60">{key.budget_monthly != null ? `$${key.budget_monthly.toFixed(2)}` : 'Unlimited'}</td>
-                    <td className="mono text-[13px] text-base-content/50">{new Date(key.created_at).toLocaleDateString()}</td>
-                  </tr>
+                    <td className="font-mono text-sm text-base-content/55">{key.rate_limit ?? 'Unlimited'}</td>
+                    <td className="font-mono text-sm text-base-content/55">{key.budget_monthly != null ? `$${key.budget_monthly.toFixed(2)}` : 'Unlimited'}</td>
+                    <td className="text-sm text-base-content/55">{key.model_fallback_id ? (fallbacks?.find(f => f.id === key.model_fallback_id)?.name ?? '—') : 'None'}</td>
+                    <td className="font-mono text-sm text-base-content/50">{new Date(key.created_at).toLocaleDateString()}</td>
+                  </motion.tr>
                 ))}
                 {(!data?.items?.length) && (
                   <tr>
-                    <td colSpan={5} className="text-center py-16 text-base-content/25 text-sm">
-                      No API keys yet
+                    <td colSpan={6} className="text-center py-16">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-base-200/60">
+                          <KeyRound className="h-6 w-6 text-base-content/30" />
+                        </div>
+                        <p className="text-sm text-base-content/40">No API keys yet</p>
+                        <Button variant="secondary" size="sm" onClick={() => setCreateOpen(true)}>
+                          Create your first key
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-        </div>
+        </motion.div>
       )}
 
+      {/* Pagination */}
       {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-between text-sm">
-          <span className="text-base-content/30">Total {data?.total ?? 0}</span>
+        <motion.div
+          initial={reducedMotion ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={reducedMotion ? { duration: 0 } : { duration: 0.3, delay: 0.2, ease: EASE }}
+          className="mt-4 flex items-center justify-between text-sm"
+        >
+          <span className="text-xs text-base-content/40">Total {data?.total ?? 0}</span>
           <div className="join">
             <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-            <span className="px-3 flex items-center text-base-content/50">{page} / {totalPages}</span>
+            <span className="px-3 flex items-center text-sm text-base-content/50">{page} / {totalPages}</span>
             <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>Next</Button>
           </div>
-        </div>
+        </motion.div>
       )}
 
+      {/* Create Modal */}
       <Modal
         open={createOpen}
         onClose={() => { setCreateOpen(false); setCreatedKey(null); }}
@@ -160,6 +221,13 @@ export default function Keys() {
                   className="input input-bordered w-full"
                 />
               </div>
+            </div>
+            <div className="form-control">
+              <label className="label"><span className="label-text font-medium">Model Fallback</span></label>
+              <select value={fallbackId} onChange={(e) => setFallbackId(e.target.value)} className="select select-bordered w-full">
+                <option value="">None</option>
+                {fallbacks?.map((fb) => (<option key={fb.id} value={fb.id}>{fb.name}</option>))}
+              </select>
             </div>
             <Button variant="primary" loading={createKeyMutation.isPending}>Create</Button>
           </form>

@@ -63,7 +63,7 @@ export default function ChannelDetail() {
     return (
       <div className="text-center py-12">
         <div className="text-base-content/40 mb-4">Channel not found</div>
-        <Button variant="secondary" onClick={() => navigate('/console/channels')}>
+        <Button variant="secondary" onClick={() => navigate('/admin/channels')}>
           Back to Channels
         </Button>
       </div>
@@ -85,7 +85,7 @@ export default function ChannelDetail() {
 
   const handleDelete = async () => {
     await deleteMutation.mutateAsync(channel.id);
-    navigate('/console/channels');
+    navigate('/admin/channels');
   };
 
   const handleCancelEdit = () => {
@@ -105,7 +105,7 @@ export default function ChannelDetail() {
 
   return (
     <div>
-      <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/console/channels')} className="mb-4">
+      <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/admin/channels')} className="mb-4">
         Back to Channels
       </Button>
 

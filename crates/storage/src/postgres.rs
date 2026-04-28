@@ -31,6 +31,7 @@ struct PgKeyRow {
     budget_monthly: Option<f64>,
     enabled: bool,
     created_by: Option<String>,
+    model_fallback_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -45,6 +46,7 @@ impl From<PgKeyRow> for ApiKey {
             budget_monthly: r.budget_monthly,
             enabled: r.enabled,
             created_by: r.created_by,
+            model_fallback_id: r.model_fallback_id,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -376,6 +378,33 @@ impl From<PgUserRow> for User {
 }
 
 #[derive(FromRow)]
+struct PgUserWithBalanceRow {
+    id: String,
+    username: String,
+    role: String,
+    enabled: bool,
+    balance: Option<f64>,
+    threshold: Option<f64>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<PgUserWithBalanceRow> for UserWithBalance {
+    fn from(r: PgUserWithBalanceRow) -> Self {
+        UserWithBalance {
+            id: r.id,
+            username: r.username,
+            role: r.role,
+            enabled: r.enabled,
+            balance: r.balance.unwrap_or(0.0),
+            threshold: r.threshold.unwrap_or(1.0),
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }
+    }
+}
+
+#[derive(FromRow)]
 struct PgChannelModelRow {
     id: String,
     channel_id: String,
@@ -492,6 +521,27 @@ impl From<PgTransactionRow> for Transaction {
     }
 }
 
+#[derive(FromRow)]
+struct PgModelFallbackRow {
+    id: String,
+    name: String,
+    config: String,
+    created_by: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<PgModelFallbackRow> for ModelFallbackConfig {
+    fn from(r: PgModelFallbackRow) -> Self {
+        ModelFallbackConfig {
+            id: r.id,
+            name: r.name,
+            config: serde_json::from_str(&r.config).unwrap_or_default(),
+            created_by: r.created_by,
+            created_at: r.created_at,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -531,8 +581,8 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_key(&self, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
-            "INSERT INTO api_keys (id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            "INSERT INTO api_keys (id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         )
         .bind(&key.id)
         .bind(&key.name)
@@ -541,6 +591,7 @@ impl crate::Storage for PostgresStorage {
         .bind(key.budget_monthly)
         .bind(key.enabled)
         .bind(&key.created_by)
+        .bind(&key.model_fallback_id)
         .bind(key.created_at)
         .bind(key.updated_at)
         .execute(&self.pool)
@@ -551,7 +602,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_key(&self, id: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys WHERE id = $1",
         )
         .bind(id)
@@ -563,7 +614,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_key_by_hash(&self, hash: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys WHERE key_hash = $1",
         )
         .bind(hash)
@@ -575,7 +626,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_keys(&self) -> Result<Vec<ApiKey>, DbErr> {
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys",
         )
         .fetch_all(&self.pool)
@@ -590,7 +641,7 @@ impl crate::Storage for PostgresStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys ORDER BY created_at DESC LIMIT $1 OFFSET $2",
         )
         .bind(page_size)
@@ -612,7 +663,7 @@ impl crate::Storage for PostgresStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, created_at, updated_at
+            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys WHERE created_by = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         )
         .bind(created_by)
@@ -631,7 +682,7 @@ impl crate::Storage for PostgresStorage {
     async fn update_key(&self, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
             "UPDATE api_keys SET name = $1, key_hash = $2, rate_limit = $3, budget_monthly = $4,
-             enabled = $5, created_by = $6, updated_at = $7 WHERE id = $8",
+             enabled = $5, created_by = $6, model_fallback_id = $7, updated_at = $8 WHERE id = $9",
         )
         .bind(&key.name)
         .bind(&key.key_hash)
@@ -639,6 +690,7 @@ impl crate::Storage for PostgresStorage {
         .bind(key.budget_monthly)
         .bind(key.enabled)
         .bind(&key.created_by)
+        .bind(&key.model_fallback_id)
         .bind(key.updated_at)
         .bind(&key.id)
         .execute(&self.pool)
@@ -987,10 +1039,11 @@ impl crate::Storage for PostgresStorage {
 
     async fn update_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "UPDATE models SET pricing_policy_id = $1 WHERE name = $2",
+            "UPDATE models SET name = $1, pricing_policy_id = $2 WHERE id = $3",
         )
-        .bind(&model.pricing_policy_id)
         .bind(&model.name)
+        .bind(&model.pricing_policy_id)
+        .bind(&model.id)
         .execute(&self.pool)
         .await?;
 
@@ -1503,21 +1556,24 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(User::from).collect())
     }
 
-    async fn list_users_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<User>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn list_users_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<UserWithBalance>, Box<dyn std::error::Error + Send + Sync>> {
         let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
             .fetch_one(&self.pool)
             .await?;
         let offset = (page - 1) * page_size;
-        let rows: Vec<PgUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, refresh_token, created_at, updated_at \
-             FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+        let rows: Vec<PgUserWithBalanceRow> = sqlx::query_as(
+            "SELECT u.id, u.username, u.role, u.enabled, \
+                    a.balance, a.threshold, u.created_at, u.updated_at \
+             FROM users u \
+             LEFT JOIN accounts a ON a.user_id = u.id \
+             ORDER BY u.created_at DESC LIMIT $1 OFFSET $2",
         )
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.pool)
         .await?;
         Ok(PaginatedResponse {
-            items: rows.into_iter().map(User::from).collect(),
+            items: rows.into_iter().map(UserWithBalance::from).collect(),
             total: total.0,
             page,
             page_size,
@@ -1835,6 +1891,68 @@ impl crate::Storage for PostgresStorage {
             reference_id: req.reference_id.clone(),
             created_at: now,
         }))
+    }
+
+    // ---- Model Fallbacks ----
+
+    async fn create_model_fallback(&self, config: &ModelFallbackConfig) -> Result<ModelFallbackConfig, DbErr> {
+        let config_json = serde_json::to_string(&config.config).unwrap_or_default();
+        sqlx::query(
+            "INSERT INTO model_fallbacks (id, name, config, created_by, created_at)
+             VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(&config.id)
+        .bind(&config.name)
+        .bind(&config_json)
+        .bind(&config.created_by)
+        .bind(config.created_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(config.clone())
+    }
+
+    async fn get_model_fallback(&self, id: &str) -> Result<Option<ModelFallbackConfig>, DbErr> {
+        let row: Option<PgModelFallbackRow> = sqlx::query_as(
+            "SELECT id, name, config, created_by, created_at FROM model_fallbacks WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(ModelFallbackConfig::from))
+    }
+
+    async fn list_model_fallbacks(&self) -> Result<Vec<ModelFallbackConfig>, DbErr> {
+        let rows: Vec<PgModelFallbackRow> = sqlx::query_as(
+            "SELECT id, name, config, created_by, created_at FROM model_fallbacks",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(ModelFallbackConfig::from).collect())
+    }
+
+    async fn update_model_fallback(&self, config: &ModelFallbackConfig) -> Result<ModelFallbackConfig, DbErr> {
+        let config_json = serde_json::to_string(&config.config).unwrap_or_default();
+        sqlx::query(
+            "UPDATE model_fallbacks SET name = $1, config = $2 WHERE id = $3",
+        )
+        .bind(&config.name)
+        .bind(&config_json)
+        .bind(&config.id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(config.clone())
+    }
+
+    async fn delete_model_fallback(&self, id: &str) -> Result<(), DbErr> {
+        sqlx::query("DELETE FROM model_fallbacks WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     // ---- Seed Data ----

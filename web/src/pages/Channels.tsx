@@ -397,7 +397,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
         {/* Quick actions */}
         <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
           <Link
-            to={`/console/channels/${channel.id}`}
+            to={`/admin/channels/${channel.id}`}
             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-md font-medium text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 transition-all duration-100 border border-transparent hover:border-base-300/40"
           >
             <Wifi className="h-3 w-3" />
