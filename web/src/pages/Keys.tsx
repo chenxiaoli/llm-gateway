@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, KeyRound } from 'lucide-react';
+import { Plus, KeyRound, TriangleAlert } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useKeys, useCreateKey } from '../hooks/useKeys';
 import { useModelFallbacks } from '../hooks/useModelFallbacks';
@@ -101,6 +101,7 @@ export default function Keys() {
               <thead>
                 <tr className="border-b border-base-300/40">
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Name</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Key</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Status</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Rate Limit (RPM)</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Monthly Budget</th>
@@ -122,6 +123,9 @@ export default function Keys() {
                         {key.name}
                       </button>
                     </td>
+                    <td className="font-mono text-sm text-base-content/40">
+                      {key.key_prefix ? `${key.key_prefix}...` : '—'}
+                    </td>
                     <td><Badge variant={key.enabled ? 'green' : 'red'}>{key.enabled ? 'Active' : 'Disabled'}</Badge></td>
                     <td className="font-mono text-sm text-base-content/55">{key.rate_limit ?? 'Unlimited'}</td>
                     <td className="font-mono text-sm text-base-content/55">{key.budget_monthly != null ? `$${key.budget_monthly.toFixed(2)}` : 'Unlimited'}</td>
@@ -131,7 +135,7 @@ export default function Keys() {
                 ))}
                 {(!data?.items?.length) && (
                   <tr>
-                    <td colSpan={6} className="text-center py-16">
+                    <td colSpan={7} className="text-center py-16">
                       <div className="flex flex-col items-center gap-3">
                         <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-base-200/60">
                           <KeyRound className="h-6 w-6 text-base-content/30" />
@@ -180,9 +184,17 @@ export default function Keys() {
         ) : undefined}
       >
         {createdKey ? (
-          <div>
-            <p className="text-sm text-base-content/40">Save this key now. It won't be shown again.</p>
-            <div className="mt-3 rounded-lg border border-base-300/50 bg-base-200/50 p-3 font-mono text-sm break-all">{createdKey}</div>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <TriangleAlert className="h-5 w-5 text-amber-500 shrink-0" />
+              <p className="text-md font-semibold text-base-content">Save this key now</p>
+            </div>
+            <p className="text-base text-base-content/70">
+              Make sure to copy and store this key securely. <strong className="text-base-content">It will not be shown again.</strong>
+            </p>
+            <div className="rounded-xl border border-base-300 bg-base-200/60 p-4">
+              <code className="font-mono text-base break-all select-all leading-relaxed">{createdKey}</code>
+            </div>
           </div>
         ) : (
           <form onSubmit={handleCreate} className="space-y-4">

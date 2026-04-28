@@ -7,11 +7,11 @@ use tokio::sync::mpsc;
 use crate::AuditTask;
 
 /// Parse usage from response bytes.
-/// Returns (input_tokens, output_tokens, cache_read_tokens).
+/// Returns (input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens).
 /// For streaming (SSE): extract from last JSON chunk before "data: [DONE]"
 /// For non-streaming (JSON): extract from "usage" field.
-fn parse_usage(bytes: &[u8], stream: bool, proto: Protocol) -> (Option<i64>, Option<i64>, Option<i64>) {
-    let parse_value = |usage: Option<&serde_json::Value>| -> (Option<i64>, Option<i64>, Option<i64>) {
+fn parse_usage(bytes: &[u8], stream: bool, proto: Protocol) -> (Option<i64>, Option<i64>, Option<i64>, Option<i64>) {
+    let parse_value = |usage: Option<&serde_json::Value>| -> (Option<i64>, Option<i64>, Option<i64>, Option<i64>) {
         match proto {
             Protocol::Openai => {
                 let prompt_tokens = usage.and_then(|u| u.get("prompt_tokens")).and_then(|t| t.as_i64());
@@ -20,9 +20,13 @@ fn parse_usage(bytes: &[u8], stream: bool, proto: Protocol) -> (Option<i64>, Opt
                     .and_then(|u| u.get("prompt_tokens_details"))
                     .and_then(|d| d.get("cache_read_tokens"))
                     .and_then(|t| t.as_i64());
+                let cache_creation = usage
+                    .and_then(|u| u.get("prompt_tokens_details"))
+                    .and_then(|d| d.get("cached_tokens"))
+                    .and_then(|t| t.as_i64());
                 // OpenAI prompt_tokens includes cache; store non-cache input only
-                let input = prompt_tokens.unwrap_or(0) - cache_read.unwrap_or(0);
-                (Some(input), output, cache_read)
+                let input = prompt_tokens.unwrap_or(0) - cache_read.unwrap_or(0) - cache_creation.unwrap_or(0);
+                (Some(input), output, cache_read, cache_creation)
             }
             Protocol::Anthropic => {
                 // Anthropic input_tokens already excludes cache; store as-is
@@ -31,7 +35,10 @@ fn parse_usage(bytes: &[u8], stream: bool, proto: Protocol) -> (Option<i64>, Opt
                 let cache_read = usage
                     .and_then(|u| u.get("cache_read_input_tokens"))
                     .and_then(|t| t.as_i64());
-                (input, output, cache_read)
+                let cache_creation = usage
+                    .and_then(|u| u.get("cache_creation_input_tokens"))
+                    .and_then(|t| t.as_i64());
+                (input, output, cache_read, cache_creation)
             }
         }
     };
@@ -39,7 +46,7 @@ fn parse_usage(bytes: &[u8], stream: bool, proto: Protocol) -> (Option<i64>, Opt
     if stream {
         let text = match std::str::from_utf8(bytes) {
             Ok(t) => t,
-            Err(_) => return (None, None, None),
+            Err(_) => return (None, None, None, None),
         };
         let mut last_usage: Option<&str> = None;
         for line in text.lines() {
@@ -60,15 +67,15 @@ fn parse_usage(bytes: &[u8], stream: bool, proto: Protocol) -> (Option<i64>, Opt
                 return parse_value(v.get("usage"));
             }
         }
-        (None, None, None)
+        (None, None, None, None)
     } else {
         let text = match std::str::from_utf8(bytes) {
             Ok(t) => t,
-            Err(_) => return (None, None, None),
+            Err(_) => return (None, None, None, None),
         };
         let v: serde_json::Value = match serde_json::from_str(text) {
             Ok(v) => v,
-            Err(_) => return (None, None, None),
+            Err(_) => return (None, None, None, None),
         };
         parse_value(v.get("usage"))
     }
@@ -87,7 +94,7 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
 
         // Parse usage from response bytes
         let proto = task.protocol.clone();
-        let (input_tokens, output_tokens, cache_read_tokens) =
+        let (input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) =
             parse_usage(&task.response_bytes, task.stream, proto);
 
         // Calculate cost using PricingCalculator with policy config
@@ -107,6 +114,7 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
                 output_chars: None,
                 request_count: 1,
                 cache_read_tokens,
+                cache_creation_tokens,
             };
             let raw_cost = PricingCalculator.calculate_cost(&policy, &usage);
             raw_cost * task.markup_ratio
@@ -115,8 +123,8 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
         };
 
         tracing::info!(
-            "[AUDIT-WORKER] Parsed: input={:?}, output={:?}, cache_read={:?}, cost={}",
-            input_tokens, output_tokens, cache_read_tokens, cost
+            "[AUDIT-WORKER] Parsed: input={:?}, output={:?}, cache_read={:?}, cache_creation={:?}, cost={}",
+            input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost
         );
 
         // Write usage record
@@ -131,6 +139,7 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
             input_tokens,
             output_tokens,
             cache_read_tokens,
+            cache_creation_tokens,
             cost,
             created_at: chrono::Utc::now(),
         };
@@ -154,6 +163,7 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
             task.user_id.as_deref(),
             &task.model_name,
             &task.provider_id,
+            task.channel_id.as_deref(),
             task.protocol,
             task.stream,
             &task.request_body,

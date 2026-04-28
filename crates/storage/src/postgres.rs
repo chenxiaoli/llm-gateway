@@ -27,6 +27,7 @@ struct PgKeyRow {
     id: String,
     name: String,
     key_hash: String,
+    key_prefix: Option<String>,
     rate_limit: Option<i64>,
     budget_monthly: Option<f64>,
     enabled: bool,
@@ -42,6 +43,7 @@ impl From<PgKeyRow> for ApiKey {
             id: r.id,
             name: r.name,
             key_hash: r.key_hash,
+            key_prefix: r.key_prefix,
             rate_limit: r.rate_limit,
             budget_monthly: r.budget_monthly,
             enabled: r.enabled,
@@ -156,6 +158,7 @@ struct PgUsageRow {
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
     cache_read_tokens: Option<i64>,
+    cache_creation_tokens: Option<i64>,
     cost: f64,
     user_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
@@ -173,6 +176,7 @@ impl From<PgUsageRow> for UsageRecord {
             input_tokens: r.input_tokens,
             output_tokens: r.output_tokens,
             cache_read_tokens: r.cache_read_tokens,
+            cache_creation_tokens: r.cache_creation_tokens,
             cost: r.cost,
             user_id: r.user_id,
             created_at: r.created_at,
@@ -185,6 +189,7 @@ struct PgUsageSummaryRow {
     model_name: String,
     total_input_tokens: i64,
     total_cache_read_tokens: i64,
+    total_cache_creation_tokens: i64,
     total_output_tokens: i64,
     total_cost: f64,
     request_count: i64,
@@ -196,6 +201,7 @@ impl From<PgUsageSummaryRow> for UsageSummaryRecord {
             model_name: r.model_name,
             total_input_tokens: r.total_input_tokens,
             total_cache_read_tokens: r.total_cache_read_tokens,
+            total_cache_creation_tokens: r.total_cache_creation_tokens,
             total_output_tokens: r.total_output_tokens,
             total_cost: r.total_cost,
             request_count: r.request_count,
@@ -581,12 +587,13 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_key(&self, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
-            "INSERT INTO api_keys (id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+            "INSERT INTO api_keys (id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
         )
         .bind(&key.id)
         .bind(&key.name)
         .bind(&key.key_hash)
+        .bind(&key.key_prefix)
         .bind(key.rate_limit)
         .bind(key.budget_monthly)
         .bind(key.enabled)
@@ -602,7 +609,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_key(&self, id: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys WHERE id = $1",
         )
         .bind(id)
@@ -614,7 +621,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_key_by_hash(&self, hash: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys WHERE key_hash = $1",
         )
         .bind(hash)
@@ -626,7 +633,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_keys(&self) -> Result<Vec<ApiKey>, DbErr> {
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys",
         )
         .fetch_all(&self.pool)
@@ -641,7 +648,7 @@ impl crate::Storage for PostgresStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys ORDER BY created_at DESC LIMIT $1 OFFSET $2",
         )
         .bind(page_size)
@@ -663,7 +670,7 @@ impl crate::Storage for PostgresStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys WHERE created_by = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         )
         .bind(created_by)
@@ -1133,8 +1140,8 @@ impl crate::Storage for PostgresStorage {
 
     async fn record_usage(&self, usage: &UsageRecord) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO usage_records (id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, user_id, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+            "INSERT INTO usage_records (id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
         )
         .bind(&usage.id)
         .bind(&usage.key_id)
@@ -1145,6 +1152,7 @@ impl crate::Storage for PostgresStorage {
         .bind(usage.input_tokens)
         .bind(usage.output_tokens)
         .bind(usage.cache_read_tokens)
+        .bind(usage.cache_creation_tokens)
         .bind(usage.cost)
         .bind(usage.user_id.clone())
         .bind(usage.created_at)
@@ -1156,7 +1164,7 @@ impl crate::Storage for PostgresStorage {
     async fn query_usage(&self, filter: &UsageFilter) -> Result<Vec<UsageRecord>, DbErr> {
         // Build query dynamically based on filter - for now, just fetch all
         let rows: Vec<PgUsageRow> = sqlx::query_as(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, user_id, created_at
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at
              FROM usage_records ORDER BY created_at DESC",
         )
         .fetch_all(&self.pool)
@@ -1203,7 +1211,7 @@ impl crate::Storage for PostgresStorage {
 
         let offset = (page - 1) * page_size;
         let data_sql = format!(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cost, user_id, created_at \
+            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at \
              FROM usage_records{} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
             where_clause,
             bind_vals.len() + 1,
@@ -1259,6 +1267,7 @@ impl crate::Storage for PostgresStorage {
                model_name, \
                COALESCE(SUM(input_tokens), 0) AS total_input_tokens, \
                COALESCE(SUM(cache_read_tokens), 0) AS total_cache_read_tokens, \
+               COALESCE(SUM(cache_creation_tokens), 0) AS total_cache_creation_tokens, \
                COALESCE(SUM(output_tokens), 0) AS total_output_tokens, \
                COALESCE(SUM(cost), 0.0) AS total_cost, \
                COUNT(*) AS request_count \

@@ -2,6 +2,7 @@ export interface ApiKey {
   id: string;
   name: string;
   key_hash: string;
+  key_prefix: string | null;
   rate_limit: number | null;
   budget_monthly: number | null;
   enabled: boolean;
@@ -97,6 +98,7 @@ export interface UsageRecord {
   input_tokens: number | null;
   output_tokens: number | null;
   cache_read_tokens: number | null;
+  cache_creation_tokens: number | null;
   cost: number;
   created_at: string;
 }
@@ -105,6 +107,7 @@ export interface UsageSummaryRecord {
   model_name: string;
   total_input_tokens: number;
   total_cache_read_tokens: number;
+  total_cache_creation_tokens: number;
   total_output_tokens: number;
   total_cost: number;
   request_count: number;
@@ -312,6 +315,7 @@ export interface PerTokenConfig {
   input_price_1m?: number;
   output_price_1m?: number;
   cache_read_price_1m?: number;
+  cache_creation_price_1m?: number;
 }
 
 export interface PerRequestConfig {
@@ -338,6 +342,7 @@ export interface HybridConfig {
   input_price_1m?: number;
   output_price_1m?: number;
   cache_read_price_1m?: number;
+  cache_creation_price_1m?: number;
 }
 
 export type PricingConfig =
