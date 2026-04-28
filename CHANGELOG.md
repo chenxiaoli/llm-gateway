@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.3] - 2026-04-28
+
+### Changed
+- Redesigned Audit Logs page with consistent design patterns: animated header, section cards, improved filter bar with active count badge, proper table styling, and detail drawer with structured sections
+
 ## [0.8.2] - 2026-04-28
 
 ### Added
