@@ -417,6 +417,84 @@ async fn process_sse_stream(
     }
 }
 
+/// Try fallback models when the initial model fails to route.
+/// Returns Some(response) if a fallback succeeded, None if no fallback available.
+fn try_model_fallback<'a>(
+    state: &'a Arc<AppState>,
+    headers: &'a HeaderMap,
+    body: &'a str,
+    original_model: &'a str,
+    api_key: &'a llm_gateway_storage::ApiKey,
+    protocol: ProxyProtocol,
+    request_path: &'a str,
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<axum::response::Response>> + Send + 'a>> {
+    Box::pin(async move {
+        let fallback_id = match api_key.model_fallback_id.as_ref() {
+            Some(id) => id,
+            None => return None,
+        };
+        let fallback_config = match state.storage.get_model_fallback(fallback_id).await {
+            Ok(Some(c)) => c,
+            _ => return None,
+        };
+        let model_lower = original_model.to_lowercase();
+
+        let group = match fallback_config.config.iter().find(|g| {
+            g.models.iter().any(|m| m.to_lowercase() == model_lower)
+        }) {
+            Some(g) => g,
+            None => return None,
+        };
+
+        let mut fallbacks: Vec<(&String, i32)> = group
+            .models
+            .iter()
+            .zip(group.priorities.iter())
+            .filter(|(m, _)| m.to_lowercase() != model_lower)
+            .map(|(m, p)| (m, *p))
+            .collect();
+        fallbacks.sort_by_key(|(_, p)| *p);
+
+        for (fallback_model, _) in fallbacks {
+            tracing::info!("[PROXY] Trying fallback model '{}' for failed '{}'", fallback_model, original_model);
+
+            let fallback_body = {
+                let req_json: serde_json::Value = match serde_json::from_str(body) {
+                    Ok(v) => v,
+                    Err(_) => return None,
+                };
+                let mut modified = req_json.clone();
+                if let Some(model_obj) = modified.get_mut("model") {
+                    *model_obj = serde_json::Value::String(fallback_model.to_string());
+                }
+                serde_json::to_string(&modified).unwrap_or_else(|_| body.to_string())
+            };
+
+            // Box the recursive proxy call to satisfy the compiler's sizing requirement
+            let result = Box::pin(proxy(
+                State(state.clone()),
+                headers.clone(),
+                fallback_body,
+                protocol,
+                request_path.to_string(),
+            )).await;
+
+            match result {
+                Ok(response) => {
+                    tracing::info!("[PROXY] Fallback to '{}' succeeded", fallback_model);
+                    return Some(response);
+                }
+                Err(e) => {
+                    tracing::warn!("[PROXY] Fallback '{}' failed: {:?}", fallback_model, e);
+                    continue;
+                }
+            }
+        }
+
+        None
+    })
+}
+
 /// Unified proxy: receives request → forwards to upstream → returns response
 /// Usage/Cost/Audit are handled in spawned async tasks
 pub async fn proxy(
@@ -488,15 +566,19 @@ pub async fn proxy(
         .and_then(|s| s.as_bool())
         .unwrap_or(false);
 
-    let model_entry = match protocol {
-        ProxyProtocol::OpenAI => models
-            .iter()
-            .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase())
-            .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?,
-        ProxyProtocol::Anthropic => models
-            .iter()
-            .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase())
-            .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?,
+    let model_entry = match models
+        .iter()
+        .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase())
+    {
+        Some(m) => m,
+        None => {
+            if let Some(resp) = try_model_fallback(
+                &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+            ).await {
+                return Ok(resp);
+            }
+            return Err(ApiError::NotFound(format!("Model '{}' not found", model_name)));
+        }
     };
 
     tracing::debug!("[PROXY] Found model: {} (id: {})", model_entry.model.name, model_entry.model.id);
@@ -526,6 +608,11 @@ pub async fn proxy(
             }
         }
         if candidates.is_empty() {
+            if let Some(resp) = try_model_fallback(
+                &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+            ).await {
+                return Ok(resp);
+            }
             return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
         }
         // Already sorted by priority in do_reload()
@@ -614,6 +701,11 @@ pub async fn proxy(
         }
         candidates.sort_by(|a, b| b.0.priority.cmp(&a.0.priority));
         if candidates.is_empty() {
+            if let Some(resp) = try_model_fallback(
+                &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+            ).await {
+                return Ok(resp);
+            }
             return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
         }
         candidates
@@ -969,6 +1061,12 @@ if status != 200 && status < 500 {
         return Ok(response_bytes.into_response());
     }
 
+    // All channels failed — try model fallback
+    if let Some(resp) = try_model_fallback(
+        &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+    ).await {
+        return Ok(resp);
+    }
     Err(ApiError::UpstreamError(502, format!("All channels failed. Last error: {}", last_error)))
 }
 /// Wrapper for /v1/chat/completions - uses OpenAI protocol

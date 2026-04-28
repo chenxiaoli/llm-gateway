@@ -5,7 +5,7 @@ import AccountBalance from './AccountBalance';
 
 describe('AccountBalance page', () => {
   it('renders Account Balance heading', async () => {
-    renderWithProviders(<AccountBalance />, { route: '/console/users/test-user-id/balance' });
+    renderWithProviders(<AccountBalance />, { route: '/admin/users/test-user-id/balance' });
 
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Account Balance' })).toBeInTheDocument();
@@ -13,7 +13,7 @@ describe('AccountBalance page', () => {
   });
 
   it('renders Recharge and Adjust buttons', async () => {
-    renderWithProviders(<AccountBalance />, { route: '/console/users/test-user-id/balance' });
+    renderWithProviders(<AccountBalance />, { route: '/admin/users/test-user-id/balance' });
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Recharge' })).toBeInTheDocument();

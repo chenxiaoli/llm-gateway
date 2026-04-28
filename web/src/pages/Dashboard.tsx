@@ -138,7 +138,7 @@ export default function Dashboard() {
               )}
               {user && (
                 <button
-                  onClick={() => navigate(`/console/users/${user.id}/balance`)}
+                  onClick={() => navigate('/console/account')}
                   className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer"
                 >
                   View Details
@@ -214,7 +214,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-base-content/70">Recent Requests</h2>
           <button
-            onClick={() => navigate('/console/logs')}
+            onClick={() => navigate('/admin/logs')}
             className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer"
           >
             View all

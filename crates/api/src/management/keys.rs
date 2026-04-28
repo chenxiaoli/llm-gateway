@@ -40,6 +40,7 @@ pub async fn create_key(
         budget_monthly: input.budget_monthly,
         enabled: true,
         created_by: Some(claims.sub),
+        model_fallback_id: input.model_fallback_id,
         created_at: now,
         updated_at: now,
     };
@@ -130,6 +131,7 @@ pub async fn update_key(
     if let Some(rate_limit) = input.rate_limit { key.rate_limit = rate_limit; }
     if let Some(budget_monthly) = input.budget_monthly { key.budget_monthly = budget_monthly; }
     if let Some(enabled) = input.enabled { key.enabled = enabled; }
+    if let Some(model_fallback_id) = input.model_fallback_id { key.model_fallback_id = model_fallback_id; }
     key.updated_at = chrono::Utc::now();
 
     let updated = state
