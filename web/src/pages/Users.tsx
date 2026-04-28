@@ -56,9 +56,9 @@ function DrawerShell({ title, isOpen, onClose, width = 560, children }: {
             onClick={onClose}
           />
           <motion.div
-            initial={reducedMotion ? false : { x: '100%' }}
+            initial={reducedMotion ? { x: 0 } : { x: '100%' }}
             animate={{ x: 0 }}
-            exit={reducedMotion ? false : { x: '100%' }}
+            exit={reducedMotion ? { x: 0 } : { x: '100%' }}
             transition={reducedMotion ? { duration: 0 } : { duration: 0.3, ease: EASE }}
             className="fixed right-0 top-0 bottom-0 z-[120] max-w-[100vw] flex flex-col bg-base-100 border-l border-base-300/60"
             style={{ width: `${width}px`, boxShadow: '-8px 0 32px rgba(0, 0, 0, 0.3)' }}

@@ -158,8 +158,8 @@ export interface User {
   id: string;
   username: string;
   role: 'admin' | 'user';
-  balance: number;
-  threshold: number;
+  balance?: number;
+  threshold?: number;
 }
 
 export interface LoginRequest {
@@ -204,6 +204,8 @@ export interface UserResponse {
   username: string;
   role: 'admin' | 'user';
   enabled: boolean;
+  balance: number;
+  threshold: number;
   created_at: string;
   updated_at: string;
 }
