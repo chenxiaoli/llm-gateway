@@ -2136,22 +2136,19 @@ impl crate::Storage for SqliteStorage {
     // ---- Seed Data ----
 
     async fn seed_data(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Check if providers already exist (idempotent)
-        let existing = self.list_providers().await?;
-        if existing.is_empty() {
-            // Get seed providers and insert them
+        // Seed providers if none exist (idempotent)
+        let existing_providers = self.list_providers().await?;
+        if existing_providers.is_empty() {
             let seed_providers = seed::get_seed_providers();
-            let mut inserted_providers = Vec::new();
             for provider in seed_providers {
-                let inserted = self.create_provider(&provider).await?;
-                inserted_providers.push(inserted);
+                self.create_provider(&provider).await?;
             }
+        }
 
-            // Build provider ID map and get seed models
-            let provider_ids = seed::build_provider_id_map(&inserted_providers);
-            let seed_models = seed::get_seed_models(&provider_ids);
-
-            // Insert seed models
+        // Seed models independently — check models table, not providers
+        let existing_models = self.list_models().await?;
+        if existing_models.is_empty() {
+            let seed_models = seed::get_seed_models(&[]);
             for model in seed_models {
                 self.create_model(&model).await?;
             }
