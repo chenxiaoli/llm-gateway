@@ -1,9 +1,12 @@
 pub mod types;
 pub mod seed;
+pub mod money;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
 #[cfg(feature = "postgres")]
 pub mod postgres;
+
+pub use money::*;
 
 pub use types::{
     *,
