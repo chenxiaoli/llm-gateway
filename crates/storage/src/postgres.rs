@@ -1285,11 +1285,11 @@ impl crate::Storage for PostgresStorage {
         let sql = format!(
             "SELECT \
                model_name, \
-               COALESCE(SUM(input_tokens), 0) AS total_input_tokens, \
-               COALESCE(SUM(cache_read_tokens), 0) AS total_cache_read_tokens, \
-               COALESCE(SUM(cache_creation_tokens), 0) AS total_cache_creation_tokens, \
-               COALESCE(SUM(output_tokens), 0) AS total_output_tokens, \
-               COALESCE(SUM(cost), 0) AS total_cost, \
+               COALESCE(SUM(input_tokens), 0)::BIGINT AS total_input_tokens, \
+               COALESCE(SUM(cache_read_tokens), 0)::BIGINT AS total_cache_read_tokens, \
+               COALESCE(SUM(cache_creation_tokens), 0)::BIGINT AS total_cache_creation_tokens, \
+               COALESCE(SUM(output_tokens), 0)::BIGINT AS total_output_tokens, \
+               COALESCE(SUM(cost), 0)::BIGINT AS total_cost, \
                COUNT(*) AS request_count \
              FROM usage_records{} \
              GROUP BY model_name \
@@ -1309,7 +1309,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, i64)>, Box<dyn std::error::Error + Send + Sync>> {
         let rows: Vec<(String, i64)> = sqlx::query_as(
-            "SELECT user_id, SUM(cost) FROM usage_records \
+            "SELECT user_id, SUM(cost)::BIGINT FROM usage_records \
              WHERE user_id IS NOT NULL AND created_at >= $1 AND created_at < $2 \
              GROUP BY user_id"
         )
