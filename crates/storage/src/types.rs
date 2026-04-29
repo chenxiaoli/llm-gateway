@@ -208,17 +208,17 @@ pub enum BillingType {
 
 // --- Pricing Policies ---
 
-/// Per-token pricing config: prices in $ per 1M tokens.
+/// Per-token pricing config: prices in integer subunits (100M per USD) per 1M tokens.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct PerTokenConfig {
-    /// Input token price per 1M tokens (e.g. 3.0 = $3.00/M).
+    /// Input token price per 1M tokens in subunits (e.g. 300_000_000 = $3.00/M).
     pub input_price_1m: Option<i64>,
-    /// Output token price per 1M tokens.
+    /// Output token price per 1M tokens in subunits.
     pub output_price_1m: Option<i64>,
-    /// Cache read price per 1M tokens (cheaper than input).
+    /// Cache read price per 1M tokens in subunits (cheaper than input).
     pub cache_read_price_1m: Option<i64>,
-    /// Cache creation price per 1M tokens.
+    /// Cache creation price per 1M tokens in subunits.
     pub cache_creation_price_1m: Option<i64>,
 }
 
@@ -282,6 +282,36 @@ pub struct TieredTokenConfig {
 
 impl TieredTokenConfig {
     pub fn tier_divisor(&self) -> i64 { 1_000_000i64 }
+}
+
+/// Single tier for context-tiered (threshold-based) token pricing.
+/// ALL tokens in a request use the price of the matched tier.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ContextTier {
+    /// Exclusive upper bound of input token count. null = final tier (no limit).
+    pub up_to: Option<i64>,
+    pub input_price_1m: Option<i64>,
+    pub output_price_1m: Option<i64>,
+    pub cache_read_price_1m: Option<i64>,
+    pub cache_creation_price_1m: Option<i64>,
+}
+
+impl ContextTier {
+    pub fn input_price(&self) -> i64 { self.input_price_1m.unwrap_or(0).max(0) }
+    pub fn output_price(&self) -> i64 { self.output_price_1m.unwrap_or(0).max(0) }
+    pub fn cache_read_price(&self) -> i64 { self.cache_read_price_1m.unwrap_or(0).max(0) }
+    pub fn cache_creation_price(&self) -> i64 { self.cache_creation_price_1m.unwrap_or(0).max(0) }
+}
+
+/// Context-tiered (threshold-based) token pricing config.
+/// The tier is determined by total input token count; all tokens use that tier's prices.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ContextTieredTokenConfig {
+    pub tiers: Vec<ContextTier>,
+}
+
+impl ContextTieredTokenConfig {
+    pub fn divisor(&self) -> i64 { 1_000_000i64 }
 }
 
 /// Hybrid pricing config: base fee per call + per-token.

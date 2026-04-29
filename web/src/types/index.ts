@@ -345,12 +345,25 @@ export interface HybridConfig {
   cache_creation_price_1m?: number;
 }
 
+export interface ContextTier {
+  up_to: number | null;
+  input_price_1m?: number;
+  output_price_1m?: number;
+  cache_read_price_1m?: number;
+  cache_creation_price_1m?: number;
+}
+
+export interface ContextTieredTokenConfig {
+  tiers: ContextTier[];
+}
+
 export type PricingConfig =
   | PerTokenConfig
   | PerRequestConfig
   | PerCharacterConfig
   | TieredTokenConfig
-  | HybridConfig;
+  | HybridConfig
+  | ContextTieredTokenConfig;
 
 export interface ChannelModel {
   id: string;

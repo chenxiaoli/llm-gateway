@@ -2148,8 +2148,21 @@ impl crate::Storage for SqliteStorage {
         // Seed models independently — check models table, not providers
         let existing_models = self.list_models().await?;
         if existing_models.is_empty() {
+            // Create pricing policies from seed data first
+            let seed_policies = seed::get_seed_pricing_policies();
+            let mut policy_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+            for (policy, model_name) in &seed_policies {
+                let policy_id = policy.id.clone();
+                self.create_pricing_policy(policy).await?;
+                policy_map.insert(model_name.to_lowercase(), policy_id);
+            }
+
             let seed_models = seed::get_seed_models(&[]);
-            for model in seed_models {
+            for mut model in seed_models {
+                // Link pricing policy if one was created for this model
+                if let Some(policy_id) = policy_map.get(&model.name.to_lowercase()) {
+                    model.pricing_policy_id = Some(policy_id.clone());
+                }
                 self.create_model(&model).await?;
             }
         }
