@@ -49,12 +49,10 @@ CREATE TABLE IF NOT EXISTS models (
     input_price      BIGINT NOT NULL DEFAULT 0,
     output_price     BIGINT NOT NULL DEFAULT 0,
     request_price    BIGINT NOT NULL DEFAULT 0,
-    enabled          BOOLEAN NOT NULL DEFAULT true,
     created_at       TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_models_provider ON models(provider_id);
-CREATE INDEX IF NOT EXISTS idx_models_enabled ON models(enabled);
 
 -- Key-Model Rate Limits
 CREATE TABLE IF NOT EXISTS key_model_rate_limits (
