@@ -190,8 +190,8 @@ pub async fn register(
     let account = llm_gateway_storage::Account {
         id: uuid::Uuid::new_v4().to_string(),
         user_id: user.id.clone(),
-        balance: 0.0,
-        threshold: 1.0,
+        balance: 0,
+        threshold: llm_gateway_storage::usd_to_units(1.0),
         currency: "USD".to_string(),
         created_at: now,
         updated_at: now,
@@ -240,7 +240,7 @@ pub async fn me(
     }))
 }
 
-use llm_gateway_storage::{PaginatedResponse, TransactionResponse};
+use llm_gateway_storage::{units_to_usd, TransactionResponse};
 
 pub async fn me_balance(
     State(state): State<Arc<AppState>>,
@@ -263,15 +263,30 @@ pub async fn me_balance(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    // Convert internal i64 to f64 USD for JSON output
+    let tx_responses: Vec<serde_json::Value> = transactions.items.iter().map(|t| {
+        let resp = TransactionResponse::from(t);
+        serde_json::json!({
+            "id": resp.id,
+            "account_id": resp.account_id,
+            "type": resp.transaction_type,
+            "amount": units_to_usd(resp.amount),
+            "balance_after": units_to_usd(resp.balance_after),
+            "description": resp.description,
+            "reference_id": resp.reference_id,
+            "created_at": resp.created_at,
+        })
+    }).collect();
+
     Ok(Json(serde_json::json!({
-        "balance": account.balance,
-        "threshold": account.threshold,
+        "balance": units_to_usd(account.balance),
+        "threshold": units_to_usd(account.threshold),
         "currency": account.currency,
-        "transactions": PaginatedResponse {
-            items: transactions.items.iter().map(TransactionResponse::from).collect(),
-            total: transactions.total,
-            page: transactions.page,
-            page_size: transactions.page_size,
+        "transactions": {
+            "items": tx_responses,
+            "total": transactions.total,
+            "page": transactions.page,
+            "page_size": transactions.page_size,
         }
     })))
 }

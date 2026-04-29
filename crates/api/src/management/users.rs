@@ -4,7 +4,7 @@ use axum::Json;
 use serde::Serialize;
 use std::sync::Arc;
 
-use llm_gateway_storage::{PaginatedResponse, PaginationParams, UpdateUser as StorageUpdateUser, User, UserWithBalance};
+use llm_gateway_storage::{units_to_usd, PaginatedResponse, PaginationParams, UpdateUser as StorageUpdateUser, User, UserWithBalance};
 
 use crate::error::ApiError;
 use crate::extractors::require_admin;
@@ -29,8 +29,8 @@ impl From<UserWithBalance> for UserResponse {
             username: u.username,
             role: u.role,
             enabled: u.enabled,
-            balance: u.balance,
-            threshold: u.threshold,
+            balance: units_to_usd(u.balance),
+            threshold: units_to_usd(u.threshold),
             created_at: u.created_at.to_rfc3339(),
             updated_at: u.updated_at.to_rfc3339(),
         }
