@@ -26,6 +26,18 @@ CREATE TABLE IF NOT EXISTS providers (
     updated_at         TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
+-- Pricing Policies (must be before models and channels which reference it)
+CREATE TABLE IF NOT EXISTS pricing_policies (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    billing_type TEXT NOT NULL,
+    config      TEXT NOT NULL,
+    created_at  TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at  TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pricing_policies_type ON pricing_policies(billing_type);
+
 -- Models
 CREATE TABLE IF NOT EXISTS models (
     id               TEXT PRIMARY KEY,
@@ -139,18 +151,6 @@ CREATE TABLE IF NOT EXISTS channels (
 
 CREATE INDEX IF NOT EXISTS idx_channels_provider ON channels(provider_id);
 CREATE INDEX IF NOT EXISTS idx_channels_enabled ON channels(enabled);
-
--- Pricing Policies
-CREATE TABLE IF NOT EXISTS pricing_policies (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    billing_type TEXT NOT NULL,
-    config      TEXT NOT NULL,
-    created_at  TIMESTAMP WITH TIME ZONE NOT NULL,
-    updated_at  TIMESTAMP WITH TIME ZONE NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_pricing_policies_type ON pricing_policies(billing_type);
 
 -- Channel Models (Junction Table)
 CREATE TABLE IF NOT EXISTS channel_models (

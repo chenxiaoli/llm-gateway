@@ -24,8 +24,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Bootstrap: create data directory and default config.toml if missing
     bootstrap().await?;
 
-    // Load config
+    // Load config with environment variable expansion
     let config_str = std::fs::read_to_string("config.toml")?;
+    let config_str = shellexpand::env(&config_str)?.to_string();
     let config: AppConfig = toml::from_str(&config_str)?;
 
     // Init storage

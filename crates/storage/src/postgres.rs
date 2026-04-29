@@ -946,8 +946,8 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "INSERT INTO models (id, name, model_type, pricing_policy_id, enabled, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6)",
+            "INSERT INTO models (id, name, model_type, pricing_policy_id, created_at)
+             VALUES ($1, $2, $3, $4, $5)",
         )
         .bind(&model.id)
         .bind(&model.name)
@@ -1005,7 +1005,7 @@ impl crate::Storage for PostgresStorage {
             LEFT JOIN pricing_policies pp ON m.pricing_policy_id = pp.id
             LEFT JOIN channel_models cm ON cm.model_id = m.id
             LEFT JOIN channels c ON c.id = cm.channel_id
-            GROUP BY m.id
+            GROUP BY m.id, m.name, m.model_type, m.pricing_policy_id, m.created_at, pp.name
             ORDER BY m.name
             "#
         )

@@ -18,3 +18,4 @@ tower = { workspace = true }
 rust-embed = { version = "8", features = ["mime-guess"] }
 mime_guess = "2"
 sha2 = "0.10"
+shellexpand = "3"

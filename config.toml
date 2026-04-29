@@ -8,8 +8,8 @@ jwt_secret = "change-me-in-production"
 allow_registration = true
 
 [database]
-driver = "sqlite"
-url = "./data/gateway.db"
+driver = "postgres"
+url = "postgresql://llm_gateway:${POSTGRES_PASSWORD}@10.0.17.11/llm_gateway"
 
 [rate_limit]
 flush_interval_secs = 30

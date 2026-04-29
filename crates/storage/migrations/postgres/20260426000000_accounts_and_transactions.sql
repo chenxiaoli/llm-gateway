@@ -2,8 +2,8 @@
 CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-    balance NUMERIC NOT NULL DEFAULT 0,
-    threshold NUMERIC NOT NULL DEFAULT 1.0,
+    balance DOUBLE PRECISION NOT NULL DEFAULT 0,
+    threshold DOUBLE PRECISION NOT NULL DEFAULT 1.0,
     currency TEXT NOT NULL DEFAULT 'USD',
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL
@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
     type TEXT NOT NULL CHECK(type IN ('credit','debit','credit_adjustment','debit_refund')),
-    amount NUMERIC NOT NULL CHECK(amount > 0),
-    balance_after NUMERIC NOT NULL,
+    amount DOUBLE PRECISION NOT NULL CHECK(amount > 0),
+    balance_after DOUBLE PRECISION NOT NULL,
     description TEXT,
     reference_id TEXT,
     created_at TIMESTAMPTZ NOT NULL
