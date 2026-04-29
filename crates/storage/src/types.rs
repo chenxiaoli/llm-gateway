@@ -44,7 +44,7 @@ pub struct ApiKey {
     pub key_hash: String,
     pub key_prefix: Option<String>,
     pub rate_limit: Option<i64>,       // global RPM, None = unlimited
-    pub budget_monthly: Option<f64>,   // monthly budget cap, None = unlimited
+    pub budget_monthly: Option<i64>,   // monthly budget cap, None = unlimited
     pub enabled: bool,
     pub created_by: Option<String>,
     pub model_fallback_id: Option<String>,
@@ -56,7 +56,7 @@ pub struct ApiKey {
 pub struct CreateApiKey {
     pub name: String,
     pub rate_limit: Option<i64>,
-    pub budget_monthly: Option<f64>,
+    pub budget_monthly: Option<i64>,
     pub model_fallback_id: Option<String>,
 }
 
@@ -64,7 +64,7 @@ pub struct CreateApiKey {
 pub struct UpdateApiKey {
     pub name: Option<String>,
     pub rate_limit: Option<Option<i64>>,
-    pub budget_monthly: Option<Option<f64>>,
+    pub budget_monthly: Option<Option<i64>>,
     pub enabled: Option<bool>,
     pub model_fallback_id: Option<Option<String>>,
 }
@@ -138,10 +138,10 @@ pub struct Channel {
     pub api_key: String,
     pub priority: i32,
     pub pricing_policy_id: Option<String>,
-    pub markup_ratio: f64,
+    pub markup_ratio: i64,
     pub rpm_limit: Option<i64>,
     pub tpm_limit: Option<i64>,
-    pub balance: Option<f64>,
+    pub balance: Option<i64>,
     pub weight: Option<i32>,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
@@ -155,10 +155,10 @@ pub struct CreateChannel {
     pub api_key: String,
     pub priority: Option<i32>,
     pub pricing_policy_id: Option<String>,
-    pub markup_ratio: Option<f64>,
+    pub markup_ratio: Option<i64>,
     pub rpm_limit: Option<i64>,
     pub tpm_limit: Option<i64>,
-    pub balance: Option<f64>,
+    pub balance: Option<i64>,
     pub weight: Option<i32>,
     pub enabled: Option<bool>,
     pub models: Option<Vec<CreateChannelModel>>,
@@ -171,11 +171,11 @@ pub struct UpdateChannel {
     // base_url removed — use provider.endpoints["default"] for fallback
     pub priority: Option<i32>,
     pub pricing_policy_id: Option<Option<String>>,
-    pub markup_ratio: Option<f64>,
+    pub markup_ratio: Option<i64>,
     pub enabled: Option<bool>,
     pub rpm_limit: Option<Option<i64>>,
     pub tpm_limit: Option<Option<i64>>,
-    pub balance: Option<Option<f64>>,
+    pub balance: Option<Option<i64>>,
     pub weight: Option<Option<i32>>,
 }
 
@@ -213,44 +213,44 @@ pub enum BillingType {
 #[serde(rename_all = "snake_case")]
 pub struct PerTokenConfig {
     /// Input token price per 1M tokens (e.g. 3.0 = $3.00/M).
-    pub input_price_1m: Option<f64>,
+    pub input_price_1m: Option<i64>,
     /// Output token price per 1M tokens.
-    pub output_price_1m: Option<f64>,
+    pub output_price_1m: Option<i64>,
     /// Cache read price per 1M tokens (cheaper than input).
-    pub cache_read_price_1m: Option<f64>,
+    pub cache_read_price_1m: Option<i64>,
     /// Cache creation price per 1M tokens.
-    pub cache_creation_price_1m: Option<f64>,
+    pub cache_creation_price_1m: Option<i64>,
 }
 
 impl PerTokenConfig {
-    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
-    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
-    pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0).max(0.0) }
-    pub fn cache_creation_price(&self) -> f64 { self.cache_creation_price_1m.unwrap_or(0.0).max(0.0) }
-    pub fn divisor(&self) -> f64 { 1_000_000.0 }
+    pub fn input_price(&self) -> i64 { self.input_price_1m.unwrap_or(0).max(0) }
+    pub fn output_price(&self) -> i64 { self.output_price_1m.unwrap_or(0).max(0) }
+    pub fn cache_read_price(&self) -> i64 { self.cache_read_price_1m.unwrap_or(0).max(0) }
+    pub fn cache_creation_price(&self) -> i64 { self.cache_creation_price_1m.unwrap_or(0).max(0) }
+    pub fn divisor(&self) -> i64 { 1_000_000i64 }
 }
 
 /// Per-request pricing config: flat fee per API call.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PerRequestConfig {
-    pub request_price: Option<f64>,
+    pub request_price: Option<i64>,
 }
 
 impl PerRequestConfig {
-    pub fn price_per_call(&self) -> f64 { self.request_price.unwrap_or(0.0).max(0.0) }
+    pub fn price_per_call(&self) -> i64 { self.request_price.unwrap_or(0).max(0) }
 }
 
 /// Per-character pricing config: prices in $ per 1M characters.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PerCharacterConfig {
-    pub input_price_1m: Option<f64>,
-    pub output_price_1m: Option<f64>,
+    pub input_price_1m: Option<i64>,
+    pub output_price_1m: Option<i64>,
 }
 
 impl PerCharacterConfig {
-    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
-    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
-    pub fn divisor(&self) -> f64 { 1_000_000.0 }
+    pub fn input_price(&self) -> i64 { self.input_price_1m.unwrap_or(0).max(0) }
+    pub fn output_price(&self) -> i64 { self.output_price_1m.unwrap_or(0).max(0) }
+    pub fn divisor(&self) -> i64 { 1_000_000i64 }
 }
 
 /// Single tier for tiered token pricing.
@@ -258,18 +258,18 @@ impl PerCharacterConfig {
 pub struct TierConfig {
     /// Upper bound of this tier in tokens (null = final tier).
     pub up_to: Option<i64>,
-    pub input_price_1m: Option<f64>,
-    pub output_price_1m: Option<f64>,
+    pub input_price_1m: Option<i64>,
+    pub output_price_1m: Option<i64>,
 }
 
 impl TierConfig {
-    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
-    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
-    pub fn divisor(&self) -> f64 {
+    pub fn input_price(&self) -> i64 { self.input_price_1m.unwrap_or(0).max(0) }
+    pub fn output_price(&self) -> i64 { self.output_price_1m.unwrap_or(0).max(0) }
+    pub fn divisor(&self) -> i64 {
         if self.input_price_1m.is_some() || self.output_price_1m.is_some() {
-            1_000_000.0
+            1_000_000i64
         } else {
-            1_000.0
+            1_000i64
         }
     }
 }
@@ -281,25 +281,25 @@ pub struct TieredTokenConfig {
 }
 
 impl TieredTokenConfig {
-    pub fn tier_divisor(&self) -> f64 { 1_000_000.0 }
+    pub fn tier_divisor(&self) -> i64 { 1_000_000i64 }
 }
 
 /// Hybrid pricing config: base fee per call + per-token.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HybridConfig {
-    pub base_per_call: Option<f64>,
-    pub input_price_1m: Option<f64>,
-    pub output_price_1m: Option<f64>,
-    pub cache_read_price_1m: Option<f64>,
-    pub cache_creation_price_1m: Option<f64>,
+    pub base_per_call: Option<i64>,
+    pub input_price_1m: Option<i64>,
+    pub output_price_1m: Option<i64>,
+    pub cache_read_price_1m: Option<i64>,
+    pub cache_creation_price_1m: Option<i64>,
 }
 
 impl HybridConfig {
-    pub fn input_price(&self) -> f64 { self.input_price_1m.unwrap_or(0.0).max(0.0) }
-    pub fn output_price(&self) -> f64 { self.output_price_1m.unwrap_or(0.0).max(0.0) }
-    pub fn cache_read_price(&self) -> f64 { self.cache_read_price_1m.unwrap_or(0.0).max(0.0) }
-    pub fn cache_creation_price(&self) -> f64 { self.cache_creation_price_1m.unwrap_or(0.0).max(0.0) }
-    pub fn divisor(&self) -> f64 { 1_000_000.0 }
+    pub fn input_price(&self) -> i64 { self.input_price_1m.unwrap_or(0).max(0) }
+    pub fn output_price(&self) -> i64 { self.output_price_1m.unwrap_or(0).max(0) }
+    pub fn cache_read_price(&self) -> i64 { self.cache_read_price_1m.unwrap_or(0).max(0) }
+    pub fn cache_creation_price(&self) -> i64 { self.cache_creation_price_1m.unwrap_or(0).max(0) }
+    pub fn divisor(&self) -> i64 { 1_000_000i64 }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -390,7 +390,7 @@ pub struct ChannelModel {
     pub upstream_model_name: Option<String>,
     pub priority_override: Option<i32>,
     pub pricing_policy_id: Option<String>,
-    pub markup_ratio: f64,
+    pub markup_ratio: i64,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -403,7 +403,7 @@ pub struct CreateChannelModel {
     pub upstream_model_name: Option<String>,
     pub priority_override: Option<i32>,
     pub pricing_policy_id: Option<String>,
-    pub markup_ratio: Option<f64>,
+    pub markup_ratio: Option<i64>,
     pub enabled: Option<bool>,
 }
 
@@ -412,7 +412,7 @@ pub struct UpdateChannelModel {
     pub upstream_model_name: Option<String>,
     pub priority_override: Option<Option<i32>>,
     pub pricing_policy_id: Option<Option<String>>,
-    pub markup_ratio: Option<f64>,
+    pub markup_ratio: Option<i64>,
     pub enabled: Option<bool>,
 }
 
@@ -440,7 +440,7 @@ pub struct UsageRecord {
     pub output_tokens: Option<i64>,
     pub cache_read_tokens: Option<i64>,
     pub cache_creation_tokens: Option<i64>,
-    pub cost: f64,
+    pub cost: i64,
     pub user_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -459,7 +459,7 @@ pub struct UsageSummaryRecord {
     pub total_cache_read_tokens: i64,
     pub total_cache_creation_tokens: i64,
     pub total_output_tokens: i64,
-    pub total_cost: f64,
+    pub total_cost: i64,
     pub request_count: i64,
 }
 
@@ -572,8 +572,8 @@ pub struct UserWithBalance {
     pub username: String,
     pub role: String,
     pub enabled: bool,
-    pub balance: f64,
-    pub threshold: f64,
+    pub balance: i64,
+    pub threshold: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -596,8 +596,8 @@ pub struct UpdateUser {
 pub struct Account {
     pub id: String,
     pub user_id: String,
-    pub balance: f64,
-    pub threshold: f64,
+    pub balance: i64,
+    pub threshold: i64,
     pub currency: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -609,8 +609,8 @@ pub struct Transaction {
     pub account_id: String,
     #[serde(rename = "type")]
     pub transaction_type: TransactionType,
-    pub amount: f64,
-    pub balance_after: f64,
+    pub amount: i64,
+    pub balance_after: i64,
     pub description: Option<String>,
     pub reference_id: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -648,20 +648,20 @@ impl std::fmt::Display for TransactionType {
 pub struct CreateTransaction {
     #[serde(rename = "type")]
     pub transaction_type: String,
-    pub amount: f64,
+    pub amount: i64,
     pub description: Option<String>,
     pub reference_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateAccountThreshold {
-    pub threshold: f64,
+    pub threshold: i64,
 }
 
 /// Request to atomically deduct balance from an account.
 pub struct DeductBalance {
     pub account_id: String,
-    pub amount: f64,
+    pub amount: i64,
     pub transaction_type: TransactionType,
     pub description: Option<String>,
     pub reference_id: Option<String>,
@@ -671,14 +671,14 @@ pub struct DeductBalance {
 #[derive(Debug)]
 pub enum DeductBalanceResult {
     Success(Transaction),
-    InsufficientBalance { current_balance: f64, requested: f64 },
+    InsufficientBalance { current_balance: i64, requested: i64 },
     AccountNotFound,
 }
 
 /// Request to atomically add balance to an account (credits, refunds).
 pub struct AddBalance {
     pub account_id: String,
-    pub amount: f64,
+    pub amount: i64,
     pub transaction_type: TransactionType,
     pub description: Option<String>,
     pub reference_id: Option<String>,
@@ -695,8 +695,8 @@ pub enum AddBalanceResult {
 pub struct AccountResponse {
     pub id: String,
     pub user_id: String,
-    pub balance: f64,
-    pub threshold: f64,
+    pub balance: i64,
+    pub threshold: i64,
     pub currency: String,
     pub created_at: String,
     pub updated_at: String,
@@ -722,8 +722,8 @@ pub struct TransactionResponse {
     pub account_id: String,
     #[serde(rename = "type")]
     pub transaction_type: String,
-    pub amount: f64,
-    pub balance_after: f64,
+    pub amount: i64,
+    pub balance_after: i64,
     pub description: Option<String>,
     pub reference_id: Option<String>,
     pub created_at: String,
@@ -762,15 +762,15 @@ mod tests {
         let account = Account {
             id: "acc-1".to_string(),
             user_id: "user-1".to_string(),
-            balance: 100.5,
-            threshold: 1.0,
+            balance: 10050,
+            threshold: 100,
             currency: "USD".to_string(),
             created_at: now,
             updated_at: now,
         };
         let response = AccountResponse::from(&account);
         assert_eq!(response.id, "acc-1");
-        assert_eq!(response.balance, 100.5);
+        assert_eq!(response.balance, 10050);
         assert_eq!(response.currency, "USD");
     }
 }
