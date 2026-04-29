@@ -117,9 +117,9 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
                 cache_creation_tokens,
             };
             let raw_cost = PricingCalculator.calculate_cost(&policy, &usage);
-            raw_cost * task.markup_ratio
+            raw_cost * task.markup_ratio / 10_000
         } else {
-            0.0
+            0
         };
 
         tracing::info!(
