@@ -95,9 +95,9 @@ CREATE INDEX IF NOT EXISTS idx_audit_model_date ON audit_logs(model_name, create
 CREATE TABLE IF NOT EXISTS rate_limit_counters (
     key_id     TEXT NOT NULL,
     model_name TEXT NOT NULL,
-    window     TEXT NOT NULL,
+    "window"   TEXT NOT NULL,
     count      INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (key_id, model_name, window)
+    PRIMARY KEY (key_id, model_name, "window")
 );
 
 -- Settings
