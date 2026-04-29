@@ -21,8 +21,7 @@ services:
     image: ghcr.io/${IMAGE_NAME:-chenxiaoli/llm-gateway}:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     volumes:
