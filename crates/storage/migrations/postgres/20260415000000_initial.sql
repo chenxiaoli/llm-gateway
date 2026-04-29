@@ -71,8 +71,8 @@ CREATE TABLE IF NOT EXISTS usage_records (
     provider_id   TEXT NOT NULL,
     channel_id    TEXT,
     protocol      TEXT NOT NULL,
-    input_tokens  INTEGER,
-    output_tokens INTEGER,
+    input_tokens  BIGINT,
+    output_tokens BIGINT,
     cost          BIGINT NOT NULL,
     created_at    TIMESTAMP WITH TIME ZONE NOT NULL
 );
@@ -93,8 +93,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     response_body TEXT NOT NULL,
     status_code   INTEGER NOT NULL,
     latency_ms    BIGINT NOT NULL,
-    input_tokens  INTEGER,
-    output_tokens INTEGER,
+    input_tokens  BIGINT,
+    output_tokens BIGINT,
     created_at    TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
