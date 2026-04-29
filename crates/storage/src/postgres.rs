@@ -29,7 +29,7 @@ struct PgKeyRow {
     key_hash: String,
     key_prefix: Option<String>,
     rate_limit: Option<i64>,
-    budget_monthly: Option<f64>,
+    budget_monthly: Option<i64>,
     enabled: bool,
     created_by: Option<String>,
     model_fallback_id: Option<String>,
@@ -159,7 +159,7 @@ struct PgUsageRow {
     output_tokens: Option<i64>,
     cache_read_tokens: Option<i64>,
     cache_creation_tokens: Option<i64>,
-    cost: f64,
+    cost: i64,
     user_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -191,7 +191,7 @@ struct PgUsageSummaryRow {
     total_cache_read_tokens: i64,
     total_cache_creation_tokens: i64,
     total_output_tokens: i64,
-    total_cost: f64,
+    total_cost: i64,
     request_count: i64,
 }
 
@@ -325,11 +325,11 @@ struct PgChannelRow {
     base_url: Option<String>,
     priority: i32,
     pricing_policy_id: Option<String>,
-    markup_ratio: f64,
+    markup_ratio: i64,
     enabled: bool,
     rpm_limit: Option<i64>,
     tpm_limit: Option<i64>,
-    balance: Option<f64>,
+    balance: Option<i64>,
     weight: Option<i32>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -389,8 +389,8 @@ struct PgUserWithBalanceRow {
     username: String,
     role: String,
     enabled: bool,
-    balance: Option<f64>,
-    threshold: Option<f64>,
+    balance: Option<i64>,
+    threshold: Option<i64>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -402,8 +402,8 @@ impl From<PgUserWithBalanceRow> for UserWithBalance {
             username: r.username,
             role: r.role,
             enabled: r.enabled,
-            balance: r.balance.unwrap_or(0.0),
-            threshold: r.threshold.unwrap_or(1.0),
+            balance: r.balance.unwrap_or(0),
+            threshold: r.threshold.unwrap_or(100_000_000),
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -418,7 +418,7 @@ struct PgChannelModelRow {
     upstream_model_name: Option<String>,
     priority_override: Option<i32>,
     pricing_policy_id: Option<String>,
-    markup_ratio: f64,
+    markup_ratio: i64,
     enabled: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -470,8 +470,8 @@ impl From<PgPricingPolicyRow> for PricingPolicy {
 struct PgAccountRow {
     id: String,
     user_id: String,
-    balance: f64,
-    threshold: f64,
+    balance: i64,
+    threshold: i64,
     currency: String,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -498,8 +498,8 @@ struct PgTransactionRow {
     id: String,
     account_id: String,
     transaction_type: String,
-    amount: f64,
-    balance_after: f64,
+    amount: i64,
+    balance_after: i64,
     description: Option<String>,
     reference_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
@@ -1269,7 +1269,7 @@ impl crate::Storage for PostgresStorage {
                COALESCE(SUM(cache_read_tokens), 0) AS total_cache_read_tokens, \
                COALESCE(SUM(cache_creation_tokens), 0) AS total_cache_creation_tokens, \
                COALESCE(SUM(output_tokens), 0) AS total_output_tokens, \
-               COALESCE(SUM(cost), 0.0) AS total_cost, \
+               COALESCE(SUM(cost), 0) AS total_cost, \
                COUNT(*) AS request_count \
              FROM usage_records{} \
              GROUP BY model_name \
@@ -1286,8 +1286,8 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(UsageSummaryRecord::from).collect())
     }
 
-    async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, f64)>, Box<dyn std::error::Error + Send + Sync>> {
-        let rows: Vec<(String, f64)> = sqlx::query_as(
+    async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, i64)>, Box<dyn std::error::Error + Send + Sync>> {
+        let rows: Vec<(String, i64)> = sqlx::query_as(
             "SELECT user_id, SUM(cost) FROM usage_records \
              WHERE user_id IS NOT NULL AND created_at >= $1 AND created_at < $2 \
              GROUP BY user_id"
@@ -1786,7 +1786,7 @@ impl crate::Storage for PostgresStorage {
         let mut tx = conn.begin().await?;
 
         // Lock the account row and get current balance
-        let row: Option<(f64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE")
+        let row: Option<(i64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE")
             .bind(&req.account_id)
             .fetch_optional(&mut *tx)
             .await?;
@@ -1850,7 +1850,7 @@ impl crate::Storage for PostgresStorage {
         let mut tx = conn.begin().await?;
 
         // Lock the account row and get current balance
-        let row: Option<(f64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE")
+        let row: Option<(i64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE")
             .bind(&req.account_id)
             .fetch_optional(&mut *tx)
             .await?;
