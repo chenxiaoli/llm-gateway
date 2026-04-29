@@ -1477,8 +1477,8 @@ impl crate::Storage for PostgresStorage {
         window: &str,
     ) -> Result<i64, DbErr> {
         sqlx::query(
-            "INSERT INTO rate_limit_counters (key_id, model_name, window, count) VALUES ($1, $2, $3, 1)
-             ON CONFLICT(key_id, model_name, window) DO UPDATE SET count = count + 1",
+            "INSERT INTO rate_limit_counters (key_id, model_name, \"window\", count) VALUES ($1, $2, $3, 1)
+             ON CONFLICT(key_id, model_name, \"window\") DO UPDATE SET count = count + 1",
         )
         .bind(key_id)
         .bind(model_name)
@@ -1487,7 +1487,7 @@ impl crate::Storage for PostgresStorage {
         .await?;
 
         let count: (i64,) = sqlx::query_as(
-            "SELECT count FROM rate_limit_counters WHERE key_id = $1 AND model_name = $2 AND window = $3",
+            "SELECT count FROM rate_limit_counters WHERE key_id = $1 AND model_name = $2 AND \"window\" = $3",
         )
         .bind(key_id)
         .bind(model_name)
@@ -1505,7 +1505,7 @@ impl crate::Storage for PostgresStorage {
         window: &str,
     ) -> Result<i64, DbErr> {
         let row: Option<(i64,)> = sqlx::query_as(
-            "SELECT count FROM rate_limit_counters WHERE key_id = $1 AND model_name = $2 AND window = $3",
+            "SELECT count FROM rate_limit_counters WHERE key_id = $1 AND model_name = $2 AND \"window\" = $3",
         )
         .bind(key_id)
         .bind(model_name)
