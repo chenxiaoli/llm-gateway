@@ -2163,7 +2163,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_transaction(&self, id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE id = $1"
+            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE id = $1"
         )
         .bind(id)
         .fetch_optional(self.pool())
@@ -2173,7 +2173,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_transaction_by_reference(&self, account_id: &str, reference_id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = $1 AND reference_id = $2"
+            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = $1 AND reference_id = $2"
         )
         .bind(account_id)
         .bind(reference_id)
@@ -2186,7 +2186,7 @@ impl crate::Storage for PostgresStorage {
         let offset = (page - 1) * page_size;
 
         let rows: Vec<PgTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         )
         .bind(account_id)
         .bind(page_size)
