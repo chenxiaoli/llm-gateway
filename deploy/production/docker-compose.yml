@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-llm_gateway}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/18/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-llm_gateway} -d ${POSTGRES_DB:-llm_gateway}"]
       interval: 10s
