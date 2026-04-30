@@ -88,7 +88,7 @@ describe('Settings page', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/GitHub/i)).toBeInTheDocument();
-      expect(screen.getByText(/v0\.8\.0/)).toBeInTheDocument();
+      expect(screen.getByText(/v0\.9\.5/)).toBeInTheDocument();
     }, { timeout: 5000 });
   });
 
