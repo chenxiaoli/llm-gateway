@@ -229,4 +229,31 @@ mod tests {
         assert!(!models.is_empty());
         println!("Loaded {} models", models.len());
     }
+
+    #[test]
+    fn test_seed_pricing_policies_not_empty() {
+        let policies = get_seed_pricing_policies();
+        println!("Generated {} pricing policies", policies.len());
+        for (p, model_name) in &policies {
+            println!("  {} -> {} ({})", model_name, p.name, p.billing_type);
+        }
+        assert!(!policies.is_empty(), "get_seed_pricing_policies should return policies for seed models");
+    }
+
+    #[test]
+    fn test_seed_model_deserialization() {
+        let data = load_seed_data().unwrap();
+        // Verify models with pricing data deserialize correctly
+        let minimax_m27 = data.models.iter().find(|m| m.name == "minimax-m2.7").expect("minimax-m2.7 should exist");
+        assert_eq!(minimax_m27.billing_type.as_deref(), Some("per_token"));
+        assert!(minimax_m27.input_price.is_some());
+        assert!(minimax_m27.output_price.is_some());
+        assert!(minimax_m27.cache_read_price.is_some());
+        assert!(minimax_m27.cache_creation_price.is_some());
+
+        // Verify models without pricing data deserialize with None defaults
+        let gpt4o = data.models.iter().find(|m| m.name == "gpt-4o").expect("gpt-4o should exist");
+        assert!(gpt4o.billing_type.is_none());
+        assert!(gpt4o.input_price.is_none());
+    }
 }
