@@ -8,7 +8,7 @@ use std::sync::Arc;
 use llm_gateway_encryption::{decrypt, encrypt};
 use llm_gateway_storage::{
     bps_to_ratio, opt_units_to_usd, opt_usd_to_units, ratio_to_bps,
-    Channel, ChannelModel, UpdateChannelApiKey,
+    Channel, ChannelModel, TimeSlot, UpdateChannelApiKey,
 };
 
 use crate::error::ApiError;
@@ -63,6 +63,7 @@ pub struct ChannelResponse {
     pub balance: Option<f64>,
     pub weight: Option<i32>,
     pub enabled: bool,
+    pub available_hours: Option<Vec<TimeSlot>>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -82,6 +83,7 @@ impl From<Channel> for ChannelResponse {
             balance: opt_units_to_usd(c.balance),
             weight: c.weight,
             enabled: c.enabled,
+            available_hours: c.available_hours,
             created_at: c.created_at.to_rfc3339(),
             updated_at: c.updated_at.to_rfc3339(),
         }
@@ -113,6 +115,7 @@ pub struct CreateChannelRequest {
     pub balance: Option<f64>,
     pub weight: Option<i32>,
     pub enabled: Option<bool>,
+    pub available_hours: Option<Vec<TimeSlot>>,
     pub models: Option<Vec<CreateChannelModelInput>>,
 }
 
@@ -127,6 +130,7 @@ pub struct UpdateChannelRequest {
     pub tpm_limit: Option<Option<i64>>,
     pub balance: Option<Option<f64>>,
     pub weight: Option<Option<i32>>,
+    pub available_hours: Option<Option<Vec<TimeSlot>>>,
 }
 
 pub async fn create_channel(
@@ -168,6 +172,7 @@ pub async fn create_channel(
         balance: opt_usd_to_units(input.balance),
         weight: input.weight,
         enabled: input.enabled.unwrap_or(true),
+        available_hours: input.available_hours,
         created_at: now,
         updated_at: now,
     };
@@ -373,6 +378,9 @@ pub async fn update_channel(
     }
     if let Some(weight) = input.weight {
         channel.weight = weight;
+    }
+    if let Some(available_hours) = input.available_hours {
+        channel.available_hours = available_hours;
     }
     channel.updated_at = chrono::Utc::now();
 

@@ -331,6 +331,7 @@ struct PgChannelRow {
     tpm_limit: Option<i64>,
     balance: Option<i64>,
     weight: Option<i32>,
+    available_hours: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -350,6 +351,10 @@ impl From<PgChannelRow> for Channel {
             tpm_limit: r.tpm_limit,
             balance: r.balance,
             weight: r.weight,
+            available_hours: match r.available_hours {
+                Some(s) if !s.is_empty() => serde_json::from_str(&s).ok(),
+                _ => None,
+            },
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -790,8 +795,8 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_channel(&self, channel: &Channel) -> Result<Channel, DbErr> {
         sqlx::query(
-            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
+            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, available_hours, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
         )
         .bind(&channel.id)
         .bind(&channel.provider_id)
@@ -806,6 +811,7 @@ impl crate::Storage for PostgresStorage {
         .bind(channel.tpm_limit)
         .bind(channel.balance)
         .bind(channel.weight.unwrap_or(100))
+        .bind(channel.available_hours.as_ref().map(|s| serde_json::to_string(s).unwrap()))
         .bind(channel.created_at)
         .bind(channel.updated_at)
         .execute(&self.pool)
@@ -819,8 +825,8 @@ impl crate::Storage for PostgresStorage {
         let channel_id = channel.id.clone();
 
         sqlx::query(
-            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
+            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, available_hours, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
         )
         .bind(&channel.id)
         .bind(&channel.provider_id)
@@ -835,6 +841,7 @@ impl crate::Storage for PostgresStorage {
         .bind(channel.tpm_limit)
         .bind(channel.balance)
         .bind(channel.weight.unwrap_or(100))
+        .bind(channel.available_hours.as_ref().map(|s| serde_json::to_string(s).unwrap()))
         .bind(channel.created_at)
         .bind(channel.updated_at)
         .execute(&mut *tx)
@@ -865,7 +872,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_channel(&self, id: &str) -> Result<Option<Channel>, DbErr> {
         let row: Option<PgChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at
+            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at, available_hours
              FROM channels WHERE id = $1",
         )
         .bind(id)
@@ -877,7 +884,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_channels(&self) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<PgChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at
+            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at, available_hours
              FROM channels ORDER BY priority ASC",
         )
         .fetch_all(&self.pool)
@@ -888,7 +895,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<PgChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at
+            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at, available_hours
              FROM channels WHERE provider_id = $1 ORDER BY priority ASC",
         )
         .bind(provider_id)
@@ -900,7 +907,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_enabled_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<PgChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at
+            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at, available_hours
              FROM channels WHERE provider_id = $1 AND enabled = true ORDER BY priority ASC",
         )
         .bind(provider_id)
@@ -913,7 +920,7 @@ impl crate::Storage for PostgresStorage {
     async fn update_channel(&self, channel: &Channel) -> Result<Channel, DbErr> {
         sqlx::query(
             "UPDATE channels SET name = $1, api_key = $2, base_url = $3, priority = $4, pricing_policy_id = $5, markup_ratio = $6,
-             enabled = $7, rpm_limit = $8, tpm_limit = $9, balance = $10, weight = $11, updated_at = $12 WHERE id = $13",
+             enabled = $7, rpm_limit = $8, tpm_limit = $9, balance = $10, weight = $11, available_hours = $12, updated_at = $13 WHERE id = $14",
         )
         .bind(&channel.name)
         .bind(&channel.api_key)
@@ -926,6 +933,7 @@ impl crate::Storage for PostgresStorage {
         .bind(channel.tpm_limit)
         .bind(channel.balance)
         .bind(channel.weight)
+        .bind(channel.available_hours.as_ref().map(|s| serde_json::to_string(s).unwrap()))
         .bind(channel.updated_at)
         .bind(&channel.id)
         .execute(&self.pool)
@@ -1706,7 +1714,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_channels_for_model(&self, model_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<PgChannelRow> = sqlx::query_as(
-            "SELECT c.id, c.provider_id, c.name, c.api_key, c.base_url, c.priority, c.pricing_policy_id, c.markup_ratio, c.enabled, c.rpm_limit, c.tpm_limit, c.balance, c.weight, c.created_at, c.updated_at
+            "SELECT c.id, c.provider_id, c.name, c.api_key, c.base_url, c.priority, c.pricing_policy_id, c.markup_ratio, c.enabled, c.rpm_limit, c.tpm_limit, c.balance, c.weight, c.created_at, c.updated_at, c.available_hours
              FROM channels c
              JOIN channel_models cm ON c.id = cm.channel_id
              WHERE cm.model_id = $1 AND c.enabled = true",

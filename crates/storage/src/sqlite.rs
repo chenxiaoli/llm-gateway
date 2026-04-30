@@ -318,6 +318,7 @@ struct SqliteChannelRow {
     tpm_limit: Option<i64>,
     balance: Option<i64>,
     weight: Option<i32>,
+    available_hours: Option<String>,
     created_at: String,
     updated_at: String,
 }
@@ -337,6 +338,10 @@ impl From<SqliteChannelRow> for Channel {
             tpm_limit: r.tpm_limit,
             balance: r.balance,
             weight: r.weight,
+            available_hours: match r.available_hours {
+                Some(s) if !s.is_empty() => serde_json::from_str(&s).ok(),
+                _ => None,
+            },
             created_at: parse_rfc3339(&r.created_at),
             updated_at: parse_rfc3339(&r.updated_at),
         }
@@ -747,8 +752,8 @@ impl crate::Storage for SqliteStorage {
 
     async fn create_channel(&self, channel: &Channel) -> Result<Channel, DbErr> {
         sqlx::query(
-            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, available_hours, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&channel.id)
         .bind(&channel.provider_id)
@@ -763,6 +768,7 @@ impl crate::Storage for SqliteStorage {
         .bind(channel.tpm_limit)
         .bind(channel.balance)
         .bind(channel.weight.unwrap_or(100))
+        .bind(channel.available_hours.as_ref().map(|s| serde_json::to_string(s).unwrap()))
         .bind(channel.created_at.to_rfc3339())
         .bind(channel.updated_at.to_rfc3339())
         .execute(&self.pool)
@@ -776,8 +782,8 @@ impl crate::Storage for SqliteStorage {
         let channel_id = channel.id.clone();
 
         sqlx::query(
-            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, available_hours, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&channel.id)
         .bind(&channel.provider_id)
@@ -792,6 +798,7 @@ impl crate::Storage for SqliteStorage {
         .bind(channel.tpm_limit)
         .bind(channel.balance)
         .bind(channel.weight.unwrap_or(100))
+        .bind(channel.available_hours.as_ref().map(|s| serde_json::to_string(s).unwrap()))
         .bind(channel.created_at.to_rfc3339())
         .bind(channel.updated_at.to_rfc3339())
         .execute(&mut *tx)
@@ -822,7 +829,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_channel(&self, id: &str) -> Result<Option<Channel>, DbErr> {
         let row: Option<SqliteChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at
+            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at, available_hours
              FROM channels WHERE id = ?",
         )
         .bind(id)
@@ -834,7 +841,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_channels(&self) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<SqliteChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at
+            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at, available_hours
              FROM channels ORDER BY priority ASC",
         )
         .fetch_all(&self.pool)
@@ -845,7 +852,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<SqliteChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at
+            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at, available_hours
              FROM channels WHERE provider_id = ? ORDER BY priority ASC",
         )
         .bind(provider_id)
@@ -857,7 +864,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn list_enabled_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<SqliteChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at
+            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_at, updated_at, available_hours
              FROM channels WHERE provider_id = ? AND enabled = 1 ORDER BY priority ASC",
         )
         .bind(provider_id)
@@ -870,7 +877,7 @@ impl crate::Storage for SqliteStorage {
     async fn update_channel(&self, channel: &Channel) -> Result<Channel, DbErr> {
         sqlx::query(
             "UPDATE channels SET name = ?, api_key = ?, base_url = ?, priority = ?, pricing_policy_id = ?, markup_ratio = ?,
-             enabled = ?, rpm_limit = ?, tpm_limit = ?, balance = ?, weight = ?, updated_at = ? WHERE id = ?",
+             enabled = ?, rpm_limit = ?, tpm_limit = ?, balance = ?, weight = ?, available_hours = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&channel.name)
         .bind(&channel.api_key)
@@ -883,6 +890,7 @@ impl crate::Storage for SqliteStorage {
         .bind(channel.tpm_limit)
         .bind(channel.balance)
         .bind(channel.weight)
+        .bind(channel.available_hours.as_ref().map(|s| serde_json::to_string(s).unwrap()))
         .bind(channel.updated_at.to_rfc3339())
         .bind(&channel.id)
         .execute(&self.pool)
@@ -1631,7 +1639,7 @@ impl crate::Storage for SqliteStorage {
 
     async fn get_channels_for_model(&self, model_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<SqliteChannelRow> = sqlx::query_as(
-            "SELECT c.id, c.provider_id, c.name, c.api_key, c.base_url, c.priority, c.pricing_policy_id, c.markup_ratio, c.enabled, c.rpm_limit, c.tpm_limit, c.balance, c.weight, c.created_at, c.updated_at
+            "SELECT c.id, c.provider_id, c.name, c.api_key, c.base_url, c.priority, c.pricing_policy_id, c.markup_ratio, c.enabled, c.rpm_limit, c.tpm_limit, c.balance, c.weight, c.created_at, c.updated_at, c.available_hours
              FROM channels c
              JOIN channel_models cm ON c.id = cm.channel_id
              WHERE cm.model_id = ? AND c.enabled = 1",
