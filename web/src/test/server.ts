@@ -83,4 +83,15 @@ export const server = setupServer(
   http.get('*/api/v1/version', () => {
     return HttpResponse.json({ version: 'v0.9.5' });
   }),
+
+  http.get('*/api/v1/admin/system-info', () => {
+    return HttpResponse.json({
+      server_bind_address: '0.0.0.0:8080',
+      database_driver: 'sqlite',
+      rate_limit_window_secs: 60,
+      rate_limit_flush_interval_secs: 30,
+      upstream_timeout_secs: 30,
+      audit_retention_days: 90,
+    });
+  }),
 );

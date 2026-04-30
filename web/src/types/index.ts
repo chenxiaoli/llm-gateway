@@ -232,6 +232,15 @@ export interface UpdateSettingsRequest {
   audit_log_response?: boolean;
 }
 
+export interface SystemInfo {
+  server_bind_address: string;
+  database_driver: string;
+  rate_limit_window_secs: number;
+  rate_limit_flush_interval_secs: number;
+  upstream_timeout_secs: number;
+  audit_retention_days: number | null;
+}
+
 export interface Channel {
   id: string;
   provider_id: string;

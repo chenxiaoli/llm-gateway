@@ -25,6 +25,17 @@ pub struct AppState {
     pub audit_tx: mpsc::Sender<AuditTask>,
     pub registry: Arc<dyn ChannelRegistry>,
     pub settlement_tx: mpsc::Sender<settlement::SettlementTrigger>,
+    pub system_info: SystemInfo,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SystemInfo {
+    pub server_bind_address: String,
+    pub database_driver: String,
+    pub rate_limit_window_secs: i64,
+    pub rate_limit_flush_interval_secs: i64,
+    pub upstream_timeout_secs: u64,
+    pub audit_retention_days: Option<i64>,
 }
 
 /// Task sent to background worker for async processing.

@@ -8,7 +8,7 @@ import {
   Timer,
   ExternalLink,
 } from 'lucide-react';
-import { useSettings, useUpdateSettings } from '../hooks/useSettings';
+import { useSettings, useUpdateSettings, useSystemInfo } from '../hooks/useSettings';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
 import { Toggle } from '../components/ui/Toggle';
@@ -27,17 +27,9 @@ const TABS: { key: SettingsTab; label: string }[] = [
   { key: 'about', label: 'About' },
 ];
 
-const STATIC_CONFIG = [
-  { label: 'Server Bind Address', value: '0.0.0.0:8080', Icon: Globe },
-  { label: 'Database Driver', value: 'SQLite', Icon: Database },
-  { label: 'Rate Limit Window', value: '60s', Icon: Clock },
-  { label: 'Rate Limit Flush Interval', value: '30s', Icon: Timer },
-  { label: 'Upstream Timeout', value: '30s', Icon: Timer },
-  { label: 'Audit Retention', value: '90 days', Icon: Clock },
-] as const;
-
 export default function Settings() {
   const { data: settings, isLoading } = useSettings();
+  const { data: systemInfo } = useSystemInfo();
   const updateMutation = useUpdateSettings();
   const reducedMotion = useReducedMotion();
 
@@ -233,7 +225,14 @@ export default function Settings() {
                 </div>
                 <div className="p-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {STATIC_CONFIG.map(({ label, value, Icon }) => (
+                    {systemInfo ? [
+                      { label: 'Server Bind Address', value: systemInfo.server_bind_address, Icon: Globe },
+                      { label: 'Database Driver', value: systemInfo.database_driver, Icon: Database },
+                      { label: 'Rate Limit Window', value: `${systemInfo.rate_limit_window_secs}s`, Icon: Clock },
+                      { label: 'Rate Limit Flush Interval', value: `${systemInfo.rate_limit_flush_interval_secs}s`, Icon: Timer },
+                      { label: 'Upstream Timeout', value: `${systemInfo.upstream_timeout_secs}s`, Icon: Timer },
+                      { label: 'Audit Retention', value: systemInfo.audit_retention_days != null ? `${systemInfo.audit_retention_days} days` : '--', Icon: Clock },
+                    ].map(({ label, value, Icon }) => (
                       <div key={label} className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-base-200/60 flex items-center justify-center shrink-0">
                           <Icon className="h-4 w-4 text-base-content/40" />
@@ -243,7 +242,9 @@ export default function Settings() {
                           <div className="text-sm font-mono font-medium">{value}</div>
                         </div>
                       </div>
-                    ))}
+                    )) : (
+                      <div className="col-span-2 text-sm text-base-content/40">Loading...</div>
+                    )}
                   </div>
                 </div>
               </div>

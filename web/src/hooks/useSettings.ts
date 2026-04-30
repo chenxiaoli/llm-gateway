@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getSettings, updateSettings } from '../api/settings';
+import { getSettings, updateSettings, getSystemInfo } from '../api/settings';
 import type { UpdateSettingsRequest } from '../types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
@@ -15,4 +15,8 @@ export function useUpdateSettings() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['settings'] }); toast.success('Settings updated'); },
     onError: (err) => { toast.error(getErrorMessage(err, 'Failed to update settings')); },
   });
+}
+
+export function useSystemInfo() {
+  return useQuery({ queryKey: ['system-info'], queryFn: getSystemInfo });
 }
