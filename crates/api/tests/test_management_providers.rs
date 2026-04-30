@@ -3,7 +3,7 @@ mod common;
 use common::MockChannelRegistry;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
-use llm_gateway_api::{management, AppState, SettlementTrigger};
+use llm_gateway_api::{management, AppState, SettlementTrigger, SystemInfo};
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::Storage;
@@ -28,6 +28,14 @@ fn make_state(db: Arc<llm_gateway_storage::sqlite::SqliteStorage>) -> Arc<AppSta
         audit_tx,
         registry: Arc::new(MockChannelRegistry),
         settlement_tx,
+        system_info: SystemInfo {
+            server_bind_address: "0.0.0.0:8080".to_string(),
+            database_driver: "sqlite".to_string(),
+            rate_limit_window_secs: 60,
+            rate_limit_flush_interval_secs: 30,
+            upstream_timeout_secs: 30,
+            audit_retention_days: Some(90),
+        },
     })
 }
 
