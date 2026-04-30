@@ -61,7 +61,7 @@ async fn run_settlement(storage: &Arc<dyn llm_gateway_storage::Storage>) {
     }
 
     // Resolve user_id → account_id
-    let mut account_charges: HashMap<String, f64> = HashMap::new();
+    let mut account_charges: HashMap<String, i64> = HashMap::new();
 
     for (user_id, cost) in &user_costs {
         if let Some(account) = storage
@@ -69,7 +69,7 @@ async fn run_settlement(storage: &Arc<dyn llm_gateway_storage::Storage>) {
             .await
             .unwrap_or(None)
         {
-            *account_charges.entry(account.id.clone()).or_insert(0.0) += cost;
+            *account_charges.entry(account.id.clone()).or_insert(0) += cost;
         }
     }
 
@@ -82,7 +82,7 @@ async fn run_settlement(storage: &Arc<dyn llm_gateway_storage::Storage>) {
     let batch_reference = format!("batch_{}", now.timestamp_micros());
 
     for (account_id, total_cost) in &account_charges {
-        if *total_cost <= 0.0 {
+        if *total_cost <= 0 {
             continue;
         }
 
@@ -112,13 +112,13 @@ async fn run_settlement(storage: &Arc<dyn llm_gateway_storage::Storage>) {
         match storage.deduct_balance(&req).await {
             Ok(llm_gateway_storage::DeductBalanceResult::Success(tx)) => {
                 tracing::info!(
-                    "[SETTLEMENT] Deducted ${:.6} from account {} (new balance: ${:.6})",
+                    "[SETTLEMENT] Deducted ${} from account {} (new balance: ${})",
                     total_cost, account_id, tx.balance_after
                 );
             }
             Ok(llm_gateway_storage::DeductBalanceResult::InsufficientBalance { current_balance, requested: _ }) => {
                 tracing::warn!(
-                    "[SETTLEMENT] Insufficient balance for account {}: balance=${:.6}, cost=${:.6}",
+                    "[SETTLEMENT] Insufficient balance for account {}: balance=${}, cost=${}",
                     account_id, current_balance, total_cost
                 );
             }

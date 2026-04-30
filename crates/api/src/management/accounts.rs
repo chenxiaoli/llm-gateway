@@ -1,23 +1,96 @@
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use llm_gateway_storage::{
-    Account, AccountResponse, AddBalance, AddBalanceResult, CreateTransaction,
-    PaginatedResponse, PaginationParams, TransactionResponse,
-    TransactionType, UpdateAccountThreshold,
+    units_to_usd, usd_to_units,
+    Account, AccountResponse as StorageAccountResponse,
+    AddBalance, AddBalanceResult,
+    PaginatedResponse, PaginationParams, TransactionResponse as StorageTransactionResponse,
+    TransactionType,
 };
 
 use crate::error::ApiError;
 use crate::extractors::require_admin;
 use crate::AppState;
 
+// --- JSON response wrappers with f64 monetary fields ---
+
 #[derive(Serialize)]
 pub struct AccountBalanceResponse {
-    pub account: AccountResponse,
-    pub transactions: PaginatedResponse<TransactionResponse>,
+    pub account: AccountJsonResponse,
+    pub transactions: PaginatedResponse<TransactionJsonResponse>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AccountJsonResponse {
+    pub id: String,
+    pub user_id: String,
+    pub balance: f64,
+    pub threshold: f64,
+    pub currency: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<StorageAccountResponse> for AccountJsonResponse {
+    fn from(a: StorageAccountResponse) -> Self {
+        AccountJsonResponse {
+            id: a.id,
+            user_id: a.user_id,
+            balance: units_to_usd(a.balance),
+            threshold: units_to_usd(a.threshold),
+            currency: a.currency,
+            created_at: a.created_at,
+            updated_at: a.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TransactionJsonResponse {
+    pub id: String,
+    pub account_id: String,
+    #[serde(rename = "type")]
+    pub transaction_type: String,
+    pub amount: f64,
+    pub balance_after: f64,
+    pub description: Option<String>,
+    pub reference_id: Option<String>,
+    pub created_at: String,
+}
+
+impl From<StorageTransactionResponse> for TransactionJsonResponse {
+    fn from(t: StorageTransactionResponse) -> Self {
+        TransactionJsonResponse {
+            id: t.id,
+            account_id: t.account_id,
+            transaction_type: t.transaction_type,
+            amount: units_to_usd(t.amount),
+            balance_after: units_to_usd(t.balance_after),
+            description: t.description,
+            reference_id: t.reference_id,
+            created_at: t.created_at,
+        }
+    }
+}
+
+// --- JSON request structs (f64 for API boundary) ---
+
+#[derive(Debug, Deserialize)]
+pub struct CreateTransactionRequest {
+    #[serde(rename = "type")]
+    pub transaction_type: String,
+    pub amount: f64,
+    pub description: Option<String>,
+    pub reference_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateThresholdRequest {
+    pub threshold: f64,
 }
 
 pub async fn get_balance(
@@ -43,9 +116,9 @@ pub async fn get_balance(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(AccountBalanceResponse {
-        account: AccountResponse::from(&account),
+        account: StorageAccountResponse::from(&account).into(),
         transactions: PaginatedResponse {
-            items: transactions.items.iter().map(TransactionResponse::from).collect(),
+            items: transactions.items.iter().map(|t| StorageTransactionResponse::from(t).into()).collect(),
             total: transactions.total,
             page: transactions.page,
             page_size: transactions.page_size,
@@ -57,8 +130,8 @@ pub async fn recharge(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(user_id): Path<String>,
-    Json(input): Json<CreateTransaction>,
-) -> Result<Json<AccountResponse>, ApiError> {
+    Json(input): Json<CreateTransactionRequest>,
+) -> Result<Json<AccountJsonResponse>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     if input.amount <= 0.0 {
@@ -73,9 +146,11 @@ pub async fn recharge(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))?;
 
+    let amount_i64 = usd_to_units(input.amount);
+
     let req = AddBalance {
         account_id: account.id.clone(),
-        amount: input.amount,
+        amount: amount_i64,
         transaction_type: TransactionType::Credit,
         description: input.description.or_else(|| Some("Recharge".to_string())),
         reference_id: input.reference_id,
@@ -83,7 +158,7 @@ pub async fn recharge(
 
     match state.storage.add_balance(&req).await {
         Ok(AddBalanceResult::Success(tx)) => {
-            Ok(Json(AccountResponse::from(&Account {
+            Ok(Json(AccountJsonResponse::from(StorageAccountResponse::from(&Account {
                 id: tx.account_id,
                 user_id,
                 balance: tx.balance_after,
@@ -91,7 +166,7 @@ pub async fn recharge(
                 currency: account.currency,
                 created_at: account.created_at,
                 updated_at: tx.created_at,
-            })))
+            }))))
         }
         Ok(AddBalanceResult::AccountNotFound) => {
             Err(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))
@@ -104,8 +179,8 @@ pub async fn adjust(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(user_id): Path<String>,
-    Json(input): Json<CreateTransaction>,
-) -> Result<Json<AccountResponse>, ApiError> {
+    Json(input): Json<CreateTransactionRequest>,
+) -> Result<Json<AccountJsonResponse>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     if input.amount <= 0.0 {
@@ -130,17 +205,19 @@ pub async fn adjust(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))?;
 
+    let amount_i64 = usd_to_units(input.amount);
+
     // Guard: DebitRefund must not result in negative balance
-    if tx_type == TransactionType::DebitRefund && account.balance < input.amount {
+    if tx_type == TransactionType::DebitRefund && account.balance < amount_i64 {
         return Err(ApiError::BadRequest(format!(
             "Insufficient balance for debit refund: balance={}, requested={}",
-            account.balance, input.amount
+            units_to_usd(account.balance), input.amount
         )));
     }
 
     let req = AddBalance {
         account_id: account.id.clone(),
-        amount: input.amount,
+        amount: amount_i64,
         transaction_type: tx_type,
         description: input.description.or_else(|| Some("Manual adjustment".to_string())),
         reference_id: input.reference_id,
@@ -148,7 +225,7 @@ pub async fn adjust(
 
     match state.storage.add_balance(&req).await {
         Ok(AddBalanceResult::Success(tx)) => {
-            Ok(Json(AccountResponse::from(&Account {
+            Ok(Json(AccountJsonResponse::from(StorageAccountResponse::from(&Account {
                 id: tx.account_id,
                 user_id,
                 balance: tx.balance_after,
@@ -156,7 +233,7 @@ pub async fn adjust(
                 currency: account.currency,
                 created_at: account.created_at,
                 updated_at: tx.created_at,
-            })))
+            }))))
         }
         Ok(AddBalanceResult::AccountNotFound) => {
             Err(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))
@@ -169,8 +246,8 @@ pub async fn update_threshold(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(user_id): Path<String>,
-    Json(input): Json<UpdateAccountThreshold>,
-) -> Result<Json<AccountResponse>, ApiError> {
+    Json(input): Json<UpdateThresholdRequest>,
+) -> Result<Json<AccountJsonResponse>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     let mut account = state
@@ -184,7 +261,7 @@ pub async fn update_threshold(
         return Err(ApiError::BadRequest("Threshold must be non-negative".to_string()));
     }
 
-    account.threshold = input.threshold;
+    account.threshold = usd_to_units(input.threshold);
     account.updated_at = chrono::Utc::now();
 
     let updated = state
@@ -193,5 +270,5 @@ pub async fn update_threshold(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(Json(AccountResponse::from(&updated)))
+    Ok(Json(AccountJsonResponse::from(StorageAccountResponse::from(&updated))))
 }

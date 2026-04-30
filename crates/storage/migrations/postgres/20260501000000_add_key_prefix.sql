@@ -1,1 +1,1 @@
-ALTER TABLE api_keys ADD COLUMN key_prefix TEXT;
+ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS key_prefix TEXT;

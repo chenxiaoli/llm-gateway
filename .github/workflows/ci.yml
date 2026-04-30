@@ -116,6 +116,8 @@ jobs:
 
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
+        env:
+          LLM_GATEWAY_VERSION: ${{ github.ref_name }}
 
       - name: Rename binary with platform suffix
         shell: bash
@@ -166,6 +168,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VITE_COMMIT_SHA=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
 
   release:
     needs: [build-release, docker]

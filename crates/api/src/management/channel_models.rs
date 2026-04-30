@@ -1,20 +1,76 @@
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::Json;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use llm_gateway_storage::{ChannelModel, CreateChannelModel, UpdateChannelModel};
+use llm_gateway_storage::{bps_to_ratio, ratio_to_bps, ChannelModel};
 
 use crate::error::ApiError;
 use crate::extractors::require_admin;
 use crate::AppState;
 
+// --- JSON response wrapper with f64 markup_ratio ---
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ChannelModelResponse {
+    pub id: String,
+    pub channel_id: String,
+    pub model_id: String,
+    pub upstream_model_name: Option<String>,
+    pub priority_override: Option<i32>,
+    pub pricing_policy_id: Option<String>,
+    pub markup_ratio: f64,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<ChannelModel> for ChannelModelResponse {
+    fn from(cm: ChannelModel) -> Self {
+        ChannelModelResponse {
+            id: cm.id,
+            channel_id: cm.channel_id,
+            model_id: cm.model_id,
+            upstream_model_name: cm.upstream_model_name,
+            priority_override: cm.priority_override,
+            pricing_policy_id: cm.pricing_policy_id,
+            markup_ratio: bps_to_ratio(cm.markup_ratio),
+            enabled: cm.enabled,
+            created_at: cm.created_at.to_rfc3339(),
+            updated_at: cm.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+// --- JSON request structs (f64 markup_ratio for API boundary) ---
+
+#[derive(Debug, Deserialize)]
+pub struct CreateChannelModelRequest {
+    pub channel_id: Option<String>,
+    pub model_id: String,
+    pub upstream_model_name: Option<String>,
+    pub priority_override: Option<i32>,
+    pub pricing_policy_id: Option<String>,
+    pub markup_ratio: Option<f64>,
+    pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateChannelModelRequest {
+    pub upstream_model_name: Option<String>,
+    pub priority_override: Option<Option<i32>>,
+    pub pricing_policy_id: Option<Option<String>>,
+    pub markup_ratio: Option<f64>,
+    pub enabled: Option<bool>,
+}
+
 pub async fn create_channel_model(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(provider_id): Path<String>,
-    Json(input): Json<CreateChannelModel>,
-) -> Result<Json<ChannelModel>, ApiError> {
+    Json(input): Json<CreateChannelModelRequest>,
+) -> Result<Json<ChannelModelResponse>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     // channel_id is required when creating by provider
@@ -43,7 +99,7 @@ pub async fn create_channel_model(
         upstream_model_name: input.upstream_model_name,
         priority_override: input.priority_override,
         pricing_policy_id: input.pricing_policy_id,
-        markup_ratio: input.markup_ratio.unwrap_or(1.0),
+        markup_ratio: ratio_to_bps(input.markup_ratio.unwrap_or(1.0)),
         enabled: input.enabled.unwrap_or(true),
         created_at: now,
         updated_at: now,
@@ -52,15 +108,15 @@ pub async fn create_channel_model(
     let created = state.storage.create_channel_model(&cm).await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(Json(created))
+    Ok(Json(ChannelModelResponse::from(created)))
 }
 
 pub async fn create_channel_model_by_channel(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(channel_id): Path<String>,
-    Json(input): Json<CreateChannelModel>,
-) -> Result<Json<ChannelModel>, ApiError> {
+    Json(input): Json<CreateChannelModelRequest>,
+) -> Result<Json<ChannelModelResponse>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     // Verify channel exists
@@ -81,7 +137,7 @@ pub async fn create_channel_model_by_channel(
         upstream_model_name: input.upstream_model_name,
         priority_override: input.priority_override,
         pricing_policy_id: input.pricing_policy_id,
-        markup_ratio: input.markup_ratio.unwrap_or(1.0),
+        markup_ratio: ratio_to_bps(input.markup_ratio.unwrap_or(1.0)),
         enabled: input.enabled.unwrap_or(true),
         created_at: now,
         updated_at: now,
@@ -90,14 +146,14 @@ pub async fn create_channel_model_by_channel(
     let created = state.storage.create_channel_model(&cm).await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(Json(created))
+    Ok(Json(ChannelModelResponse::from(created)))
 }
 
 pub async fn list_channel_models(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(provider_id): Path<String>,
-) -> Result<Json<Vec<ChannelModel>>, ApiError> {
+) -> Result<Json<Vec<ChannelModelResponse>>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     // Get channels for provider, then channel_models for those channels
@@ -114,29 +170,29 @@ pub async fn list_channel_models(
         all_models.extend(cms);
     }
 
-    Ok(Json(all_models))
+    Ok(Json(all_models.into_iter().map(ChannelModelResponse::from).collect()))
 }
 
 pub async fn get_channel_model(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(id): Path<String>,
-) -> Result<Json<ChannelModel>, ApiError> {
+) -> Result<Json<ChannelModelResponse>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     let cm = state.storage.get_channel_model(&id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("ChannelModel not found".to_string()))?;
 
-    Ok(Json(cm))
+    Ok(Json(ChannelModelResponse::from(cm)))
 }
 
 pub async fn update_channel_model(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(id): Path<String>,
-    Json(input): Json<UpdateChannelModel>,
-) -> Result<Json<ChannelModel>, ApiError> {
+    Json(input): Json<UpdateChannelModelRequest>,
+) -> Result<Json<ChannelModelResponse>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     let mut cm = state.storage.get_channel_model(&id).await
@@ -153,7 +209,7 @@ pub async fn update_channel_model(
         cm.pricing_policy_id = pricing_policy_id;
     }
     if let Some(markup_ratio) = input.markup_ratio {
-        cm.markup_ratio = markup_ratio;
+        cm.markup_ratio = ratio_to_bps(markup_ratio);
     }
     if let Some(enabled) = input.enabled {
         cm.enabled = enabled;
@@ -163,7 +219,7 @@ pub async fn update_channel_model(
     let updated = state.storage.update_channel_model(&cm).await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(Json(updated))
+    Ok(Json(ChannelModelResponse::from(updated)))
 }
 
 pub async fn delete_channel_model(
@@ -183,11 +239,11 @@ pub async fn list_channel_models_by_channel(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(channel_id): Path<String>,
-) -> Result<Json<Vec<ChannelModel>>, ApiError> {
+) -> Result<Json<Vec<ChannelModelResponse>>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     let models = state.storage.list_channel_models_by_channel(&channel_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(Json(models))
+    Ok(Json(models.into_iter().map(ChannelModelResponse::from).collect()))
 }

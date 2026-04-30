@@ -43,7 +43,7 @@ pub struct AuditTask {
     // Pricing params (worker parses usage and calculates cost)
     pub pricing_policy_config: Option<serde_json::Value>,  // config from PricingPolicy
     pub pricing_policy_billing_type: String,               // billing type from PricingPolicy
-    pub markup_ratio: f64,                                // multiplier applied to pricing policy cost
+    pub markup_ratio: i64,                                // markup ratio in basis points (1.0 = 10_000)
     pub channel_id: Option<String>,
     pub original_model: Option<String>,
     pub upstream_model: Option<String>,

@@ -81,6 +81,6 @@ export const server = setupServer(
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
   http.get('*/api/v1/version', () => {
-    return HttpResponse.json({ version: 'v0.8.0' });
+    return HttpResponse.json({ version: 'v0.9.5' });
   }),
 );

@@ -10,12 +10,12 @@ import { Modal } from '../components/ui/Modal';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { motion } from 'framer-motion';
 import type { PricingPolicyWithCounts } from '../types';
-import type { PricingConfig, TierConfig } from '../types';
+import type { PricingConfig, TierConfig, ContextTier } from '../types';
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 const schema = z.object({
   name: z.string().min(1, 'Policy name is required'),
-  billing_type: z.enum(['per_token', 'per_request', 'per_character', 'tiered_token', 'hybrid']),
+  billing_type: z.enum(['per_token', 'per_request', 'per_character', 'tiered_token', 'hybrid', 'context_tiered']),
   input_price_1m: z.string().optional(),
   output_price_1m: z.string().optional(),
   cache_read_price_1m: z.string().optional(),
@@ -27,38 +27,44 @@ type FormValues = z.infer<typeof schema>;
 
 const resolver = zodResolver(schema);
 
+// Prices are stored as integer subunits (100_000_000 per USD) matching the backend.
+const UNITS_PER_USD = 100_000_000;
+
 function buildConfig(data: FormValues): PricingConfig {
   const { billing_type, input_price_1m, output_price_1m, cache_read_price_1m, cache_creation_price_1m, request_price } = data;
-  const num = (v: string | undefined) => v ? parseFloat(v) : undefined;
+  const toSub = (v: string | undefined) => v ? Math.round(parseFloat(v) * UNITS_PER_USD) : undefined;
   switch (billing_type) {
     case 'per_token':
       return {
-        input_price_1m: num(input_price_1m),
-        output_price_1m: num(output_price_1m),
-        cache_read_price_1m: num(cache_read_price_1m),
-        cache_creation_price_1m: num(cache_creation_price_1m),
+        input_price_1m: toSub(input_price_1m),
+        output_price_1m: toSub(output_price_1m),
+        cache_read_price_1m: toSub(cache_read_price_1m),
+        cache_creation_price_1m: toSub(cache_creation_price_1m),
       };
     case 'per_request':
-      return { request_price: num(request_price) };
+      return { request_price: toSub(request_price) };
     case 'per_character':
       return {
-        input_price_1m: num(input_price_1m),
-        output_price_1m: num(output_price_1m),
+        input_price_1m: toSub(input_price_1m),
+        output_price_1m: toSub(output_price_1m),
       };
     case 'tiered_token':
       return {
-        input_price_1m: num(input_price_1m),
-        output_price_1m: num(output_price_1m),
-        cache_read_price_1m: num(cache_read_price_1m),
+        input_price_1m: toSub(input_price_1m),
+        output_price_1m: toSub(output_price_1m),
+        cache_read_price_1m: toSub(cache_read_price_1m),
       };
     case 'hybrid':
       return {
-        base_per_call: num(request_price),
-        input_price_1m: num(input_price_1m),
-        output_price_1m: num(output_price_1m),
-        cache_read_price_1m: num(cache_read_price_1m),
-        cache_creation_price_1m: num(cache_creation_price_1m),
+        base_per_call: toSub(request_price),
+        input_price_1m: toSub(input_price_1m),
+        output_price_1m: toSub(output_price_1m),
+        cache_read_price_1m: toSub(cache_read_price_1m),
+        cache_creation_price_1m: toSub(cache_creation_price_1m),
       };
+    case 'context_tiered':
+      // Handled separately in PolicyFormModal via contextTiers state
+      return { tiers: [] };
   }
 }
 
@@ -67,14 +73,21 @@ const BILLING_TYPES: Record<string, string> = {
   per_request: 'Per Request',
   per_character: 'Per Character',
   tiered_token: 'Tiered Token',
+  context_tiered: 'Context Tiered',
   hybrid: 'Hybrid',
 };
 
 // ── Config renderer for table cells ───────────────────────────────────────────
 function fmt(val: unknown): string {
-  if (typeof val === 'number') return `$${val.toFixed(4)}/M`;
+  if (typeof val === 'number') return `$${(val / UNITS_PER_USD).toFixed(4)}/M`;
   if (typeof val === 'object' && val !== null) return JSON.stringify(val);
   return String(val);
+}
+
+function formatTokenCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}K`;
+  return String(n);
 }
 
 function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
@@ -132,6 +145,28 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
     );
   }
 
+  if (bt === 'context_tiered') {
+    const tiers = cfg['tiers'] as ContextTier[] | undefined;
+    if (!tiers || tiers.length === 0) {
+      return <span className="text-xs text-base-content/30 italic">—</span>;
+    }
+    return (
+      <div className="flex flex-col gap-1">
+        {tiers.map((tier, i) => {
+          const label = tier.up_to != null ? `< ${formatTokenCount(tier.up_to)}` : `${formatTokenCount(0)}+`;
+          return (
+            <div key={i} className="flex items-center gap-1">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30 min-w-[40px]">{label}</span>
+              <span className="text-[10px] font-mono text-base-content/60">
+                In {fmt(tier.input_price_1m)} · Out {fmt(tier.output_price_1m)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   if (bt === 'per_request') {
     const p = cfg['request_price'] as number | undefined;
     return (
@@ -166,6 +201,96 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
   return <span className="text-xs text-base-content/30 italic">—</span>;
 }
 
+// ── Context Tiered Fields (dynamic tier list) ──────────────────────────────────
+const INPUT_CLASS = 'w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors';
+
+interface TierRow {
+  up_to: string;
+  input_price_1m: string;
+  output_price_1m: string;
+  cache_read_price_1m: string;
+  cache_creation_price_1m: string;
+}
+
+function tierRowDefault(): TierRow {
+  return { up_to: '', input_price_1m: '', output_price_1m: '', cache_read_price_1m: '', cache_creation_price_1m: '' };
+}
+
+function ContextTieredFields({ onChange, tiers: initialTiers }: { onChange: (tiers: TierRow[]) => void; tiers: TierRow[] }) {
+  const [tiers, setTiers] = useState<TierRow[]>(initialTiers);
+
+  const update = (updated: TierRow[]) => {
+    setTiers(updated);
+    onChange(updated);
+  };
+
+  const handleChange = (index: number, field: keyof TierRow, value: string) => {
+    const next = [...tiers];
+    next[index] = { ...next[index], [field]: value };
+    update(next);
+  };
+
+  const addTier = () => update([...tiers, tierRowDefault()]);
+  const removeTier = (index: number) => {
+    if (tiers.length <= 1) return;
+    update(tiers.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+          Context Tiers
+        </label>
+        <button type="button" onClick={addTier} className="text-xs text-primary hover:text-primary/80 font-medium">
+          + Add Tier
+        </button>
+      </div>
+      {tiers.map((tier, i) => (
+        <div key={i} className="p-3 rounded-lg border border-base-300/50 bg-base-200/30 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/40">Tier {i + 1}</span>
+            {tiers.length > 1 && (
+              <button type="button" onClick={() => removeTier(i)} className="text-[10px] text-error/60 hover:text-error">
+                Remove
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">
+                {i < tiers.length - 1 ? 'Up To (tokens)' : 'Final Tier'}
+              </label>
+              {i < tiers.length - 1 ? (
+                <input type="number" step="1" value={tier.up_to} onChange={e => handleChange(i, 'up_to', e.target.value)} placeholder="e.g. 32000" className={INPUT_CLASS} />
+              ) : (
+                <div className="h-10 flex items-center px-3 text-xs text-base-content/30 italic rounded-lg border border-base-300/30 bg-base-200/20">No upper limit</div>
+              )}
+            </div>
+            <div />
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">Input ($/M)</label>
+              <input type="number" step="0.0001" value={tier.input_price_1m} onChange={e => handleChange(i, 'input_price_1m', e.target.value)} placeholder="$0.00" className={INPUT_CLASS} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">Output ($/M)</label>
+              <input type="number" step="0.0001" value={tier.output_price_1m} onChange={e => handleChange(i, 'output_price_1m', e.target.value)} placeholder="$0.00" className={INPUT_CLASS} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">Cache Read ($/M)</label>
+              <input type="number" step="0.0001" value={tier.cache_read_price_1m} onChange={e => handleChange(i, 'cache_read_price_1m', e.target.value)} placeholder="$0.00" className={INPUT_CLASS} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">Cache Create ($/M)</label>
+              <input type="number" step="0.0001" value={tier.cache_creation_price_1m} onChange={e => handleChange(i, 'cache_creation_price_1m', e.target.value)} placeholder="$0.00" className={INPUT_CLASS} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Shared Policy Form Modal ──────────────────────────────────────────────────
 interface PolicyFormModalProps {
   title: string;
@@ -189,23 +314,48 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
     defaultValues: {
       name: defaultValues?.name ?? '',
       billing_type: (billingType as FormValues['billing_type']) ?? 'per_token',
-      input_price_1m: cfg?.['input_price_1m'] != null ? String(cfg['input_price_1m']) : '',
-      output_price_1m: cfg?.['output_price_1m'] != null ? String(cfg['output_price_1m']) : '',
-      cache_read_price_1m: cfg?.['cache_read_price_1m'] != null ? String(cfg['cache_read_price_1m']) : '',
-      cache_creation_price_1m: cfg?.['cache_creation_price_1m'] != null ? String(cfg['cache_creation_price_1m']) : '',
-      request_price: cfg?.['request_price'] != null ? String(cfg['request_price']) : '',
+      input_price_1m: cfg?.['input_price_1m'] != null ? String(Number(cfg['input_price_1m']) / UNITS_PER_USD) : '',
+      output_price_1m: cfg?.['output_price_1m'] != null ? String(Number(cfg['output_price_1m']) / UNITS_PER_USD) : '',
+      cache_read_price_1m: cfg?.['cache_read_price_1m'] != null ? String(Number(cfg['cache_read_price_1m']) / UNITS_PER_USD) : '',
+      cache_creation_price_1m: cfg?.['cache_creation_price_1m'] != null ? String(Number(cfg['cache_creation_price_1m']) / UNITS_PER_USD) : '',
+      request_price: cfg?.['request_price'] != null ? String(Number(cfg['request_price']) / UNITS_PER_USD) : '',
     },
     resolver,
   });
 
   const watchedBillingType = watch('billing_type');
+  const [contextTiers, setContextTiers] = useState<TierRow[]>(() => {
+    const tiersArr = cfg?.['tiers'] as Record<string, unknown>[] | undefined;
+    if (tiersArr && tiersArr.length > 0) {
+      return tiersArr.map(t => ({
+        up_to: t['up_to'] != null ? String(t['up_to']) : '',
+        input_price_1m: t['input_price_1m'] != null ? String(Number(t['input_price_1m']) / UNITS_PER_USD) : '',
+        output_price_1m: t['output_price_1m'] != null ? String(Number(t['output_price_1m']) / UNITS_PER_USD) : '',
+        cache_read_price_1m: t['cache_read_price_1m'] != null ? String(Number(t['cache_read_price_1m']) / UNITS_PER_USD) : '',
+        cache_creation_price_1m: t['cache_creation_price_1m'] != null ? String(Number(t['cache_creation_price_1m']) / UNITS_PER_USD) : '',
+      }));
+    }
+    return [tierRowDefault(), tierRowDefault()];
+  });
 
   const onFormSubmit = async (data: FormValues) => {
-    await onSubmit({
-      name: data.name,
-      billing_type: data.billing_type,
-      config: buildConfig(data),
-    });
+    if (data.billing_type === 'context_tiered') {
+      const toSub = (v: string) => v ? Math.round(parseFloat(v) * UNITS_PER_USD) : undefined;
+      const tiers = contextTiers.map((tier, i) => ({
+        up_to: i < contextTiers.length - 1 ? (tier.up_to ? parseInt(tier.up_to) : null) : null,
+        input_price_1m: toSub(tier.input_price_1m),
+        output_price_1m: toSub(tier.output_price_1m),
+        cache_read_price_1m: toSub(tier.cache_read_price_1m),
+        cache_creation_price_1m: toSub(tier.cache_creation_price_1m),
+      }));
+      await onSubmit({ name: data.name, billing_type: data.billing_type, config: { tiers } });
+    } else {
+      await onSubmit({
+        name: data.name,
+        billing_type: data.billing_type,
+        config: buildConfig(data),
+      });
+    }
     reset();
     onClose();
   };
@@ -409,6 +559,10 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
               />
             </div>
           </div>
+        )}
+
+        {watchedBillingType === 'context_tiered' && (
+          <ContextTieredFields onChange={setContextTiers} tiers={contextTiers} />
         )}
 
         <div className="flex gap-2 pt-1">

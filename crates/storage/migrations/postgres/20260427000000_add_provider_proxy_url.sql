@@ -1,1 +1,1 @@
-ALTER TABLE providers ADD COLUMN proxy_url TEXT;
+ALTER TABLE providers ADD COLUMN IF NOT EXISTS proxy_url TEXT;

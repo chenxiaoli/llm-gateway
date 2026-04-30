@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::types::{Model, Provider};
+use crate::money::usd_to_units;
+use crate::types::{Model, PricingPolicy, Provider};
 
 /// Seed data format from JSON (public for API)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,7 +28,6 @@ pub struct SeedProvider {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SeedModel {
-    pub provider: String,
     pub name: String,
     #[serde(default)]
     pub billing_type: Option<String>,
@@ -35,6 +35,24 @@ pub struct SeedModel {
     pub input_price: Option<f64>,
     #[serde(default)]
     pub output_price: Option<f64>,
+    #[serde(default)]
+    pub cache_read_price: Option<f64>,
+    #[serde(default)]
+    pub cache_creation_price: Option<f64>,
+    #[serde(default)]
+    pub tiers: Vec<SeedTier>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SeedTier {
+    pub up_to: Option<i64>,
+    pub input_price: Option<f64>,
+    pub output_price: Option<f64>,
+    #[serde(default)]
+    pub cache_read_price: Option<f64>,
+    #[serde(default)]
+    pub cache_creation_price: Option<f64>,
 }
 
 const SEED_JSON: &str = include_str!("../seed_providers.json");
@@ -88,6 +106,79 @@ pub fn get_seed_providers() -> Vec<Provider> {
             }
         })
         .collect()
+}
+
+/// Build pricing policies from seed models.
+/// Creates policies for both per_token (with optional cache prices) and context_tiered models.
+/// Returns (policy, model_name) pairs so the caller can link them.
+pub fn get_seed_pricing_policies() -> Vec<(PricingPolicy, String)> {
+    let data: SeedData = match serde_json::from_str(SEED_JSON) {
+        Ok(d) => d,
+        Err(_) => return Vec::new(),
+    };
+
+    data.models
+        .iter()
+        .filter_map(|m| {
+            let billing_type = m.billing_type.as_deref().unwrap_or("per_token");
+
+            match billing_type {
+                "context_tiered" if !m.tiers.is_empty() => {
+                    let tiers: Vec<serde_json::Value> = m.tiers.iter().map(|t| {
+                        let mut obj = serde_json::Map::new();
+                        if let Some(up_to) = t.up_to {
+                            obj.insert("up_to".into(), serde_json::Value::from(up_to));
+                        }
+                        if let Some(p) = t.input_price {
+                            obj.insert("input_price_1m".into(), serde_json::Value::from(usd_to_units(p)));
+                        }
+                        if let Some(p) = t.output_price {
+                            obj.insert("output_price_1m".into(), serde_json::Value::from(usd_to_units(p)));
+                        }
+                        if let Some(p) = t.cache_read_price {
+                            obj.insert("cache_read_price_1m".into(), serde_json::Value::from(usd_to_units(p)));
+                        }
+                        if let Some(p) = t.cache_creation_price {
+                            obj.insert("cache_creation_price_1m".into(), serde_json::Value::from(usd_to_units(p)));
+                        }
+                        serde_json::Value::Object(obj)
+                    }).collect();
+
+                    let config = serde_json::json!({ "tiers": tiers });
+                    Some((build_policy(&m.name, billing_type, config), m.name.clone()))
+                }
+                "per_token" if m.input_price.is_some() || m.output_price.is_some() => {
+                    let mut obj = serde_json::Map::new();
+                    if let Some(p) = m.input_price {
+                        obj.insert("input_price_1m".into(), serde_json::Value::from(usd_to_units(p)));
+                    }
+                    if let Some(p) = m.output_price {
+                        obj.insert("output_price_1m".into(), serde_json::Value::from(usd_to_units(p)));
+                    }
+                    if let Some(p) = m.cache_read_price {
+                        obj.insert("cache_read_price_1m".into(), serde_json::Value::from(usd_to_units(p)));
+                    }
+                    if let Some(p) = m.cache_creation_price {
+                        obj.insert("cache_creation_price_1m".into(), serde_json::Value::from(usd_to_units(p)));
+                    }
+                    let config = serde_json::Value::Object(obj);
+                    Some((build_policy(&m.name, billing_type, config), m.name.clone()))
+                }
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+fn build_policy(model_name: &str, billing_type: &str, config: serde_json::Value) -> PricingPolicy {
+    PricingPolicy {
+        id: Uuid::new_v4().to_string(),
+        name: format!("{} Pricing", model_name),
+        billing_type: billing_type.to_string(),
+        config,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    }
 }
 
 /// Load seed models given provider IDs mapped by provider name

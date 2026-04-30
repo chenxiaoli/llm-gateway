@@ -1,9 +1,12 @@
 pub mod types;
 pub mod seed;
+pub mod money;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
 #[cfg(feature = "postgres")]
 pub mod postgres;
+
+pub use money::*;
 
 pub use types::{
     *,
@@ -85,7 +88,7 @@ pub trait Storage: Send + Sync {
     async fn query_usage(&self, filter: &UsageFilter) -> Result<Vec<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage_paginated(&self, filter: &UsageFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage_summary(&self, filter: &UsageFilter) -> Result<Vec<UsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>>;
-    async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, f64)>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, i64)>, Box<dyn std::error::Error + Send + Sync>>;
 
     // Audit
     async fn insert_log(&self, log: &AuditLog) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;

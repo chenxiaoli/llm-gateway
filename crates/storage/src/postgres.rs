@@ -29,7 +29,7 @@ struct PgKeyRow {
     key_hash: String,
     key_prefix: Option<String>,
     rate_limit: Option<i64>,
-    budget_monthly: Option<f64>,
+    budget_monthly: Option<i64>,
     enabled: bool,
     created_by: Option<String>,
     model_fallback_id: Option<String>,
@@ -159,7 +159,7 @@ struct PgUsageRow {
     output_tokens: Option<i64>,
     cache_read_tokens: Option<i64>,
     cache_creation_tokens: Option<i64>,
-    cost: f64,
+    cost: i64,
     user_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -191,7 +191,7 @@ struct PgUsageSummaryRow {
     total_cache_read_tokens: i64,
     total_cache_creation_tokens: i64,
     total_output_tokens: i64,
-    total_cost: f64,
+    total_cost: i64,
     request_count: i64,
 }
 
@@ -325,11 +325,11 @@ struct PgChannelRow {
     base_url: Option<String>,
     priority: i32,
     pricing_policy_id: Option<String>,
-    markup_ratio: f64,
+    markup_ratio: i64,
     enabled: bool,
     rpm_limit: Option<i64>,
     tpm_limit: Option<i64>,
-    balance: Option<f64>,
+    balance: Option<i64>,
     weight: Option<i32>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -389,8 +389,8 @@ struct PgUserWithBalanceRow {
     username: String,
     role: String,
     enabled: bool,
-    balance: Option<f64>,
-    threshold: Option<f64>,
+    balance: Option<i64>,
+    threshold: Option<i64>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -402,8 +402,8 @@ impl From<PgUserWithBalanceRow> for UserWithBalance {
             username: r.username,
             role: r.role,
             enabled: r.enabled,
-            balance: r.balance.unwrap_or(0.0),
-            threshold: r.threshold.unwrap_or(1.0),
+            balance: r.balance.unwrap_or(0),
+            threshold: r.threshold.unwrap_or(100_000_000),
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -418,7 +418,7 @@ struct PgChannelModelRow {
     upstream_model_name: Option<String>,
     priority_override: Option<i32>,
     pricing_policy_id: Option<String>,
-    markup_ratio: f64,
+    markup_ratio: i64,
     enabled: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -470,8 +470,8 @@ impl From<PgPricingPolicyRow> for PricingPolicy {
 struct PgAccountRow {
     id: String,
     user_id: String,
-    balance: f64,
-    threshold: f64,
+    balance: i64,
+    threshold: i64,
     currency: String,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -498,8 +498,8 @@ struct PgTransactionRow {
     id: String,
     account_id: String,
     transaction_type: String,
-    amount: f64,
-    balance_after: f64,
+    amount: i64,
+    balance_after: i64,
     description: Option<String>,
     reference_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
@@ -946,8 +946,8 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_model(&self, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "INSERT INTO models (id, name, model_type, pricing_policy_id, enabled, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6)",
+            "INSERT INTO models (id, name, model_type, pricing_policy_id, created_at)
+             VALUES ($1, $2, $3, $4, $5)",
         )
         .bind(&model.id)
         .bind(&model.name)
@@ -1005,7 +1005,7 @@ impl crate::Storage for PostgresStorage {
             LEFT JOIN pricing_policies pp ON m.pricing_policy_id = pp.id
             LEFT JOIN channel_models cm ON cm.model_id = m.id
             LEFT JOIN channels c ON c.id = cm.channel_id
-            GROUP BY m.id
+            GROUP BY m.id, m.name, m.model_type, m.pricing_policy_id, m.created_at, pp.name
             ORDER BY m.name
             "#
         )
@@ -1174,26 +1174,35 @@ impl crate::Storage for PostgresStorage {
 
     async fn query_usage_paginated(&self, filter: &UsageFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<UsageRecord>, Box<dyn std::error::Error + Send + Sync>> {
         let mut conditions = Vec::new();
-        let mut bind_vals: Vec<String> = Vec::new();
+        let mut param_idx = 1;
+        let mut bind_user: Option<String> = None;
+        let mut bind_model: Option<String> = None;
+        let mut bind_since: Option<chrono::DateTime<chrono::Utc>> = None;
+        let mut bind_until: Option<chrono::DateTime<chrono::Utc>> = None;
 
         if let Some(ref user_id) = filter.user_id {
-            conditions.push(format!("user_id = ${}", bind_vals.len() + 1));
-            bind_vals.push(user_id.clone());
+            conditions.push(format!("user_id = ${}", param_idx));
+            bind_user = Some(user_id.clone());
+            param_idx += 1;
         } else if let Some(ref key_id) = filter.key_id {
-            conditions.push(format!("key_id = ${}", bind_vals.len() + 1));
-            bind_vals.push(key_id.clone());
+            conditions.push(format!("key_id = ${}", param_idx));
+            bind_user = Some(key_id.clone());
+            param_idx += 1;
         }
         if let Some(ref model_name) = filter.model_name {
-            conditions.push(format!("model_name = ${}", bind_vals.len() + 1));
-            bind_vals.push(model_name.clone());
+            conditions.push(format!("model_name = ${}", param_idx));
+            bind_model = Some(model_name.clone());
+            param_idx += 1;
         }
         if let Some(since) = filter.since {
-            conditions.push(format!("created_at >= ${}", bind_vals.len() + 1));
-            bind_vals.push(since.to_rfc3339());
+            conditions.push(format!("created_at >= ${}", param_idx));
+            bind_since = Some(since);
+            param_idx += 1;
         }
         if let Some(until) = filter.until {
-            conditions.push(format!("created_at <= ${}", bind_vals.len() + 1));
-            bind_vals.push(until.to_rfc3339());
+            conditions.push(format!("created_at <= ${}", param_idx));
+            bind_until = Some(until);
+            param_idx += 1;
         }
 
         let where_clause = if conditions.is_empty() {
@@ -1204,9 +1213,10 @@ impl crate::Storage for PostgresStorage {
 
         let count_sql = format!("SELECT COUNT(*) FROM usage_records{}", where_clause);
         let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
-        for val in &bind_vals {
-            count_query = count_query.bind(val);
-        }
+        if let Some(ref v) = bind_user { count_query = count_query.bind(v); }
+        if let Some(ref v) = bind_model { count_query = count_query.bind(v); }
+        if let Some(ref v) = bind_since { count_query = count_query.bind(*v); }
+        if let Some(ref v) = bind_until { count_query = count_query.bind(*v); }
         let total = count_query.fetch_one(&self.pool).await?.0;
 
         let offset = (page - 1) * page_size;
@@ -1214,13 +1224,14 @@ impl crate::Storage for PostgresStorage {
             "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at \
              FROM usage_records{} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
             where_clause,
-            bind_vals.len() + 1,
-            bind_vals.len() + 2
+            param_idx,
+            param_idx + 1
         );
         let mut data_query = sqlx::query_as::<_, PgUsageRow>(&data_sql);
-        for val in bind_vals {
-            data_query = data_query.bind(val);
-        }
+        if let Some(v) = bind_user { data_query = data_query.bind(v); }
+        if let Some(v) = bind_model { data_query = data_query.bind(v); }
+        if let Some(v) = bind_since { data_query = data_query.bind(v); }
+        if let Some(v) = bind_until { data_query = data_query.bind(v); }
         data_query = data_query.bind(page_size).bind(offset);
         let rows = data_query.fetch_all(&self.pool).await?;
 
@@ -1234,26 +1245,35 @@ impl crate::Storage for PostgresStorage {
 
     async fn query_usage_summary(&self, filter: &UsageFilter) -> Result<Vec<UsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>> {
         let mut conditions = Vec::new();
-        let mut bind_vals: Vec<String> = Vec::new();
+        let mut param_idx = 1;
+        let mut bind_user: Option<String> = None;
+        let mut bind_model: Option<String> = None;
+        let mut bind_since: Option<chrono::DateTime<chrono::Utc>> = None;
+        let mut bind_until: Option<chrono::DateTime<chrono::Utc>> = None;
 
         if let Some(ref user_id) = filter.user_id {
-            conditions.push(format!("user_id = ${}", bind_vals.len() + 1));
-            bind_vals.push(user_id.clone());
+            conditions.push(format!("user_id = ${}", param_idx));
+            bind_user = Some(user_id.clone());
+            param_idx += 1;
         } else if let Some(ref key_id) = filter.key_id {
-            conditions.push(format!("key_id = ${}", bind_vals.len() + 1));
-            bind_vals.push(key_id.clone());
+            conditions.push(format!("key_id = ${}", param_idx));
+            bind_user = Some(key_id.clone());
+            param_idx += 1;
         }
         if let Some(ref model_name) = filter.model_name {
-            conditions.push(format!("model_name = ${}", bind_vals.len() + 1));
-            bind_vals.push(model_name.clone());
+            conditions.push(format!("model_name = ${}", param_idx));
+            bind_model = Some(model_name.clone());
+            param_idx += 1;
         }
         if let Some(since) = filter.since {
-            conditions.push(format!("created_at >= ${}", bind_vals.len() + 1));
-            bind_vals.push(since.to_rfc3339());
+            conditions.push(format!("created_at >= ${}", param_idx));
+            bind_since = Some(since);
+            param_idx += 1;
         }
         if let Some(until) = filter.until {
-            conditions.push(format!("created_at <= ${}", bind_vals.len() + 1));
-            bind_vals.push(until.to_rfc3339());
+            conditions.push(format!("created_at <= ${}", param_idx));
+            bind_until = Some(until);
+            param_idx += 1;
         }
 
         let where_clause = if conditions.is_empty() {
@@ -1265,11 +1285,11 @@ impl crate::Storage for PostgresStorage {
         let sql = format!(
             "SELECT \
                model_name, \
-               COALESCE(SUM(input_tokens), 0) AS total_input_tokens, \
-               COALESCE(SUM(cache_read_tokens), 0) AS total_cache_read_tokens, \
-               COALESCE(SUM(cache_creation_tokens), 0) AS total_cache_creation_tokens, \
-               COALESCE(SUM(output_tokens), 0) AS total_output_tokens, \
-               COALESCE(SUM(cost), 0.0) AS total_cost, \
+               COALESCE(SUM(input_tokens), 0)::BIGINT AS total_input_tokens, \
+               COALESCE(SUM(cache_read_tokens), 0)::BIGINT AS total_cache_read_tokens, \
+               COALESCE(SUM(cache_creation_tokens), 0)::BIGINT AS total_cache_creation_tokens, \
+               COALESCE(SUM(output_tokens), 0)::BIGINT AS total_output_tokens, \
+               COALESCE(SUM(cost), 0)::BIGINT AS total_cost, \
                COUNT(*) AS request_count \
              FROM usage_records{} \
              GROUP BY model_name \
@@ -1278,22 +1298,23 @@ impl crate::Storage for PostgresStorage {
         );
 
         let mut query = sqlx::query_as::<_, PgUsageSummaryRow>(&sql);
-        for val in bind_vals {
-            query = query.bind(val);
-        }
+        if let Some(v) = bind_user { query = query.bind(v); }
+        if let Some(v) = bind_model { query = query.bind(v); }
+        if let Some(v) = bind_since { query = query.bind(v); }
+        if let Some(v) = bind_until { query = query.bind(v); }
 
         let rows: Vec<PgUsageSummaryRow> = query.fetch_all(&self.pool).await?;
         Ok(rows.into_iter().map(UsageSummaryRecord::from).collect())
     }
 
-    async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, f64)>, Box<dyn std::error::Error + Send + Sync>> {
-        let rows: Vec<(String, f64)> = sqlx::query_as(
-            "SELECT user_id, SUM(cost) FROM usage_records \
+    async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, i64)>, Box<dyn std::error::Error + Send + Sync>> {
+        let rows: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT user_id, SUM(cost)::BIGINT FROM usage_records \
              WHERE user_id IS NOT NULL AND created_at >= $1 AND created_at < $2 \
              GROUP BY user_id"
         )
-        .bind(since.to_rfc3339())
-        .bind(until.to_rfc3339())
+        .bind(since)
+        .bind(until)
         .fetch_all(&self.pool)
         .await?;
         Ok(rows)
@@ -1786,7 +1807,7 @@ impl crate::Storage for PostgresStorage {
         let mut tx = conn.begin().await?;
 
         // Lock the account row and get current balance
-        let row: Option<(f64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE")
+        let row: Option<(i64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE")
             .bind(&req.account_id)
             .fetch_optional(&mut *tx)
             .await?;
@@ -1850,7 +1871,7 @@ impl crate::Storage for PostgresStorage {
         let mut tx = conn.begin().await?;
 
         // Lock the account row and get current balance
-        let row: Option<(f64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE")
+        let row: Option<(i64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE")
             .bind(&req.account_id)
             .fetch_optional(&mut *tx)
             .await?;
@@ -1969,23 +1990,33 @@ impl crate::Storage for PostgresStorage {
     async fn seed_data(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use crate::seed;
 
-        // Check if providers already exist (idempotent)
-        let existing = self.list_providers().await?;
-        if existing.is_empty() {
-            // Get seed providers and insert them
+        // Seed providers if none exist (idempotent)
+        let existing_providers = self.list_providers().await?;
+        if existing_providers.is_empty() {
             let seed_providers = seed::get_seed_providers();
-            let mut inserted_providers = Vec::new();
             for provider in seed_providers {
-                let inserted = self.create_provider(&provider).await?;
-                inserted_providers.push(inserted);
+                self.create_provider(&provider).await?;
+            }
+        }
+
+        // Seed models independently — check models table, not providers
+        let existing_models = self.list_models().await?;
+        if existing_models.is_empty() {
+            // Create pricing policies from seed data first
+            let seed_policies = seed::get_seed_pricing_policies();
+            let mut policy_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+            for (policy, model_name) in &seed_policies {
+                let policy_id = policy.id.clone();
+                self.create_pricing_policy(policy).await?;
+                policy_map.insert(model_name.to_lowercase(), policy_id);
             }
 
-            // Build provider ID map and get seed models
-            let provider_ids = seed::build_provider_id_map(&inserted_providers);
-            let seed_models = seed::get_seed_models(&provider_ids);
-
-            // Insert seed models
-            for model in seed_models {
+            let seed_models = seed::get_seed_models(&[]);
+            for mut model in seed_models {
+                // Link pricing policy if one was created for this model
+                if let Some(policy_id) = policy_map.get(&model.name.to_lowercase()) {
+                    model.pricing_policy_id = Some(policy_id.clone());
+                }
                 self.create_model(&model).await?;
             }
         }
@@ -2163,7 +2194,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_transaction(&self, id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE id = $1"
+            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE id = $1"
         )
         .bind(id)
         .fetch_optional(self.pool())
@@ -2173,7 +2204,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_transaction_by_reference(&self, account_id: &str, reference_id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = $1 AND reference_id = $2"
+            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = $1 AND reference_id = $2"
         )
         .bind(account_id)
         .bind(reference_id)
@@ -2186,7 +2217,7 @@ impl crate::Storage for PostgresStorage {
         let offset = (page - 1) * page_size;
 
         let rows: Vec<PgTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         )
         .bind(account_id)
         .bind(page_size)

@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
     name           TEXT NOT NULL,
     key_hash       TEXT NOT NULL UNIQUE,
     rate_limit     INTEGER,
-    budget_monthly REAL,
+    budget_monthly INTEGER,
     enabled        BOOLEAN NOT NULL DEFAULT true,
     created_by     TEXT,
     created_at     TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -26,6 +26,18 @@ CREATE TABLE IF NOT EXISTS providers (
     updated_at         TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
+-- Pricing Policies (must be before models and channels which reference it)
+CREATE TABLE IF NOT EXISTS pricing_policies (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    billing_type TEXT NOT NULL,
+    config      TEXT NOT NULL,
+    created_at  TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at  TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_pricing_policies_type ON pricing_policies(billing_type);
+
 -- Models
 CREATE TABLE IF NOT EXISTS models (
     id               TEXT PRIMARY KEY,
@@ -34,15 +46,13 @@ CREATE TABLE IF NOT EXISTS models (
     model_type       TEXT,
     pricing_policy_id TEXT REFERENCES pricing_policies(id),
     billing_type     TEXT NOT NULL DEFAULT 'per_token',
-    input_price      REAL NOT NULL DEFAULT 0,
-    output_price     REAL NOT NULL DEFAULT 0,
-    request_price    REAL NOT NULL DEFAULT 0,
-    enabled          BOOLEAN NOT NULL DEFAULT true,
+    input_price      BIGINT NOT NULL DEFAULT 0,
+    output_price     BIGINT NOT NULL DEFAULT 0,
+    request_price    BIGINT NOT NULL DEFAULT 0,
     created_at       TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_models_provider ON models(provider_id);
-CREATE INDEX IF NOT EXISTS idx_models_enabled ON models(enabled);
 
 -- Key-Model Rate Limits
 CREATE TABLE IF NOT EXISTS key_model_rate_limits (
@@ -61,9 +71,9 @@ CREATE TABLE IF NOT EXISTS usage_records (
     provider_id   TEXT NOT NULL,
     channel_id    TEXT,
     protocol      TEXT NOT NULL,
-    input_tokens  INTEGER,
-    output_tokens INTEGER,
-    cost          REAL NOT NULL,
+    input_tokens  BIGINT,
+    output_tokens BIGINT,
+    cost          BIGINT NOT NULL,
     created_at    TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
@@ -83,8 +93,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     response_body TEXT NOT NULL,
     status_code   INTEGER NOT NULL,
     latency_ms    BIGINT NOT NULL,
-    input_tokens  INTEGER,
-    output_tokens INTEGER,
+    input_tokens  BIGINT,
+    output_tokens BIGINT,
     created_at    TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
@@ -127,11 +137,11 @@ CREATE TABLE IF NOT EXISTS channels (
     base_url         TEXT,
     priority         INTEGER NOT NULL DEFAULT 0,
     pricing_policy_id TEXT REFERENCES pricing_policies(id),
-    markup_ratio     REAL NOT NULL DEFAULT 1.0,
+    markup_ratio     BIGINT NOT NULL DEFAULT 10000,
     enabled          BOOLEAN NOT NULL DEFAULT true,
     rpm_limit        INTEGER,
     tpm_limit        INTEGER,
-    balance          REAL,
+    balance          BIGINT,
     weight           INTEGER DEFAULT 100,
     created_at       TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at       TIMESTAMP WITH TIME ZONE NOT NULL
@@ -139,18 +149,6 @@ CREATE TABLE IF NOT EXISTS channels (
 
 CREATE INDEX IF NOT EXISTS idx_channels_provider ON channels(provider_id);
 CREATE INDEX IF NOT EXISTS idx_channels_enabled ON channels(enabled);
-
--- Pricing Policies
-CREATE TABLE IF NOT EXISTS pricing_policies (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    billing_type TEXT NOT NULL,
-    config      TEXT NOT NULL,
-    created_at  TIMESTAMP WITH TIME ZONE NOT NULL,
-    updated_at  TIMESTAMP WITH TIME ZONE NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_pricing_policies_type ON pricing_policies(billing_type);
 
 -- Channel Models (Junction Table)
 CREATE TABLE IF NOT EXISTS channel_models (
@@ -160,11 +158,11 @@ CREATE TABLE IF NOT EXISTS channel_models (
     upstream_model_name TEXT NOT NULL,
     priority_override   INTEGER,
     cost_policy_id      TEXT REFERENCES pricing_policies(id),
-    markup_ratio        REAL NOT NULL DEFAULT 1.0,
+    markup_ratio        BIGINT NOT NULL DEFAULT 10000,
     billing_type        TEXT,
-    input_price         REAL,
-    output_price        REAL,
-    request_price       REAL,
+    input_price         BIGINT,
+    output_price        BIGINT,
+    request_price       BIGINT,
     enabled             BOOLEAN NOT NULL DEFAULT true,
     created_at          TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at          TIMESTAMP WITH TIME ZONE NOT NULL,

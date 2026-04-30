@@ -46,7 +46,7 @@ struct SqliteKeyRow {
     key_hash: String,
     key_prefix: Option<String>,
     rate_limit: Option<i64>,
-    budget_monthly: Option<f64>,
+    budget_monthly: Option<i64>,
     enabled: i64,
     created_by: Option<String>,
     model_fallback_id: Option<String>,
@@ -141,7 +141,7 @@ struct SqliteUsageSummaryRow {
     total_cache_read_tokens: i64,
     total_cache_creation_tokens: i64,
     total_output_tokens: i64,
-    total_cost: f64,
+    total_cost: i64,
     request_count: i64,
 }
 
@@ -171,7 +171,7 @@ struct SqliteUsageRow {
     output_tokens: Option<i64>,
     cache_read_tokens: Option<i64>,
     cache_creation_tokens: Option<i64>,
-    cost: f64,
+    cost: i64,
     user_id: Option<String>,
     created_at: String,
 }
@@ -313,10 +313,10 @@ struct SqliteChannelRow {
     priority: i32,
     enabled: i64,
     pricing_policy_id: Option<String>,  // NEW
-    markup_ratio: f64,                   // NEW
+    markup_ratio: i64,                   // NEW
     rpm_limit: Option<i64>,
     tpm_limit: Option<i64>,
-    balance: Option<f64>,
+    balance: Option<i64>,
     weight: Option<i32>,
     created_at: String,
     updated_at: String,
@@ -376,8 +376,8 @@ struct SqliteUserWithBalanceRow {
     username: String,
     role: String,
     enabled: i64,
-    balance: Option<f64>,
-    threshold: Option<f64>,
+    balance: Option<i64>,
+    threshold: Option<i64>,
     created_at: String,
     updated_at: String,
 }
@@ -389,8 +389,8 @@ impl From<SqliteUserWithBalanceRow> for UserWithBalance {
             username: r.username,
             role: r.role,
             enabled: r.enabled != 0,
-            balance: r.balance.unwrap_or(0.0),
-            threshold: r.threshold.unwrap_or(1.0),
+            balance: r.balance.unwrap_or(0),
+            threshold: r.threshold.unwrap_or(100_000_000),
             created_at: parse_rfc3339(&r.created_at),
             updated_at: parse_rfc3339(&r.updated_at),
         }
@@ -405,7 +405,7 @@ struct SqliteChannelModelRow {
     upstream_model_name: Option<String>,
     priority_override: Option<i32>,
     pricing_policy_id: Option<String>,
-    markup_ratio: f64,
+    markup_ratio: i64,
     enabled: i64,
     created_at: String,
     updated_at: String,
@@ -452,7 +452,7 @@ impl From<SqlitePricingPolicyRow> for PricingPolicy {
 }
 
 #[derive(FromRow)]
-struct SqliteAccountRow { id: String, user_id: String, balance: f64, threshold: f64, currency: String, created_at: String, updated_at: String }
+struct SqliteAccountRow { id: String, user_id: String, balance: i64, threshold: i64, currency: String, created_at: String, updated_at: String }
 
 impl From<SqliteAccountRow> for Account {
     fn from(r: SqliteAccountRow) -> Self {
@@ -461,7 +461,7 @@ impl From<SqliteAccountRow> for Account {
 }
 
 #[derive(FromRow)]
-struct SqliteTransactionRow { id: String, account_id: String, transaction_type: String, amount: f64, balance_after: f64, description: Option<String>, reference_id: Option<String>, created_at: String }
+struct SqliteTransactionRow { id: String, account_id: String, transaction_type: String, amount: i64, balance_after: i64, description: Option<String>, reference_id: Option<String>, created_at: String }
 
 impl From<SqliteTransactionRow> for Transaction {
     fn from(r: SqliteTransactionRow) -> Self {
@@ -1239,7 +1239,7 @@ impl crate::Storage for SqliteStorage {
                COALESCE(SUM(cache_read_tokens), 0) AS total_cache_read_tokens, \
                COALESCE(SUM(cache_creation_tokens), 0) AS total_cache_creation_tokens, \
                COALESCE(SUM(output_tokens), 0) AS total_output_tokens, \
-               COALESCE(SUM(cost), 0.0) AS total_cost, \
+               COALESCE(SUM(cost), 0) AS total_cost, \
                COUNT(*) AS request_count \
              FROM usage_records {} \
              GROUP BY model_name \
@@ -1256,8 +1256,8 @@ impl crate::Storage for SqliteStorage {
         Ok(rows.into_iter().map(UsageSummaryRecord::from).collect())
     }
 
-    async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, f64)>, Box<dyn std::error::Error + Send + Sync>> {
-        let rows: Vec<(String, f64)> = sqlx::query_as(
+    async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, i64)>, Box<dyn std::error::Error + Send + Sync>> {
+        let rows: Vec<(String, i64)> = sqlx::query_as(
             "SELECT user_id, SUM(cost) FROM usage_records \
              WHERE user_id IS NOT NULL AND created_at >= ? AND created_at < ? \
              GROUP BY user_id"
@@ -1955,7 +1955,7 @@ impl crate::Storage for SqliteStorage {
         let mut tx = conn.begin().await?;
 
         // Lock the account row and get current balance
-        let row: Option<(f64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = ?")
+        let row: Option<(i64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = ?")
             .bind(&req.account_id)
             .fetch_optional(&mut *tx)
             .await?;
@@ -2019,7 +2019,7 @@ impl crate::Storage for SqliteStorage {
         let mut tx = conn.begin().await?;
 
         // Lock the account row and get current balance
-        let row: Option<(f64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = ?")
+        let row: Option<(i64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = ?")
             .bind(&req.account_id)
             .fetch_optional(&mut *tx)
             .await?;
@@ -2136,23 +2136,33 @@ impl crate::Storage for SqliteStorage {
     // ---- Seed Data ----
 
     async fn seed_data(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Check if providers already exist (idempotent)
-        let existing = self.list_providers().await?;
-        if existing.is_empty() {
-            // Get seed providers and insert them
+        // Seed providers if none exist (idempotent)
+        let existing_providers = self.list_providers().await?;
+        if existing_providers.is_empty() {
             let seed_providers = seed::get_seed_providers();
-            let mut inserted_providers = Vec::new();
             for provider in seed_providers {
-                let inserted = self.create_provider(&provider).await?;
-                inserted_providers.push(inserted);
+                self.create_provider(&provider).await?;
+            }
+        }
+
+        // Seed models independently — check models table, not providers
+        let existing_models = self.list_models().await?;
+        if existing_models.is_empty() {
+            // Create pricing policies from seed data first
+            let seed_policies = seed::get_seed_pricing_policies();
+            let mut policy_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+            for (policy, model_name) in &seed_policies {
+                let policy_id = policy.id.clone();
+                self.create_pricing_policy(policy).await?;
+                policy_map.insert(model_name.to_lowercase(), policy_id);
             }
 
-            // Build provider ID map and get seed models
-            let provider_ids = seed::build_provider_id_map(&inserted_providers);
-            let seed_models = seed::get_seed_models(&provider_ids);
-
-            // Insert seed models
-            for model in seed_models {
+            let seed_models = seed::get_seed_models(&[]);
+            for mut model in seed_models {
+                // Link pricing policy if one was created for this model
+                if let Some(policy_id) = policy_map.get(&model.name.to_lowercase()) {
+                    model.pricing_policy_id = Some(policy_id.clone());
+                }
                 self.create_model(&model).await?;
             }
         }

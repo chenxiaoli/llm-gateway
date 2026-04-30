@@ -26,7 +26,7 @@ use crate::AuditTask;
 pub struct ChannelModelEnriched {
     pub upstream_model_name: Option<String>,
     pub pricing_policy_id: Option<String>,
-    pub markup_ratio: f64,
+    pub markup_ratio: i64,
 }
 
 #[derive(Clone, Debug)]
@@ -293,7 +293,7 @@ pub struct SseAuditParams {
     pub request_body: String,
     pub pricing_policy_config: Option<serde_json::Value>,
     pub pricing_policy_billing_type: String,
-    pub markup_ratio: f64,
+    pub markup_ratio: i64,
     pub channel_id: String,
     pub original_model: Option<String>,
     pub upstream_model: Option<String>,
@@ -528,7 +528,7 @@ pub async fn proxy(
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?
         {
-            if account.threshold > 0.0 && account.balance < account.threshold {
+            if account.threshold > 0 && account.balance < account.threshold {
                 tracing::warn!(
                     "[PROXY] Balance check failed: user={}, balance={}, threshold={}",
                     created_by, account.balance, account.threshold
@@ -1123,13 +1123,13 @@ mod tests {
                 ChannelModelEnriched {
                     upstream_model_name: Some("gpt-4o".into()),
                     pricing_policy_id: Some("policy-1".into()),
-                    markup_ratio: 1.5,
+                    markup_ratio: 15_000,
                 },
             )]),
             proxy_url: None,
         };
         let enriched = rc.model_overrides.get(&model_key).expect("should have model override");
-        assert_eq!(enriched.markup_ratio, 1.5);
+        assert_eq!(enriched.markup_ratio, 15_000);
         assert_eq!(enriched.upstream_model_name.as_deref(), Some("gpt-4o"));
         assert_eq!(enriched.pricing_policy_id.as_deref(), Some("policy-1"));
         assert_eq!(rc.adapter, ProxyProtocol::OpenAI);
@@ -1176,7 +1176,7 @@ mod tests {
                 ChannelModelEnriched {
                     upstream_model_name: Some("claude-3-5-sonnet".into()),
                     pricing_policy_id: Some("policy-2".into()),
-                    markup_ratio: 2.0,
+                    markup_ratio: 20_000,
                 },
             )]),
             proxy_url: None,
@@ -1188,7 +1188,7 @@ mod tests {
         assert_eq!(resolved.provider_id, "prov-2");
         assert_eq!(resolved.adapter, ProxyProtocol::Anthropic);
         let enriched = resolved.model_overrides.get("claude-3-5-sonnet").expect("should have model override");
-        assert_eq!(enriched.markup_ratio, 2.0);
+        assert_eq!(enriched.markup_ratio, 20_000);
     }
 
     #[test]
