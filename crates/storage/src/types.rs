@@ -186,7 +186,7 @@ pub struct UpdateChannel {
     pub tpm_limit: Option<Option<i64>>,
     pub balance: Option<Option<i64>>,
     pub weight: Option<Option<i32>>,
-    pub available_hours: Option<Option<Vec<TimeSlot>>>,
+    pub available_hours: Option<Vec<TimeSlot>>,
 }
 
 /// Dedicated payload for updating a channel's API key.
