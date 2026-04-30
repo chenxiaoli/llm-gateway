@@ -28,6 +28,8 @@ RUN cargo chef cook --release --recipe-path recipe.json
 
 # ---- Stage 5: Build application ----
 FROM chef AS build
+ARG VERSION
+ENV LLM_GATEWAY_VERSION=$VERSION
 COPY . .
 COPY --from=frontend /app/web/dist ./web/dist
 COPY --from=builder /app/target /app/target
