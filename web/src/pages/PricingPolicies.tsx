@@ -153,11 +153,11 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
     return (
       <div className="flex flex-col gap-1">
         {tiers.map((tier, i) => {
-          const label = tier.up_to != null ? `< ${formatTokenCount(tier.up_to)}` : `${formatTokenCount(0)}+`;
+          const label = tier.up_to != null ? `< ${formatTokenCount(tier.up_to)}` : `> ${i > 0 && tiers[i - 1].up_to != null ? formatTokenCount(tiers[i - 1].up_to!) : '0'}`;
           return (
             <div key={i} className="flex items-center gap-1">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30 min-w-[40px]">{label}</span>
-              <span className="text-[10px] font-mono text-base-content/60">
+              <span className="text-sm font-semibold uppercase tracking-wider text-base-content/40 min-w-[48px]">{label}</span>
+              <span className="text-sm font-mono text-base-content/70">
                 In {fmt(tier.input_price_1m)} · Out {fmt(tier.output_price_1m)}
               </span>
             </div>
