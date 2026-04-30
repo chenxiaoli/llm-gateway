@@ -138,10 +138,16 @@ pub fn management_router() -> Router<Arc<AppState>> {
         )
         // Version (public)
         .route("/api/v1/version", get(version))
+        // System info (admin)
+        .route("/api/v1/admin/system-info", get(system_info))
 }
 
 async fn version(State(_state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "version": option_env!("GIT_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")),
     }))
+}
+
+async fn system_info(State(state): State<Arc<AppState>>) -> Json<crate::SystemInfo> {
+    Json(state.system_info.clone())
 }

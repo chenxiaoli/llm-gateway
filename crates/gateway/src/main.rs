@@ -2,7 +2,7 @@ use axum::middleware;
 use axum::routing::{get, post};
 use axum::http::{header, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
-use llm_gateway_api::{self as api, AppState, InMemoryChannelRegistry, spawn_registry_refresh};
+use llm_gateway_api::{self as api, AppState, SystemInfo, InMemoryChannelRegistry, spawn_registry_refresh};
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
@@ -91,6 +91,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     ));
 
     // App state
+    let system_info = SystemInfo {
+        server_bind_address: format!("{}:{}", config.server.host, config.server.port),
+        database_driver: config.database.driver.clone(),
+        rate_limit_window_secs: config.rate_limit.window_size_secs,
+        rate_limit_flush_interval_secs: config.rate_limit.flush_interval_secs,
+        upstream_timeout_secs: config.upstream.timeout_secs,
+        audit_retention_days: config.audit.retention_days,
+    };
     let state = Arc::new(AppState {
         storage,
         rate_limiter,
@@ -100,6 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         audit_tx,
         registry,
         settlement_tx,
+        system_info,
     });
 
     // Build router
