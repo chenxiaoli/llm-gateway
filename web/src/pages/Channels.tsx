@@ -387,12 +387,21 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
 
         {/* Available Hours */}
         {channel.available_hours && channel.available_hours.length > 0 ? (
-          <div className="shrink-0 flex items-center gap-1.5 px-2 py-1 rounded bg-base-200/50" title={channel.available_hours.map(s => `${s.days.join(',')} ${s.start}-${s.end}`).join('; ')}>
-            <Clock className="h-3 w-3 text-base-content/35" />
-            <span className="text-md font-mono text-base-content/50">{channel.available_hours.length} schedule{channel.available_hours.length > 1 ? 's' : ''}</span>
+          <div className="shrink-0 flex flex-col gap-0.5 px-2 py-1 rounded bg-base-200/50">
+            {channel.available_hours.map((slot, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <Clock className="h-3 w-3 text-base-content/35 shrink-0" />
+                <span className="text-md font-mono text-base-content/50 whitespace-nowrap">{slot.start}–{slot.end}</span>
+                <div className="flex gap-0.5">
+                  {slot.days.map(d => (
+                    <span key={d} className="text-[10px] font-medium text-primary/70 bg-primary/8 px-1 rounded">{d.slice(0, 3)}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="shrink-0 flex items-center gap-1.5 px-2 py-1 rounded" title="Always available">
+          <div className="shrink-0 flex items-center gap-1.5 px-2 py-1 rounded">
             <Clock className="h-3 w-3 text-base-content/20" />
             <span className="text-md font-mono text-base-content/25">24/7</span>
           </div>
