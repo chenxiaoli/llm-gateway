@@ -9,10 +9,26 @@ import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
 import { Toggle } from '../components/ui/Toggle';
 import { Globe, Plus, Radio, Hash, ShieldCheck, Key, Wifi, Cpu, Search, X, Clock } from 'lucide-react';
-import type { Channel, CreateChannelRequest } from '../types';
+import type { Channel, CreateChannelRequest, TimeSlot } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
+
+// ── Availability check (mirrors backend is_available_now) ─────────────────────
+function isAvailableNow(slots: TimeSlot[] | null | undefined): boolean {
+  if (!slots || slots.length === 0) return true;
+  const now = new Date();
+  const day = now.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }).toLowerCase();
+  const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  return slots.some((slot) => {
+    if (!slot.days.includes(day)) return false;
+    const [sh, sm] = slot.start.split(':').map(Number);
+    const [eh, em] = slot.end.split(':').map(Number);
+    const start = (sh || 0) * 60 + (sm || 0);
+    const end = (eh || 0) * 60 + (em || 0);
+    return nowMinutes >= start && nowMinutes < end;
+  });
+}
 
 // ── Searchable Model Multi-Select ─────────────────────────────────────────────
 function ModelMultiSelect({
@@ -386,23 +402,32 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
         </div>
 
         {/* Available Hours */}
-        {channel.available_hours && channel.available_hours.length > 0 ? (
-          <div className="shrink-0 flex flex-col gap-0.5 px-2 py-1 rounded bg-base-200/50">
-            {channel.available_hours.map((slot, i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <Clock className="h-3 w-3 text-base-content/35 shrink-0" />
-                <span className="text-md font-mono text-base-content/50 whitespace-nowrap">{slot.start}–{slot.end}</span>
-                <div className="flex gap-0.5">
-                  {slot.days.map(d => (
-                    <span key={d} className="text-sm font-medium text-primary/70 bg-primary/8 px-1 rounded">{d.slice(0, 3)}</span>
-                  ))}
-                </div>
+        {channel.available_hours && channel.available_hours.length > 0 ? (() => {
+          const available = isAvailableNow(channel.available_hours);
+          return (
+            <div className={`shrink-0 flex flex-col gap-0.5 px-2 py-1 rounded ${available ? 'bg-success/5 border border-success/15' : 'bg-base-200/50 border border-base-300/30'}`}>
+              <div className="flex items-center gap-1.5">
+                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${available ? 'bg-success' : 'bg-base-content/20'}`} />
+                <span className={`text-sm font-semibold ${available ? 'text-success/80' : 'text-base-content/35'}`}>
+                  {available ? 'Available' : 'Outside Hours'}
+                </span>
               </div>
-            ))}
-          </div>
-        ) : (
+              {channel.available_hours.map((slot, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <Clock className="h-3 w-3 text-base-content/35 shrink-0" />
+                  <span className="text-md font-mono text-base-content/50 whitespace-nowrap">{slot.start}–{slot.end}</span>
+                  <div className="flex gap-0.5">
+                    {slot.days.map(d => (
+                      <span key={d} className="text-sm font-medium text-primary/70 bg-primary/8 px-1 rounded">{d.slice(0, 3)}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })() : (
           <div className="shrink-0 flex items-center gap-1.5 px-2 py-1 rounded">
-            <Clock className="h-3 w-3 text-base-content/20" />
+            <div className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
             <span className="text-md font-mono text-base-content/25">24/7</span>
           </div>
         )}
