@@ -221,7 +221,7 @@ export default function Home() {
                   {codeExamples[activeProtocol].curl.map((block, i) => (
                     <div key={i}>
                       {block.prompt && <span className="text-primary mr-2 select-none">{block.prompt}</span>}
-                      <span>curl -X POST {serverHost}{block.lines[0].replace('/v1/chat/completions', '').replace('/v1/messages', '')}<wbr />{block.lines[0]}</span>
+                      <span>{block.lines[0].replace('curl -X POST /', `curl -X POST ${serverHost}/`)}</span>
                       {block.lines.slice(1).map((line, j) => (
                         <div key={j}>{line}</div>
                       ))}
