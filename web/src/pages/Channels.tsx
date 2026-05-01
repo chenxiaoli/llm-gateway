@@ -8,7 +8,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
 import { Toggle } from '../components/ui/Toggle';
-import { Globe, Plus, Radio, Hash, ShieldCheck, Key, Wifi, Cpu, Search, X, Clock } from 'lucide-react';
+import { Globe, Plus, Radio, Hash, ShieldCheck, Key, Wifi, Cpu, Search, X, Clock, Scale } from 'lucide-react';
 import type { Channel, CreateChannelRequest, TimeSlot } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -152,6 +152,7 @@ function AddChannelDrawer({
   const [name, setName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [priority, setPriority] = useState('1');
+  const [weight, setWeight] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
 
@@ -160,6 +161,7 @@ function AddChannelDrawer({
     setName('');
     setApiKey('');
     setPriority('1');
+    setWeight('');
     setEnabled(false);
     setSelectedModelIds(new Set());
   };
@@ -181,6 +183,7 @@ function AddChannelDrawer({
         name,
         api_key: apiKey,
         priority: priority ? parseInt(priority) : 1,
+        weight: weight ? parseInt(weight) : null,
         enabled,
         models,
       };
@@ -269,6 +272,25 @@ function AddChannelDrawer({
               onChange={(e) => setPriority(e.target.value)}
               required
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-md font-mono text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+            />
+          </div>
+        </div>
+
+        {/* Weight */}
+        <div className="space-y-1.5">
+          <label className="text-base font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
+            <Scale className="h-3.5 w-3.5" />
+            Weight
+            <span className="text-base-content/20 normal-case font-normal tracking-normal text-base">(higher = more traffic)</span>
+          </label>
+          <div className="relative">
+            <input
+              type="number"
+              min="0"
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              placeholder="100"
+              className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-md font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
           </div>
         </div>
@@ -374,6 +396,13 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
           <div className="flex items-center gap-1 px-2 py-1 rounded bg-base-200/50">
             <Hash className="h-3 w-3 text-base-content/35" />
             <span className="text-md font-mono font-semibold text-base-content/55">{channel.priority}</span>
+          </div>
+        </div>
+
+        <div className="shrink-0">
+          <div className="flex items-center gap-1 px-2 py-1 rounded bg-accent/5 border border-accent/10">
+            <Scale className="h-3 w-3 text-accent/50" />
+            <span className="text-md font-mono font-semibold text-accent/60">{channel.weight ?? 100}</span>
           </div>
         </div>
 

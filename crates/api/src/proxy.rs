@@ -1,6 +1,7 @@
 use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
+use rand::Rng as _;
 use axum::response::IntoResponse;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -44,6 +45,7 @@ pub struct ResolvedChannel {
     pub adapter: ProxyProtocol,
     pub timeout_ms: u64,
     pub priority: i32,
+    pub weight: Option<i32>,
     /// Per-model overrides: keyed by lowercase model name.
     pub model_overrides: HashMap<String, ChannelModelEnriched>,
     pub proxy_url: Option<String>,
@@ -207,6 +209,7 @@ impl InMemoryChannelRegistry {
                 adapter: ProxyProtocol::OpenAI,
                 timeout_ms: 60_000,
                 priority: channel.priority,
+                weight: channel.weight,
                 model_overrides,
                 proxy_url,
                 available_hours: channel.available_hours.clone(),
@@ -229,21 +232,6 @@ impl InMemoryChannelRegistry {
                     }
                 }
             }
-        }
-
-        // Sort channel_ids by priority (higher priority first)
-        for (_model, channel_ids) in model_index.iter_mut() {
-            channel_ids.sort_by(|a, b| {
-                let prio_a = cache
-                    .get(a)
-                    .map(|c| c.priority)
-                    .unwrap_or(i32::MIN);
-                let prio_b = cache
-                    .get(b)
-                    .map(|c| c.priority)
-                    .unwrap_or(i32::MIN);
-                prio_b.cmp(&prio_a)
-            });
         }
 
         self.cache.store(Arc::new(cache));
@@ -277,6 +265,46 @@ fn is_available_now(slots: &Option<Vec<TimeSlot>>) -> bool {
         let end = parse_time(&slot.end);
         now_minutes >= start && now_minutes < end
     })
+}
+
+fn select_weighted_order<T>(items: &mut Vec<T>, weight_fn: impl Fn(&T) -> i32) {
+    let mut rng = rand::rng();
+    for i in 0..items.len().saturating_sub(1) {
+        let total_weight: i32 = items[i..].iter().map(|item| weight_fn(item).max(1)).sum();
+        if total_weight == 0 {
+            continue;
+        }
+        let mut roll = rng.random_range(0..total_weight);
+        let mut selected = i;
+        for (j, item) in items[i..].iter().enumerate() {
+            roll -= weight_fn(item).max(1);
+            if roll < 0 {
+                selected = i + j;
+                break;
+            }
+        }
+        items.swap(i, selected);
+    }
+}
+
+fn apply_weighted_routing(candidates: &mut Vec<(ResolvedChannel, llm_gateway_storage::ChannelModel)>) {
+    candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
+    let mut result = Vec::with_capacity(candidates.len());
+    let mut i = 0;
+    while i < candidates.len() {
+        let prio = candidates[i].0.priority;
+        let start = i;
+        while i < candidates.len() && candidates[i].0.priority == prio {
+            i += 1;
+        }
+        let mut tier: Vec<_> = candidates[start..i].to_vec();
+        if tier.len() > 1 {
+            select_weighted_order(&mut tier, |c| c.0.weight.unwrap_or(100));
+        }
+        result.extend(tier);
+    }
+    candidates.clear();
+    candidates.extend(result);
 }
 
 #[async_trait::async_trait]
@@ -616,7 +644,7 @@ pub async fn proxy(
     // === Step 3: Route via ChannelRegistry (cache-first) ===
     let resolved_channels = state.registry.resolve_by_model(&model_name).await;
 
-    let routing_candidates: Vec<(ResolvedChannel, llm_gateway_storage::ChannelModel)> = if !resolved_channels.is_empty() {
+    let mut routing_candidates: Vec<(ResolvedChannel, llm_gateway_storage::ChannelModel)> = if !resolved_channels.is_empty() {
         // Cache hit: use pre-enriched per-model data (no DB call needed)
         let model_key = model_name.to_lowercase();
         let mut candidates = Vec::new();
@@ -722,6 +750,7 @@ pub async fn proxy(
                         adapter: protocol,
                         timeout_ms: 60_000,
                         priority: channel.priority,
+                        weight: channel.weight,
                         model_overrides: HashMap::new(), // not used in cache-miss path
                         proxy_url,
                         available_hours: channel.available_hours.clone(),
@@ -730,7 +759,7 @@ pub async fn proxy(
                 }
             }
         }
-        candidates.sort_by(|a, b| b.0.priority.cmp(&a.0.priority));
+        candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
         if candidates.is_empty() {
             if let Some(resp) = try_model_fallback(
                 &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
@@ -741,6 +770,8 @@ pub async fn proxy(
         }
         candidates
     };
+
+    apply_weighted_routing(&mut routing_candidates);
 
     // Extract provider_id from resolved channel for audit/billing
     let provider_id = routing_candidates.first()
@@ -1149,6 +1180,7 @@ mod tests {
             adapter: ProxyProtocol::OpenAI,
             timeout_ms: 30_000,
             priority: 1,
+            weight: None,
             model_overrides: HashMap::from([(
                 model_key.clone(),
                 ChannelModelEnriched {
@@ -1181,6 +1213,7 @@ mod tests {
             adapter: ProxyProtocol::OpenAI,
             timeout_ms: 30_000,
             priority: 1,
+            weight: None,
             model_overrides: HashMap::new(),
             proxy_url: None,
             available_hours: None,
@@ -1204,6 +1237,7 @@ mod tests {
             adapter: ProxyProtocol::Anthropic,
             timeout_ms: 60_000,
             priority: 5,
+            weight: None,
             model_overrides: HashMap::from([(
                 "claude-3-5-sonnet".to_lowercase(),
                 ChannelModelEnriched {

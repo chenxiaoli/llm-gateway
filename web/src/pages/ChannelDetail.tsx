@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Pencil, Trash2, KeyRound, Hash, Plus, Building2, LinkIcon, Power, Eye, EyeOff, Clock } from 'lucide-react';
+import { ArrowLeft, Pencil, Trash2, KeyRound, Hash, Plus, Building2, LinkIcon, Power, Eye, EyeOff, Clock, Scale } from 'lucide-react';
 import { useChannel, useUpdateChannel, useDeleteChannel, useChannelModels, useCreateChannelModel, useDeleteChannelModel, useUpdateChannelModel, useUpdateChannelApiKey } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
@@ -29,6 +29,7 @@ export default function ChannelDetail() {
   const [isEditing, setIsEditing] = useState(false);
   const [channelName, setChannelName] = useState('');
   const [channelPriority, setChannelPriority] = useState('0');
+  const [channelWeight, setChannelWeight] = useState('');
   const [channelEnabled, setChannelEnabled] = useState(false);
   const [revealKey, setRevealKey] = useState(false);
 
@@ -50,6 +51,7 @@ export default function ChannelDetail() {
     if (channel) {
       setChannelName(channel.name);
       setChannelPriority(String(channel.priority));
+      setChannelWeight(channel.weight != null ? String(channel.weight) : '');
       setChannelEnabled(channel.enabled);
       setHoursSlots(channel.available_hours ?? []);
     }
@@ -81,6 +83,7 @@ export default function ChannelDetail() {
     const input: UpdateChannelRequest = {
       name: channelName,
       priority: Number(channelPriority),
+      weight: channelWeight ? Number(channelWeight) : null,
       enabled: channelEnabled,
     };
     await updateMutation.mutateAsync({ id: channel.id, input });
@@ -95,6 +98,7 @@ export default function ChannelDetail() {
   const handleCancelEdit = () => {
     setChannelName(channel.name);
     setChannelPriority(String(channel.priority));
+    setChannelWeight(channel.weight != null ? String(channel.weight) : '');
     setChannelEnabled(channel.enabled);
     setIsEditing(false);
   };
@@ -200,6 +204,18 @@ export default function ChannelDetail() {
                 <div className="text-xs text-base-content/40 uppercase tracking-wider">Priority</div>
                 <div className="text-sm font-mono text-base-content/80">
                   {channel.priority}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                <Scale className="h-4 w-4 text-accent" />
+              </div>
+              <div className="flex-1">
+                <div className="text-xs text-base-content/40 uppercase tracking-wider">Weight</div>
+                <div className="text-sm font-mono text-base-content/80">
+                  {channel.weight ?? 100}
                 </div>
               </div>
             </div>
@@ -429,6 +445,21 @@ export default function ChannelDetail() {
               value={channelPriority}
               onChange={(e) => setChannelPriority(e.target.value)}
               min={0}
+              className="input input-bordered w-full"
+            />
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Weight</span>
+              <span className="label-text-alt text-base-content/40">higher = more traffic</span>
+            </label>
+            <input
+              type="number"
+              value={channelWeight}
+              onChange={(e) => setChannelWeight(e.target.value)}
+              min={0}
+              placeholder="100"
               className="input input-bordered w-full"
             />
           </div>
