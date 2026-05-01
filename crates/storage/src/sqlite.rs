@@ -203,6 +203,7 @@ struct SqliteAuditSummaryRow {
     model_name: String,
     provider_id: String,
     channel_id: Option<String>,
+    channel_name: Option<String>,
     protocol: String,
     stream: i32,
     status_code: i32,
@@ -228,6 +229,7 @@ impl From<SqliteAuditSummaryRow> for AuditLogSummary {
             model_name: r.model_name,
             provider_id: r.provider_id,
             channel_id: r.channel_id,
+            channel_name: r.channel_name,
             protocol: parse_protocol(&r.protocol),
             stream: r.stream != 0,
             status_code: r.status_code,
@@ -254,6 +256,7 @@ struct SqliteAuditRow {
     model_name: String,
     provider_id: String,
     channel_id: Option<String>,
+    channel_name: Option<String>,
     protocol: String,
     stream: i32,
     request_body: String,
@@ -281,6 +284,7 @@ impl From<SqliteAuditRow> for AuditLog {
             model_name: r.model_name,
             provider_id: r.provider_id,
             channel_id: r.channel_id,
+            channel_name: r.channel_name,
             protocol: parse_protocol(&r.protocol),
             stream: r.stream != 0, // Convert i32 to bool
             request_body: r.request_body,
@@ -1358,31 +1362,33 @@ impl crate::Storage for SqliteStorage {
     }
 
     async fn query_logs_paginated(&self, filter: &LogFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<AuditLogSummary>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut where_sql = String::from("WHERE 1=1");
+        let mut conditions = Vec::new();
         let mut bind_vars: Vec<String> = Vec::new();
 
         if let Some(ref user_id) = filter.user_id {
-            where_sql.push_str(" AND user_id = ?");
+            conditions.push("a.user_id = ?".to_string());
             bind_vars.push(user_id.clone());
         }
         if let Some(ref key_id) = filter.key_id {
-            where_sql.push_str(" AND key_id = ?");
+            conditions.push("a.key_id = ?".to_string());
             bind_vars.push(key_id.clone());
         }
         if let Some(ref model_name) = filter.model_name {
-            where_sql.push_str(" AND model_name = ?");
+            conditions.push("a.model_name = ?".to_string());
             bind_vars.push(model_name.clone());
         }
         if let Some(since) = filter.since {
-            where_sql.push_str(" AND created_at >= ?");
+            conditions.push("a.created_at >= ?".to_string());
             bind_vars.push(since.to_rfc3339());
         }
         if let Some(until) = filter.until {
-            where_sql.push_str(" AND created_at <= ?");
+            conditions.push("a.created_at <= ?".to_string());
             bind_vars.push(until.to_rfc3339());
         }
 
-        let count_sql = format!("SELECT COUNT(*) FROM audit_logs {}", where_sql);
+        let where_clause = if conditions.is_empty() { String::new() } else { format!(" WHERE {}", conditions.join(" AND ")) };
+
+        let count_sql = format!("SELECT COUNT(*) FROM audit_logs a{}", where_clause);
         let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
         for var in &bind_vars {
             count_query = count_query.bind(var.clone());
@@ -1391,11 +1397,11 @@ impl crate::Storage for SqliteStorage {
 
         let offset = (page - 1) * page_size;
         let data_sql = format!(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, \
-             status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason, \
-             request_path, upstream_url, request_headers, response_headers, user_id \
-             FROM audit_logs {} ORDER BY created_at DESC LIMIT ? OFFSET ?",
-            where_sql
+            "SELECT a.id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream, \
+             a.status_code, a.latency_ms, a.input_tokens, a.output_tokens, a.created_at, a.original_model, a.upstream_model, a.model_override_reason, \
+             a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id \
+             FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id{} ORDER BY a.created_at DESC LIMIT ? OFFSET ?",
+            where_clause
         );
         let mut data_query = sqlx::query_as::<_, SqliteAuditSummaryRow>(&data_sql);
         for var in bind_vars {
@@ -1413,10 +1419,10 @@ impl crate::Storage for SqliteStorage {
     }
 
     async fn get_log(&self, id: &str) -> Result<Option<AuditLog>, Box<dyn std::error::Error + Send + Sync>> {
-        let sql = "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body, \
-                   status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason, \
-                   request_path, upstream_url, request_headers, response_headers, user_id \
-                   FROM audit_logs WHERE id = ?";
+        let sql = "SELECT a.id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream, a.request_body, a.response_body, \
+                   a.status_code, a.latency_ms, a.input_tokens, a.output_tokens, a.created_at, a.original_model, a.upstream_model, a.model_override_reason, \
+                   a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id \
+                   FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id WHERE a.id = ?";
         let row: Option<SqliteAuditRow> = sqlx::query_as(sql)
             .bind(id)
             .fetch_optional(&self.pool)

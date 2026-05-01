@@ -127,6 +127,7 @@ export interface AuditLogSummary {
   model_name: string;
   provider_id: string;
   channel_id: string | null;
+  channel_name: string | null;
   protocol: 'openai' | 'anthropic';
   stream: boolean;
   status_code: number;

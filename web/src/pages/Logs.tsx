@@ -169,6 +169,7 @@ export default function Logs() {
                   <tr className="border-b border-base-300/40">
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Time</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Model</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Channel</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Protocol</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Stream</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Status</th>
@@ -181,7 +182,7 @@ export default function Logs() {
                 <tbody>
                   {data?.items?.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="text-center py-12 text-base-content/30">
+                      <td colSpan={10} className="text-center py-12 text-base-content/30">
                         <Search className="h-8 w-8 mx-auto mb-2 opacity-40" />
                         <div>No logs found</div>
                         {hasFilters && <div className="text-xs mt-1">Try adjusting your filters</div>}
@@ -198,6 +199,9 @@ export default function Logs() {
                         {new Date(log.created_at).toLocaleString()}
                       </td>
                       <td className="mono font-medium">{log.model_name}</td>
+                      <td className="mono text-[13px] text-base-content/55">
+                        {log.channel_name ?? '-'}
+                      </td>
                       <td>
                         <Badge variant={log.protocol === 'openai' ? 'blue' : 'purple'}>
                           {log.protocol}
@@ -348,7 +352,7 @@ export default function Logs() {
                 <div className="rounded-lg bg-base-200/60 p-3">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Channel</div>
                   <div className="mono text-[13px] text-base-content/70">
-                    {selectedLog.channel_id ? `${selectedLog.channel_id.slice(0, 8)}…` : '-'}
+                    {selectedLog.channel_name ?? '-'}
                   </div>
                 </div>
               </div>
