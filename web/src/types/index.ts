@@ -283,6 +283,7 @@ export interface CreateChannelRequest {
   name: string;
   api_key: string;
   priority?: number;
+  weight?: number | null;
   enabled?: boolean;
   available_hours?: TimeSlot[];
   models?: CreateChannelModelRequest[];
@@ -293,6 +294,7 @@ export interface UpdateChannelRequest {
   // api_key intentionally omitted — use dedicated updateChannelApiKey
   // base_url removed — use provider.endpoints["default"]
   priority?: number;
+  weight?: number | null;
   enabled?: boolean;
   available_hours?: TimeSlot[];
 }
