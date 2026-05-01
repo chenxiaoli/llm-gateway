@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.3] - 2026-05-01
+
+### Added
+- Show channel name on audit log list page and detail drawer (LEFT JOIN channels instead of showing truncated UUIDs)
+
+### Fixed
+- Model card pricing now correctly converts from subunits to USD
+- Channel detail page refreshes after editing available hours
+
 ## [0.10.2] - 2026-05-01
 
 ### Fixed
