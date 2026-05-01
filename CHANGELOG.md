@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.0] - 2026-05-01
+
+### Added
+- Weighted round-robin channel routing — channels at the same priority tier distribute traffic proportionally by weight (default 100)
+- Weight configuration on channel create/edit forms
+- Weight display on channel list and detail pages
+
 ## [0.10.7] - 2026-05-01
 
 ### Added
