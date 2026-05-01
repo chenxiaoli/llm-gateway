@@ -124,3 +124,11 @@ Use git flow branching model:
 - `release/*` — branched from `develop`, merged to both `main` and `develop`
 - `hotfix/*` — branched from `main`, merged to both `main` and `develop`
 - Never commit directly to `main`
+
+### Release Process
+
+1. Create `release/X.Y.Z` from `develop`
+2. Bump version in all `Cargo.toml` files
+3. **Update `CHANGELOG.md`** — review `git log <prev-tag>..HEAD --oneline --no-merges`, write entry following Keep a Changelog format (Added / Changed / Fixed)
+4. Commit, merge to `main` then `develop`, tag `vX.Y.Z`, push all
+5. Delete release branch

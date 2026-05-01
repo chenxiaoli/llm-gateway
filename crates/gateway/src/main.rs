@@ -39,13 +39,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             db.seed_data().await?;
             Arc::new(db)
         }
-        _ => {
+        "sqlite" => {
             let db_path = config.database.url.as_deref().unwrap_or("./data/gateway.db");
             tracing::info!("Using SQLite: {}", db_path);
             let db = SqliteStorage::new(db_path).await?;
             db.run_migrations().await?;
             db.seed_data().await?;
             Arc::new(db)
+        }
+        other => {
+            return Err(format!("Unknown database driver '{}'. Supported: 'sqlite', 'postgres'", other).into());
         }
     };
 
