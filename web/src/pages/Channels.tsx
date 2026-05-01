@@ -8,7 +8,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
 import { Toggle } from '../components/ui/Toggle';
-import { Globe, Plus, Radio, Hash, ShieldCheck, Key, Wifi, Cpu, Search, X } from 'lucide-react';
+import { Globe, Plus, Radio, Hash, ShieldCheck, Key, Wifi, Cpu, Search, X, Clock } from 'lucide-react';
 import type { Channel, CreateChannelRequest } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -384,6 +384,19 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
             <span className="text-base text-base-content/25">no models</span>
           )}
         </div>
+
+        {/* Available Hours */}
+        {channel.available_hours && channel.available_hours.length > 0 ? (
+          <div className="shrink-0 flex items-center gap-1.5 px-2 py-1 rounded bg-base-200/50" title={channel.available_hours.map(s => `${s.days.join(',')} ${s.start}-${s.end}`).join('; ')}>
+            <Clock className="h-3 w-3 text-base-content/35" />
+            <span className="text-md font-mono text-base-content/50">{channel.available_hours.length} schedule{channel.available_hours.length > 1 ? 's' : ''}</span>
+          </div>
+        ) : (
+          <div className="shrink-0 flex items-center gap-1.5 px-2 py-1 rounded" title="Always available">
+            <Clock className="h-3 w-3 text-base-content/20" />
+            <span className="text-md font-mono text-base-content/25">24/7</span>
+          </div>
+        )}
 
         {/* Status badge */}
         <div
