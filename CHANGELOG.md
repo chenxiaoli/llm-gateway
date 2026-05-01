@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.6] - 2026-05-01
+
+### Fixed
+- Channel list API now includes `available_hours` in response (was missing from `ChannelWithModels`, causing list to always show "24/7")
+- Improved model badge and day abbreviation font sizes on channel list page for readability
+
 ## [0.10.5] - 2026-05-01
 
 ### Fixed
