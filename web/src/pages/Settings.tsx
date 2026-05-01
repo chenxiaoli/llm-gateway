@@ -281,7 +281,7 @@ export default function Settings() {
                       </div>
                       <div>
                         <div className="text-xs text-base-content/40">Database</div>
-                        <div className="text-sm font-mono font-medium">SQLite</div>
+                        <div className="text-sm font-mono font-medium">{systemInfo?.database_driver || '—'}</div>
                       </div>
                     </div>
                   </div>
