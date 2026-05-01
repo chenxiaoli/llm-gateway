@@ -72,6 +72,7 @@ impl AuditLogger {
             model_name: model_name.to_string(),
             provider_id: provider_id.to_string(),
             channel_id: channel_id.map(String::from),
+            channel_name: None,
             protocol,
             stream,
             request_body: request_body.to_string(),

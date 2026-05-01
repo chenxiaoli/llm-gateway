@@ -37,7 +37,8 @@ export function useUpdateChannel(providerId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateChannelRequest }) => updateChannelApi(id, input),
-    onSuccess: () => {
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['channels', id] });
       queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channels'] });
       toast.success('Channel updated');
     },
