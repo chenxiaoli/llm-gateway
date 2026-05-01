@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.4] - 2026-05-01
+
+### Added
+- Show available hours indicator on channel list page (schedule count or 24/7)
+
 ## [0.10.3] - 2026-05-01
 
 ### Added
