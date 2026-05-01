@@ -1179,7 +1179,7 @@ checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
 name = "llm-gateway"
-version = "0.10.2"
+version = "0.10.5"
 dependencies = [
  "axum",
  "llm-gateway-api",
@@ -1200,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-api"
-version = "0.10.2"
+version = "0.10.5"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -1229,7 +1229,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-audit"
-version = "0.10.2"
+version = "0.10.5"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1239,7 +1239,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-auth"
-version = "0.10.2"
+version = "0.10.5"
 dependencies = [
  "bcrypt",
  "chrono",
@@ -1252,7 +1252,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-billing"
-version = "0.10.2"
+version = "0.10.5"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1261,7 +1261,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-encryption"
-version = "0.10.2"
+version = "0.10.5"
 dependencies = [
  "aes-gcm",
  "base64",
@@ -1271,7 +1271,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-provider"
-version = "0.10.2"
+version = "0.10.5"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -1283,14 +1283,14 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-ratelimit"
-version = "0.10.2"
+version = "0.10.5"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
 name = "llm-gateway-storage"
-version = "0.10.2"
+version = "0.10.5"
 dependencies = [
  "async-trait",
  "chrono",

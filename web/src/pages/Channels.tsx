@@ -368,14 +368,14 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
               {channelModels.slice(0, 6).map((cm) => (
                 <div
                   key={cm.id}
-                  className={`badge badge-sm badge-neutral badge-outline ${!cm.enabled ? 'opacity-40' : ''}`}
+                  className={`badge badge-neutral badge-outline ${!cm.enabled ? 'opacity-40' : ''}`}
                   title={cm.upstream_model_name ? `upstream: ${cm.upstream_model_name}` : undefined}
                 >
                   {cm.model_name}
                 </div>
               ))}
               {channelModels.length > 6 && (
-                <div className="badge badge-sm badge-neutral badge-outline opacity-40">
+                <div className="badge badge-neutral badge-outline opacity-40">
                   +{channelModels.length - 6}
                 </div>
               )}
@@ -394,7 +394,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
                 <span className="text-md font-mono text-base-content/50 whitespace-nowrap">{slot.start}–{slot.end}</span>
                 <div className="flex gap-0.5">
                   {slot.days.map(d => (
-                    <span key={d} className="text-[10px] font-medium text-primary/70 bg-primary/8 px-1 rounded">{d.slice(0, 3)}</span>
+                    <span key={d} className="text-sm font-medium text-primary/70 bg-primary/8 px-1 rounded">{d.slice(0, 3)}</span>
                   ))}
                 </div>
               </div>
