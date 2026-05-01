@@ -241,6 +241,12 @@ export interface SystemInfo {
   audit_retention_days: number | null;
 }
 
+export interface TimeSlot {
+  days: string[];
+  start: string;
+  end: string;
+}
+
 export interface Channel {
   id: string;
   provider_id: string;
@@ -254,6 +260,7 @@ export interface Channel {
   balance?: number | null;
   weight?: number | null;
   enabled: boolean;
+  available_hours?: TimeSlot[] | null;
   created_at: string;
   updated_at: string;
   models?: ChannelModelInfo[];
@@ -276,6 +283,7 @@ export interface CreateChannelRequest {
   api_key: string;
   priority?: number;
   enabled?: boolean;
+  available_hours?: TimeSlot[];
   models?: CreateChannelModelRequest[];
 }
 
@@ -285,6 +293,7 @@ export interface UpdateChannelRequest {
   // base_url removed — use provider.endpoints["default"]
   priority?: number;
   enabled?: boolean;
+  available_hours?: TimeSlot[];
 }
 
 export interface UpdateChannelApiKeyRequest {

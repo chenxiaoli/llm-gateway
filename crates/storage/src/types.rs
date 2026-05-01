@@ -131,6 +131,13 @@ pub struct UpdateProvider {
 // --- Channels ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeSlot {
+    pub days: Vec<String>,
+    pub start: String,
+    pub end: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Channel {
     pub id: String,
     pub provider_id: String,
@@ -144,6 +151,7 @@ pub struct Channel {
     pub balance: Option<i64>,
     pub weight: Option<i32>,
     pub enabled: bool,
+    pub available_hours: Option<Vec<TimeSlot>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -161,6 +169,7 @@ pub struct CreateChannel {
     pub balance: Option<i64>,
     pub weight: Option<i32>,
     pub enabled: Option<bool>,
+    pub available_hours: Option<Vec<TimeSlot>>,
     pub models: Option<Vec<CreateChannelModel>>,
 }
 
@@ -177,6 +186,7 @@ pub struct UpdateChannel {
     pub tpm_limit: Option<Option<i64>>,
     pub balance: Option<Option<i64>>,
     pub weight: Option<Option<i32>>,
+    pub available_hours: Option<Vec<TimeSlot>>,
 }
 
 /// Dedicated payload for updating a channel's API key.

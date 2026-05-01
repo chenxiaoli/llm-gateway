@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Pencil, Trash2, KeyRound, Hash, Plus, Building2, LinkIcon, Power, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Pencil, Trash2, KeyRound, Hash, Plus, Building2, LinkIcon, Power, Eye, EyeOff, Clock } from 'lucide-react';
 import { useChannel, useUpdateChannel, useDeleteChannel, useChannelModels, useCreateChannelModel, useDeleteChannelModel, useUpdateChannelModel, useUpdateChannelApiKey } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
@@ -9,7 +9,7 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Toggle } from '../components/ui/Toggle';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
-import type { UpdateChannelRequest, ChannelModel } from '../types';
+import type { UpdateChannelRequest, ChannelModel, TimeSlot } from '../types';
 
 export default function ChannelDetail() {
   const { id } = useParams<{ id: string }>();
@@ -43,11 +43,15 @@ export default function ChannelDetail() {
   const [modelEnabled, setModelEnabled] = useState(true);
   const [editingModel, setEditingModel] = useState<ChannelModel | null>(null);
 
+  const [editingHours, setEditingHours] = useState(false);
+  const [hoursSlots, setHoursSlots] = useState<TimeSlot[]>([]);
+
   useEffect(() => {
     if (channel) {
       setChannelName(channel.name);
       setChannelPriority(String(channel.priority));
       setChannelEnabled(channel.enabled);
+      setHoursSlots(channel.available_hours ?? []);
     }
   }, [channel]);
 
@@ -256,6 +260,36 @@ export default function ChannelDetail() {
             </div>
           </div>
         )}
+
+        {/* Available Hours Card */}
+        <div className="bg-base-100 rounded-box p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-base-content/60">Available Hours</h2>
+            <Button variant="secondary" size="sm" icon={<Pencil className="h-4 w-4" />} onClick={() => { setHoursSlots(channel.available_hours ?? []); setEditingHours(true); }}>
+              Edit
+            </Button>
+          </div>
+          {channel.available_hours && channel.available_hours.length > 0 ? (
+            <div className="space-y-2">
+              {channel.available_hours.map((slot, i) => (
+                <div key={i} className="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
+                  <Clock className="h-4 w-4 text-primary shrink-0" />
+                  <div className="flex-1">
+                    <span className="font-mono text-sm text-base-content/80">{slot.start} – {slot.end}</span>
+                  </div>
+                  <div className="flex gap-1 flex-wrap justify-end">
+                    {slot.days.map(d => (
+                      <span key={d} className="px-2 py-0.5 bg-primary/10 text-primary/80 rounded text-xs font-medium capitalize">{d}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-base-content/30 italic">Always available (no restrictions)</div>
+          )}
+        </div>
+
         {/* Metadata Card */}
         <div className="bg-base-100 rounded-box p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-base-content/60 mb-4">Metadata</h2>
@@ -645,6 +679,75 @@ export default function ChannelDetail() {
               Update Key
             </Button>
             <Button variant="ghost" type="button" onClick={() => setIsUpdatingApiKey(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Available Hours Modal */}
+      <Modal open={editingHours} onClose={() => setEditingHours(false)} title="Edit Available Hours">
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          await updateMutation.mutateAsync({
+            id: channel.id,
+            input: { available_hours: hoursSlots },
+          });
+          setEditingHours(false);
+        }} className="space-y-4">
+          <div className="bg-base-200/50 rounded-box px-4 py-3 text-sm text-base-content/60">
+            Restrict this channel to specific days and times. Leave empty to make it always available. All times are in UTC.
+          </div>
+
+          {hoursSlots.map((slot, i) => (
+            <div key={i} className="p-4 bg-base-200/30 rounded-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-base-content/50">Slot {i + 1}</span>
+                <button type="button" onClick={() => setHoursSlots(hoursSlots.filter((_, j) => j !== i))} className="text-base-content/30 hover:text-error text-xs cursor-pointer">Remove</button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-base-content/40 uppercase tracking-wider">Start</label>
+                  <input type="time" value={slot.start} onChange={e => {
+                    const next = [...hoursSlots]; next[i] = { ...next[i], start: e.target.value }; setHoursSlots(next);
+                  }} className="input input-bordered w-full text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs text-base-content/40 uppercase tracking-wider">End</label>
+                  <input type="time" value={slot.end} onChange={e => {
+                    const next = [...hoursSlots]; next[i] = { ...next[i], end: e.target.value }; setHoursSlots(next);
+                  }} className="input input-bordered w-full text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-base-content/40 uppercase tracking-wider mb-1 block">Days</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {['mon','tue','wed','thu','fri','sat','sun'].map(d => (
+                    <button key={d} type="button" onClick={() => {
+                      const next = [...hoursSlots];
+                      const days = next[i].days.includes(d) ? next[i].days.filter(x => x !== d) : [...next[i].days, d];
+                      next[i] = { ...next[i], days };
+                      setHoursSlots(next);
+                    }} className={`px-2.5 py-1 rounded text-xs font-medium cursor-pointer transition-colors ${
+                      slot.days.includes(d) ? 'bg-primary/15 text-primary border border-primary/25' : 'bg-base-200 text-base-content/40 border border-transparent'
+                    }`}>
+                      {d.charAt(0).toUpperCase() + d.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          <Button variant="ghost" size="sm" type="button" onClick={() => setHoursSlots([...hoursSlots, { days: ['mon','tue','wed','thu','fri'], start: '09:00', end: '17:00' }])} className="w-full border border-dashed border-base-content/15">
+            + Add Time Slot
+          </Button>
+
+          <div className="flex gap-2 pt-2">
+            <Button variant="primary" type="submit" loading={updateMutation.isPending}>
+              Save
+            </Button>
+            <Button variant="ghost" type="button" onClick={() => setEditingHours(false)}>
               Cancel
             </Button>
           </div>

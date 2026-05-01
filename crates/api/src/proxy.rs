@@ -12,6 +12,7 @@ use chrono::Utc;
 use async_trait::async_trait;
 
 use llm_gateway_auth::hash_api_key;
+use llm_gateway_storage::types::TimeSlot;
 use llm_gateway_storage::Protocol;
 
 use crate::error::ApiError;
@@ -46,6 +47,7 @@ pub struct ResolvedChannel {
     /// Per-model overrides: keyed by lowercase model name.
     pub model_overrides: HashMap<String, ChannelModelEnriched>,
     pub proxy_url: Option<String>,
+    pub available_hours: Option<Vec<TimeSlot>>,
 }
 
 impl ResolvedChannel {
@@ -207,6 +209,7 @@ impl InMemoryChannelRegistry {
                 priority: channel.priority,
                 model_overrides,
                 proxy_url,
+                available_hours: channel.available_hours.clone(),
             };
 
             cache.insert(channel.id.clone(), resolved);
@@ -250,6 +253,32 @@ impl InMemoryChannelRegistry {
     }
 }
 
+fn is_available_now(slots: &Option<Vec<TimeSlot>>) -> bool {
+    let slots = match slots {
+        Some(s) if !s.is_empty() => s,
+        _ => return true,
+    };
+    let now = chrono::Utc::now();
+    let today = now.format("%a").to_string().to_lowercase();
+    let now_minutes = now.format("%H").to_string().parse::<i32>().unwrap_or(0) * 60
+        + now.format("%M").to_string().parse::<i32>().unwrap_or(0);
+
+    slots.iter().any(|slot| {
+        if !slot.days.contains(&today) {
+            return false;
+        }
+        let parse_time = |t: &str| -> i32 {
+            let parts: Vec<&str> = t.split(':').take(2).collect();
+            let h: i32 = parts.first().and_then(|p| p.parse().ok()).unwrap_or(0);
+            let m: i32 = parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(0);
+            h * 60 + m
+        };
+        let start = parse_time(&slot.start);
+        let end = parse_time(&slot.end);
+        now_minutes >= start && now_minutes < end
+    })
+}
+
 #[async_trait::async_trait]
 impl ChannelRegistry for InMemoryChannelRegistry {
     async fn resolve_by_model(&self, model: &str) -> Vec<ResolvedChannel> {
@@ -260,6 +289,7 @@ impl ChannelRegistry for InMemoryChannelRegistry {
                 let cache = self.cache.load();
                 ids.iter()
                     .filter_map(|id| cache.get(id).cloned())
+                    .filter(|ch| is_available_now(&ch.available_hours))
                     .collect()
             }
             None => Vec::new(),
@@ -694,6 +724,7 @@ pub async fn proxy(
                         priority: channel.priority,
                         model_overrides: HashMap::new(), // not used in cache-miss path
                         proxy_url,
+                        available_hours: channel.available_hours.clone(),
                     };
                     candidates.push((resolved, cm.clone()));
                 }
@@ -1127,6 +1158,7 @@ mod tests {
                 },
             )]),
             proxy_url: None,
+            available_hours: None,
         };
         let enriched = rc.model_overrides.get(&model_key).expect("should have model override");
         assert_eq!(enriched.markup_ratio, 15_000);
@@ -1151,6 +1183,7 @@ mod tests {
             priority: 1,
             model_overrides: HashMap::new(),
             proxy_url: None,
+            available_hours: None,
         };
         let registry = StubRegistry(vec![rc.clone()]);
         let result = registry.resolve_by_model("any-model").await;
@@ -1180,6 +1213,7 @@ mod tests {
                 },
             )]),
             proxy_url: None,
+            available_hours: None,
         };
         let registry = StubRegistry(vec![rc.clone()]);
         let result = registry.resolve(&channel_id.to_string()).await;
