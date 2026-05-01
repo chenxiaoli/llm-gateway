@@ -4,6 +4,70 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.0] - 2026-05-01
+
+### Added
+- Channel Available Hours — restrict channels to specific days and time ranges (UTC), with routing automatically filtering out channels outside their scheduled hours
+- Frontend Available Hours card on Channel Detail page with day toggles and time inputs
+
+### Fixed
+- Clear schedule now works correctly (send `[]` to clear — `Option<Option<Vec<TimeSlot>>>` bug fixed to single Option)
+
+## [0.9.7] - 2026-04-30
+
+### Fixed
+- Seed pricing policies deserialization — camelCase JSON keys now match `#[serde(rename_all = "camelCase")]`
+- Pricing policy seeding decoupled from model seeding (independent table check)
+- Reduced seed pricing policies to glm-5.1, minimax-m2.7, minimax-m2.7-highspeed only
+
+## [0.9.6] - 2026-04-30
+
+### Fixed
+- Seed models loaded independently from providers (N:N model-provider architecture)
+
+## [0.9.5] - 2026-04-30
+
+### Fixed
+- Version passed explicitly via build arg in Dockerfile
+- Settings test updated for version-agnostic matching
+
+## [0.9.4] - 2026-04-30
+
+### Added
+- Monetary integer subunits — all money values stored as integer microdollars (1 USD = 1,000,000 units) to eliminate floating-point errors
+- `money` module with `usd_to_units` / `units_to_usd` / `bps_to_ratio` / `ratio_to_bps` conversion helpers
+- SQLite and PostgreSQL migrations to convert existing monetary columns to INTEGER/BIGINT
+- API boundary conversion: management handlers accept/return USD floats, storage layer uses i64 integers
+- Billing, settlement, and workers updated to integer arithmetic throughout
+
+### Fixed
+- PostgreSQL type compatibility (BIGINT for SUM aggregates, TIMESTAMPTZ for timestamps)
+- PostgreSQL migrations made idempotent for existing databases
+- Context-tiered billing support in frontend pricing display
+
+## [0.9.3] - 2026-04-29
+
+### Fixed
+- Quote reserved keyword `window` in PostgreSQL rate_limit_counters query
+
+## [0.9.2] - 2026-04-29
+
+### Fixed
+- Correct PostgreSQL 18 data path in production docker-compose
+- Use list form for `depends_on` in docker-compose
+
+## [0.9.1] - 2026-04-29
+
+### Fixed
+- Add version field to all docker-compose files
+
+## [0.9.0] - 2026-04-29
+
+### Added
+- Cache creation pricing support
+- Key prefix display in API key list
+- Sidebar improvements and font switch (Outfit + JetBrains Mono)
+
 ## [0.8.3] - 2026-04-28
 
 ### Changed
