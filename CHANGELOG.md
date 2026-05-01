@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.1] - 2026-05-01
+
+### Fixed
+- Validate database driver at startup — unknown values now fail with clear error instead of silently falling back to SQLite
+- About tab no longer hardcodes "SQLite", reads actual driver from config
+
 ## [0.10.0] - 2026-05-01
 
 ### Added
