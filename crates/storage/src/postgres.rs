@@ -1395,7 +1395,7 @@ impl crate::Storage for PostgresStorage {
              FROM usage_records u \
              LEFT JOIN channels c ON u.channel_id = c.id \
              {} \
-             GROUP BY u.channel_id \
+             GROUP BY u.channel_id, c.name \
              ORDER BY total_requests DESC",
             where_clause
         );
