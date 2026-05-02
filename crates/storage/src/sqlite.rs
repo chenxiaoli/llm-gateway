@@ -160,6 +160,29 @@ impl From<SqliteUsageSummaryRow> for UsageSummaryRecord {
 }
 
 #[derive(FromRow)]
+struct SqliteChannelUsageSummaryRow {
+    channel_id: Option<String>,
+    channel_name: Option<String>,
+    total_requests: i64,
+    total_cost: i64,
+    total_input_tokens: i64,
+    total_output_tokens: i64,
+}
+
+impl From<SqliteChannelUsageSummaryRow> for ChannelUsageSummaryRecord {
+    fn from(r: SqliteChannelUsageSummaryRow) -> Self {
+        ChannelUsageSummaryRecord {
+            channel_id: r.channel_id,
+            channel_name: r.channel_name,
+            total_requests: r.total_requests,
+            total_cost: r.total_cost,
+            total_input_tokens: r.total_input_tokens,
+            total_output_tokens: r.total_output_tokens,
+        }
+    }
+}
+
+#[derive(FromRow)]
 struct SqliteUsageRow {
     id: String,
     key_id: String,
@@ -1266,6 +1289,55 @@ impl crate::Storage for SqliteStorage {
 
         let rows: Vec<SqliteUsageSummaryRow> = query.fetch_all(&self.pool).await?;
         Ok(rows.into_iter().map(UsageSummaryRecord::from).collect())
+    }
+
+    async fn query_channel_usage_summary(&self, filter: &UsageFilter) -> Result<Vec<ChannelUsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut where_sql = String::from("WHERE 1=1");
+        let mut bind_vars: Vec<String> = Vec::new();
+
+        if let Some(ref user_id) = filter.user_id {
+            where_sql.push_str(" AND u.user_id = ?");
+            bind_vars.push(user_id.clone());
+        } else if let Some(ref key_id) = filter.key_id {
+            where_sql.push_str(" AND u.key_id = ?");
+            bind_vars.push(key_id.clone());
+        }
+        if let Some(ref model_name) = filter.model_name {
+            where_sql.push_str(" AND u.model_name = ?");
+            bind_vars.push(model_name.clone());
+        }
+        if let Some(since) = filter.since {
+            where_sql.push_str(" AND u.created_at >= ?");
+            bind_vars.push(since.to_rfc3339());
+        }
+        if let Some(until) = filter.until {
+            where_sql.push_str(" AND u.created_at <= ?");
+            bind_vars.push(until.to_rfc3339());
+        }
+
+        let sql = format!(
+            "SELECT \
+               u.channel_id, \
+               c.name AS channel_name, \
+               COUNT(*) AS total_requests, \
+               COALESCE(SUM(u.cost), 0) AS total_cost, \
+               COALESCE(SUM(u.input_tokens), 0) AS total_input_tokens, \
+               COALESCE(SUM(u.output_tokens), 0) AS total_output_tokens \
+             FROM usage_records u \
+             LEFT JOIN channels c ON u.channel_id = c.id \
+             {} \
+             GROUP BY u.channel_id \
+             ORDER BY total_requests DESC",
+            where_sql
+        );
+
+        let mut query = sqlx::query_as::<_, SqliteChannelUsageSummaryRow>(&sql);
+        for var in bind_vars {
+            query = query.bind(var);
+        }
+
+        let rows: Vec<SqliteChannelUsageSummaryRow> = query.fetch_all(&self.pool).await?;
+        Ok(rows.into_iter().map(ChannelUsageSummaryRecord::from).collect())
     }
 
     async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, i64)>, Box<dyn std::error::Error + Send + Sync>> {

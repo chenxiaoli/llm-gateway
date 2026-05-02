@@ -113,6 +113,15 @@ export interface UsageSummaryRecord {
   request_count: number;
 }
 
+export interface ChannelUsageSummaryRecord {
+  channel_id: string | null;
+  channel_name: string | null;
+  total_requests: number;
+  total_cost: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+}
+
 export interface UsageFilter {
   key_id?: string;
   user_id?: string;

@@ -4,7 +4,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use llm_gateway_storage::{units_to_usd, PaginatedResponse, PaginationParams, UsageFilter, UsageRecord, UsageSummaryRecord};
+use llm_gateway_storage::{units_to_usd, ChannelUsageSummaryRecord, PaginatedResponse, PaginationParams, UsageFilter, UsageRecord, UsageSummaryRecord};
 
 use crate::error::ApiError;
 use crate::extractors::require_auth;
@@ -136,4 +136,51 @@ pub async fn get_usage_summary(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(records.into_iter().map(UsageSummaryResponse::from).collect()))
+}
+
+// --- Channel Usage Summary ---
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ChannelUsageSummaryResponse {
+    pub channel_id: Option<String>,
+    pub channel_name: Option<String>,
+    pub total_requests: i64,
+    pub total_cost: f64,
+    pub total_input_tokens: i64,
+    pub total_output_tokens: i64,
+}
+
+impl From<ChannelUsageSummaryRecord> for ChannelUsageSummaryResponse {
+    fn from(r: ChannelUsageSummaryRecord) -> Self {
+        ChannelUsageSummaryResponse {
+            channel_id: r.channel_id,
+            channel_name: r.channel_name,
+            total_requests: r.total_requests,
+            total_cost: units_to_usd(r.total_cost),
+            total_input_tokens: r.total_input_tokens,
+            total_output_tokens: r.total_output_tokens,
+        }
+    }
+}
+
+pub async fn get_channel_usage_summary(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(query): Query<UsageSummaryQuery>,
+) -> Result<Json<Vec<ChannelUsageSummaryResponse>>, ApiError> {
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+
+    let mut filter = query.filter;
+
+    if claims.role != "admin" {
+        filter.user_id = Some(claims.sub);
+    }
+
+    let records = state
+        .storage
+        .query_channel_usage_summary(&filter)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(records.into_iter().map(ChannelUsageSummaryResponse::from).collect()))
 }
