@@ -2,6 +2,7 @@ pub mod auth;
 pub mod error;
 pub mod extractors;
 pub mod models;
+pub mod user_models;
 pub mod proxy;
 pub mod settlement;
 pub mod workers;

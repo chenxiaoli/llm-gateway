@@ -120,6 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Use /*path to capture the remaining path after /v1
         .route("/v1/chat/completions", post(api::proxy::proxy_with_protocol))
         .route("/v1/models", get(api::models::list_models))
+        .route("/api/v1/user/models", get(api::user_models::list_user_models))
         .route("/v1/messages", post(api::proxy::messages))
         // Management API
         .merge(api::management::management_router())
