@@ -3,5 +3,5 @@ import type { UserModelView } from '../types';
 
 export async function listUserModels(): Promise<UserModelView[]> {
   const { data } = await apiClient.get<UserModelView[]>('/user/models');
-  return data;
+  return Array.isArray(data) ? data : [];
 }

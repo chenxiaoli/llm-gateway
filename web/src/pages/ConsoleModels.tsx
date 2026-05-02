@@ -154,7 +154,7 @@ export default function ConsoleModels() {
   ) ?? [];
 
   const totalModels = models?.length ?? 0;
-  const liveModels = models?.filter(m => m.is_available).length ?? 0;
+  const liveModels = models?.filter(m => m.is_available)?.length ?? 0;
   const idleModels = totalModels - liveModels;
 
   if (isLoading) {
