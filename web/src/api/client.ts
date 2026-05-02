@@ -20,7 +20,15 @@ export const adminApiClient = axios.create({
   },
 });
 
-// Copy interceptors to admin client
+// Attach Bearer token to both clients
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 adminApiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY);
   if (token) {

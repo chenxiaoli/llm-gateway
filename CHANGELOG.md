@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.5] - 2026-05-02
+
+### Fixed
+- `apiClient` (used by keys, model-fallbacks, usage, accounts) was not attaching Bearer token to requests — all non-`/admin/*` authenticated endpoints returned 401
+
 ## [0.13.4] - 2026-05-02
 
 ### Fixed
