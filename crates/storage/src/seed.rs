@@ -237,6 +237,7 @@ pub fn get_seed_provider_models(
                         provider_id: provider_id.to_string(),
                         model_id: model_id.to_string(),
                         upstream_name: Some(model_name.to_string()),
+                        pricing_policy_id: None,
                         created_at: Utc::now(),
                     });
                 }

@@ -86,6 +86,7 @@ pub trait Storage: Send + Sync {
     // Provider Models
     async fn upsert_provider_models(&self, provider_id: &str, models: Vec<ProviderModel>) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn list_provider_models(&self, provider_id: &str) -> Result<Vec<ProviderModelInfo>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn set_provider_models(&self, provider_id: &str, models: Vec<ProviderModel>) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     // Usage
     async fn record_usage(&self, usage: &UsageRecord) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;

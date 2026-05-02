@@ -23,6 +23,7 @@ import AccountBalance from './pages/AccountBalance';
 import Settings from './pages/Settings';
 import Usage from './pages/Usage';
 import Logs from './pages/Logs';
+import AdminDashboard from './pages/AdminDashboard';
 
 function RequireAuth() {
   const user = useAuthStore((s) => s.user);
@@ -62,7 +63,8 @@ function App() {
         </Route>
         <Route path="/admin" element={<Layout />}>
           <Route element={<RequireAdmin />}>
-            <Route index element={<Navigate to="channels" replace />} />
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="channels" element={<Channels />} />
             <Route path="channels/:id" element={<ChannelDetail />} />
             <Route path="providers" element={<Providers />} />

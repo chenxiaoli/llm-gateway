@@ -1736,13 +1736,14 @@ impl crate::Storage for PostgresStorage {
     async fn upsert_provider_models(&self, provider_id: &str, models: Vec<ProviderModel>) -> Result<(), DbErr> {
         for pm in models {
             sqlx::query(
-                "INSERT INTO provider_models (provider_id, model_id, upstream_name, created_at)
-                 VALUES ($1, $2, $3, NOW())
-                 ON CONFLICT (provider_id, model_id) DO UPDATE SET upstream_name = EXCLUDED.upstream_name",
+                "INSERT INTO provider_models (provider_id, model_id, upstream_name, pricing_policy_id, created_at)
+                 VALUES ($1, $2, $3, $4, NOW())
+                 ON CONFLICT (provider_id, model_id) DO UPDATE SET upstream_name = EXCLUDED.upstream_name, pricing_policy_id = EXCLUDED.pricing_policy_id",
             )
             .bind(provider_id)
             .bind(&pm.model_id)
             .bind(&pm.upstream_name)
+            .bind(&pm.pricing_policy_id)
             .execute(&self.pool)
             .await?;
         }
@@ -1750,8 +1751,8 @@ impl crate::Storage for PostgresStorage {
     }
 
     async fn list_provider_models(&self, provider_id: &str) -> Result<Vec<ProviderModelInfo>, DbErr> {
-        let rows = sqlx::query_as::<_, (String, String, Option<String>)>(
-            "SELECT pm.model_id, m.name, pm.upstream_name
+        let rows = sqlx::query_as::<_, (String, String, Option<String>, Option<String>)>(
+            "SELECT pm.model_id, m.name, pm.upstream_name, pm.pricing_policy_id
              FROM provider_models pm
              JOIN models m ON m.id = pm.model_id
              WHERE pm.provider_id = $1
@@ -1760,11 +1761,32 @@ impl crate::Storage for PostgresStorage {
         .bind(provider_id)
         .fetch_all(&self.pool)
         .await?;
-        Ok(rows.into_iter().map(|(model_id, model_name, upstream_name)| ProviderModelInfo {
+        Ok(rows.into_iter().map(|(model_id, model_name, upstream_name, pricing_policy_id)| ProviderModelInfo {
             model_id,
             model_name,
             upstream_name,
+            pricing_policy_id,
         }).collect())
+    }
+
+    async fn set_provider_models(&self, provider_id: &str, models: Vec<ProviderModel>) -> Result<(), DbErr> {
+        sqlx::query("DELETE FROM provider_models WHERE provider_id = $1")
+            .bind(provider_id)
+            .execute(&self.pool)
+            .await?;
+        for pm in models {
+            sqlx::query(
+                "INSERT INTO provider_models (provider_id, model_id, upstream_name, pricing_policy_id, created_at)
+                 VALUES ($1, $2, $3, $4, now())",
+            )
+            .bind(provider_id)
+            .bind(&pm.model_id)
+            .bind(&pm.upstream_name)
+            .bind(&pm.pricing_policy_id)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
     }
 
     async fn count_admin_users(&self) -> Result<i64, DbErr> {
