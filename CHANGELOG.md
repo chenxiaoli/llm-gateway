@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.1] - 2026-05-02
+
+### Added
+- Channel usage summary API endpoint (`GET /api/v1/usage/channel-summary`) — server-side aggregation of usage_records by channel_id with channel names
+- `ChannelUsageSummaryRecord` storage type and `query_channel_usage_summary` method for SQLite and PostgreSQL
+- Frontend `useChannelUsageSummary` hook and API client
+
+### Changed
+- Admin dashboard channel usage section now uses server-side aggregation instead of client-side aggregation from 200 audit log entries
+
 ## [0.13.0] - 2026-05-02
 
 ### Added

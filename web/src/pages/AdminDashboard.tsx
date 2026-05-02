@@ -1,6 +1,6 @@
 import { MessageSquare, DollarSign, Zap, TrendingUp, Activity, Server, Network, Users, Cpu, KeyRound, ArrowRight, Clock, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useUsageSummary } from '../hooks/useUsage';
+import { useUsageSummary, useChannelUsageSummary } from '../hooks/useUsage';
 import { useLogs } from '../hooks/useLogs';
 import { useProviders } from '../hooks/useProviders';
 import { useAllChannels } from '../hooks/useChannels';
@@ -70,7 +70,7 @@ export default function AdminDashboard() {
   const { data: todaySummary } = useUsageSummary({ since: startOfDay() });
   const { data: monthSummary } = useUsageSummary({ since: startOfMonth() });
   const { data: recentLogs, isLoading: logsLoading } = useLogs({}, 1, 10);
-  const { data: channelLogs } = useLogs({ since: startOfDay() }, 1, 200);
+  const { data: channelUsage } = useChannelUsageSummary({ since: startOfDay() });
   const { data: providers } = useProviders();
   const { data: channels } = useAllChannels();
   const { data: models } = useAllModels();
@@ -97,24 +97,7 @@ export default function AdminDashboard() {
     .sort((a, b) => b.request_count - a.request_count)
     .slice(0, 5);
 
-  // Aggregate channel usage from today's logs
-  const channelStats = (() => {
-    const items = channelLogs?.items ?? [];
-    if (!items.length) return [];
-    const map = new Map<string, { name: string; requests: number; errors: number; latency: number }>();
-    for (const log of items) {
-      const key = log.channel_id ?? '_none';
-      const name = log.channel_name ?? 'Direct';
-      const entry = map.get(key) ?? { name, requests: 0, errors: 0, latency: 0 };
-      entry.requests++;
-      if (log.status_code >= 400) entry.errors++;
-      entry.latency += log.latency_ms;
-      map.set(key, entry);
-    }
-    return [...map.values()]
-      .map(c => ({ ...c, avgLatency: Math.round(c.latency / c.requests), errorRate: Math.round((c.errors / c.requests) * 100) }))
-      .sort((a, b) => b.requests - a.requests);
-  })();
+  const channelStats = channelUsage ?? [];
 
   return (
     <div className="px-6 pb-8">
@@ -277,21 +260,20 @@ export default function AdminDashboard() {
             ) : (
               <div className="divide-y divide-base-300/20">
                 {channelStats.map((c) => {
-                  const pct = channelLogs?.items?.length ? Math.round((c.requests / channelLogs.items.length) * 100) : 0;
+                  const totalReqs = channelStats.reduce((s, x) => s + x.total_requests, 0);
+                  const pct = totalReqs > 0 ? Math.round((c.total_requests / totalReqs) * 100) : 0;
                   return (
-                    <div key={c.name} className="px-4 py-3">
+                    <div key={c.channel_id ?? '_none'} className="px-4 py-3">
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="font-mono text-sm font-medium text-base-content/70 truncate">{c.name}</span>
-                        <span className="font-mono text-xs font-bold">{c.requests.toLocaleString()}</span>
+                        <span className="font-mono text-sm font-medium text-base-content/70 truncate">{c.channel_name ?? 'Direct'}</span>
+                        <span className="font-mono text-xs font-bold">{c.total_requests.toLocaleString()}</span>
                       </div>
                       <div className="h-1 rounded-full bg-base-200/60 overflow-hidden mb-1.5">
                         <div className="h-full rounded-full bg-blue-400/50" style={{ width: `${pct}%` }} />
                       </div>
                       <div className="flex items-center gap-3 text-[10px] font-mono text-base-content/35">
-                        <span>{c.avgLatency}ms avg</span>
-                        {c.errorRate > 0 && (
-                          <span className={c.errorRate > 10 ? 'text-amber-400' : ''}>{c.errorRate}% err</span>
-                        )}
+                        <span>{((c.total_input_tokens ?? 0) + (c.total_output_tokens ?? 0)).toLocaleString()} tokens</span>
+                        <span>${c.total_cost.toFixed(4)}</span>
                       </div>
                     </div>
                   );

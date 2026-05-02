@@ -522,6 +522,16 @@ pub struct UsageSummaryRecord {
     pub request_count: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct ChannelUsageSummaryRecord {
+    pub channel_id: Option<String>,
+    pub channel_name: Option<String>,
+    pub total_requests: i64,
+    pub total_cost: i64,
+    pub total_input_tokens: i64,
+    pub total_output_tokens: i64,
+}
+
 fn deserialize_datetime_opt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<DateTime<Utc>>, D::Error> {
     let s: Option<String> = Option::deserialize(d)?;
     match s {
