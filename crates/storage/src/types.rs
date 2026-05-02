@@ -171,6 +171,7 @@ pub struct Channel {
     pub weight: Option<i32>,
     pub enabled: bool,
     pub available_hours: Option<Vec<TimeSlot>>,
+    pub created_by: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
