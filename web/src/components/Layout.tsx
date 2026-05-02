@@ -36,6 +36,7 @@ const consoleItems = [
 ];
 
 const adminItems = [
+  { key: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { key: '/admin/channels', icon: Network, label: 'Channels' },
   { key: '/admin/providers', icon: Server, label: 'Providers' },
   { key: '/admin/models', icon: Cpu, label: 'Models' },

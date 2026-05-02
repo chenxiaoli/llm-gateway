@@ -1,6 +1,6 @@
 [package]
 name = 'llm-gateway-encryption'
-version = '0.10.5'
+version = '0.13.0'
 edition = '2021'
 
 [dependencies]

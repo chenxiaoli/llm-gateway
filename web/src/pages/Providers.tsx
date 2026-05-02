@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { Plus, Pencil, Trash2, Copy, Check, Globe, Zap, Radio, Layers, Shield } from 'lucide-react';
-import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider } from '../hooks/useProviders';
+import { useState, useEffect } from 'react';
+import { Plus, Pencil, Trash2, Copy, Check, Globe, Zap, Radio, Layers, Shield, X } from 'lucide-react';
+import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider, useProviderModels, useUpdateProviderModels } from '../hooks/useProviders';
+import { useAllModels } from '../hooks/useModels';
+import { usePricingPolicies } from '../hooks/usePricingPolicies';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Drawer } from '../components/ui/Drawer';
@@ -94,14 +96,18 @@ function EndpointReadout({ protocol, url }: { protocol: string; url: string }) {
 }
 
 // ── Provider Module ─────────────────────────────────────────────────────────
-function ProviderModule({ provider, onEdit, onDelete, index }: {
+function ProviderModule({ provider, onEdit, onDelete, onEditModel, onAddModel, index }: {
   provider: Provider;
   onEdit: (p: Provider) => void;
   onDelete: (p: Provider) => void;
+  onEditModel: (provider: Provider, model: { model_id: string; model_name: string; upstream_name: string | null; pricing_policy_id: string | null }) => void;
+  onAddModel: (p: Provider) => void;
   index: number;
 }) {
+  const { data: providerModels } = useProviderModels(provider.id);
   const endpointEntries = provider.endpoints ? Object.entries(provider.endpoints) : [];
   const hasEndpoints = endpointEntries.length > 0;
+  const models = Array.isArray(providerModels) ? providerModels : [];
 
   // Derive the primary protocol for the card's accent color
   const primaryProtocol = endpointEntries[0]?.[0];
@@ -156,7 +162,7 @@ function ProviderModule({ provider, onEdit, onDelete, index }: {
                   {/* Status indicator */}
                   <span className="flex items-center gap-1.5">
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${provider.enabled ? '' : ''}`}
+                      className="w-1.5 h-1.5 rounded-full"
                       style={provider.enabled ? {
                         background: '#06d6a0',
                         boxShadow: '0 0 8px rgba(6, 214, 160, 0.5)',
@@ -228,6 +234,29 @@ function ProviderModule({ provider, onEdit, onDelete, index }: {
             </div>
           )}
 
+          {/* Supported Models */}
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {models.map(m => (
+              <button
+                key={m.model_id}
+                onClick={() => onEditModel(provider, m)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-base-200/30 border border-base-300/12 hover:border-accent/30 hover:text-accent/70 text-sm font-mono text-base-content/55 leading-none transition-all duration-200 cursor-pointer"
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.pricing_policy_id ? 'bg-success/70' : 'bg-base-content/15'}`}
+                />
+                {m.model_name}
+              </button>
+            ))}
+            <button
+              onClick={() => onAddModel(provider)}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded border border-dashed border-base-300/30 hover:border-accent/40 text-sm text-base-content/30 hover:text-accent transition-all duration-200 cursor-pointer"
+            >
+              <Plus className="h-3 w-3" />
+              <span className="font-mono text-xs">add</span>
+            </button>
+          </div>
+
           {/* Footer — metadata */}
           <div className="flex items-center justify-between mt-4 pt-3 border-t border-base-300/20">
             <span className="font-mono text-xs text-base-content/35">
@@ -243,6 +272,211 @@ function ProviderModule({ provider, onEdit, onDelete, index }: {
         </div>
       </div>
     </motion.div>
+  );
+}
+
+// ── Edit Single Provider Model Modal ─────────────────────────────────────────
+function ProviderEditModelModal({ open, onClose, provider, model }: {
+  open: boolean;
+  onClose: () => void;
+  provider: Provider;
+  model: { model_id: string; model_name: string; upstream_name: string | null; pricing_policy_id: string | null };
+}) {
+  const { data: providerModels } = useProviderModels(provider.id);
+  const { data: pricingPolicies } = usePricingPolicies();
+  const updateMutation = useUpdateProviderModels();
+
+  const [upstreamName, setUpstreamName] = useState(model.upstream_name ?? '');
+  const [pricingPolicyId, setPricingPolicyId] = useState(model.pricing_policy_id ?? '');
+
+  // Reset form when opening
+  useEffect(() => {
+    if (open) {
+      setUpstreamName(model.upstream_name ?? '');
+      setPricingPolicyId(model.pricing_policy_id ?? '');
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSave = async () => {
+    const current = Array.isArray(providerModels) ? providerModels : [];
+    const updated = current.map(m =>
+      m.model_id === model.model_id
+        ? { model_id: m.model_id, upstream_name: upstreamName || undefined, pricing_policy_id: pricingPolicyId || null }
+        : { model_id: m.model_id, upstream_name: m.upstream_name ?? undefined, pricing_policy_id: m.pricing_policy_id }
+    );
+    await updateMutation.mutateAsync({ providerId: provider.id, models: updated });
+    onClose();
+  };
+
+  const handleRemove = async () => {
+    const current = Array.isArray(providerModels) ? providerModels : [];
+    const remaining = current
+      .filter(m => m.model_id !== model.model_id)
+      .map(m => ({ model_id: m.model_id, upstream_name: m.upstream_name ?? undefined, pricing_policy_id: m.pricing_policy_id }));
+    await updateMutation.mutateAsync({ providerId: provider.id, models: remaining });
+    onClose();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={model.model_name} width={400}>
+      <div className="space-y-5">
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">Upstream Name</label>
+          <input
+            type="text"
+            value={upstreamName}
+            onChange={(e) => setUpstreamName(e.target.value)}
+            placeholder="Override upstream model name"
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">Pricing Policy</label>
+          <select
+            value={pricingPolicyId}
+            onChange={(e) => setPricingPolicyId(e.target.value)}
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors cursor-pointer"
+          >
+            <option value="">None</option>
+            {pricingPolicies?.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center justify-between pt-2 border-t border-base-300/15">
+          <Button variant="danger" size="sm" onClick={handleRemove} loading={updateMutation.isPending}>
+            Remove
+          </Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button variant="primary" onClick={handleSave} loading={updateMutation.isPending}>Save</Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ── Direct Add Model Modal (from card button) ────────────────────────────────
+function ProviderAddModelModal({ open, onClose, provider }: {
+  open: boolean;
+  onClose: () => void;
+  provider: Provider;
+}) {
+  const { data: providerModels } = useProviderModels(provider.id);
+  const { data: allModels } = useAllModels();
+  const { data: pricingPolicies } = usePricingPolicies();
+  const updateMutation = useUpdateProviderModels();
+
+  const models = Array.isArray(providerModels) ? providerModels : [];
+  const assignedIds = new Set(models.map(m => m.model_id));
+  const availableModels = allModels?.filter(am => !assignedIds.has(am.id)) ?? [];
+
+  const handleAdd = (modelId: string, upstreamName: string, pricingPolicyId: string | null) => {
+    const current = models.map(m => ({
+      model_id: m.model_id,
+      upstream_name: m.upstream_name ?? undefined,
+      pricing_policy_id: m.pricing_policy_id,
+    }));
+    updateMutation.mutateAsync({
+      providerId: provider.id,
+      models: [...current, { model_id: modelId, upstream_name: upstreamName || undefined, pricing_policy_id: pricingPolicyId }],
+    });
+    onClose();
+  };
+
+  return (
+    <AddProviderModelModal
+      open={open}
+      onClose={onClose}
+      availableModels={availableModels}
+      pricingPolicies={pricingPolicies ?? []}
+      onAdd={handleAdd}
+    />
+  );
+}
+
+// ── Add Provider Model Modal ─────────────────────────────────────────────────
+function AddProviderModelModal({ open, onClose, availableModels, pricingPolicies, onAdd }: {
+  open: boolean;
+  onClose: () => void;
+  availableModels: { id: string; name: string }[];
+  pricingPolicies: { id: string; name: string }[];
+  onAdd: (modelId: string, upstreamName: string, pricingPolicyId: string | null) => void;
+}) {
+  const [selectedModelId, setSelectedModelId] = useState('');
+  const [upstreamName, setUpstreamName] = useState('');
+  const [pricingPolicyId, setPricingPolicyId] = useState<string | null>(null);
+
+  const selectedModel = availableModels.find(m => m.id === selectedModelId);
+
+  // Pre-fill upstream name when model is selected
+  useEffect(() => {
+    if (selectedModel) {
+      setUpstreamName(selectedModel.name);
+    }
+  }, [selectedModelId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedModelId) return;
+    onAdd(selectedModelId, upstreamName, pricingPolicyId);
+    setSelectedModelId('');
+    setUpstreamName('');
+    setPricingPolicyId(null);
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="Add Model" width={420}>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">Model</label>
+          <select
+            value={selectedModelId}
+            onChange={(e) => setSelectedModelId(e.target.value)}
+            required
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors cursor-pointer"
+          >
+            <option value="" disabled>Select a model</option>
+            {availableModels.map(m => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">Upstream Name</label>
+          <input
+            type="text"
+            value={upstreamName}
+            onChange={(e) => setUpstreamName(e.target.value)}
+            placeholder="Override upstream model name"
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">Pricing Policy</label>
+          <select
+            value={pricingPolicyId ?? ''}
+            onChange={(e) => setPricingPolicyId(e.target.value || null)}
+            className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors cursor-pointer"
+          >
+            <option value="">None</option>
+            {pricingPolicies.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={!selectedModelId}>Add Model</Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 
@@ -335,6 +569,24 @@ export default function Providers() {
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletingProvider, setDeletingProvider] = useState<Provider | null>(null);
+
+  const [editModelOpen, setEditModelOpen] = useState(false);
+  const [editModelProvider, setEditModelProvider] = useState<Provider | null>(null);
+  const [editModelData, setEditModelData] = useState<{ model_id: string; model_name: string; upstream_name: string | null; pricing_policy_id: string | null } | null>(null);
+
+  const [addModelOpen, setAddModelOpen] = useState(false);
+  const [addModelProvider, setAddModelProvider] = useState<Provider | null>(null);
+
+  const handleEditModel = (provider: Provider, model: { model_id: string; model_name: string; upstream_name: string | null; pricing_policy_id: string | null }) => {
+    setEditModelProvider(provider);
+    setEditModelData(model);
+    setEditModelOpen(true);
+  };
+
+  const handleAddModel = (provider: Provider) => {
+    setAddModelProvider(provider);
+    setAddModelOpen(true);
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -465,6 +717,8 @@ export default function Providers() {
               provider={provider}
               onEdit={handleEdit}
               onDelete={handleDelete}
+              onEditModel={handleEditModel}
+              onAddModel={handleAddModel}
               index={i}
             />
           ))}
@@ -590,6 +844,25 @@ export default function Providers() {
           </div>
         </div>
       </Modal>
+
+      {/* Edit Provider Model Modal */}
+      {editModelProvider && editModelData && (
+        <ProviderEditModelModal
+          open={editModelOpen}
+          onClose={() => { setEditModelOpen(false); setEditModelProvider(null); setEditModelData(null); }}
+          provider={editModelProvider}
+          model={editModelData}
+        />
+      )}
+
+      {/* Direct Add Model Modal */}
+      {addModelProvider && (
+        <ProviderAddModelModal
+          open={addModelOpen}
+          onClose={() => { setAddModelOpen(false); setAddModelProvider(null); }}
+          provider={addModelProvider}
+        />
+      )}
     </div>
   );
 }

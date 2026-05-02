@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Pencil, Trash2, RotateCcw } from 'lucide-react';
-import { useProvider, useUpdateProvider, useDeleteProvider, useSyncModels } from '../hooks/useProviders';
+import { ArrowLeft, Plus, Pencil, Trash2 } from 'lucide-react';
+import { useProvider, useUpdateProvider, useDeleteProvider } from '../hooks/useProviders';
 import { useChannels, useCreateChannel, useUpdateChannel, useDeleteChannel } from '../hooks/useChannels';
 import { useChannelModels, useCreateChannelModel, useUpdateChannelModel, useDeleteChannelModel } from '../hooks/useChannelModels';
 import { usePricingPolicies } from '../hooks/usePricingPolicies';
@@ -22,7 +22,6 @@ export default function ProviderDetail() {
   const createChannelMutation = useCreateChannel(id!);
   const updateChannelMutation = useUpdateChannel(id!);
   const deleteChannelMutation = useDeleteChannel(id!);
-  const syncModelsMutation = useSyncModels(id!);
 
   const { data: channels } = useChannels(id!);
   const { data: channelModels } = useChannelModels(id!);
@@ -178,7 +177,6 @@ export default function ProviderDetail() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold">Channel Models</h2>
             <div className="flex gap-2">
-              <Button variant="ghost" icon={<RotateCcw className="h-4 w-4" />} onClick={() => syncModelsMutation.mutate()} loading={syncModelsMutation.isPending}>Sync Models</Button>
               <Button variant="ghost" icon={<Plus className="h-4 w-4" />} onClick={openAddModel}>Add Model</Button>
             </div>
           </div>

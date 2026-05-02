@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { listProviders, getProvider, createProvider, updateProvider, deleteProvider, syncModels } from '../api/providers';
+import { listProviders, getProvider, createProvider, updateProvider, deleteProvider, listProviderModels, updateProviderModels } from '../api/providers';
 import type { CreateProviderRequest, UpdateProviderRequest } from '../types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
@@ -43,14 +43,23 @@ export function useDeleteProvider() {
   });
 }
 
-export function useSyncModels(providerId: string) {
+export function useProviderModels(providerId: string) {
+  return useQuery({
+    queryKey: ['providers', providerId, 'models'],
+    queryFn: () => listProviderModels(providerId),
+    enabled: !!providerId,
+  });
+}
+
+export function useUpdateProviderModels() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => syncModels(providerId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'models'] });
-      toast.success('Models synced');
+    mutationFn: ({ providerId, models }: { providerId: string; models: { model_id: string; upstream_name?: string; pricing_policy_id?: string | null }[] }) =>
+      updateProviderModels(providerId, models),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['providers', variables.providerId, 'models'] });
+      toast.success('Supported models updated');
     },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to sync models')); },
+    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to update supported models')); },
   });
 }

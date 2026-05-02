@@ -516,7 +516,7 @@ export default function ChannelDetail() {
               className="select select-bordered w-full"
             >
               <option value="">Select a model...</option>
-              {(providerModels && providerModels.length > 0
+              {(Array.isArray(providerModels) && providerModels.length > 0
                 ? providerModels
                     .filter(m => !channelModels?.some(cm => cm.model_id === m.model_id))
                     .map(m => ({ id: m.model_id, name: m.model_name }))

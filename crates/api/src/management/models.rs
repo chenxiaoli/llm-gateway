@@ -10,20 +10,6 @@ use crate::error::ApiError;
 use crate::extractors::require_admin;
 use crate::AppState;
 
-#[derive(Serialize)]
-pub struct SyncModelsResponse {
-    pub new: i32,
-    pub updated: i32,
-    pub models: Vec<SyncedModel>,
-}
-
-#[derive(Serialize)]
-pub struct SyncedModel {
-    pub name: String,
-    pub model_type: Option<String>,
-    pub created: bool,
-}
-
 pub async fn list_all_models(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -122,201 +108,6 @@ pub async fn delete_model(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
-pub async fn sync_models(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(provider_id): Path<String>,
-) -> Result<Json<SyncModelsResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
-
-    let provider = state
-        .storage
-        .get_provider(&provider_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
-
-    // Get channels to find API key
-    let channels = state
-        .storage
-        .list_channels_by_provider(&provider_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let api_key = channels
-        .first()
-        .ok_or_else(|| ApiError::NotFound("No channels found for provider".to_string()))?
-        .api_key
-        .clone();
-
-    let client = reqwest::Client::new();
-    let mut new_count = 0;
-    let mut updated_count = 0;
-    let mut synced_models: Vec<SyncedModel> = Vec::new();
-
-    // Fetch from OpenAI-compatible endpoint
-    let openai_endpoints: serde_json::Value = provider
-        .endpoints
-        .as_ref()
-        .and_then(|e| serde_json::from_str(e).ok())
-        .unwrap_or(serde_json::Value::Null);
-    if let Some(base_url) = openai_endpoints
-        .get("openai")
-        .and_then(|v| v.as_str())
-        .or_else(|| openai_endpoints.get("default").and_then(|v| v.as_str()))
-    {
-        let url = format!("{}/models", base_url.trim_end_matches('/'));
-        match client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .send()
-            .await
-        {
-            Ok(response) => {
-                if let Ok(json) = response.json::<serde_json::Value>().await {
-                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
-                        for model_entry in data {
-                            let name = match model_entry.get("id").and_then(|v| v.as_str()) {
-                                Some(n) => n.to_string(),
-                                None => continue,
-                            };
-                            let model_type = model_entry
-                                .get("type")
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.to_string());
-
-                            // Check if model exists
-                            let existing = state.storage.get_model(&name).await.map_err(|e| ApiError::Internal(e.to_string()))?;
-
-                            if existing.is_some() {
-                                updated_count += 1;
-                                synced_models.push(SyncedModel {
-                                    name,
-                                    model_type,
-                                    created: false,
-                                });
-                            } else {
-                                // Create new model
-                                let model = Model {
-                                    id: name.clone(),
-                                    name: name.clone(),
-                                    model_type: model_type.clone(),
-                                    pricing_policy_id: None,
-                                    created_at: chrono::Utc::now(),
-                                };
-                                let _ = state.storage.create_model(&model).await.map_err(|e| ApiError::Internal(e.to_string()));
-                                new_count += 1;
-                                synced_models.push(SyncedModel {
-                                    name,
-                                    model_type,
-                                    created: true,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                tracing::warn!("Failed to fetch models from OpenAI endpoint: {}", e);
-            }
-        }
-    }
-
-    // Fetch from Anthropic endpoint
-    let anthropic_endpoints: serde_json::Value = provider
-        .endpoints
-        .as_ref()
-        .and_then(|e| serde_json::from_str(e).ok())
-        .unwrap_or(serde_json::Value::Null);
-    if let Some(base_url) = anthropic_endpoints
-        .get("anthropic")
-        .and_then(|v| v.as_str())
-        .or_else(|| anthropic_endpoints.get("default").and_then(|v| v.as_str()))
-    {
-        let url = format!("{}/models", base_url.trim_end_matches('/'));
-        match client
-            .get(&url)
-            .header("x-api-key", &api_key)
-            .header("anthropic-version", "2023-06-01")
-            .send()
-            .await
-        {
-            Ok(response) => {
-                if let Ok(json) = response.json::<serde_json::Value>().await {
-                    if let Some(data) = json.get("data").and_then(|d| d.as_array()) {
-                        for model_entry in data {
-                            let name = match model_entry.get("id").and_then(|v| v.as_str()) {
-                                Some(n) => n.to_string(),
-                                None => continue,
-                            };
-                            let model_type = model_entry
-                                .get("type")
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.to_string());
-
-                            // Skip if already processed from OpenAI
-                            if synced_models.iter().any(|m| m.name == name) {
-                                continue;
-                            }
-
-                            // Check if model exists
-                            let existing = state.storage.get_model(&name).await.map_err(|e| ApiError::Internal(e.to_string()))?;
-
-                            if existing.is_some() {
-                                updated_count += 1;
-                                synced_models.push(SyncedModel {
-                                    name,
-                                    model_type,
-                                    created: false,
-                                });
-                            } else {
-                                // Create new model
-                                let model = Model {
-                                    id: name.clone(),
-                                    name: name.clone(),
-                                    model_type: model_type.clone(),
-                                    pricing_policy_id: None,
-                                    created_at: chrono::Utc::now(),
-                                };
-                                let _ = state.storage.create_model(&model).await.map_err(|e| ApiError::Internal(e.to_string()));
-                                new_count += 1;
-                                synced_models.push(SyncedModel {
-                                    name,
-                                    model_type,
-                                    created: true,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                tracing::warn!("Failed to fetch models from Anthropic endpoint: {}", e);
-            }
-        }
-    }
-
-    // Upsert into provider_models
-    let provider_model_entries: Vec<ProviderModel> = synced_models
-        .iter()
-        .map(|m| ProviderModel {
-            provider_id: provider_id.clone(),
-            model_id: m.name.clone(),
-            upstream_name: Some(m.name.clone()),
-            created_at: chrono::Utc::now(),
-        })
-        .collect();
-    if !provider_model_entries.is_empty() {
-        let _ = state.storage.upsert_provider_models(&provider_id, provider_model_entries).await;
-    }
-
-    Ok(Json(SyncModelsResponse {
-        new: new_count,
-        updated: updated_count,
-        models: synced_models,
-    }))
-}
-
 pub async fn list_provider_models(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -331,4 +122,47 @@ pub async fn list_provider_models(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(models))
+}
+
+#[derive(serde::Deserialize)]
+pub struct UpdateProviderModelsRequest {
+    pub models: Vec<ProviderModelInput>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct ProviderModelInput {
+    pub model_id: String,
+    pub upstream_name: Option<String>,
+    pub pricing_policy_id: Option<String>,
+}
+
+pub async fn update_provider_models(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(provider_id): Path<String>,
+    Json(input): Json<UpdateProviderModelsRequest>,
+) -> Result<Json<Vec<ProviderModelInfo>>, ApiError> {
+    require_admin(&headers, &state.jwt_secret)?;
+
+    let models: Vec<ProviderModel> = input.models.into_iter().map(|m| ProviderModel {
+        provider_id: provider_id.clone(),
+        model_id: m.model_id,
+        upstream_name: m.upstream_name,
+        pricing_policy_id: m.pricing_policy_id,
+        created_at: chrono::Utc::now(),
+    }).collect();
+
+    state
+        .storage
+        .set_provider_models(&provider_id, models)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let result = state
+        .storage
+        .list_provider_models(&provider_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(result))
 }

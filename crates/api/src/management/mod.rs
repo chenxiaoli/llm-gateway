@@ -59,7 +59,7 @@ pub fn management_router() -> Router<Arc<AppState>> {
         )
         .route(
             "/api/v1/admin/providers/{id}/models",
-            get(models::list_provider_models),
+            get(models::list_provider_models).put(models::update_provider_models),
         )
         .route(
             "/api/v1/admin/channels",

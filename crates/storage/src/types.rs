@@ -135,6 +135,7 @@ pub struct ProviderModel {
     pub provider_id: String,
     pub model_id: String,
     pub upstream_name: Option<String>,
+    pub pricing_policy_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -143,6 +144,7 @@ pub struct ProviderModelInfo {
     pub model_id: String,
     pub model_name: String,
     pub upstream_name: Option<String>,
+    pub pricing_policy_id: Option<String>,
 }
 
 // --- Channels ---

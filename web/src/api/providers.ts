@@ -1,5 +1,5 @@
 import { adminApiClient } from './client';
-import type { Provider, CreateProviderRequest, UpdateProviderRequest, Channel, CreateChannelRequest, UpdateChannelRequest, SyncModelsResponse, ChannelModel, CreateChannelModelRequest, UpdateChannelModelRequest, UpdateChannelApiKeyRequest } from '../types';
+import type { Provider, CreateProviderRequest, UpdateProviderRequest, Channel, CreateChannelRequest, UpdateChannelRequest, ChannelModel, CreateChannelModelRequest, UpdateChannelModelRequest, UpdateChannelApiKeyRequest, ProviderModelInfo } from '../types';
 
 export async function getSeedData(): Promise<{ providers: Array<{ name: string; endpoints?: Record<string, string>; enabled?: boolean }>; models: Array<{ provider: string; name: string; billing_type?: string; input_price?: number; output_price?: number }> }> {
   const { data } = await adminApiClient.get('/seed');
@@ -64,19 +64,13 @@ export async function deleteChannel(id: string): Promise<void> {
   await adminApiClient.delete(`/channels/${id}`);
 }
 
-export async function syncModels(providerId: string): Promise<SyncModelsResponse> {
-  const { data } = await adminApiClient.post<SyncModelsResponse>(`/providers/${providerId}/sync-models`, {});
+export async function listProviderModels(providerId: string): Promise<ProviderModelInfo[]> {
+  const { data } = await adminApiClient.get<ProviderModelInfo[]>(`/providers/${providerId}/models`);
   return data;
 }
 
-export interface ProviderModelInfo {
-  model_id: string;
-  model_name: string;
-  upstream_name: string | null;
-}
-
-export async function listProviderModels(providerId: string): Promise<ProviderModelInfo[]> {
-  const { data } = await adminApiClient.get<ProviderModelInfo[]>(`/providers/${providerId}/models`);
+export async function updateProviderModels(providerId: string, models: { model_id: string; upstream_name?: string; pricing_policy_id?: string | null }[]): Promise<ProviderModelInfo[]> {
+  const { data } = await adminApiClient.put<ProviderModelInfo[]>(`/providers/${providerId}/models`, { models });
   return data;
 }
 

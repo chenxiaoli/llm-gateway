@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.0] - 2026-05-02
+
+### Added
+- Admin dashboard — system status, metrics, top models, channel usage breakdown, recent requests
+- Provider models management — add/edit/remove models per provider via modals (pricing policy, upstream name)
+- `PUT /api/v1/admin/providers/{id}/models` endpoint for updating provider model assignments
+- Pricing policy column in provider_models table (migration: `20260505000000_provider_models_pricing`)
+- Channel usage section on admin dashboard showing per-channel request distribution, latency, and error rate
+- Dashboard nav item in admin sidebar
+
+### Changed
+- Provider cards now show models as clickable badges (click to edit) with pricing indicator dots
+- ChannelDetail crash on non-array API responses fixed with `Array.isArray()` guard
+
 ## [0.12.0] - 2026-05-02
 
 ### Added

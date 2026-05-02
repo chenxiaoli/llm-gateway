@@ -399,6 +399,13 @@ export interface ChannelModel {
   updated_at: string;
 }
 
+export interface ProviderModelInfo {
+  model_id: string;
+  model_name: string;
+  upstream_name: string | null;
+  pricing_policy_id: string | null;
+}
+
 export interface CreateChannelModelRequest {
   model_id: string;
   upstream_model_name?: string | null;
