@@ -69,6 +69,17 @@ export async function syncModels(providerId: string): Promise<SyncModelsResponse
   return data;
 }
 
+export interface ProviderModelInfo {
+  model_id: string;
+  model_name: string;
+  upstream_name: string | null;
+}
+
+export async function listProviderModels(providerId: string): Promise<ProviderModelInfo[]> {
+  const { data } = await adminApiClient.get<ProviderModelInfo[]>(`/providers/${providerId}/models`);
+  return data;
+}
+
 // --- Channel Models ---
 
 export async function listChannelModels(providerId: string): Promise<ChannelModel[]> {

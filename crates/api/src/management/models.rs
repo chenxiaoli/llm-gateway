@@ -4,7 +4,7 @@ use axum::Json;
 use serde::Serialize;
 use std::sync::Arc;
 
-use llm_gateway_storage::{Model, UpdateModel};
+use llm_gateway_storage::{Model, ProviderModel, ProviderModelInfo, UpdateModel};
 
 use crate::error::ApiError;
 use crate::extractors::require_admin;
@@ -296,9 +296,39 @@ pub async fn sync_models(
         }
     }
 
+    // Upsert into provider_models
+    let provider_model_entries: Vec<ProviderModel> = synced_models
+        .iter()
+        .map(|m| ProviderModel {
+            provider_id: provider_id.clone(),
+            model_id: m.name.clone(),
+            upstream_name: Some(m.name.clone()),
+            created_at: chrono::Utc::now(),
+        })
+        .collect();
+    if !provider_model_entries.is_empty() {
+        let _ = state.storage.upsert_provider_models(&provider_id, provider_model_entries).await;
+    }
+
     Ok(Json(SyncModelsResponse {
         new: new_count,
         updated: updated_count,
         models: synced_models,
     }))
+}
+
+pub async fn list_provider_models(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(provider_id): Path<String>,
+) -> Result<Json<Vec<ProviderModelInfo>>, ApiError> {
+    require_admin(&headers, &state.jwt_secret)?;
+
+    let models = state
+        .storage
+        .list_provider_models(&provider_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(models))
 }
