@@ -16,7 +16,7 @@ pub use types::{
     DeductBalance, DeductBalanceResult,
     AddBalance, AddBalanceResult,
 };
-pub use seed::{SeedData, SeedProvider, SeedModel, get_available_providers, get_available_models};
+pub use seed::{SeedData, SeedProvider, SeedModel, get_available_providers, get_available_models, get_seed_provider_models};
 
 #[async_trait::async_trait]
 pub trait Storage: Send + Sync {
@@ -82,6 +82,10 @@ pub trait Storage: Send + Sync {
     async fn get_channels_for_model(&self, model_id: &str) -> Result<Vec<Channel>, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_channel_model(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    // Provider Models
+    async fn upsert_provider_models(&self, provider_id: &str, models: Vec<ProviderModel>) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_provider_models(&self, provider_id: &str) -> Result<Vec<ProviderModelInfo>, Box<dyn std::error::Error + Send + Sync>>;
 
     // Usage
     async fn record_usage(&self, usage: &UsageRecord) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;

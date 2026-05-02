@@ -128,6 +128,23 @@ pub struct UpdateProvider {
     pub enabled: Option<bool>,
 }
 
+// --- Provider Models ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderModel {
+    pub provider_id: String,
+    pub model_id: String,
+    pub upstream_name: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderModelInfo {
+    pub model_id: String,
+    pub model_name: String,
+    pub upstream_name: Option<String>,
+}
+
 // --- Channels ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

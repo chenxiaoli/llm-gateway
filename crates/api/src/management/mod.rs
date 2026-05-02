@@ -58,6 +58,10 @@ pub fn management_router() -> Router<Arc<AppState>> {
             post(channels::create_channel).get(channels::list_channels),
         )
         .route(
+            "/api/v1/admin/providers/{id}/models",
+            get(models::list_provider_models),
+        )
+        .route(
             "/api/v1/admin/channels",
             post(channels::create_channel).get(channels::list_all_channels),
         )

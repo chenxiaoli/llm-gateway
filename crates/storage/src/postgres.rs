@@ -1733,6 +1733,40 @@ impl crate::Storage for PostgresStorage {
         Ok(())
     }
 
+    async fn upsert_provider_models(&self, provider_id: &str, models: Vec<ProviderModel>) -> Result<(), DbErr> {
+        for pm in models {
+            sqlx::query(
+                "INSERT INTO provider_models (provider_id, model_id, upstream_name, created_at)
+                 VALUES ($1, $2, $3, NOW())
+                 ON CONFLICT (provider_id, model_id) DO UPDATE SET upstream_name = EXCLUDED.upstream_name",
+            )
+            .bind(provider_id)
+            .bind(&pm.model_id)
+            .bind(&pm.upstream_name)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn list_provider_models(&self, provider_id: &str) -> Result<Vec<ProviderModelInfo>, DbErr> {
+        let rows = sqlx::query_as::<_, (String, String, Option<String>)>(
+            "SELECT pm.model_id, m.name, pm.upstream_name
+             FROM provider_models pm
+             JOIN models m ON m.id = pm.model_id
+             WHERE pm.provider_id = $1
+             ORDER BY m.name",
+        )
+        .bind(provider_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(|(model_id, model_name, upstream_name)| ProviderModelInfo {
+            model_id,
+            model_name,
+            upstream_name,
+        }).collect())
+    }
+
     async fn count_admin_users(&self) -> Result<i64, DbErr> {
         let row: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM users WHERE role = 'admin' AND enabled = true",
@@ -2013,6 +2047,21 @@ impl crate::Storage for PostgresStorage {
         // Seed default settings for audit logs (idempotent - uses ON CONFLICT)
         self.set_setting("audit_log_request", "true").await?;
         self.set_setting("audit_log_response", "true").await?;
+
+        // Seed provider_models if empty
+        let providers = self.list_providers().await?;
+        let models = self.list_models().await?;
+        let provider_id_map = seed::build_provider_id_map(&providers);
+        let model_id_map: Vec<(String, String)> = models.iter().map(|m| (m.model.name.clone(), m.model.id.clone())).collect();
+        let seed_pm = seed::get_seed_provider_models(&provider_id_map, &model_id_map);
+        if !seed_pm.is_empty() {
+            for (provider_id, group) in &seed_pm.iter().fold(std::collections::HashMap::<String, Vec<_>>::new(), |mut acc, pm| {
+                acc.entry(pm.provider_id.clone()).or_default().push(pm.clone());
+                acc
+            }) {
+                let _ = self.upsert_provider_models(provider_id, group.clone()).await;
+            }
+        }
 
         Ok(())
     }

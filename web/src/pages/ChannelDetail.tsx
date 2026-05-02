@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Pencil, Trash2, KeyRound, Hash, Plus, Building2, LinkIcon, Power, Eye, EyeOff, Clock, Scale } from 'lucide-react';
-import { useChannel, useUpdateChannel, useDeleteChannel, useChannelModels, useCreateChannelModel, useDeleteChannelModel, useUpdateChannelModel, useUpdateChannelApiKey } from '../hooks/useChannels';
+import { useChannel, useUpdateChannel, useDeleteChannel, useChannelModels, useCreateChannelModel, useDeleteChannelModel, useUpdateChannelModel, useUpdateChannelApiKey, useProviderModels } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
 import { usePricingPolicies } from '../hooks/usePricingPolicies';
@@ -18,6 +18,7 @@ export default function ChannelDetail() {
   const { data: providers } = useProviders();
   const { data: channelModels, isLoading: modelsLoading } = useChannelModels(channel?.id || '');
   const { data: allModels } = useAllModels();
+  const { data: providerModels } = useProviderModels(channel?.provider_id ?? '');
   const { data: policies } = usePricingPolicies();
   const updateMutation = useUpdateChannel(id!);
   const deleteMutation = useDeleteChannel(id!);
@@ -505,12 +506,25 @@ export default function ChannelDetail() {
             </label>
             <select
               value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
+              onChange={(e) => {
+                setSelectedModel(e.target.value);
+                const pm = (providerModels && providerModels.length > 0 ? providerModels : null)
+                  ?.find(m => m.model_id === e.target.value);
+                if (pm?.upstream_name) setUpstreamModelName(pm.upstream_name);
+              }}
               required
               className="select select-bordered w-full"
             >
               <option value="">Select a model...</option>
-              {allModels?.filter(m => !channelModels?.some(cm => cm.model_id === m.id)).map((model) => (
+              {(providerModels && providerModels.length > 0
+                ? providerModels
+                    .filter(m => !channelModels?.some(cm => cm.model_id === m.model_id))
+                    .map(m => ({ id: m.model_id, name: m.model_name }))
+                : allModels
+                    ?.filter(m => !channelModels?.some(cm => cm.model_id === m.id))
+                    .map(m => ({ id: m.id, name: m.name }))
+                    ?? []
+              ).map((model) => (
                 <option key={model.id} value={model.id}>
                   {model.name}
                 </option>

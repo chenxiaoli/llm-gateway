@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::money::usd_to_units;
-use crate::types::{Model, PricingPolicy, Provider};
+use crate::types::{Model, PricingPolicy, Provider, ProviderModel};
 
 /// Seed data format from JSON (public for API)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -208,6 +208,42 @@ pub fn build_provider_id_map(providers: &[Provider]) -> Vec<(String, String)> {
         .iter()
         .map(|p| (p.name.clone(), p.id.clone()))
         .collect()
+}
+
+/// Provider-to-model name mapping for seed data
+const PROVIDER_MODEL_MAP: &[(&str, &[&str])] = &[
+    ("OpenAI", &["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"]),
+    ("Anthropic", &["claude-4-opus-20250514", "claude-sonnet-4-20250514", "claude-3-5-sonnet", "claude-3-haiku"]),
+    ("MiniMax", &["minimax-m2.7", "minimax-m2.7-highspeed", "minimax-m2.5"]),
+    ("GLM", &["glm-4", "glm-4-flash", "glm-4-plus", "glm-5.1"]),
+    ("Alibaba", &["qwen3.6-plus", "kimi-k2.5"]),
+];
+
+/// Build provider_models entries for seeding.
+/// `provider_id_map` = [(provider_name, provider_id)], `model_id_map` = [(model_name, model_id)]
+pub fn get_seed_provider_models(
+    provider_id_map: &[(String, String)],
+    model_id_map: &[(String, String)],
+) -> Vec<ProviderModel> {
+    let provider_map: HashMap<&str, &str> = provider_id_map.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    let model_map: HashMap<&str, &str> = model_id_map.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+
+    let mut result = Vec::new();
+    for (provider_name, model_names) in PROVIDER_MODEL_MAP {
+        if let Some(provider_id) = provider_map.get(provider_name) {
+            for model_name in *model_names {
+                if let Some(model_id) = model_map.get(model_name) {
+                    result.push(ProviderModel {
+                        provider_id: provider_id.to_string(),
+                        model_id: model_id.to_string(),
+                        upstream_name: Some(model_name.to_string()),
+                        created_at: Utc::now(),
+                    });
+                }
+            }
+        }
+    }
+    result
 }
 
 #[cfg(test)]
