@@ -440,6 +440,22 @@ pub struct ModelWithProvider {
     pub channel_names: Vec<String>,
 }
 
+#[derive(Debug, serde::Serialize)]
+pub struct UserPricingInfo {
+    pub billing_type: String,
+    pub config: serde_json::Value,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct UserModelView {
+    pub name: String,
+    pub model_type: Option<String>,
+    pub pricing_policy_name: Option<String>,
+    pub pricing: Option<UserPricingInfo>,
+    pub is_available: bool,
+    pub created_at: String,
+}
+
 // --- Channel Models (Junction Table) ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
