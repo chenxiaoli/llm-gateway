@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.0] - 2026-05-02
+
+### Added
+- Provider models catalog — new `provider_models` table records which models each provider supports
+- Model dropdown in "Add Channel Model" modal now filters by channel's provider
+- Upstream model name auto-filled from provider catalog when selecting a model
+- `GET /api/v1/admin/providers/{id}/models` endpoint for provider's model catalog
+- Seed data populates provider_models for all built-in providers
+
 ## [0.11.0] - 2026-05-01
 
 ### Added
