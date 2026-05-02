@@ -210,6 +210,29 @@ impl From<PgUsageSummaryRow> for UsageSummaryRecord {
 }
 
 #[derive(FromRow)]
+struct PgChannelUsageSummaryRow {
+    channel_id: Option<String>,
+    channel_name: Option<String>,
+    total_requests: i64,
+    total_cost: i64,
+    total_input_tokens: i64,
+    total_output_tokens: i64,
+}
+
+impl From<PgChannelUsageSummaryRow> for ChannelUsageSummaryRecord {
+    fn from(r: PgChannelUsageSummaryRow) -> Self {
+        ChannelUsageSummaryRecord {
+            channel_id: r.channel_id,
+            channel_name: r.channel_name,
+            total_requests: r.total_requests,
+            total_cost: r.total_cost,
+            total_input_tokens: r.total_input_tokens,
+            total_output_tokens: r.total_output_tokens,
+        }
+    }
+}
+
+#[derive(FromRow)]
 struct PgAuditSummaryRow {
     id: String,
     key_id: String,
@@ -1317,6 +1340,71 @@ impl crate::Storage for PostgresStorage {
 
         let rows: Vec<PgUsageSummaryRow> = query.fetch_all(&self.pool).await?;
         Ok(rows.into_iter().map(UsageSummaryRecord::from).collect())
+    }
+
+    async fn query_channel_usage_summary(&self, filter: &UsageFilter) -> Result<Vec<ChannelUsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut conditions = Vec::new();
+        let mut param_idx = 1;
+        let mut bind_vals: Vec<String> = Vec::new();
+        let mut bind_since: Option<chrono::DateTime<chrono::Utc>> = None;
+        let mut bind_until: Option<chrono::DateTime<chrono::Utc>> = None;
+
+        if let Some(ref user_id) = filter.user_id {
+            conditions.push(format!("u.user_id = ${}", param_idx));
+            bind_vals.push(user_id.clone());
+            param_idx += 1;
+        } else if let Some(ref key_id) = filter.key_id {
+            conditions.push(format!("u.key_id = ${}", param_idx));
+            bind_vals.push(key_id.clone());
+            param_idx += 1;
+        }
+        if let Some(ref model_name) = filter.model_name {
+            conditions.push(format!("u.model_name = ${}", param_idx));
+            bind_vals.push(model_name.clone());
+            param_idx += 1;
+        }
+        if let Some(since) = filter.since {
+            conditions.push(format!("u.created_at >= ${}", param_idx));
+            bind_since = Some(since);
+            param_idx += 1;
+        }
+        if let Some(until) = filter.until {
+            conditions.push(format!("u.created_at <= ${}", param_idx));
+            bind_until = Some(until);
+            param_idx += 1;
+        }
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!(" WHERE {}", conditions.join(" AND "))
+        };
+
+        let sql = format!(
+            "SELECT \
+               u.channel_id, \
+               c.name AS channel_name, \
+               COUNT(*) AS total_requests, \
+               COALESCE(SUM(u.cost), 0)::BIGINT AS total_cost, \
+               COALESCE(SUM(u.input_tokens), 0)::BIGINT AS total_input_tokens, \
+               COALESCE(SUM(u.output_tokens), 0)::BIGINT AS total_output_tokens \
+             FROM usage_records u \
+             LEFT JOIN channels c ON u.channel_id = c.id \
+             {} \
+             GROUP BY u.channel_id \
+             ORDER BY total_requests DESC",
+            where_clause
+        );
+
+        let mut query = sqlx::query_as::<_, PgChannelUsageSummaryRow>(&sql);
+        for v in bind_vals {
+            query = query.bind(v);
+        }
+        if let Some(v) = bind_since { query = query.bind(v); }
+        if let Some(v) = bind_until { query = query.bind(v); }
+
+        let rows: Vec<PgChannelUsageSummaryRow> = query.fetch_all(&self.pool).await?;
+        Ok(rows.into_iter().map(ChannelUsageSummaryRecord::from).collect())
     }
 
     async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, i64)>, Box<dyn std::error::Error + Send + Sync>> {
