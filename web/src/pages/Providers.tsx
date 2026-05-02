@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Pencil, Trash2, Copy, Check, Globe, Zap, Radio, Layers, Shield, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Copy, Check, Globe, Zap, Radio, Layers, Shield } from 'lucide-react';
 import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider, useProviderModels, useUpdateProviderModels } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
 import { usePricingPolicies } from '../hooks/usePricingPolicies';
