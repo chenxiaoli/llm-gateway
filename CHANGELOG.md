@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.3] - 2026-05-02
+
+### Fixed
+- Add placeholder migration for `20260424000000` — fixes `VersionMissing` crash on startup for databases that already had this migration applied
+
 ## [0.13.2] - 2026-05-02
 
 ### Added
