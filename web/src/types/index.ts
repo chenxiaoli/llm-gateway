@@ -271,6 +271,7 @@ export interface Channel {
   weight?: number | null;
   enabled: boolean;
   available_hours?: TimeSlot[] | null;
+  created_by?: string | null;
   created_at: string;
   updated_at: string;
   models?: ChannelModelInfo[];

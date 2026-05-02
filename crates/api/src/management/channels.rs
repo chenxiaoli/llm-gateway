@@ -65,6 +65,7 @@ pub struct ChannelResponse {
     pub weight: Option<i32>,
     pub enabled: bool,
     pub available_hours: Option<Vec<TimeSlot>>,
+    pub created_by: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -85,6 +86,7 @@ impl From<Channel> for ChannelResponse {
             weight: c.weight,
             enabled: c.enabled,
             available_hours: c.available_hours,
+            created_by: c.created_by,
             created_at: c.created_at.to_rfc3339(),
             updated_at: c.updated_at.to_rfc3339(),
         }
@@ -139,7 +141,7 @@ pub async fn create_channel(
     headers: HeaderMap,
     Json(input): Json<CreateChannelRequest>,
 ) -> Result<Json<ChannelResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_admin(&headers, &state.jwt_secret)?;
 
     let provider_id = input.provider_id.clone();
     let name = input.name.trim().to_string();
@@ -174,6 +176,7 @@ pub async fn create_channel(
         weight: input.weight,
         enabled: input.enabled.unwrap_or(true),
         available_hours: input.available_hours,
+        created_by: Some(claims.sub),
         created_at: now,
         updated_at: now,
     };

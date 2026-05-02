@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.2] - 2026-05-02
+
+### Added
+- `created_by` column on channels table — tracks which admin user created each channel
+- `created_by` field in channel API responses
+
 ## [0.13.1] - 2026-05-02
 
 ### Added
