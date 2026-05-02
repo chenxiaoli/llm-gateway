@@ -23,6 +23,7 @@ import {
   ChevronDown,
   Menu,
   X,
+  SquareStack,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { useTheme } from '../hooks/useTheme';
@@ -32,6 +33,7 @@ const consoleItems = [
   { key: '/console/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { key: '/console/keys', icon: KeyRound, label: 'API Keys' },
   { key: '/console/model-fallbacks', icon: ArrowRightLeft, label: 'Model Fallbacks' },
+  { key: '/console/models', icon: SquareStack, label: 'Models' },
   { key: '/console/usage', icon: BarChart3, label: 'Usage' },
 ];
 
