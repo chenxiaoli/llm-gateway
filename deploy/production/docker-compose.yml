@@ -17,11 +17,21 @@ services:
     networks:
       - internal
 
+  nats:
+    image: nats:2-alpine
+    restart: unless-stopped
+    command: ["--jetstream", "--store_dir", "/data"]
+    volumes:
+      - nats_data:/data
+    networks:
+      - internal
+
   gateway:
     image: ghcr.io/${IMAGE_NAME:-chenxiaoli/llm-gateway}:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       - postgres
+      - nats
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     volumes:
@@ -29,8 +39,33 @@ services:
     networks:
       - internal
 
+  usage-worker:
+    image: ghcr.io/${IMAGE_NAME:-chenxiaoli/llm-gateway}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - nats
+    entrypoint: ["/app/llm-gateway-usage-worker"]
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+    networks:
+      - internal
+
+  audit-worker:
+    image: ghcr.io/${IMAGE_NAME:-chenxiaoli/llm-gateway}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - nats
+    entrypoint: ["/app/llm-gateway-audit-worker"]
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+    networks:
+      - internal
+
 volumes:
   postgres_data:
+  nats_data:
 
 networks:
   internal:

@@ -35,12 +35,16 @@ COPY --from=frontend /app/web/dist ./web/dist
 COPY --from=builder /app/target /app/target
 RUN cargo build --release
 RUN cp target/release/llm-gateway /app/llm-gateway
+RUN cp target/release/llm-gateway-usage-worker /app/llm-gateway-usage-worker
+RUN cp target/release/llm-gateway-audit-worker /app/llm-gateway-audit-worker
 
 # ---- Stage 6: Runtime ----
 FROM gcr.io/distroless/cc-debian12 AS runtime
 
 WORKDIR /app
 COPY --from=build /app/llm-gateway /app/llm-gateway
+COPY --from=build /app/llm-gateway-usage-worker /app/llm-gateway-usage-worker
+COPY --from=build /app/llm-gateway-audit-worker /app/llm-gateway-audit-worker
 COPY config.toml /app/config.toml
 
 USER 1000:1000
