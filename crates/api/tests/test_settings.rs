@@ -26,6 +26,7 @@ fn make_state(db: Arc<llm_gateway_storage::sqlite::SqliteStorage>) -> Arc<AppSta
         jwt_secret: common::TEST_JWT_SECRET.to_string(),
         encryption_key: [0u8; 32],
         audit_tx,
+        nats_publisher: None,
         registry: Arc::new(MockChannelRegistry),
         settlement_tx,
         system_info: SystemInfo {
