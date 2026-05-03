@@ -8,6 +8,7 @@ llm-gateway-api = { path = "../api" }
 llm-gateway-storage = { path = "../storage", features = ["sqlite", "postgres"] }
 llm-gateway-audit = { path = "../audit" }
 llm-gateway-ratelimit = { path = "../ratelimit" }
+llm-gateway-nats-publisher = { path = "../nats-publisher" }
 tokio = { workspace = true }
 axum = { workspace = true }
 tracing = { workspace = true }
