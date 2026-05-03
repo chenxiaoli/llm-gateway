@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAllChannels } from '../hooks/useChannels';
+import { useAllChannels, useTestChannel } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
 import { createChannel } from '../api/providers';
@@ -8,7 +8,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
 import { Toggle } from '../components/ui/Toggle';
-import { Globe, Plus, Radio, Hash, ShieldCheck, Key, Wifi, Cpu, Search, X, Clock, Scale } from 'lucide-react';
+import { Globe, Plus, Radio, Hash, ShieldCheck, Key, Wifi, Cpu, Search, X, Clock, Scale, Zap, Check, Loader2 } from 'lucide-react';
 import type { Channel, CreateChannelRequest, TimeSlot } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -350,6 +350,35 @@ interface ChannelRowProps {
 }
 
 function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
+  const testMutation = useTestChannel();
+  const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+
+  useEffect(() => {
+    if (testStatus === 'success' || testStatus === 'error') {
+      const timer = setTimeout(() => setTestStatus('idle'), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [testStatus]);
+
+  const handleTest = () => {
+    setTestStatus('loading');
+    testMutation.mutate(channel.id, {
+      onSuccess: (result) => {
+        if (result.success) {
+          setTestStatus('success');
+          toast.success(`Channel OK — ${result.latency_ms}ms (model: ${result.model})`);
+        } else {
+          setTestStatus('error');
+          toast.error(`Channel test failed: ${result.error ?? 'Unknown error'}`);
+        }
+      },
+      onError: (err) => {
+        setTestStatus('error');
+        toast.error(getErrorMessage(err, 'Channel test failed'));
+      },
+    });
+  };
+
   const channelModels = channel.models ?? [];
 
   return (
@@ -472,6 +501,23 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
 
         {/* Quick actions */}
         <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          <button
+            onClick={handleTest}
+            disabled={testStatus === 'loading'}
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-md font-medium transition-all duration-100 border border-transparent ${
+              testStatus === 'success'
+                ? 'text-success hover:text-success'
+                : testStatus === 'error'
+                ? 'text-error hover:text-error'
+                : 'text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 hover:border-base-300/40'
+            }`}
+          >
+            {testStatus === 'loading' && <Loader2 className="h-3 w-3 animate-spin" />}
+            {testStatus === 'success' && <Check className="h-3 w-3" />}
+            {testStatus === 'error' && <X className="h-3 w-3" />}
+            {testStatus === 'idle' && <Zap className="h-3 w-3" />}
+            {testStatus === 'loading' ? 'Testing' : testStatus === 'success' ? 'OK' : testStatus === 'error' ? 'Fail' : 'Test'}
+          </button>
           <Link
             to={`/admin/channels/${channel.id}`}
             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-md font-medium text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 transition-all duration-100 border border-transparent hover:border-base-300/40"
