@@ -142,6 +142,140 @@
     "balanceAdjusted": "Balance adjusted successfully",
     "balanceAdjustFailed": "Failed to adjust balance",
     "thresholdUpdated": "Threshold updated",
-    "thresholdUpdateFailed": "Failed to update threshold"
+    "thresholdUpdateFailed": "Failed to update threshold",
+    "keyCopiedToClipboard": "Key copied to clipboard"
+  },
+  "keys": {
+    "title": "API Keys",
+    "description": "Manage access keys for API authentication",
+    "createKey": "Create Key",
+    "table": {
+      "name": "Name",
+      "key": "Key",
+      "status": "Status",
+      "rateLimit": "Rate Limit (RPM)",
+      "monthlyBudget": "Monthly Budget",
+      "fallback": "Fallback",
+      "created": "Created"
+    },
+    "active": "Active",
+    "disabled": "Disabled",
+    "unlimited": "Unlimited",
+    "none": "None",
+    "empty": "No API keys yet",
+    "createFirst": "Create your first key",
+    "pagination": {
+      "total": "Total {{count}}",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "createModal": {
+      "title": "Create API Key",
+      "copyKey": "Copy Key",
+      "done": "Done",
+      "saveNow": "Save this key now",
+      "securityNotice": "Make sure to copy and store this key securely.",
+      "securityWarning": "It will not be shown again."
+    },
+    "form": {
+      "name": "Name",
+      "namePlaceholder": "e.g., production-app",
+      "rateLimit": "Rate Limit (RPM)",
+      "monthlyBudget": "Monthly Budget ($)",
+      "modelFallback": "Model Fallback",
+      "noneOption": "None"
+    }
+  },
+  "keyDetail": {
+    "backToKeys": "Back to Keys",
+    "editKey": "Edit Key: {{name}}",
+    "keyNotFound": "Key not found",
+    "form": {
+      "name": "Name",
+      "enabled": "Enabled",
+      "rateLimit": "Rate Limit (RPM, empty = unlimited)",
+      "monthlyBudget": "Monthly Budget ($, empty = unlimited)",
+      "modelFallback": "Model Fallback",
+      "noneOption": "None"
+    },
+    "deleteKey": "Delete Key",
+    "deleteConfirm": "Delete this key?"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "description": "Real-time overview of your LLM gateway activity",
+    "accountBalance": "Account Balance",
+    "lowBalance": "Low Balance",
+    "viewDetails": "View Details",
+    "stats": {
+      "todayRequests": "Today's Requests",
+      "todayCost": "Today's Cost",
+      "monthlyCost": "Monthly Cost",
+      "activeModels": "Active Models",
+      "avgLatency": "Avg Latency",
+      "successRate": "Success Rate",
+      "recent": "Recent"
+    },
+    "units": {
+      "ms": "ms",
+      "percent": "%",
+      "reqs": "reqs"
+    },
+    "recentRequests": "Recent Requests",
+    "viewAll": "View all",
+    "table": {
+      "time": "Time",
+      "model": "Model",
+      "protocol": "Protocol",
+      "status": "Status",
+      "tokens": "Tokens",
+      "latency": "Latency"
+    },
+    "noRequests": "No requests yet"
+  },
+  "adminDashboard": {
+    "title": "Admin Dashboard",
+    "description": "System overview and real-time gateway metrics",
+    "systemOnline": "System Online",
+    "timeout": "timeout {{seconds}}s",
+    "auditRetention": "audit {{days}}d",
+    "providersCount": "{{active}}/{{total}} providers",
+    "channelsCount": "{{active}}/{{total}} channels",
+    "modelsCount": "{{count}} models",
+    "usersCount": "{{count}} users",
+    "keysCount": "{{count}} keys",
+    "stats": {
+      "todayRequests": "Today's Requests",
+      "todayCost": "Today's Cost",
+      "monthlyCost": "Monthly Cost",
+      "activeModels": "Active Models",
+      "todayTokensSub": "{{count}} tokens",
+      "monthlyRequestsSub": "{{count}} requests",
+      "trafficTodaySub": "{{count}} with traffic today",
+      "avgLatency": "Avg Latency",
+      "errorRate": "Error Rate",
+      "recent": "Recent"
+    },
+    "units": {
+      "ms": "ms",
+      "percent": "%",
+      "reqs": "reqs",
+      "tokens": "tokens"
+    },
+    "topModelsToday": "Top Models Today",
+    "channelUsageToday": "Channel Usage Today",
+    "recentRequests": "Recent Requests",
+    "viewAll": "View all",
+    "noTrafficToday": "No traffic today",
+    "direct": "Direct",
+    "table": {
+      "time": "Time",
+      "model": "Model",
+      "protocol": "Protocol",
+      "status": "Status",
+      "tokens": "Tokens",
+      "latency": "Latency"
+    },
+    "noRequests": "No requests yet"
   }
 }

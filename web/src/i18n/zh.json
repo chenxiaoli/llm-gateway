@@ -142,6 +142,140 @@
     "balanceAdjusted": "余额调整成功",
     "balanceAdjustFailed": "调整余额失败",
     "thresholdUpdated": "阈值已更新",
-    "thresholdUpdateFailed": "更新阈值失败"
+    "thresholdUpdateFailed": "更新阈值失败",
+    "keyCopiedToClipboard": "密钥已复制到剪贴板"
+  },
+  "keys": {
+    "title": "API 密钥",
+    "description": "管理用于 API 认证的访问密钥",
+    "createKey": "创建密钥",
+    "table": {
+      "name": "名称",
+      "key": "密钥",
+      "status": "状态",
+      "rateLimit": "速率限制 (RPM)",
+      "monthlyBudget": "月度预算",
+      "fallback": "降级策略",
+      "created": "创建时间"
+    },
+    "active": "启用",
+    "disabled": "禁用",
+    "unlimited": "无限制",
+    "none": "无",
+    "empty": "暂无 API 密钥",
+    "createFirst": "创建您的第一个密钥",
+    "pagination": {
+      "total": "共 {{count}} 个",
+      "previous": "上一页",
+      "next": "下一页"
+    },
+    "createModal": {
+      "title": "创建 API 密钥",
+      "copyKey": "复制密钥",
+      "done": "完成",
+      "saveNow": "请立即保存此密钥",
+      "securityNotice": "请务必复制并妥善保存此密钥。",
+      "securityWarning": "此密钥不会再次显示。"
+    },
+    "form": {
+      "name": "名称",
+      "namePlaceholder": "例如：production-app",
+      "rateLimit": "速率限制 (RPM)",
+      "monthlyBudget": "月度预算 ($)",
+      "modelFallback": "模型降级",
+      "noneOption": "无"
+    }
+  },
+  "keyDetail": {
+    "backToKeys": "返回密钥列表",
+    "editKey": "编辑密钥：{{name}}",
+    "keyNotFound": "密钥未找到",
+    "form": {
+      "name": "名称",
+      "enabled": "启用",
+      "rateLimit": "速率限制 (RPM，留空表示无限制)",
+      "monthlyBudget": "月度预算 ($，留空表示无限制)",
+      "modelFallback": "模型降级",
+      "noneOption": "无"
+    },
+    "deleteKey": "删除密钥",
+    "deleteConfirm": "确定删除此密钥？"
+  },
+  "dashboard": {
+    "title": "仪表盘",
+    "description": "LLM 网关活动实时概览",
+    "accountBalance": "账户余额",
+    "lowBalance": "余额不足",
+    "viewDetails": "查看详情",
+    "stats": {
+      "todayRequests": "今日请求",
+      "todayCost": "今日费用",
+      "monthlyCost": "本月费用",
+      "activeModels": "活跃模型",
+      "avgLatency": "平均延迟",
+      "successRate": "成功率",
+      "recent": "近期"
+    },
+    "units": {
+      "ms": "毫秒",
+      "percent": "%",
+      "reqs": "次请求"
+    },
+    "recentRequests": "最近请求",
+    "viewAll": "查看全部",
+    "table": {
+      "time": "时间",
+      "model": "模型",
+      "protocol": "协议",
+      "status": "状态",
+      "tokens": "Token 数",
+      "latency": "延迟"
+    },
+    "noRequests": "暂无请求"
+  },
+  "adminDashboard": {
+    "title": "管理仪表盘",
+    "description": "系统概览与实时网关指标",
+    "systemOnline": "系统运行中",
+    "timeout": "超时 {{seconds}}s",
+    "auditRetention": "审计保留 {{days}}天",
+    "providersCount": "{{active}}/{{total}} 个提供商",
+    "channelsCount": "{{active}}/{{total}} 个通道",
+    "modelsCount": "{{count}} 个模型",
+    "usersCount": "{{count}} 个用户",
+    "keysCount": "{{count}} 个密钥",
+    "stats": {
+      "todayRequests": "今日请求",
+      "todayCost": "今日费用",
+      "monthlyCost": "本月费用",
+      "activeModels": "活跃模型",
+      "todayTokensSub": "{{count}} Token",
+      "monthlyRequestsSub": "{{count}} 次请求",
+      "trafficTodaySub": "{{count}} 个今日有流量",
+      "avgLatency": "平均延迟",
+      "errorRate": "错误率",
+      "recent": "近期"
+    },
+    "units": {
+      "ms": "毫秒",
+      "percent": "%",
+      "reqs": "次请求",
+      "tokens": "Token"
+    },
+    "topModelsToday": "今日热门模型",
+    "channelUsageToday": "今日通道用量",
+    "recentRequests": "最近请求",
+    "viewAll": "查看全部",
+    "noTrafficToday": "今日无流量",
+    "direct": "直连",
+    "table": {
+      "time": "时间",
+      "model": "模型",
+      "protocol": "协议",
+      "status": "状态",
+      "tokens": "Token 数",
+      "latency": "延迟"
+    },
+    "noRequests": "暂无请求"
   }
 }

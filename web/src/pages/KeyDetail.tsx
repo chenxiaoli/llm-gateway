@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useKey, useUpdateKey, useDeleteKey } from '../hooks/useKeys';
 import { useModelFallbacks } from '../hooks/useModelFallbacks';
 import { Button } from '../components/ui/Button';
@@ -8,6 +9,7 @@ import { Toggle } from '../components/ui/Toggle';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 export default function KeyDetail() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: key, isLoading } = useKey(id!);
@@ -32,7 +34,7 @@ export default function KeyDetail() {
   }, [key]);
 
   if (isLoading) return <div className="flex justify-center py-12"><span className="loading loading-spinner loading-lg" /></div>;
-  if (!key) return <div className="text-base-content/40">Key not found</div>;
+  if (!key) return <div className="text-base-content/40">{t('keyDetail.keyNotFound')}</div>;
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,16 +58,16 @@ export default function KeyDetail() {
   return (
     <div>
       <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/console/keys')} className="mb-4">
-        Back to Keys
+        {t('keyDetail.backToKeys')}
       </Button>
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Edit Key: {key.name}</h1>
+        <h1 className="text-2xl font-bold">{t('keyDetail.editKey', { name: key.name })}</h1>
       </div>
 
       <form onSubmit={handleUpdate} className="max-w-lg space-y-4">
         <div className="form-control">
-          <label className="label"><span className="label-text">Name</span></label>
+          <label className="label"><span className="label-text">{t('keyDetail.form.name')}</span></label>
           <input
             type="text"
             value={name}
@@ -75,11 +77,11 @@ export default function KeyDetail() {
           />
         </div>
         <div className="flex items-center justify-between">
-          <label className="label-text">Enabled</label>
+          <label className="label-text">{t('keyDetail.form.enabled')}</label>
           <Toggle checked={enabled} onChange={setEnabled} />
         </div>
         <div className="form-control">
-          <label className="label"><span className="label-text">Rate Limit (RPM, empty = unlimited)</span></label>
+          <label className="label"><span className="label-text">{t('keyDetail.form.rateLimit')}</span></label>
           <input
             type="number"
             value={rateLimit}
@@ -89,7 +91,7 @@ export default function KeyDetail() {
           />
         </div>
         <div className="form-control">
-          <label className="label"><span className="label-text">Monthly Budget ($, empty = unlimited)</span></label>
+          <label className="label"><span className="label-text">{t('keyDetail.form.monthlyBudget')}</span></label>
           <input
             type="number"
             value={budgetMonthly}
@@ -100,16 +102,16 @@ export default function KeyDetail() {
           />
         </div>
         <div className="form-control">
-          <label className="label"><span className="label-text">Model Fallback</span></label>
+          <label className="label"><span className="label-text">{t('keyDetail.form.modelFallback')}</span></label>
           <select value={fallbackId} onChange={(e) => setFallbackId(e.target.value)} className="select select-bordered w-full">
-            <option value="">None</option>
+            <option value="">{t('keyDetail.form.noneOption')}</option>
             {fallbacks?.map((fb) => (<option key={fb.id} value={fb.id}>{fb.name}</option>))}
           </select>
         </div>
         <div className="flex gap-2">
-          <Button variant="primary" type="submit" loading={updateMutation.isPending}>Save</Button>
-          <ConfirmDialog title="Delete this key?" onConfirm={handleDelete} okText="Delete">
-            <Button variant="danger">Delete Key</Button>
+          <Button variant="primary" type="submit" loading={updateMutation.isPending}>{t('common.save')}</Button>
+          <ConfirmDialog title={t('keyDetail.deleteConfirm')} onConfirm={handleDelete} okText={t('common.delete')}>
+            <Button variant="danger">{t('keyDetail.deleteKey')}</Button>
           </ConfirmDialog>
         </div>
       </form>
