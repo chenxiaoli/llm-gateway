@@ -2,9 +2,6 @@ use futures::StreamExt;
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_storage::{Protocol, UsageRecord};
 use std::sync::Arc;
-use tokio::sync::mpsc;
-
-use crate::AuditTask;
 
 /// Parse usage from response bytes.
 /// Returns (input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens).
@@ -117,99 +114,6 @@ pub fn calculate_cost(
     } else {
         0
     }
-}
-
-/// Background worker: receives audit tasks, parses usage, calculates cost, writes DB
-pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, mut rx: mpsc::Receiver<AuditTask>) {
-    tracing::info!("[AUDIT-WORKER] Starting audit worker");
-    let audit_logger = Arc::new(AuditLogger::new(storage.clone()));
-
-    while let Some(task) = rx.recv().await {
-        tracing::info!(
-            "[AUDIT-WORKER] Task received: key_id={}, model={}, stream={}, response_bytes_len={}",
-            task.key_id, task.model_name, task.stream, task.response_bytes.len()
-        );
-
-        // Parse usage from response bytes
-        let proto = task.protocol.clone();
-        let (input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) =
-            parse_usage(&task.response_bytes, task.stream, proto);
-
-        // Calculate cost using PricingCalculator with policy config
-        let cost = calculate_cost(
-            &task.pricing_policy_config,
-            &task.pricing_policy_billing_type,
-            task.markup_ratio,
-            input_tokens,
-            output_tokens,
-            cache_read_tokens,
-            cache_creation_tokens,
-        );
-
-        tracing::info!(
-            "[AUDIT-WORKER] Parsed: input={:?}, output={:?}, cache_read={:?}, cache_creation={:?}, cost={}",
-            input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost
-        );
-
-        // Write usage record
-        let record = UsageRecord {
-            id: uuid::Uuid::new_v4().to_string(),
-            key_id: task.key_id.clone(),
-            user_id: task.user_id.clone(),
-            model_name: task.model_name.clone(),
-            provider_id: task.provider_id.clone(),
-            channel_id: task.channel_id.clone(),
-            protocol: task.protocol.clone(),
-            input_tokens,
-            output_tokens,
-            cache_read_tokens,
-            cache_creation_tokens,
-            cost,
-            created_at: chrono::Utc::now(),
-        };
-        if let Err(e) = storage.record_usage(&record).await {
-            tracing::error!("[AUDIT-WORKER] Failed to record usage: {}", e);
-        }
-
-        // Write audit log (only if not streaming, since full SSE response can be large)
-        let response_body = if task.stream {
-            if task.response_bytes.len() < 100_000 {
-                String::from_utf8_lossy(&task.response_bytes).to_string()
-            } else {
-                "[streaming response truncated]".to_string()
-            }
-        } else {
-            String::from_utf8_lossy(&task.response_bytes).to_string()
-        };
-
-        if let Err(e) = audit_logger.log_request(
-            &task.key_id,
-            task.user_id.as_deref(),
-            &task.model_name,
-            &task.provider_id,
-            task.channel_id.as_deref(),
-            task.protocol,
-            task.stream,
-            &task.request_body,
-            &response_body,
-            task.status_code,
-            task.latency_ms,
-            input_tokens,
-            output_tokens,
-            task.original_model.as_deref(),
-            task.upstream_model.as_deref(),
-            task.model_override_reason.as_deref(),
-            task.request_path.as_deref(),
-            task.upstream_url.as_deref(),
-            task.request_headers.as_deref(),
-            task.response_headers.as_deref(),
-        ).await {
-            tracing::error!("[AUDIT-WORKER] Failed to log audit request: {}", e);
-        }
-
-        tracing::info!("[AUDIT-WORKER] Task completed: key_id={}, model={}", task.key_id, task.model_name);
-    }
-    tracing::info!("[AUDIT-WORKER] Worker exiting, channel closed");
 }
 
 /// NATS consumer worker: reads usage events from JetStream and writes to DB.

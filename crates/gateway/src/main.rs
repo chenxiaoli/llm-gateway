@@ -41,22 +41,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Arc::new(db)
     };
 
-    // Init NATS publisher (optional)
-    let nats_publisher: Option<Arc<llm_gateway_nats_publisher::NatsPublisher>> =
-        if let Some(nats_cfg) = &config.nats {
-            match llm_gateway_nats_publisher::NatsPublisher::new(&nats_cfg.url).await {
-                Ok(pub_) => {
-                    tracing::info!("Connected to NATS: {}", nats_cfg.url);
-                    Some(Arc::new(pub_))
-                }
-                Err(e) => {
-                    tracing::error!("Failed to connect to NATS: {}", e);
-                    return Err(format!("NATS connection failed: {}", e).into());
-                }
+    // Init NATS publisher (required)
+    let nats_cfg = config.nats.as_ref().ok_or("[nats] section is required in config.toml")?;
+    let nats_publisher: Arc<llm_gateway_nats_publisher::NatsPublisher> =
+        match llm_gateway_nats_publisher::NatsPublisher::new(&nats_cfg.url).await {
+            Ok(pub_) => {
+                tracing::info!("Connected to NATS: {}", nats_cfg.url);
+                Arc::new(pub_)
             }
-        } else {
-            tracing::info!("NATS not configured, using in-process mpsc for audit");
-            None
+            Err(e) => {
+                tracing::error!("Failed to connect to NATS: {}", e);
+                return Err(format!("NATS connection failed: {}", e).into());
+            }
         };
 
     // Derive encryption key (32 bytes via SHA256)
@@ -86,12 +82,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Init audit logger
     let audit_logger = Arc::new(AuditLogger::new(storage.clone()));
 
-    // Create MPSC channel for async audit logging
-    let (audit_tx, audit_rx) = tokio::sync::mpsc::channel::<llm_gateway_api::AuditTask>(100);
-    // Spawn background workers (NATS or mpsc depending on config)
-    if let Some(nats) = &nats_publisher {
-        let nats_usage = nats.clone();
-        let nats_audit = nats.clone();
+    // Spawn NATS consumer workers
+    {
+        let nats_usage = nats_publisher.clone();
+        let nats_audit = nats_publisher.clone();
         let storage_usage = storage.clone();
         let storage_audit = storage.clone();
         tokio::spawn(async move {
@@ -99,11 +93,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         });
         tokio::spawn(async move {
             llm_gateway_api::workers::start_nats_audit_worker(storage_audit, nats_audit).await;
-        });
-    } else {
-        let storage_clone = storage.clone();
-        tokio::spawn(async move {
-            llm_gateway_api::workers::start_audit_worker(storage_clone, audit_rx).await;
         });
     }
 
@@ -131,7 +120,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         audit_logger,
         jwt_secret: config.auth.jwt_secret.clone(),
         encryption_key,
-        audit_tx,
         nats_publisher,
         registry,
         settlement_tx,
@@ -197,6 +185,9 @@ allow_registration = true
 [database]
 driver = "postgres"
 url = "postgresql://user:password@localhost/llm_gateway"
+
+[nats]
+url = "nats://localhost:4222"
 
 [rate_limit]
 flush_interval_secs = 30

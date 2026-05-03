@@ -352,55 +352,54 @@ async fn publish_audit_events(
     cache_creation_tokens: Option<i64>,
     cost: i64,
 ) {
-    if let Some(nats) = &state.nats_publisher {
-        let now = chrono::Utc::now();
+    let nats = &state.nats_publisher;
+    let now = chrono::Utc::now();
 
-        let usage_event = UsageEvent {
-            id: uuid::Uuid::new_v4().to_string(),
-            key_id: task.key_id.clone(),
-            user_id: task.user_id.clone(),
-            model_name: task.model_name.clone(),
-            provider_id: task.provider_id.clone(),
-            channel_id: task.channel_id.clone(),
-            protocol: format!("{:?}", task.protocol).to_lowercase(),
-            input_tokens,
-            output_tokens,
-            cache_read_tokens,
-            cache_creation_tokens,
-            cost,
-            latency_ms: task.latency_ms,
-            created_at: now.to_rfc3339(),
-        };
+    let usage_event = UsageEvent {
+        id: uuid::Uuid::new_v4().to_string(),
+        key_id: task.key_id.clone(),
+        user_id: task.user_id.clone(),
+        model_name: task.model_name.clone(),
+        provider_id: task.provider_id.clone(),
+        channel_id: task.channel_id.clone(),
+        protocol: format!("{:?}", task.protocol).to_lowercase(),
+        input_tokens,
+        output_tokens,
+        cache_read_tokens,
+        cache_creation_tokens,
+        cost,
+        latency_ms: task.latency_ms,
+        created_at: now.to_rfc3339(),
+    };
 
-        let audit_event = AuditEvent {
-            id: uuid::Uuid::new_v4().to_string(),
-            key_id: task.key_id.clone(),
-            user_id: task.user_id.clone(),
-            model_name: task.model_name.clone(),
-            provider_id: task.provider_id.clone(),
-            channel_id: task.channel_id.clone(),
-            protocol: format!("{:?}", task.protocol).to_lowercase(),
-            stream: task.stream,
-            status_code: task.status_code,
-            latency_ms: task.latency_ms,
-            original_model: task.original_model.clone(),
-            upstream_model: task.upstream_model.clone(),
-            model_override_reason: task.model_override_reason.clone(),
-            request_path: task.request_path.clone(),
-            upstream_url: task.upstream_url.clone(),
-            request_body: task.request_body.clone(),
-            response_body: String::from_utf8_lossy(&task.response_bytes).into_owned(),
-            request_headers: task.request_headers.clone(),
-            response_headers: task.response_headers.clone(),
-            created_at: now.to_rfc3339(),
-        };
+    let audit_event = AuditEvent {
+        id: uuid::Uuid::new_v4().to_string(),
+        key_id: task.key_id.clone(),
+        user_id: task.user_id.clone(),
+        model_name: task.model_name.clone(),
+        provider_id: task.provider_id.clone(),
+        channel_id: task.channel_id.clone(),
+        protocol: format!("{:?}", task.protocol).to_lowercase(),
+        stream: task.stream,
+        status_code: task.status_code,
+        latency_ms: task.latency_ms,
+        original_model: task.original_model.clone(),
+        upstream_model: task.upstream_model.clone(),
+        model_override_reason: task.model_override_reason.clone(),
+        request_path: task.request_path.clone(),
+        upstream_url: task.upstream_url.clone(),
+        request_body: task.request_body.clone(),
+        response_body: String::from_utf8_lossy(&task.response_bytes).into_owned(),
+        request_headers: task.request_headers.clone(),
+        response_headers: task.response_headers.clone(),
+        created_at: now.to_rfc3339(),
+    };
 
-        if let Err(e) = nats.publish_usage(&usage_event).await {
-            tracing::warn!("[NATS] Failed to publish usage event: {}", e);
-        }
-        if let Err(e) = nats.publish_audit(&audit_event).await {
-            tracing::warn!("[NATS] Failed to publish audit event: {}", e);
-        }
+    if let Err(e) = nats.publish_usage(&usage_event).await {
+        tracing::warn!("[NATS] Failed to publish usage event: {}", e);
+    }
+    if let Err(e) = nats.publish_audit(&audit_event).await {
+        tracing::warn!("[NATS] Failed to publish audit event: {}", e);
     }
 }
 
@@ -408,24 +407,20 @@ async fn dispatch_audit_task(
     state: &Arc<crate::AppState>,
     task: crate::AuditTask,
 ) {
-    if state.nats_publisher.is_some() {
-        let proto = task.protocol.clone();
-        let stream = task.stream;
-        let (input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) =
-            crate::workers::parse_usage(&task.response_bytes, stream, proto);
-        let cost = crate::workers::calculate_cost(
-            &task.pricing_policy_config,
-            &task.pricing_policy_billing_type,
-            task.markup_ratio,
-            input_tokens,
-            output_tokens,
-            cache_read_tokens,
-            cache_creation_tokens,
-        );
-        publish_audit_events(state, &task, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost).await;
-    } else {
-        let _ = state.audit_tx.try_send(task);
-    }
+    let proto = task.protocol.clone();
+    let stream = task.stream;
+    let (input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) =
+        crate::workers::parse_usage(&task.response_bytes, stream, proto);
+    let cost = crate::workers::calculate_cost(
+        &task.pricing_policy_config,
+        &task.pricing_policy_billing_type,
+        task.markup_ratio,
+        input_tokens,
+        output_tokens,
+        cache_read_tokens,
+        cache_creation_tokens,
+    );
+    publish_audit_events(state, &task, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost).await;
 }
 
 /// Parameters for SSE AuditTask construction
