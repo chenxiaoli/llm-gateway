@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1.0] - 2026-05-03
+
+### Added
+- Frontend internationalization (i18n) with English and Simplified Chinese support
+- Language toggle (Globe icon) in sidebar header — instant switch, persists to localStorage
+- Browser language auto-detection (falls back to English)
+- 850 translation keys across 25 sections covering all pages, components, hooks, and toast messages
+- `react-i18next` + `i18next` with bundled JSON translation files
+
+### Changed
+- **SQLite removed** — PostgreSQL is now the only database driver
+- NATS JetStream is required (no mpsc fallback) — gateway fails to start without `[nats]` config
+- NATS streams renamed from `GATEWAY_*` to `LLM_GATEWAY_*` (`LLM_GATEWAY_USAGE`, `LLM_GATEWAY_AUDIT`)
+- Audit and usage workers extracted into independent binaries (`llm-gateway-usage-worker`, `llm-gateway-audit-worker`)
+- Docker builds now produce 3 binaries with `entrypoint` override for worker services
+- Production docker-compose includes NATS service with JetStream
+- Integration tests use PostgreSQL service container instead of SQLite
+
+### Fixed
+- ResolveJsonModule added to tsconfig for JSON imports
+- ConfirmDialog i18n defaults resolve at render time (not module load)
+- Test render helper imports i18n for component test compatibility
+
 ## [1.0.0] - 2026-05-03
 
 ### Added
