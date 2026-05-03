@@ -1,6 +1,9 @@
 use async_nats::jetstream::{self, consumer::PushConsumer, Context};
 use serde::{Deserialize, Serialize};
 
+// Re-export AckKind so consumers don't need a direct async-nats dependency.
+pub use async_nats::jetstream::AckKind;
+
 // ---------------------------------------------------------------------------
 // Event types
 // ---------------------------------------------------------------------------

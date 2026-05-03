@@ -1,3 +1,4 @@
+use futures::StreamExt;
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_storage::{Protocol, UsageRecord};
 use std::sync::Arc;
@@ -209,4 +210,136 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
         tracing::info!("[AUDIT-WORKER] Task completed: key_id={}, model={}", task.key_id, task.model_name);
     }
     tracing::info!("[AUDIT-WORKER] Worker exiting, channel closed");
+}
+
+/// NATS consumer worker: reads usage events from JetStream and writes to DB.
+pub async fn start_nats_usage_worker(
+    storage: Arc<dyn llm_gateway_storage::Storage>,
+    nats: Arc<llm_gateway_nats_publisher::NatsPublisher>,
+) {
+    tracing::info!("[NATS-USAGE-WORKER] Starting");
+
+    let consumer = match nats.create_usage_consumer().await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!("[NATS-USAGE-WORKER] Failed to create consumer: {}", e);
+            return;
+        }
+    };
+
+    let mut messages = consumer.messages().await.unwrap_or_else(|e| {
+        tracing::error!("[NATS-USAGE-WORKER] Failed to subscribe: {}", e);
+        panic!("NATS usage consumer subscribe failed");
+    });
+
+    while let Some(Ok(msg)) = messages.next().await {
+        let event: llm_gateway_nats_publisher::UsageEvent = match serde_json::from_slice(&msg.payload) {
+            Ok(e) => e,
+            Err(e) => {
+                tracing::warn!("[NATS-USAGE-WORKER] Failed to deserialize: {}", e);
+                let _ = msg.ack().await;
+                continue;
+            }
+        };
+
+        let record = UsageRecord {
+            id: event.id,
+            key_id: event.key_id,
+            user_id: event.user_id,
+            model_name: event.model_name,
+            provider_id: event.provider_id,
+            channel_id: event.channel_id,
+            protocol: match event.protocol.as_str() {
+                "anthropic" => Protocol::Anthropic,
+                _ => Protocol::Openai,
+            },
+            input_tokens: event.input_tokens,
+            output_tokens: event.output_tokens,
+            cache_read_tokens: event.cache_read_tokens,
+            cache_creation_tokens: event.cache_creation_tokens,
+            cost: event.cost,
+            created_at: chrono::DateTime::parse_from_rfc3339(&event.created_at)
+                .map(|dt| dt.to_utc())
+                .unwrap_or_else(|_| chrono::Utc::now()),
+        };
+
+        if let Err(e) = storage.record_usage(&record).await {
+            tracing::warn!("[NATS-USAGE-WORKER] Failed to record usage: {}", e);
+            let _ = msg.ack_with(llm_gateway_nats_publisher::AckKind::Nak(None)).await;
+            continue;
+        }
+
+        let _ = msg.ack().await;
+    }
+
+    tracing::info!("[NATS-USAGE-WORKER] Exiting");
+}
+
+/// NATS consumer worker: reads audit events from JetStream and writes to DB.
+pub async fn start_nats_audit_worker(
+    storage: Arc<dyn llm_gateway_storage::Storage>,
+    nats: Arc<llm_gateway_nats_publisher::NatsPublisher>,
+) {
+    tracing::info!("[NATS-AUDIT-WORKER] Starting");
+
+    let audit_logger = AuditLogger::new(storage);
+    let consumer = match nats.create_audit_consumer().await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::error!("[NATS-AUDIT-WORKER] Failed to create consumer: {}", e);
+            return;
+        }
+    };
+
+    let mut messages = consumer.messages().await.unwrap_or_else(|e| {
+        tracing::error!("[NATS-AUDIT-WORKER] Failed to subscribe: {}", e);
+        panic!("NATS audit consumer subscribe failed");
+    });
+
+    while let Some(Ok(msg)) = messages.next().await {
+        let event: llm_gateway_nats_publisher::AuditEvent = match serde_json::from_slice(&msg.payload) {
+            Ok(e) => e,
+            Err(e) => {
+                tracing::warn!("[NATS-AUDIT-WORKER] Failed to deserialize: {}", e);
+                let _ = msg.ack().await;
+                continue;
+            }
+        };
+
+        let proto = match event.protocol.as_str() {
+            "anthropic" => Protocol::Anthropic,
+            _ => Protocol::Openai,
+        };
+
+        if let Err(e) = audit_logger.log_request(
+            &event.key_id,
+            event.user_id.as_deref(),
+            &event.model_name,
+            &event.provider_id,
+            event.channel_id.as_deref(),
+            proto,
+            event.stream,
+            &event.request_body,
+            &event.response_body,
+            event.status_code,
+            event.latency_ms,
+            None,
+            None,
+            event.original_model.as_deref(),
+            event.upstream_model.as_deref(),
+            event.model_override_reason.as_deref(),
+            event.request_path.as_deref(),
+            event.upstream_url.as_deref(),
+            event.request_headers.as_deref(),
+            event.response_headers.as_deref(),
+        ).await {
+            tracing::warn!("[NATS-AUDIT-WORKER] Failed to log audit: {}", e);
+            let _ = msg.ack_with(llm_gateway_nats_publisher::AckKind::Nak(None)).await;
+            continue;
+        }
+
+        let _ = msg.ack().await;
+    }
+
+    tracing::info!("[NATS-AUDIT-WORKER] Exiting");
 }
