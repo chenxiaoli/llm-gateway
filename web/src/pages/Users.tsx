@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Wallet, X, DollarSign, MessageSquare, Zap } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { useUsers, useUpdateUser, useDeleteUser } from '../hooks/useUsers';
 import { useUserBalance, useRechargeUser, useAdjustUser } from '../hooks/useAccounts';
 import { useUsage, useUsageSummary } from '../hooks/useUsage';
@@ -15,13 +16,6 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Modal } from '../components/ui/Modal';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-
-const TX_TYPE_LABELS: Record<string, { label: string; color: 'green' | 'red' | 'blue' | 'purple' }> = {
-  credit: { label: 'Credit', color: 'green' },
-  debit: { label: 'Debit', color: 'red' },
-  credit_adjustment: { label: 'Adjustment', color: 'blue' },
-  debit_refund: { label: 'Refund', color: 'purple' },
-};
 
 // ── Shared Drawer Shell ───────────────────────────────────────────────────────
 
@@ -89,6 +83,7 @@ function DrawerShell({ title, isOpen, onClose, width = 560, children }: {
 // ── User Detail Drawer ────────────────────────────────────────────────────────
 
 function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () => void }) {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { data, isLoading } = useUserBalance(userId ?? '', 1, 10);
   const rechargeMutation = useRechargeUser();
@@ -104,11 +99,18 @@ function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () =>
   const account = data?.account;
   const transactions = data?.transactions?.items ?? [];
 
+  const TX_TYPE_LABELS: Record<string, { label: string; color: 'green' | 'red' | 'blue' | 'purple' }> = {
+    credit: { label: t('users.drawer.credit'), color: 'green' },
+    debit: { label: t('users.drawer.debit'), color: 'red' },
+    credit_adjustment: { label: t('users.drawer.adjustment'), color: 'blue' },
+    debit_refund: { label: t('users.drawer.refund'), color: 'purple' },
+  };
+
   const handleRecharge = () => {
     const amount = parseFloat(rechargeAmount);
     if (!amount || amount <= 0 || !userId) return;
     rechargeMutation.mutate(
-      { userId, data: { type: 'credit', amount, description: description || 'Recharge' } },
+      { userId, data: { type: 'credit', amount, description: description || t('users.drawer.credit') } },
       {
         onSuccess: () => {
           setRechargeOpen(false);
@@ -124,7 +126,7 @@ function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () =>
     const amount = parseFloat(adjustAmount);
     if (!amount || amount <= 0 || !userId) return;
     adjustMutation.mutate(
-      { userId, data: { type: adjustType, amount, description: description || 'Manual adjustment' } },
+      { userId, data: { type: adjustType, amount, description: description || t('users.drawer.adjustment') } },
       {
         onSuccess: () => {
           setAdjustOpen(false);
@@ -139,7 +141,7 @@ function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () =>
   const isOpen = userId !== null;
 
   return (
-    <DrawerShell title="User Details" isOpen={isOpen} onClose={onClose} width={480}>
+    <DrawerShell title={t('users.drawer.title')} isOpen={isOpen} onClose={onClose} width={480}>
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <span className="loading loading-spinner loading-lg" />
@@ -149,7 +151,7 @@ function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () =>
           {account && (
             <div className="rounded-2xl border border-base-300/40 bg-base-100 p-5">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Account Balance</span>
+                <span className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('users.drawer.accountBalance')}</span>
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                   account.balance <= account.threshold ? 'bg-amber-500/10' : 'bg-primary/10'
                 }`}>
@@ -161,21 +163,21 @@ function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () =>
                 <span className="text-sm text-base-content/40 ml-2 font-normal">{account.currency}</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-xs text-base-content/40">Threshold: ${account.threshold.toFixed(2)}</span>
-                {account.balance <= account.threshold && <Badge variant="amber">Low Balance</Badge>}
+                <span className="text-xs text-base-content/40">{t('users.drawer.threshold')}: ${account.threshold.toFixed(2)}</span>
+                {account.balance <= account.threshold && <Badge variant="amber">{t('users.drawer.lowBalance')}</Badge>}
               </div>
             </div>
           )}
 
           <div className="flex gap-2">
-            <Button size="sm" className="flex-1" onClick={() => setRechargeOpen(true)}>Recharge</Button>
-            <Button variant="secondary" size="sm" className="flex-1" onClick={() => setAdjustOpen(true)}>Adjust</Button>
+            <Button size="sm" className="flex-1" onClick={() => setRechargeOpen(true)}>{t('users.drawer.recharge')}</Button>
+            <Button variant="secondary" size="sm" className="flex-1" onClick={() => setAdjustOpen(true)}>{t('users.drawer.adjust')}</Button>
           </div>
 
           <div>
-            <h4 className="text-sm font-bold text-base-content/70 mb-3">Recent Transactions</h4>
+            <h4 className="text-sm font-bold text-base-content/70 mb-3">{t('users.drawer.recentTransactions')}</h4>
             {transactions.length === 0 ? (
-              <div className="text-center py-8 text-base-content/40 text-sm">No transactions yet</div>
+              <div className="text-center py-8 text-base-content/40 text-sm">{t('users.drawer.noTransactions')}</div>
             ) : (
               <div className="space-y-2">
                 {transactions.map((tx) => {
@@ -205,10 +207,10 @@ function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () =>
       )}
 
       {/* Recharge Modal */}
-      <Modal open={rechargeOpen} onClose={() => setRechargeOpen(false)} title="Recharge Balance">
+      <Modal open={rechargeOpen} onClose={() => setRechargeOpen(false)} title={t('users.rechargeModal.title')}>
         <div className="space-y-4">
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5 block">Amount (USD)</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5 block">{t('users.rechargeModal.amount')}</label>
             <input
               type="number"
               value={rechargeAmount}
@@ -220,38 +222,38 @@ function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () =>
             />
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5 block">Description</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5 block">{t('users.rechargeModal.descriptionLabel')}</label>
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Monthly top-up"
+              placeholder={t('users.rechargeModal.descriptionPlaceholder')}
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setRechargeOpen(false)}>Cancel</Button>
-            <Button onClick={handleRecharge} loading={rechargeMutation.isPending}>Confirm Recharge</Button>
+            <Button variant="ghost" onClick={() => setRechargeOpen(false)}>{t('common.cancel')}</Button>
+            <Button onClick={handleRecharge} loading={rechargeMutation.isPending}>{t('users.rechargeModal.confirmRecharge')}</Button>
           </div>
         </div>
       </Modal>
 
       {/* Adjust Modal */}
-      <Modal open={adjustOpen} onClose={() => setAdjustOpen(false)} title="Adjust Balance">
+      <Modal open={adjustOpen} onClose={() => setAdjustOpen(false)} title={t('users.adjustModal.title')}>
         <div className="space-y-4">
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5 block">Type</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5 block">{t('users.adjustModal.type')}</label>
             <select
               value={adjustType}
               onChange={(e) => setAdjustType(e.target.value as 'credit_adjustment' | 'debit_refund')}
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors cursor-pointer"
             >
-              <option value="credit_adjustment">Credit Adjustment (add)</option>
-              <option value="debit_refund">Debit / Refund (subtract)</option>
+              <option value="credit_adjustment">{t('users.adjustModal.creditAdjustment')}</option>
+              <option value="debit_refund">{t('users.adjustModal.debitRefund')}</option>
             </select>
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5 block">Amount (USD)</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5 block">{t('users.adjustModal.amount')}</label>
             <input
               type="number"
               value={adjustAmount}
@@ -263,18 +265,18 @@ function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () =>
             />
           </div>
           <div>
-            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5 block">Description</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5 block">{t('users.adjustModal.descriptionLabel')}</label>
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Customer compensation"
+              placeholder={t('users.adjustModal.descriptionPlaceholder')}
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setAdjustOpen(false)}>Cancel</Button>
-            <Button onClick={handleAdjust} loading={adjustMutation.isPending}>Confirm Adjustment</Button>
+            <Button variant="ghost" onClick={() => setAdjustOpen(false)}>{t('common.cancel')}</Button>
+            <Button onClick={handleAdjust} loading={adjustMutation.isPending}>{t('users.adjustModal.confirmAdjustment')}</Button>
           </div>
         </div>
       </Modal>
@@ -285,6 +287,7 @@ function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () =>
 // ── Usage Drawer ──────────────────────────────────────────────────────────────
 
 function UsageDrawer({ userId, onClose }: { userId: string | null; onClose: () => void }) {
+  const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const usageFilter = userId ? { user_id: userId } : {};
@@ -319,13 +322,13 @@ function UsageDrawer({ userId, onClose }: { userId: string | null; onClose: () =
   }));
 
   return (
-    <DrawerShell title="User Usage" isOpen={isOpen} onClose={onClose} width={800}>
+    <DrawerShell title={t('users.usageDrawer.title')} isOpen={isOpen} onClose={onClose} width={800}>
       {(usageLoading || summaryLoading) ? (
         <div className="flex items-center justify-center py-12">
           <span className="loading loading-spinner loading-lg" />
         </div>
       ) : totals.requests === 0 ? (
-        <div className="text-center py-16 text-base-content/40 text-sm">No usage data for this user</div>
+        <div className="text-center py-16 text-base-content/40 text-sm">{t('users.usageDrawer.noUsage')}</div>
       ) : (
         <div className="space-y-6">
           {/* Stat Cards */}
@@ -333,28 +336,28 @@ function UsageDrawer({ userId, onClose }: { userId: string | null; onClose: () =
             <div className="rounded-2xl border border-base-300/40 bg-base-100 p-4">
               <div className="flex items-center gap-2 mb-2">
                 <DollarSign className="h-4 w-4 text-emerald-400" />
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Total Cost</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">{t('users.usageDrawer.totalCost')}</span>
               </div>
               <div className="font-mono text-2xl font-bold">${totals.cost.toFixed(4)}</div>
             </div>
             <div className="rounded-2xl border border-base-300/40 bg-base-100 p-4">
               <div className="flex items-center gap-2 mb-2">
                 <MessageSquare className="h-4 w-4 text-blue-400" />
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Requests</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">{t('users.usageDrawer.requests')}</span>
               </div>
               <div className="font-mono text-2xl font-bold">{totals.requests.toLocaleString()}</div>
             </div>
             <div className="rounded-2xl border border-base-300/40 bg-base-100 p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Zap className="h-4 w-4 text-amber-400" />
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Input Tokens</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">{t('users.usageDrawer.inputTokens')}</span>
               </div>
               <div className="font-mono text-2xl font-bold">{totals.inputTokens.toLocaleString()}</div>
             </div>
             <div className="rounded-2xl border border-base-300/40 bg-base-100 p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Zap className="h-4 w-4 text-rose-400" />
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">Output Tokens</span>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">{t('users.usageDrawer.outputTokens')}</span>
               </div>
               <div className="font-mono text-2xl font-bold">{totals.outputTokens.toLocaleString()}</div>
             </div>
@@ -363,7 +366,7 @@ function UsageDrawer({ userId, onClose }: { userId: string | null; onClose: () =
           {/* Chart */}
           {chartData.length > 0 && (
             <div className="rounded-2xl border border-base-300/40 bg-base-100 p-5">
-              <h4 className="text-sm font-bold text-base-content/70 mb-4">Token Usage by Model</h4>
+              <h4 className="text-sm font-bold text-base-content/70 mb-4">{t('users.usageDrawer.tokenUsageByModel')}</h4>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--color-base-300)" opacity={0.4} />
@@ -386,12 +389,12 @@ function UsageDrawer({ userId, onClose }: { userId: string | null; onClose: () =
             <table className="table table-sm">
               <thead>
                 <tr className="border-b border-base-300/40">
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/45">Time</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/45">Model</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/45">Protocol</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/45 text-right">Input</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/45 text-right">Output</th>
-                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/45 text-right">Cost</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/45">{t('users.usageDrawer.table.time')}</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/45">{t('users.usageDrawer.table.model')}</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/45">{t('users.usageDrawer.table.protocol')}</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/45 text-right">{t('users.usageDrawer.table.input')}</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/45 text-right">{t('users.usageDrawer.table.output')}</th>
+                  <th className="text-[11px] font-semibold uppercase tracking-wider text-base-content/45 text-right">{t('users.usageDrawer.table.cost')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -410,7 +413,7 @@ function UsageDrawer({ userId, onClose }: { userId: string | null; onClose: () =
                 {items.length === 0 && (
                   <tr>
                     <td colSpan={6} className="text-center py-8 text-base-content/40 text-sm">
-                      No usage records
+                      {t('users.usageDrawer.noUsageRecords')}
                     </td>
                   </tr>
                 )}
@@ -421,16 +424,16 @@ function UsageDrawer({ userId, onClose }: { userId: string | null; onClose: () =
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between text-sm">
-              <span className="text-xs text-base-content/40">Total {usageData?.total ?? 0}</span>
+              <span className="text-xs text-base-content/40">{t('users.usageDrawer.pagination.total', { count: usageData?.total ?? 0 })}</span>
               <div className="join">
                 <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-                  Previous
+                  {t('users.usageDrawer.pagination.previous')}
                 </Button>
                 <span className="px-3 flex items-center text-sm text-base-content/60">
                   {page} / {totalPages}
                 </span>
                 <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
-                  Next
+                  {t('users.usageDrawer.pagination.next')}
                 </Button>
               </div>
             </div>
@@ -444,6 +447,7 @@ function UsageDrawer({ userId, onClose }: { userId: string | null; onClose: () =
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function Users() {
+  const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const reducedMotion = useReducedMotion();
@@ -466,10 +470,10 @@ export default function Users() {
         className="mb-8 pt-8"
       >
         <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
-          Users
+          {t('users.title')}
         </h1>
         <p className="text-base text-base-content/50">
-          Manage user accounts and permissions
+          {t('users.description')}
         </p>
       </motion.div>
 
@@ -488,12 +492,12 @@ export default function Users() {
             <table className="table table-sm">
               <thead>
                 <tr className="border-b border-base-300/40">
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Username</th>
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Role</th>
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Status</th>
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">Balance</th>
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Created</th>
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Actions</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('users.table.username')}</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('users.table.role')}</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('users.table.status')}</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">{t('users.table.balance')}</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('users.table.created')}</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('users.table.actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -512,7 +516,7 @@ export default function Users() {
                         value={user.role}
                         size="sm"
                         onChange={(value) => updateMutation.mutate({ id: user.id, input: { role: value as 'admin' | 'user' } })}
-                        options={[{ value: 'admin', label: 'Admin' }, { value: 'user', label: 'User' }]}
+                        options={[{ value: 'admin', label: t('users.roleAdmin') }, { value: 'user', label: t('users.roleUser') }]}
                       />
                     </td>
                     <td>
@@ -520,7 +524,7 @@ export default function Users() {
                         className="cursor-pointer"
                         onClick={() => updateMutation.mutate({ id: user.id, input: { enabled: !user.enabled } })}
                       >
-                        <Badge variant={user.enabled ? 'green' : 'red'}>{user.enabled ? 'Enabled' : 'Disabled'}</Badge>
+                        <Badge variant={user.enabled ? 'green' : 'red'}>{user.enabled ? t('users.enabled') : t('users.disabled')}</Badge>
                       </button>
                     </td>
                     <td className="text-right">
@@ -541,17 +545,17 @@ export default function Users() {
                           size="sm"
                           onClick={() => setDrawerUserId(user.id)}
                         >
-                          Detail
+                          {t('users.detail')}
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => setUsageUserId(user.id)}
                         >
-                          Usage
+                          {t('users.usage')}
                         </Button>
-                        <ConfirmDialog title="Delete this user?" onConfirm={() => deleteMutation.mutate(user.id)} okText="Delete">
-                          <Button variant="danger" size="sm">Delete</Button>
+                        <ConfirmDialog title={t('users.deleteUser')} onConfirm={() => deleteMutation.mutate(user.id)} okText={t('common.delete')}>
+                          <Button variant="danger" size="sm">{t('common.delete')}</Button>
                         </ConfirmDialog>
                       </div>
                     </td>
@@ -560,7 +564,7 @@ export default function Users() {
                 {data?.items?.length === 0 && (
                   <tr>
                     <td colSpan={6} className="text-center py-12 text-base-content/40 text-sm">
-                      No users found
+                      {t('users.noUsers')}
                     </td>
                   </tr>
                 )}
@@ -570,16 +574,16 @@ export default function Users() {
 
           {totalPages > 1 && (
             <div className="mt-4 flex items-center justify-between text-sm">
-              <span className="text-xs text-base-content/40">Total {data?.total ?? 0}</span>
+              <span className="text-xs text-base-content/40">{t('users.pagination.total', { count: data?.total ?? 0 })}</span>
               <div className="join">
                 <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-                  Previous
+                  {t('users.pagination.previous')}
                 </Button>
                 <span className="px-3 flex items-center text-sm text-base-content/60">
                   {page} / {totalPages}
                 </span>
                 <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
-                  Next
+                  {t('users.pagination.next')}
                 </Button>
               </div>
             </div>

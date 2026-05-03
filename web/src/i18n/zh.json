@@ -720,5 +720,341 @@
       "priority": "优先级",
       "enabled": "启用"
     }
+  },
+  "users": {
+    "title": "用户",
+    "description": "管理用户账户和权限",
+    "table": {
+      "username": "用户名",
+      "role": "角色",
+      "status": "状态",
+      "balance": "余额",
+      "created": "创建时间",
+      "actions": "操作"
+    },
+    "roleAdmin": "管理员",
+    "roleUser": "用户",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "noUsers": "暂无用户",
+    "pagination": {
+      "total": "共 {{count}} 个",
+      "previous": "上一页",
+      "next": "下一页"
+    },
+    "drawer": {
+      "title": "用户详情",
+      "accountBalance": "账户余额",
+      "threshold": "阈值",
+      "lowBalance": "余额不足",
+      "recharge": "充值",
+      "adjust": "调整",
+      "recentTransactions": "最近交易",
+      "noTransactions": "暂无交易记录",
+      "credit": "充值",
+      "debit": "扣费",
+      "adjustment": "调整",
+      "refund": "退款"
+    },
+    "rechargeModal": {
+      "title": "充值余额",
+      "amount": "金额（美元）",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "例如：月度充值",
+      "confirmRecharge": "确认充值"
+    },
+    "adjustModal": {
+      "title": "调整余额",
+      "type": "类型",
+      "creditAdjustment": "信用调整（增加）",
+      "debitRefund": "借记/退款（扣减）",
+      "amount": "金额（美元）",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "例如：客户补偿",
+      "confirmAdjustment": "确认调整"
+    },
+    "detail": "详情",
+    "usage": "用量",
+    "deleteUser": "确定删除此用户？",
+    "usageDrawer": {
+      "title": "用户用量",
+      "noUsage": "该用户暂无用量数据",
+      "totalCost": "总费用",
+      "requests": "请求数",
+      "inputTokens": "输入 Token",
+      "outputTokens": "输出 Token",
+      "tokenUsageByModel": "各模型 Token 用量",
+      "table": {
+        "time": "时间",
+        "model": "模型",
+        "protocol": "协议",
+        "input": "输入",
+        "output": "输出",
+        "cost": "费用"
+      },
+      "noUsageRecords": "暂无用量记录",
+      "pagination": {
+        "total": "共 {{count}} 条",
+        "previous": "上一页",
+        "next": "下一页"
+      }
+    }
+  },
+  "settings": {
+    "title": "设置",
+    "description": "网关配置",
+    "tabs": {
+      "general": "通用",
+      "security": "安全与审计",
+      "system": "系统信息",
+      "about": "关于"
+    },
+    "general": {
+      "sectionTitle": "通用设置",
+      "allowRegistration": "允许注册",
+      "allowRegistrationDesc": "允许新用户在登录页注册",
+      "serverHost": "服务器地址",
+      "serverHostDesc": "代理端点使用的网关基础 URL"
+    },
+    "security": {
+      "sectionTitle": "审计日志",
+      "logRequestBody": "记录请求体",
+      "logRequestBodyDesc": "在审计日志中捕获并存储上游请求负载",
+      "logResponseBody": "记录响应体",
+      "logResponseBodyDesc": "在审计日志中捕获并存储上游响应负载",
+      "storageNotice": "启用请求/响应体记录可能会增加存储用量。审计日志将按照配置的保留期限进行保留。"
+    },
+    "system": {
+      "sectionTitle": "基础设施配置",
+      "serverBindAddress": "服务器绑定地址",
+      "databaseDriver": "数据库驱动",
+      "rateLimitWindow": "速率限制窗口",
+      "rateLimitFlushInterval": "速率限制刷新间隔",
+      "upstreamTimeout": "上游超时",
+      "auditRetention": "审计保留",
+      "days": "{{count}} 天",
+      "configNotice": "这些值来源于 config.toml。更改需要编辑配置文件并重启网关。"
+    },
+    "about": {
+      "sectionTitle": "网关信息",
+      "version": "版本",
+      "database": "数据库",
+      "linksTitle": "链接",
+      "githubRepo": "GitHub 仓库",
+      "githubDesc": "源代码、问题、文档"
+    }
+  },
+  "account": {
+    "administrator": "管理员",
+    "user": "用户",
+    "balance": "余额",
+    "threshold": "阈值",
+    "status": "状态",
+    "lowBalance": "余额不足",
+    "active": "正常",
+    "transactionHistory": "交易记录",
+    "table": {
+      "time": "时间",
+      "type": "类型",
+      "amount": "金额",
+      "balanceAfter": "变动后余额",
+      "description": "描述"
+    },
+    "noTransactions": "暂无交易记录",
+    "pagination": {
+      "total": "共 {{count}} 条",
+      "previous": "上一页",
+      "next": "下一页"
+    },
+    "credit": "充值",
+    "debit": "扣费",
+    "adjustment": "调整",
+    "refund": "退款"
+  },
+  "accountBalance": {
+    "title": "账户余额",
+    "balance": "余额",
+    "threshold": "阈值",
+    "currency": "币种",
+    "recharge": "充值",
+    "adjust": "调整",
+    "table": {
+      "time": "时间",
+      "type": "类型",
+      "amount": "金额",
+      "balanceAfter": "变动后余额",
+      "description": "描述"
+    },
+    "noTransactions": "暂无交易记录",
+    "pagination": {
+      "total": "共 {{count}} 条",
+      "previous": "上一页",
+      "next": "下一页"
+    },
+    "credit": "充值",
+    "debit": "扣费",
+    "adjustment": "调整",
+    "refund": "退款",
+    "rechargeModal": {
+      "title": "充值余额",
+      "amount": "金额（美元）",
+      "descriptionLabel": "描述（可选）",
+      "descriptionPlaceholder": "例如：月度充值",
+      "confirmRecharge": "确认充值"
+    },
+    "adjustModal": {
+      "title": "调整余额",
+      "type": "类型",
+      "creditAdjustment": "信用调整（增加）",
+      "debitRefund": "借记/退款（扣减）",
+      "amount": "金额（美元）",
+      "descriptionLabel": "描述（可选）",
+      "descriptionPlaceholder": "例如：客户补偿",
+      "confirmAdjustment": "确认调整"
+    }
+  },
+  "modelFallbacks": {
+    "title": "模型降级",
+    "description": "为 API 密钥配置降级模型链",
+    "createFallback": "创建降级策略",
+    "groupCount": "{{count}} 个分组",
+    "groupCount_plural": "{{count}} 个分组",
+    "edit": "编辑",
+    "deleteLabel": "删除 {{name}}",
+    "noFallbacks": "暂无模型降级配置",
+    "createFirst": "创建第一个降级策略",
+    "editModal": {
+      "titleEdit": "编辑模型降级",
+      "titleCreate": "创建模型降级",
+      "name": "名称",
+      "namePlaceholder": "例如：GPT-4 降级链",
+      "fallbackGroups": "降级分组",
+      "fallbackGroupsDesc": "每个分组定义等效模型。优先级数字越小越先尝试。",
+      "groupLabel": "分组 {{number}}",
+      "removeGroupLabel": "移除分组 {{number}}",
+      "removeModelLabel": "移除模型",
+      "addModel": "+ 添加模型",
+      "addGroup": "+ 添加分组",
+      "validationError": "每个分组至少需要 2 个模型才能定义降级链。",
+      "update": "更新",
+      "create": "创建"
+    },
+    "deleteModal": {
+      "title": "删除模型降级",
+      "message": "确定删除？引用此配置的 API 密钥将失去降级链。"
+    }
+  },
+  "pricingPolicies": {
+    "title": "定价策略",
+    "description": "为模型和通道配置定价规则",
+    "descriptionCount": "已配置 {{count}} 个定价策略",
+    "loading": "正在加载定价策略...",
+    "addPolicy": "添加策略",
+    "empty": {
+      "title": "暂无定价策略",
+      "description": "创建定价策略以对模型和通道应用计费规则。",
+      "createFirst": "创建第一个策略"
+    },
+    "table": {
+      "name": "名称",
+      "billing": "计费方式",
+      "config": "配置",
+      "models": "模型",
+      "channelModels": "通道模型",
+      "created": "创建时间"
+    },
+    "billingTypes": {
+      "perToken": "按 Token",
+      "perRequest": "按请求",
+      "perCharacter": "按字符",
+      "tieredToken": "分层 Token",
+      "contextTiered": "上下文分层",
+      "hybrid": "混合"
+    },
+    "configCell": {
+      "in": "输入",
+      "out": "输出",
+      "cacheRead": "缓存读",
+      "cacheCreate": "缓存写",
+      "base": "基础",
+      "perCall": "每次调用",
+      "inChar": "输入/字符",
+      "outChar": "输出/字符",
+      "tierCount": "{{count}} 个分层",
+      "tierCount_plural": "{{count}} 个分层"
+    },
+    "form": {
+      "policyName": "策略名称",
+      "policyNamePlaceholder": "例如：标准 GPT-4 定价",
+      "policyNameRequired": "策略名称不能为空",
+      "billingType": "计费方式",
+      "inputPrice": "输入价格（每百万 $）",
+      "outputPrice": "输出价格（每百万 $）",
+      "cacheReadPrice": "缓存读取价格（每百万 $，更便宜）",
+      "cacheReadPlaceholder": "$0.00（默认使用输入价格）",
+      "cacheCreationPrice": "缓存创建价格（每百万 $）",
+      "perRequestPrice": "每次请求价格（$）",
+      "inputPriceChars": "输入价格（每百万字符 $）",
+      "outputPriceChars": "输出价格（每百万字符 $）",
+      "basePrice": "每次调用基础价格（$）",
+      "saveChanges": "保存更改",
+      "createPolicy": "创建策略",
+      "addTitle": "添加定价策略",
+      "editTitle": "编辑 {{name}}"
+    },
+    "contextTiers": {
+      "label": "上下文分层",
+      "addTier": "+ 添加分层",
+      "tierNumber": "分层 {{number}}",
+      "remove": "移除",
+      "upTo": "上限（Token）",
+      "finalTier": "最终分层",
+      "noUpperLimit": "无上限",
+      "inputPrice": "输入（$/百万）",
+      "outputPrice": "输出（$/百万）",
+      "cacheRead": "缓存读取（$/百万）",
+      "cacheCreate": "缓存创建（$/百万）",
+      "upToLabel": "< {{value}}",
+      "aboveLabel": "> {{value}}"
+    },
+    "deletePolicy": "确定删除策略「{{name}}」？"
+  },
+  "home": {
+    "brand": "LLM Gateway",
+    "dashboard": "控制台",
+    "hero": {
+      "title1": "一个 API 端点",
+      "title2": "连接所有 LLM 提供商",
+      "description": "统一网关，管理密钥、执行速率限制、追踪成本，并通过单一端点将请求代理到 OpenAI、Anthropic 等提供商。",
+      "getStarted": "开始使用",
+      "seeHowItWorks": "了解工作原理"
+    },
+    "howItWorks": {
+      "title": "工作原理",
+      "step1Title": "配置提供商",
+      "step1Desc": "添加上游 LLM 提供商，设置包含 API 密钥、模型和路由规则的通道。",
+      "step2Title": "路由请求",
+      "step2Desc": "通过单一端点发送请求。网关处理协议转换和负载均衡。",
+      "step3Title": "监控用量",
+      "step3Desc": "按密钥追踪成本、延迟和 Token 用量。每个请求都有完整的审计日志。"
+    },
+    "quickStart": {
+      "title": "快速开始",
+      "openaiSdk": "OpenAI SDK",
+      "anthropicSdk": "Anthropic SDK",
+      "curl": "cURL",
+      "sdkLabel": "{{sdk}} SDK",
+      "dropIn": "直接使用现有 SDK — 只需更改 <code>baseURL</code>"
+    },
+    "cta": {
+      "title": "准备好开始了吗？",
+      "description": "几分钟内即可设置网关。配置提供商、创建 API 密钥，开始路由请求。",
+      "goToDashboard": "进入控制台",
+      "starOnGithub": "在 GitHub 上加星"
+    },
+    "footer": {
+      "brand": "LLM Gateway",
+      "openSource": "开源项目"
+    }
   }
 }

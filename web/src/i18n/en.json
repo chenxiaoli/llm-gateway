@@ -720,5 +720,341 @@
       "priority": "Priority",
       "enabled": "Enabled"
     }
+  },
+  "users": {
+    "title": "Users",
+    "description": "Manage user accounts and permissions",
+    "table": {
+      "username": "Username",
+      "role": "Role",
+      "status": "Status",
+      "balance": "Balance",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "roleAdmin": "Admin",
+    "roleUser": "User",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "noUsers": "No users found",
+    "pagination": {
+      "total": "Total {{count}}",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "drawer": {
+      "title": "User Details",
+      "accountBalance": "Account Balance",
+      "threshold": "Threshold",
+      "lowBalance": "Low Balance",
+      "recharge": "Recharge",
+      "adjust": "Adjust",
+      "recentTransactions": "Recent Transactions",
+      "noTransactions": "No transactions yet",
+      "credit": "Credit",
+      "debit": "Debit",
+      "adjustment": "Adjustment",
+      "refund": "Refund"
+    },
+    "rechargeModal": {
+      "title": "Recharge Balance",
+      "amount": "Amount (USD)",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "e.g. Monthly top-up",
+      "confirmRecharge": "Confirm Recharge"
+    },
+    "adjustModal": {
+      "title": "Adjust Balance",
+      "type": "Type",
+      "creditAdjustment": "Credit Adjustment (add)",
+      "debitRefund": "Debit / Refund (subtract)",
+      "amount": "Amount (USD)",
+      "descriptionLabel": "Description",
+      "descriptionPlaceholder": "e.g. Customer compensation",
+      "confirmAdjustment": "Confirm Adjustment"
+    },
+    "detail": "Detail",
+    "usage": "Usage",
+    "deleteUser": "Delete this user?",
+    "usageDrawer": {
+      "title": "User Usage",
+      "noUsage": "No usage data for this user",
+      "totalCost": "Total Cost",
+      "requests": "Requests",
+      "inputTokens": "Input Tokens",
+      "outputTokens": "Output Tokens",
+      "tokenUsageByModel": "Token Usage by Model",
+      "table": {
+        "time": "Time",
+        "model": "Model",
+        "protocol": "Protocol",
+        "input": "Input",
+        "output": "Output",
+        "cost": "Cost"
+      },
+      "noUsageRecords": "No usage records",
+      "pagination": {
+        "total": "Total {{count}}",
+        "previous": "Previous",
+        "next": "Next"
+      }
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "Gateway configuration",
+    "tabs": {
+      "general": "General",
+      "security": "Security & Audit",
+      "system": "System Info",
+      "about": "About"
+    },
+    "general": {
+      "sectionTitle": "GENERAL SETTINGS",
+      "allowRegistration": "Allow Registration",
+      "allowRegistrationDesc": "Permit new users to register on the login page",
+      "serverHost": "Server Host",
+      "serverHostDesc": "Gateway base URL used by the proxy endpoint"
+    },
+    "security": {
+      "sectionTitle": "AUDIT LOGGING",
+      "logRequestBody": "Log Request Body",
+      "logRequestBodyDesc": "Capture and store upstream request payloads in audit logs",
+      "logResponseBody": "Log Response Body",
+      "logResponseBodyDesc": "Capture and store upstream response payloads in audit logs",
+      "storageNotice": "Enabling request/response body logging may increase storage usage. Audit logs are retained according to the configured retention period."
+    },
+    "system": {
+      "sectionTitle": "INFRASTRUCTURE CONFIGURATION",
+      "serverBindAddress": "Server Bind Address",
+      "databaseDriver": "Database Driver",
+      "rateLimitWindow": "Rate Limit Window",
+      "rateLimitFlushInterval": "Rate Limit Flush Interval",
+      "upstreamTimeout": "Upstream Timeout",
+      "auditRetention": "Audit Retention",
+      "days": "{{count}} days",
+      "configNotice": "These values are derived from config.toml. Changes require editing the configuration file and restarting the gateway."
+    },
+    "about": {
+      "sectionTitle": "GATEWAY INFORMATION",
+      "version": "Version",
+      "database": "Database",
+      "linksTitle": "LINKS",
+      "githubRepo": "GitHub Repository",
+      "githubDesc": "Source code, issues, documentation"
+    }
+  },
+  "account": {
+    "administrator": "Administrator",
+    "user": "User",
+    "balance": "Balance",
+    "threshold": "Threshold",
+    "status": "Status",
+    "lowBalance": "Low Balance",
+    "active": "Active",
+    "transactionHistory": "Transaction History",
+    "table": {
+      "time": "Time",
+      "type": "Type",
+      "amount": "Amount",
+      "balanceAfter": "Balance After",
+      "description": "Description"
+    },
+    "noTransactions": "No transactions yet",
+    "pagination": {
+      "total": "Total {{count}}",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "credit": "Credit",
+    "debit": "Debit",
+    "adjustment": "Adjustment",
+    "refund": "Refund"
+  },
+  "accountBalance": {
+    "title": "Account Balance",
+    "balance": "Balance",
+    "threshold": "Threshold",
+    "currency": "Currency",
+    "recharge": "Recharge",
+    "adjust": "Adjust",
+    "table": {
+      "time": "Time",
+      "type": "Type",
+      "amount": "Amount",
+      "balanceAfter": "Balance After",
+      "description": "Description"
+    },
+    "noTransactions": "No transactions yet",
+    "pagination": {
+      "total": "Total {{count}}",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "credit": "Credit",
+    "debit": "Debit",
+    "adjustment": "Adjustment",
+    "refund": "Refund",
+    "rechargeModal": {
+      "title": "Recharge Balance",
+      "amount": "Amount (USD)",
+      "descriptionLabel": "Description (optional)",
+      "descriptionPlaceholder": "e.g. Monthly top-up",
+      "confirmRecharge": "Confirm Recharge"
+    },
+    "adjustModal": {
+      "title": "Adjust Balance",
+      "type": "Type",
+      "creditAdjustment": "Credit Adjustment (add)",
+      "debitRefund": "Debit / Refund (subtract)",
+      "amount": "Amount (USD)",
+      "descriptionLabel": "Description (optional)",
+      "descriptionPlaceholder": "e.g. Customer compensation",
+      "confirmAdjustment": "Confirm Adjustment"
+    }
+  },
+  "modelFallbacks": {
+    "title": "Model Fallbacks",
+    "description": "Configure fallback model chains for API keys",
+    "createFallback": "Create Fallback",
+    "groupCount": "{{count}} group",
+    "groupCount_plural": "{{count}} groups",
+    "edit": "Edit",
+    "deleteLabel": "Delete {{name}}",
+    "noFallbacks": "No model fallback configs yet",
+    "createFirst": "Create your first fallback",
+    "editModal": {
+      "titleEdit": "Edit Model Fallback",
+      "titleCreate": "Create Model Fallback",
+      "name": "Name",
+      "namePlaceholder": "e.g., GPT-4 Fallback Chain",
+      "fallbackGroups": "Fallback Groups",
+      "fallbackGroupsDesc": "Each group defines equivalent models. Lower priority number = tried first.",
+      "groupLabel": "Group {{number}}",
+      "removeGroupLabel": "Remove group {{number}}",
+      "removeModelLabel": "Remove model",
+      "addModel": "+ Add Model",
+      "addGroup": "+ Add Group",
+      "validationError": "Each group needs at least 2 models to define a fallback chain.",
+      "update": "Update",
+      "create": "Create"
+    },
+    "deleteModal": {
+      "title": "Delete Model Fallback",
+      "message": "Are you sure? API keys referencing this config will lose their fallback chain."
+    }
+  },
+  "pricingPolicies": {
+    "title": "Pricing Policies",
+    "description": "Configure pricing rules for models and channels",
+    "descriptionCount": "{{count}} pricing policies configured",
+    "loading": "Loading pricing policies…",
+    "addPolicy": "Add Policy",
+    "empty": {
+      "title": "No pricing policies yet",
+      "description": "Create pricing policies to apply billing rules to models and channels.",
+      "createFirst": "Create First Policy"
+    },
+    "table": {
+      "name": "Name",
+      "billing": "Billing",
+      "config": "Config",
+      "models": "Models",
+      "channelModels": "Channel Models",
+      "created": "Created"
+    },
+    "billingTypes": {
+      "perToken": "Per Token",
+      "perRequest": "Per Request",
+      "perCharacter": "Per Character",
+      "tieredToken": "Tiered Token",
+      "contextTiered": "Context Tiered",
+      "hybrid": "Hybrid"
+    },
+    "configCell": {
+      "in": "In",
+      "out": "Out",
+      "cacheRead": "Cache Read",
+      "cacheCreate": "Cache Create",
+      "base": "Base",
+      "perCall": "Per Call",
+      "inChar": "In/Char",
+      "outChar": "Out/Char",
+      "tierCount": "{{count}} tier",
+      "tierCount_plural": "{{count}} tiers"
+    },
+    "form": {
+      "policyName": "Policy Name",
+      "policyNamePlaceholder": "e.g. Standard GPT-4 Pricing",
+      "policyNameRequired": "Policy name is required",
+      "billingType": "Billing Type",
+      "inputPrice": "Input Price ($ per 1M)",
+      "outputPrice": "Output Price ($ per 1M)",
+      "cacheReadPrice": "Cache Read Price ($ per 1M, cheaper)",
+      "cacheReadPlaceholder": "$0.00 (defaults to input price)",
+      "cacheCreationPrice": "Cache Creation Price ($ per 1M)",
+      "perRequestPrice": "Per Request Price ($)",
+      "inputPriceChars": "Input Price ($ per 1M chars)",
+      "outputPriceChars": "Output Price ($ per 1M chars)",
+      "basePrice": "Base Price per Call ($)",
+      "saveChanges": "Save Changes",
+      "createPolicy": "Create Policy",
+      "addTitle": "Add Pricing Policy",
+      "editTitle": "Edit {{name}}"
+    },
+    "contextTiers": {
+      "label": "Context Tiers",
+      "addTier": "+ Add Tier",
+      "tierNumber": "Tier {{number}}",
+      "remove": "Remove",
+      "upTo": "Up To (tokens)",
+      "finalTier": "Final Tier",
+      "noUpperLimit": "No upper limit",
+      "inputPrice": "Input ($/M)",
+      "outputPrice": "Output ($/M)",
+      "cacheRead": "Cache Read ($/M)",
+      "cacheCreate": "Cache Create ($/M)",
+      "upToLabel": "< {{value}}",
+      "aboveLabel": "> {{value}}"
+    },
+    "deletePolicy": "Delete \"{{name}}\"?"
+  },
+  "home": {
+    "brand": "LLM Gateway",
+    "dashboard": "Dashboard",
+    "hero": {
+      "title1": "One API endpoint",
+      "title2": "every LLM provider",
+      "description": "A unified gateway that manages keys, enforces rate limits, tracks costs, and proxies requests to OpenAI, Anthropic, and more through a single endpoint.",
+      "getStarted": "Get Started",
+      "seeHowItWorks": "See how it works"
+    },
+    "howItWorks": {
+      "title": "How it works",
+      "step1Title": "Configure Providers",
+      "step1Desc": "Add upstream LLM providers and set up channels with API keys, models, and routing rules.",
+      "step2Title": "Route Requests",
+      "step2Desc": "Send requests through a single endpoint. The gateway handles protocol translation and load balancing.",
+      "step3Title": "Monitor Usage",
+      "step3Desc": "Track costs, latency, and token usage per key. Full audit logs for every request."
+    },
+    "quickStart": {
+      "title": "Quick Start",
+      "openaiSdk": "OpenAI SDK",
+      "anthropicSdk": "Anthropic SDK",
+      "curl": "cURL",
+      "sdkLabel": "{{sdk}} SDK",
+      "dropIn": "Drop in your existing SDK — just change the <code>baseURL</code>"
+    },
+    "cta": {
+      "title": "Ready to get started?",
+      "description": "Set up your gateway in minutes. Configure providers, create API keys, and start routing requests.",
+      "goToDashboard": "Go to Dashboard",
+      "starOnGithub": "Star on GitHub"
+    },
+    "footer": {
+      "brand": "LLM Gateway",
+      "openSource": "Open Source"
+    }
   }
 }
