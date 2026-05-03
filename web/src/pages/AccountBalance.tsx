@@ -1,19 +1,14 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { DollarSign } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useUserBalance, useRechargeUser, useAdjustUser } from '../hooks/useAccounts';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 
-const TX_TYPE_LABELS: Record<string, { label: string; color: 'green' | 'red' | 'blue' | 'purple' }> = {
-  credit: { label: 'Credit', color: 'green' },
-  debit: { label: 'Debit', color: 'red' },
-  credit_adjustment: { label: 'Adjustment', color: 'blue' },
-  debit_refund: { label: 'Refund', color: 'purple' },
-};
-
 export default function AccountBalance() {
+  const { t } = useTranslation();
   const { userId } = useParams<{ userId: string }>();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
@@ -32,13 +27,20 @@ export default function AccountBalance() {
   const transactions = data?.transactions;
   const totalPages = Math.ceil((transactions?.total ?? 0) / pageSize);
 
+  const TX_TYPE_LABELS: Record<string, { label: string; color: 'green' | 'red' | 'blue' | 'purple' }> = {
+    credit: { label: t('accountBalance.credit'), color: 'green' },
+    debit: { label: t('accountBalance.debit'), color: 'red' },
+    credit_adjustment: { label: t('accountBalance.adjustment'), color: 'blue' },
+    debit_refund: { label: t('accountBalance.refund'), color: 'purple' },
+  };
+
   const handleRecharge = () => {
     const amount = parseFloat(rechargeAmount);
     if (!amount || amount <= 0 || !userId) return;
     rechargeMutation.mutate(
       {
         userId,
-        data: { type: 'credit', amount, description: description || 'Recharge' },
+        data: { type: 'credit', amount, description: description || t('accountBalance.credit') },
       },
       {
         onSuccess: () => {
@@ -56,7 +58,7 @@ export default function AccountBalance() {
     adjustMutation.mutate(
       {
         userId,
-        data: { type: adjustType, amount, description: description || 'Manual adjustment' },
+        data: { type: adjustType, amount, description: description || t('accountBalance.adjustment') },
       },
       {
         onSuccess: () => {
@@ -71,7 +73,7 @@ export default function AccountBalance() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Account Balance</h1>
+        <h1 className="text-2xl font-bold">{t('accountBalance.title')}</h1>
       </div>
 
       {/* Balance Header */}
@@ -80,16 +82,16 @@ export default function AccountBalance() {
           <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
             <div className="stat-title text-base-content/50">
               <DollarSign className="h-4 w-4 inline mr-1" />
-              Balance
+              {t('accountBalance.balance')}
             </div>
             <div className="stat-value text-3xl font-mono">${account.balance.toFixed(4)}</div>
           </div>
           <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
-            <div className="stat-title text-base-content/50">Threshold</div>
+            <div className="stat-title text-base-content/50">{t('accountBalance.threshold')}</div>
             <div className="stat-value text-2xl font-mono">${account.threshold.toFixed(2)}</div>
           </div>
           <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
-            <div className="stat-title text-base-content/50">Currency</div>
+            <div className="stat-title text-base-content/50">{t('accountBalance.currency')}</div>
             <div className="stat-value text-2xl">{account.currency}</div>
           </div>
         </div>
@@ -97,9 +99,9 @@ export default function AccountBalance() {
 
       {/* Actions */}
       <div className="mb-4 flex gap-2">
-        <Button onClick={() => setRechargeOpen(true)}>Recharge</Button>
+        <Button onClick={() => setRechargeOpen(true)}>{t('accountBalance.recharge')}</Button>
         <Button variant="secondary" onClick={() => setAdjustOpen(true)}>
-          Adjust
+          {t('accountBalance.adjust')}
         </Button>
       </div>
 
@@ -114,13 +116,13 @@ export default function AccountBalance() {
             <table className="table table-sm">
               <thead>
                 <tr className="border-b border-base-300">
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Time</th>
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Type</th>
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50 text-right">Amount</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('accountBalance.table.time')}</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('accountBalance.table.type')}</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50 text-right">{t('accountBalance.table.amount')}</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50 text-right">
-                    Balance After
+                    {t('accountBalance.table.balanceAfter')}
                   </th>
-                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Description</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('accountBalance.table.description')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -146,7 +148,7 @@ export default function AccountBalance() {
                 {transactions?.items.length === 0 && (
                   <tr>
                     <td colSpan={5} className="text-center py-8 text-base-content/40">
-                      No transactions yet
+                      {t('accountBalance.noTransactions')}
                     </td>
                   </tr>
                 )}
@@ -156,7 +158,7 @@ export default function AccountBalance() {
 
           {totalPages > 1 && (
             <div className="mt-4 flex items-center justify-between text-sm">
-              <span className="text-base-content/40">Total {transactions?.total ?? 0}</span>
+              <span className="text-base-content/40">{t('accountBalance.pagination.total', { count: transactions?.total ?? 0 })}</span>
               <div className="join">
                 <Button
                   variant="ghost"
@@ -164,7 +166,7 @@ export default function AccountBalance() {
                   disabled={page <= 1}
                   onClick={() => setPage(page - 1)}
                 >
-                  Previous
+                  {t('accountBalance.pagination.previous')}
                 </Button>
                 <span className="px-3 flex items-center text-base-content/60">
                   {page} / {totalPages}
@@ -175,7 +177,7 @@ export default function AccountBalance() {
                   disabled={page >= totalPages}
                   onClick={() => setPage(page + 1)}
                 >
-                  Next
+                  {t('accountBalance.pagination.next')}
                 </Button>
               </div>
             </div>
@@ -184,11 +186,11 @@ export default function AccountBalance() {
       )}
 
       {/* Recharge Modal */}
-      <Modal open={rechargeOpen} onClose={() => setRechargeOpen(false)} title="Recharge Balance">
+      <Modal open={rechargeOpen} onClose={() => setRechargeOpen(false)} title={t('accountBalance.rechargeModal.title')}>
         <div className="space-y-4">
           <div>
             <label className="label">
-              <span className="label-text">Amount (USD)</span>
+              <span className="label-text">{t('accountBalance.rechargeModal.amount')}</span>
             </label>
             <input
               type="number"
@@ -202,33 +204,33 @@ export default function AccountBalance() {
           </div>
           <div>
             <label className="label">
-              <span className="label-text">Description (optional)</span>
+              <span className="label-text">{t('accountBalance.rechargeModal.descriptionLabel')}</span>
             </label>
             <input
               type="text"
               className="input input-bordered w-full"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Monthly top-up"
+              placeholder={t('accountBalance.rechargeModal.descriptionPlaceholder')}
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => setRechargeOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleRecharge} disabled={rechargeMutation.isPending}>
-              Confirm Recharge
+              {t('accountBalance.rechargeModal.confirmRecharge')}
             </Button>
           </div>
         </div>
       </Modal>
 
       {/* Adjust Modal */}
-      <Modal open={adjustOpen} onClose={() => setAdjustOpen(false)} title="Adjust Balance">
+      <Modal open={adjustOpen} onClose={() => setAdjustOpen(false)} title={t('accountBalance.adjustModal.title')}>
         <div className="space-y-4">
           <div>
             <label className="label">
-              <span className="label-text">Type</span>
+              <span className="label-text">{t('accountBalance.adjustModal.type')}</span>
             </label>
             <select
               className="select select-bordered w-full"
@@ -237,13 +239,13 @@ export default function AccountBalance() {
                 setAdjustType(e.target.value as 'credit_adjustment' | 'debit_refund')
               }
             >
-              <option value="credit_adjustment">Credit Adjustment (add)</option>
-              <option value="debit_refund">Debit / Refund (subtract)</option>
+              <option value="credit_adjustment">{t('accountBalance.adjustModal.creditAdjustment')}</option>
+              <option value="debit_refund">{t('accountBalance.adjustModal.debitRefund')}</option>
             </select>
           </div>
           <div>
             <label className="label">
-              <span className="label-text">Amount (USD)</span>
+              <span className="label-text">{t('accountBalance.adjustModal.amount')}</span>
             </label>
             <input
               type="number"
@@ -257,22 +259,22 @@ export default function AccountBalance() {
           </div>
           <div>
             <label className="label">
-              <span className="label-text">Description (optional)</span>
+              <span className="label-text">{t('accountBalance.adjustModal.descriptionLabel')}</span>
             </label>
             <input
               type="text"
               className="input input-bordered w-full"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Customer compensation"
+              placeholder={t('accountBalance.adjustModal.descriptionPlaceholder')}
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => setAdjustOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button onClick={handleAdjust} disabled={adjustMutation.isPending}>
-              Confirm Adjustment
+              {t('accountBalance.adjustModal.confirmAdjustment')}
             </Button>
           </div>
         </div>

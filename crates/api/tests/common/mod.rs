@@ -1,4 +1,4 @@
-use llm_gateway_storage::{sqlite::SqliteStorage, Storage};
+use llm_gateway_storage::{postgres::PostgresStorage, Storage};
 use llm_gateway_auth::create_jwt;
 use llm_gateway_api::{ChannelRegistry, ResolvedChannel};
 use std::sync::Arc;
@@ -29,9 +29,32 @@ pub struct TestUser {
     pub token: String,
 }
 
-pub async fn setup_test_db() -> Arc<SqliteStorage> {
-    let storage = SqliteStorage::new_in_memory().await.unwrap();
-    storage.run_migrations().await.unwrap();
+/// Set up a test database connection.
+/// Requires DATABASE_URL env var to point at a PostgreSQL instance.
+/// Truncates all tables to ensure test isolation.
+pub async fn setup_test_db() -> Arc<PostgresStorage> {
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL env var must be set for tests");
+    let storage = PostgresStorage::new(&database_url)
+        .await
+        .expect("Failed to connect to test PostgreSQL");
+    storage.run_migrations().await.expect("Failed to run migrations");
+
+    // Truncate all tables for test isolation
+    let tables = [
+        "transactions", "accounts", "usage_records", "audit_logs",
+        "rate_limit_counters", "channel_models", "channels",
+        "provider_models", "provider_models_pricing", "models",
+        "providers", "api_keys", "users", "settings",
+        "pricing_policies", "model_fallbacks",
+    ];
+    for table in &tables {
+        sqlx::query(&format!("TRUNCATE TABLE {} CASCADE", table))
+            .execute(storage.pool())
+            .await
+            .expect("Failed to truncate table");
+    }
+
     Arc::new(storage)
 }
 

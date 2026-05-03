@@ -1,6 +1,6 @@
 [package]
 name = "llm-gateway-api"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 
 [dependencies]
@@ -9,7 +9,6 @@ llm-gateway-storage = { path = "../storage" }
 llm-gateway-auth = { path = "../auth" }
 llm-gateway-provider = { path = "../provider" }
 llm-gateway-billing = { path = "../billing" }
-llm-gateway-audit = { path = "../audit" }
 llm-gateway-nats-publisher = { path = "../nats-publisher" }
 llm-gateway-ratelimit = { path = "../ratelimit" }
 llm-gateway-encryption = { workspace = true }
@@ -32,8 +31,8 @@ rand = "0.9"
 
 [dev-dependencies]
 llm-gateway-storage = { path = "../storage" }
-llm-gateway-audit = { path = "../audit" }
 llm-gateway-ratelimit = { path = "../ratelimit" }
+sqlx = { workspace = true }
 tower = { workspace = true }
 hyper = { workspace = true }
 serde_json = { workspace = true }

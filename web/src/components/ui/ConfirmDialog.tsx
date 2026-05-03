@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './Button';
+import { useTranslation } from 'react-i18next';
 
 export interface ConfirmDialogProps {
   title: string;
@@ -12,7 +13,10 @@ export interface ConfirmDialogProps {
   variant?: 'danger' | 'default';
 }
 
-export function ConfirmDialog({ title, onConfirm, children, okText = 'Confirm', cancelText = 'Cancel', variant = 'default' }: ConfirmDialogProps) {
+export function ConfirmDialog({ title, onConfirm, children, okText, cancelText, variant = 'default' }: ConfirmDialogProps) {
+  const { t } = useTranslation();
+  const resolvedOkText = okText ?? t('common.confirm');
+  const resolvedCancelText = cancelText ?? t('common.cancel');
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -68,10 +72,10 @@ export function ConfirmDialog({ title, onConfirm, children, okText = 'Confirm', 
                 <h3 className="text-[15px] font-semibold text-base-content mb-6">{title}</h3>
                 <div className="flex justify-end gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-                    {cancelText}
+                    {resolvedCancelText}
                   </Button>
                   <Button variant={variant === 'danger' ? 'danger' : undefined} size="sm" onClick={handleConfirm}>
-                    {okText}
+                    {resolvedOkText}
                   </Button>
                 </div>
               </motion.div>

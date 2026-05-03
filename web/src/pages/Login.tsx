@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
 import { getAuthConfig } from '../api/auth';
 import { Button } from '../components/ui/Button';
@@ -8,6 +9,7 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
 
 export default function Login() {
+  const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -28,7 +30,7 @@ export default function Login() {
       await login({ username, password });
       navigate('/console/dashboard');
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Invalid username or password'));
+      toast.error(getErrorMessage(err, t('auth.errorInvalid')));
     } finally {
       setLoading(false);
     }
@@ -47,38 +49,38 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">
             <div className="form-control">
-              <label className="label"><span className="label-text font-medium">Username</span></label>
+              <label className="label"><span className="label-text font-medium">{t('auth.username')}</span></label>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username"
+                placeholder={t('auth.username')}
                 required
                 className="input input-bordered w-full"
               />
             </div>
             <div className="form-control">
-              <label className="label"><span className="label-text font-medium">Password</span></label>
+              <label className="label"><span className="label-text font-medium">{t('auth.password')}</span></label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
+                placeholder={t('auth.password')}
                 required
                 className="input input-bordered w-full"
               />
             </div>
             <div className={authConfig?.allow_registration ? 'pt-2' : ''}>
               <Button variant="primary" size="lg" loading={loading} className="w-full">
-                Sign In
+                {t('auth.signIn')}
               </Button>
             </div>
           </form>
 
           {authConfig?.allow_registration && (
             <p className="text-center text-sm text-base-content/50 mt-5">
-              Don't have an account?{' '}
-              <Link to="/console/register" className="link link-primary">Create one</Link>
+              {t('auth.noAccount')}{' '}
+              <Link to="/console/register" className="link link-primary">{t('auth.createOne')}</Link>
             </p>
           )}
         </div>

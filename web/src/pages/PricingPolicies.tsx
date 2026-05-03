@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { DollarSign, Plus, Cpu, Globe, Pencil, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { usePricingPolicies, useCreatePricingPolicy, useUpdatePricingPolicy, useDeletePricingPolicy } from '../hooks/usePricingPolicies';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -13,8 +14,8 @@ import type { PricingPolicyWithCounts } from '../types';
 import type { PricingConfig, TierConfig, ContextTier } from '../types';
 
 // ── Schema ────────────────────────────────────────────────────────────────────
-const schema = z.object({
-  name: z.string().min(1, 'Policy name is required'),
+const useSchema = (t: (key: string) => string) => z.object({
+  name: z.string().min(1, t('pricingPolicies.form.policyNameRequired')),
   billing_type: z.enum(['per_token', 'per_request', 'per_character', 'tiered_token', 'hybrid', 'context_tiered']),
   input_price_1m: z.string().optional(),
   output_price_1m: z.string().optional(),
@@ -23,9 +24,7 @@ const schema = z.object({
   request_price: z.string().optional(),
 });
 
-type FormValues = z.infer<typeof schema>;
-
-const resolver = zodResolver(schema);
+type FormValues = z.infer<ReturnType<typeof useSchema>>;
 
 // Prices are stored as integer subunits (100_000_000 per USD) matching the backend.
 const UNITS_PER_USD = 100_000_000;
@@ -68,15 +67,6 @@ function buildConfig(data: FormValues): PricingConfig {
   }
 }
 
-const BILLING_TYPES: Record<string, string> = {
-  per_token: 'Per Token',
-  per_request: 'Per Request',
-  per_character: 'Per Character',
-  tiered_token: 'Tiered Token',
-  context_tiered: 'Context Tiered',
-  hybrid: 'Hybrid',
-};
-
 // ── Config renderer for table cells ───────────────────────────────────────────
 function fmt(val: unknown): string {
   if (typeof val === 'number') return `$${(val / UNITS_PER_USD).toFixed(4)}/M`;
@@ -91,6 +81,7 @@ function formatTokenCount(n: number): string {
 }
 
 function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
+  const { t } = useTranslation();
   const cfg = policy.config as Record<string, unknown>;
   const bt = policy.billing_type;
 
@@ -104,31 +95,31 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
       <div className="flex flex-wrap gap-1.5">
         {input != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">In</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.in')}</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(input)}</span>
           </span>
         )}
         {output != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Out</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.out')}</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(output)}</span>
           </span>
         )}
         {cache != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Cache Read</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.cacheRead')}</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(cache)}</span>
           </span>
         )}
         {cacheCreate != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Cache Create</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.cacheCreate')}</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(cacheCreate)}</span>
           </span>
         )}
         {bt === 'hybrid' && base != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Base</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.base')}</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(base)}</span>
           </span>
         )}
@@ -140,7 +131,7 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
     const tiers = cfg['tiers'] as TierConfig[] | undefined;
     return (
       <span className="inline-flex items-center gap-1 text-xs text-base-content/40 italic">
-        {tiers ? `${tiers.length} tier${tiers.length !== 1 ? 's' : ''}` : '—'}
+        {tiers ? t('pricingPolicies.configCell.tierCount', { count: tiers.length }) : '—'}
       </span>
     );
   }
@@ -153,12 +144,12 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
     return (
       <div className="flex flex-col gap-1">
         {tiers.map((tier, i) => {
-          const label = tier.up_to != null ? `< ${formatTokenCount(tier.up_to)}` : `> ${i > 0 && tiers[i - 1].up_to != null ? formatTokenCount(tiers[i - 1].up_to!) : '0'}`;
+          const label = tier.up_to != null ? t('pricingPolicies.contextTiers.upToLabel', { value: formatTokenCount(tier.up_to) }) : t('pricingPolicies.contextTiers.aboveLabel', { value: i > 0 && tiers[i - 1].up_to != null ? formatTokenCount(tiers[i - 1].up_to!) : '0' });
           return (
             <div key={i} className="flex items-center gap-1">
               <span className="text-sm font-semibold uppercase tracking-wider text-base-content/40 min-w-[48px]">{label}</span>
               <span className="text-sm font-mono text-base-content/70">
-                In {fmt(tier.input_price_1m)} · Out {fmt(tier.output_price_1m)}
+                {t('pricingPolicies.configCell.in')} {fmt(tier.input_price_1m)} · {t('pricingPolicies.configCell.out')} {fmt(tier.output_price_1m)}
               </span>
             </div>
           );
@@ -171,7 +162,7 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
     const p = cfg['request_price'] as number | undefined;
     return (
       <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30">
-        <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Per Call</span>
+        <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.perCall')}</span>
         <span className="text-xs font-mono font-bold text-base-content">{p != null ? fmt(p) : '—'}</span>
       </span>
     );
@@ -184,13 +175,13 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
       <div className="flex flex-wrap gap-1.5">
         {input != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">In/Char</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.inChar')}</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(input)}</span>
           </span>
         )}
         {output != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">Out/Char</span>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.outChar')}</span>
             <span className="text-xs font-mono font-bold text-base-content">{fmt(output)}</span>
           </span>
         )}
@@ -217,6 +208,7 @@ function tierRowDefault(): TierRow {
 }
 
 function ContextTieredFields({ onChange, tiers: initialTiers }: { onChange: (tiers: TierRow[]) => void; tiers: TierRow[] }) {
+  const { t } = useTranslation();
   const [tiers, setTiers] = useState<TierRow[]>(initialTiers);
 
   const update = (updated: TierRow[]) => {
@@ -240,48 +232,48 @@ function ContextTieredFields({ onChange, tiers: initialTiers }: { onChange: (tie
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-          Context Tiers
+          {t('pricingPolicies.contextTiers.label')}
         </label>
         <button type="button" onClick={addTier} className="text-xs text-primary hover:text-primary/80 font-medium">
-          + Add Tier
+          {t('pricingPolicies.contextTiers.addTier')}
         </button>
       </div>
       {tiers.map((tier, i) => (
         <div key={i} className="p-3 rounded-lg border border-base-300/50 bg-base-200/30 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/40">Tier {i + 1}</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-base-content/40">{t('pricingPolicies.contextTiers.tierNumber', { number: i + 1 })}</span>
             {tiers.length > 1 && (
               <button type="button" onClick={() => removeTier(i)} className="text-[10px] text-error/60 hover:text-error">
-                Remove
+                {t('pricingPolicies.contextTiers.remove')}
               </button>
             )}
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">
-                {i < tiers.length - 1 ? 'Up To (tokens)' : 'Final Tier'}
+                {i < tiers.length - 1 ? t('pricingPolicies.contextTiers.upTo') : t('pricingPolicies.contextTiers.finalTier')}
               </label>
               {i < tiers.length - 1 ? (
                 <input type="number" step="1" value={tier.up_to} onChange={e => handleChange(i, 'up_to', e.target.value)} placeholder="e.g. 32000" className={INPUT_CLASS} />
               ) : (
-                <div className="h-10 flex items-center px-3 text-xs text-base-content/30 italic rounded-lg border border-base-300/30 bg-base-200/20">No upper limit</div>
+                <div className="h-10 flex items-center px-3 text-xs text-base-content/30 italic rounded-lg border border-base-300/30 bg-base-200/20">{t('pricingPolicies.contextTiers.noUpperLimit')}</div>
               )}
             </div>
             <div />
             <div className="space-y-1">
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">Input ($/M)</label>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">{t('pricingPolicies.contextTiers.inputPrice')}</label>
               <input type="number" step="0.0001" value={tier.input_price_1m} onChange={e => handleChange(i, 'input_price_1m', e.target.value)} placeholder="$0.00" className={INPUT_CLASS} />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">Output ($/M)</label>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">{t('pricingPolicies.contextTiers.outputPrice')}</label>
               <input type="number" step="0.0001" value={tier.output_price_1m} onChange={e => handleChange(i, 'output_price_1m', e.target.value)} placeholder="$0.00" className={INPUT_CLASS} />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">Cache Read ($/M)</label>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">{t('pricingPolicies.contextTiers.cacheRead')}</label>
               <input type="number" step="0.0001" value={tier.cache_read_price_1m} onChange={e => handleChange(i, 'cache_read_price_1m', e.target.value)} placeholder="$0.00" className={INPUT_CLASS} />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">Cache Create ($/M)</label>
+              <label className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40">{t('pricingPolicies.contextTiers.cacheCreate')}</label>
               <input type="number" step="0.0001" value={tier.cache_creation_price_1m} onChange={e => handleChange(i, 'cache_creation_price_1m', e.target.value)} placeholder="$0.00" className={INPUT_CLASS} />
             </div>
           </div>
@@ -301,8 +293,21 @@ interface PolicyFormModalProps {
 }
 
 function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }: PolicyFormModalProps) {
+  const { t } = useTranslation();
   const billingType = defaultValues?.billing_type ?? 'per_token';
   const cfg = defaultValues?.config as Record<string, unknown> | undefined;
+
+  const BILLING_TYPES: Record<string, string> = {
+    per_token: t('pricingPolicies.billingTypes.perToken'),
+    per_request: t('pricingPolicies.billingTypes.perRequest'),
+    per_character: t('pricingPolicies.billingTypes.perCharacter'),
+    tiered_token: t('pricingPolicies.billingTypes.tieredToken'),
+    context_tiered: t('pricingPolicies.billingTypes.contextTiered'),
+    hybrid: t('pricingPolicies.billingTypes.hybrid'),
+  };
+
+  const schema = useSchema(t);
+  const resolver = zodResolver(schema);
 
   const {
     register,
@@ -366,12 +371,12 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
         {/* Name */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-            Policy Name
+            {t('pricingPolicies.form.policyName')}
           </label>
           <input
             type="text"
             {...register('name')}
-            placeholder="e.g. Standard GPT-4 Pricing"
+            placeholder={t('pricingPolicies.form.policyNamePlaceholder')}
             className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
           />
           {errors.name && (
@@ -382,7 +387,7 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
         {/* Billing Type */}
         <div className="space-y-1.5">
           <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-            Billing Type
+            {t('pricingPolicies.form.billingType')}
           </label>
           <select
             {...register('billing_type')}
@@ -400,7 +405,7 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                  Input Price ($ per 1M)
+                  {t('pricingPolicies.form.inputPrice')}
                 </label>
                 <input
                   type="number"
@@ -412,7 +417,7 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                  Output Price ($ per 1M)
+                  {t('pricingPolicies.form.outputPrice')}
                 </label>
                 <input
                   type="number"
@@ -425,19 +430,19 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                Cache Read Price ($ per 1M, cheaper)
+                {t('pricingPolicies.form.cacheReadPrice')}
               </label>
               <input
                 type="number"
                 step="0.0001"
                 {...register('cache_read_price_1m')}
-                placeholder="$0.00 (defaults to input price)"
+                placeholder={t('pricingPolicies.form.cacheReadPlaceholder')}
                 className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-colors"
               />
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                Cache Creation Price ($ per 1M)
+                {t('pricingPolicies.form.cacheCreationPrice')}
               </label>
               <input
                 type="number"
@@ -453,7 +458,7 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
         {watchedBillingType === 'per_request' && (
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-              Per Request Price ($)
+              {t('pricingPolicies.form.perRequestPrice')}
             </label>
             <input
               type="number"
@@ -469,7 +474,7 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                Input Price ($ per 1M chars)
+                {t('pricingPolicies.form.inputPriceChars')}
               </label>
               <input
                 type="number"
@@ -481,7 +486,7 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                Output Price ($ per 1M chars)
+                {t('pricingPolicies.form.outputPriceChars')}
               </label>
               <input
                 type="number"
@@ -498,7 +503,7 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
           <div className="space-y-2">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                Base Price per Call ($)
+                {t('pricingPolicies.form.basePrice')}
               </label>
               <input
                 type="number"
@@ -511,7 +516,7 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                  Input Price ($ per 1M)
+                  {t('pricingPolicies.form.inputPrice')}
                 </label>
                 <input
                   type="number"
@@ -523,7 +528,7 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                  Output Price ($ per 1M)
+                  {t('pricingPolicies.form.outputPrice')}
                 </label>
                 <input
                   type="number"
@@ -536,7 +541,7 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                Cache Read Price ($ per 1M, cheaper)
+                {t('pricingPolicies.form.cacheReadPrice')}
               </label>
               <input
                 type="number"
@@ -548,7 +553,7 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-                Cache Creation Price ($ per 1M)
+                {t('pricingPolicies.form.cacheCreationPrice')}
               </label>
               <input
                 type="number"
@@ -567,10 +572,10 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
 
         <div className="flex gap-2 pt-1">
           <Button type="submit" variant="primary" loading={isPending} className="flex-1">
-            {title.includes('Edit') ? 'Save Changes' : 'Create Policy'}
+            {title.includes(t('common.edit')) ? t('pricingPolicies.form.saveChanges') : t('pricingPolicies.form.createPolicy')}
           </Button>
           <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
         </div>
       </form>
@@ -580,12 +585,22 @@ function PolicyFormModal({ title, defaultValues, onSubmit, onClose, isPending }:
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function PricingPolicies() {
+  const { t } = useTranslation();
   const { data: policies, isLoading } = usePricingPolicies();
   const createMutation = useCreatePricingPolicy();
   const updateMutation = useUpdatePricingPolicy();
   const deleteMutation = useDeletePricingPolicy();
   const [isAdding, setIsAdding] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<PricingPolicyWithCounts | null>(null);
+
+  const BILLING_TYPES: Record<string, string> = {
+    per_token: t('pricingPolicies.billingTypes.perToken'),
+    per_request: t('pricingPolicies.billingTypes.perRequest'),
+    per_character: t('pricingPolicies.billingTypes.perCharacter'),
+    tiered_token: t('pricingPolicies.billingTypes.tieredToken'),
+    context_tiered: t('pricingPolicies.billingTypes.contextTiered'),
+    hybrid: t('pricingPolicies.billingTypes.hybrid'),
+  };
 
   const total = policies?.length ?? 0;
 
@@ -594,7 +609,7 @@ export default function PricingPolicies() {
       <div className="flex items-center justify-center py-24">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-          <span className="text-xs text-base-content/35 font-medium">Loading pricing policies…</span>
+          <span className="text-xs text-base-content/35 font-medium">{t('pricingPolicies.loading')}</span>
         </div>
       </div>
     );
@@ -610,7 +625,7 @@ export default function PricingPolicies() {
       >
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-bold tracking-tight text-base-content">Pricing Policies</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-base-content">{t('pricingPolicies.title')}</h1>
             {total > 0 && (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-widest bg-base-200/70 text-base-content/40 border border-base-300/50">
                 {total}
@@ -618,7 +633,7 @@ export default function PricingPolicies() {
             )}
           </div>
           <p className="text-sm text-base-content/35">
-            {total === 0 ? 'Configure pricing rules for models and channels' : `${total} pricing policies configured`}
+            {total === 0 ? t('pricingPolicies.description') : t('pricingPolicies.descriptionCount', { count: total })}
           </p>
         </div>
 
@@ -628,7 +643,7 @@ export default function PricingPolicies() {
           transition={{ duration: 0.2 }}
         >
           <Button icon={<Plus className="h-4 w-4" />} onClick={() => setIsAdding(true)} size="sm">
-            Add Policy
+            {t('pricingPolicies.addPolicy')}
           </Button>
         </motion.div>
       </motion.div>
@@ -643,12 +658,12 @@ export default function PricingPolicies() {
           <div className="w-16 h-16 rounded-2xl bg-base-200/60 flex items-center justify-center mb-6">
             <DollarSign className="h-8 w-8 text-base-content/20" />
           </div>
-          <h3 className="text-lg font-semibold text-base-content/60 mb-1.5">No pricing policies yet</h3>
+          <h3 className="text-lg font-semibold text-base-content/60 mb-1.5">{t('pricingPolicies.empty.title')}</h3>
           <p className="text-sm text-base-content/30 mb-6 text-center max-w-xs">
-            Create pricing policies to apply billing rules to models and channels.
+            {t('pricingPolicies.empty.description')}
           </p>
           <Button variant="primary" size="sm" onClick={() => setIsAdding(true)}>
-            Create First Policy
+            {t('pricingPolicies.empty.createFirst')}
           </Button>
         </motion.div>
       ) : (
@@ -656,12 +671,12 @@ export default function PricingPolicies() {
           <table className="table">
             <thead>
               <tr className="border-b border-base-300">
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Name</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Billing</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Config</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Models</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Channel Models</th>
-                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Created</th>
+                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('pricingPolicies.table.name')}</th>
+                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('pricingPolicies.table.billing')}</th>
+                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('pricingPolicies.table.config')}</th>
+                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('pricingPolicies.table.models')}</th>
+                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('pricingPolicies.table.channelModels')}</th>
+                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('pricingPolicies.table.created')}</th>
                 <th className="w-20"></th>
               </tr>
             </thead>
@@ -693,18 +708,18 @@ export default function PricingPolicies() {
                       <button
                         onClick={() => setEditingPolicy(policy)}
                         className="btn btn-ghost btn-sm btn-circle"
-                        title="Edit"
+                        title={t('common.edit')}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <ConfirmDialog
-                        title={`Delete "${policy.name}"?`}
+                        title={t('pricingPolicies.deletePolicy', { name: policy.name })}
                         onConfirm={() => deleteMutation.mutate(policy.id)}
-                        okText="Delete"
+                        okText={t('common.delete')}
                       >
                         <button
                           className="btn btn-ghost btn-sm btn-circle text-error"
-                          title="Delete"
+                          title={t('common.delete')}
                           disabled={deleteMutation.isPending}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -721,7 +736,7 @@ export default function PricingPolicies() {
 
       {isAdding && (
         <PolicyFormModal
-          title="Add Pricing Policy"
+          title={t('pricingPolicies.form.addTitle')}
           onSubmit={async (data) => {
             await createMutation.mutateAsync(data);
           }}
@@ -732,7 +747,7 @@ export default function PricingPolicies() {
 
       {editingPolicy && (
         <PolicyFormModal
-          title={`Edit ${editingPolicy.name}`}
+          title={t('pricingPolicies.form.editTitle', { name: editingPolicy.name })}
           defaultValues={editingPolicy}
           onSubmit={async (data) => {
             await updateMutation.mutateAsync({ id: editingPolicy.id, input: data });

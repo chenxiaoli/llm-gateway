@@ -3,6 +3,7 @@ import { listChannelModelsByProvider, createChannelModel, updateChannelModel, de
 import type { CreateChannelModelRequest, UpdateChannelModelRequest } from '../types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
+import i18n from '../i18n';
 
 export function useChannelModels(providerId: string) {
   return useQuery({
@@ -16,8 +17,8 @@ export function useCreateChannelModel(providerId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateChannelModelRequest) => createChannelModel(providerId, input),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channelModels'] }); toast.success('Model added to provider'); },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to add model')); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channelModels'] }); toast.success(i18n.t('toasts.providerModelAdded')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.providerModelAddFailed'))); },
   });
 }
 
@@ -26,8 +27,8 @@ export function useUpdateChannelModel(providerId: string) {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateChannelModelRequest }) =>
       updateChannelModel(id, input),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channelModels'] }); toast.success('Model updated'); },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to update model')); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channelModels'] }); toast.success(i18n.t('toasts.providerModelUpdated')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.providerModelUpdateFailed'))); },
   });
 }
 
@@ -35,7 +36,7 @@ export function useDeleteChannelModel(providerId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteChannelModel(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channelModels'] }); toast.success('Model removed'); },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to remove model')); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channelModels'] }); toast.success(i18n.t('toasts.providerModelRemoved')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.providerModelRemoveFailed'))); },
   });
 }

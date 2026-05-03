@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import i18n from '../i18n';
 import { useAllChannels, useTestChannel } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
@@ -43,6 +45,7 @@ function ModelMultiSelect({
   const { data: allModels } = useAllModels();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
 
   const filtered = (allModels ?? []).filter(
     (m) =>
@@ -54,10 +57,10 @@ function ModelMultiSelect({
     <div className="space-y-2">
       <label className="text-base font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
         <Cpu className="h-3.5 w-3.5" />
-        Models
+        {t('channels.modelSelect.label')}
         {selected.length > 0 && (
           <span className="normal-case font-normal tracking-normal text-base-content/30">
-            ({selected.length} selected)
+            {t('channels.modelSelect.selected', { count: selected.length })}
           </span>
         )}
       </label>
@@ -91,7 +94,7 @@ function ModelMultiSelect({
           value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
-          placeholder="search models..."
+          placeholder={t('channels.modelSelect.searchPlaceholder')}
           className="w-full h-9 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-md text-base-content placeholder:text-base-content/25 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
         />
       </div>
@@ -112,7 +115,7 @@ function ModelMultiSelect({
             >
               {filtered.length === 0 ? (
                 <p className="text-md text-base-content/30 text-center py-4">
-                  {query ? 'no match' : 'no models'}
+                  {query ? t('channels.modelSelect.noMatch') : t('channels.modelSelect.noModels')}
                 </p>
               ) : (
                 filtered.map((m) => (
@@ -147,6 +150,7 @@ function AddChannelDrawer({
 }) {
   const queryClient = useQueryClient();
   const { data: allModels } = useAllModels();
+  const { t } = useTranslation();
   const [isPending, setIsPending] = useState(false);
   const [providerId, setProviderId] = useState('');
   const [name, setName] = useState('');
@@ -172,7 +176,7 @@ function AddChannelDrawer({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!providerId) { toast.error('Select a provider'); return; }
+    if (!providerId) { toast.error(i18n.t('channels.addDrawer.selectProviderError')); return; }
     setIsPending(true);
     try {
       const models = selectedModelIds.size > 0
@@ -189,23 +193,23 @@ function AddChannelDrawer({
       };
       await createChannel(input);
       queryClient.invalidateQueries({ queryKey: ['channels'] });
-      toast.success('Channel created');
+      toast.success(i18n.t('toasts.channelCreated'));
       handleClose();
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to create channel'));
+      toast.error(getErrorMessage(err, i18n.t('toasts.channelCreateFailed')));
     } finally {
       setIsPending(false);
     }
   };
 
   return (
-    <Drawer open={open} onClose={handleClose} title="Add Channel" width={440}>
+    <Drawer open={open} onClose={handleClose} title={t('channels.addDrawer.title')} width={440}>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Provider */}
         <div className="space-y-1.5">
           <label className="text-base font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
             <Globe className="h-3.5 w-3.5" />
-            Provider
+            {t('channels.addDrawer.provider')}
           </label>
           <select
             value={providerId}
@@ -213,7 +217,7 @@ function AddChannelDrawer({
             required
             className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-md text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
           >
-            <option value="">Select a provider...</option>
+            <option value="">{t('channels.addDrawer.selectProvider')}</option>
             {providers?.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -224,7 +228,7 @@ function AddChannelDrawer({
         <div className="space-y-1.5">
           <label className="text-base font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
             <Radio className="h-3.5 w-3.5" />
-            Channel Name
+            {t('channels.addDrawer.channelName')}
           </label>
           <div className="relative">
             <input
@@ -232,7 +236,7 @@ function AddChannelDrawer({
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              placeholder="e.g. openai-primary, anthropic-failover"
+              placeholder={t('channels.addDrawer.channelNamePlaceholder')}
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-md font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
           </div>
@@ -242,7 +246,7 @@ function AddChannelDrawer({
         <div className="space-y-1.5">
           <label className="text-base font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
             <Key className="h-3.5 w-3.5" />
-            API Key
+            {t('channels.addDrawer.apiKey')}
           </label>
           <div className="relative">
             <input
@@ -261,8 +265,8 @@ function AddChannelDrawer({
         <div className="space-y-1.5">
           <label className="text-base font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
             <Hash className="h-3.5 w-3.5" />
-            Priority
-            <span className="text-base-content/20 normal-case font-normal tracking-normal text-base">(lower = higher priority)</span>
+            {t('channels.addDrawer.priority')}
+            <span className="text-base-content/20 normal-case font-normal tracking-normal text-base">{t('channels.addDrawer.priorityHint')}</span>
           </label>
           <div className="relative">
             <input
@@ -280,8 +284,8 @@ function AddChannelDrawer({
         <div className="space-y-1.5">
           <label className="text-base font-semibold uppercase tracking-wider text-base-content/50 flex items-center gap-1.5">
             <Scale className="h-3.5 w-3.5" />
-            Weight
-            <span className="text-base-content/20 normal-case font-normal tracking-normal text-base">(higher = more traffic)</span>
+            {t('channels.addDrawer.weight')}
+            <span className="text-base-content/20 normal-case font-normal tracking-normal text-base">{t('channels.addDrawer.weightHint')}</span>
           </label>
           <div className="relative">
             <input
@@ -317,8 +321,8 @@ function AddChannelDrawer({
         {/* Enabled */}
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <span className="text-md font-medium text-base-content">Enabled</span>
-            <p className="text-base text-base-content/40">Channels must be enabled to receive traffic</p>
+            <span className="text-md font-medium text-base-content">{t('channels.addDrawer.enabled')}</span>
+            <p className="text-base text-base-content/40">{t('channels.addDrawer.enabledHint')}</p>
           </div>
           <Toggle checked={enabled} onChange={setEnabled} />
         </div>
@@ -331,10 +335,10 @@ function AddChannelDrawer({
             loading={isPending}
             className="flex-1"
           >
-            Create Channel
+            {t('channels.addDrawer.createChannel')}
           </Button>
           <Button type="button" variant="ghost" onClick={handleClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
         </div>
       </form>
@@ -351,6 +355,7 @@ interface ChannelRowProps {
 
 function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
   const testMutation = useTestChannel();
+  const { t } = useTranslation();
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
   useEffect(() => {
@@ -366,15 +371,15 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
       onSuccess: (result) => {
         if (result.success) {
           setTestStatus('success');
-          toast.success(`Channel OK — ${result.latency_ms}ms (model: ${result.model})`);
+          toast.success(i18n.t('channels.row.testOk', { latency: result.latency_ms, model: result.model }));
         } else {
           setTestStatus('error');
-          toast.error(`Channel test failed: ${result.error ?? 'Unknown error'}`);
+          toast.error(i18n.t('channels.row.testFailed', { error: result.error ?? i18n.t('channels.row.unknownError') }));
         }
       },
       onError: (err) => {
         setTestStatus('error');
-        toast.error(getErrorMessage(err, 'Channel test failed'));
+        toast.error(getErrorMessage(err, i18n.t('channels.row.testFailedShort')));
       },
     });
   };
@@ -455,7 +460,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
               )}
             </div>
           ) : (
-            <span className="text-base text-base-content/25">no models</span>
+            <span className="text-base text-base-content/25">{t('channels.row.noModels')}</span>
           )}
         </div>
 
@@ -467,7 +472,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
               <div className="flex items-center gap-1.5">
                 <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${available ? 'bg-success' : 'bg-base-content/20'}`} />
                 <span className={`text-sm font-semibold ${available ? 'text-success/80' : 'text-base-content/35'}`}>
-                  {available ? 'Available' : 'Outside Hours'}
+                  {available ? t('channels.row.available') : t('channels.row.outsideHours')}
                 </span>
               </div>
               {channel.available_hours.map((slot, i) => (
@@ -496,7 +501,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
             channel.enabled ? 'text-success/80' : 'text-base-content/30'
           }`}
         >
-          {channel.enabled ? 'Active' : 'Off'}
+          {channel.enabled ? t('channels.row.active') : t('channels.row.off')}
         </div>
 
         {/* Quick actions */}
@@ -516,14 +521,14 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
             {testStatus === 'success' && <Check className="h-3 w-3" />}
             {testStatus === 'error' && <X className="h-3 w-3" />}
             {testStatus === 'idle' && <Zap className="h-3 w-3" />}
-            {testStatus === 'loading' ? 'Testing' : testStatus === 'success' ? 'OK' : testStatus === 'error' ? 'Fail' : 'Test'}
+            {testStatus === 'loading' ? t('channels.row.testing') : testStatus === 'success' ? t('channels.row.ok') : testStatus === 'error' ? t('channels.row.fail') : t('channels.row.test')}
           </button>
           <Link
             to={`/admin/channels/${channel.id}`}
             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-md font-medium text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 transition-all duration-100 border border-transparent hover:border-base-300/40"
           >
             <Wifi className="h-3 w-3" />
-            Configure
+            {t('channels.row.configure')}
           </Link>
         </div>
       </div>
@@ -533,6 +538,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
 
 // ── Empty State ───────────────────────────────────────────────────────────────
 function EmptyState({ onAddClick }: { onAddClick: () => void }) {
+  const { t } = useTranslation();
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}
@@ -552,9 +558,9 @@ function EmptyState({ onAddClick }: { onAddClick: () => void }) {
         </div>
       </div>
 
-      <h3 className="text-lg font-semibold text-base-content/50 mb-1.5">No channels configured</h3>
+      <h3 className="text-lg font-semibold text-base-content/50 mb-1.5">{t('channels.empty.title')}</h3>
       <p className="text-md text-base-content/25 mb-8 text-center max-w-xs leading-relaxed">
-        Channels connect your providers to route traffic through the gateway.
+        {t('channels.empty.description')}
       </p>
 
       <button
@@ -562,7 +568,7 @@ function EmptyState({ onAddClick }: { onAddClick: () => void }) {
         className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-accent/10 hover:bg-accent/15 border border-accent/20 text-accent text-md font-semibold transition-all duration-200 cursor-pointer"
       >
         <Plus className="h-4 w-4" />
-        Add First Channel
+        {t('channels.empty.addFirst')}
       </button>
     </motion.div>
   );
@@ -570,6 +576,7 @@ function EmptyState({ onAddClick }: { onAddClick: () => void }) {
 
 // ── Stats Bar ─────────────────────────────────────────────────────────────────
 function StatsBar({ channels }: { channels: Channel[] }) {
+  const { t } = useTranslation();
   const total = channels.length;
   const active = channels.filter(c => c.enabled).length;
   const disabled = total - active;
@@ -582,15 +589,15 @@ function StatsBar({ channels }: { channels: Channel[] }) {
       className="grid grid-cols-3 gap-3 mb-7"
     >
       <div className="rounded-xl border border-base-300/50 bg-base-100/50 px-4 py-3">
-        <div className="text-base uppercase tracking-widest text-base-content/30 font-semibold mb-1">Total Channels</div>
+        <div className="text-base uppercase tracking-widest text-base-content/30 font-semibold mb-1">{t('channels.stats.totalChannels')}</div>
         <div className="text-xl font-bold text-base-content font-mono">{total}</div>
       </div>
       <div className="rounded-xl border border-success/20 bg-success/5 px-4 py-3">
-        <div className="text-base uppercase tracking-widest text-success/70 font-semibold mb-1">Active</div>
+        <div className="text-base uppercase tracking-widest text-success/70 font-semibold mb-1">{t('channels.stats.active')}</div>
         <div className="text-xl font-bold text-success font-mono">{active}</div>
       </div>
       <div className="rounded-xl border border-base-300/50 bg-base-100/50 px-4 py-3">
-        <div className="text-base uppercase tracking-widest text-base-content/30 font-semibold mb-1">Disabled</div>
+        <div className="text-base uppercase tracking-widest text-base-content/30 font-semibold mb-1">{t('channels.stats.disabled')}</div>
         <div className="text-xl font-bold text-base-content/40 font-mono">{disabled}</div>
       </div>
     </motion.div>
@@ -601,6 +608,7 @@ function StatsBar({ channels }: { channels: Channel[] }) {
 export default function Channels() {
   const { data: channels, isLoading } = useAllChannels();
   const { data: providers } = useProviders();
+  const { t } = useTranslation();
   const [isAdding, setIsAdding] = useState(false);
 
   const getProviderName = (providerId: string) =>
@@ -611,7 +619,7 @@ export default function Channels() {
       <div className="flex items-center justify-center py-24">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 rounded-full border-2 border-accent/30 border-t-accent animate-spin" />
-          <span className="text-md text-base-content/35 font-medium">Loading channels...</span>
+          <span className="text-md text-base-content/35 font-medium">{t('channels.loading')}</span>
         </div>
       </div>
     );
@@ -631,7 +639,7 @@ export default function Channels() {
       >
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-xl font-bold tracking-tight text-base-content">Channels</h1>
+            <h1 className="text-xl font-bold tracking-tight text-base-content">{t('channels.title')}</h1>
             {totalChannels > 0 && (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-base font-bold uppercase tracking-widest bg-base-200/70 text-base-content/40 border border-base-300/50">
                 {totalChannels}
@@ -640,8 +648,8 @@ export default function Channels() {
           </div>
           <p className="text-md text-base-content/35">
             {totalChannels === 0
-              ? 'Configure provider failover endpoints'
-              : `${activeChannels} active · ${totalChannels - activeChannels} disabled`}
+              ? t('channels.description')
+              : t('channels.descriptionCount', { active: activeChannels, disabled: totalChannels - activeChannels })}
           </p>
         </div>
 
@@ -658,7 +666,7 @@ export default function Channels() {
                 size="sm"
                 onClick={() => setIsAdding(true)}
               >
-                Add Channel
+                {t('channels.addChannel')}
               </Button>
             </motion.div>
           )}

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import {
   Search,
@@ -22,6 +23,7 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 
 export default function Logs() {
   const reducedMotion = useReducedMotion();
+  const { t } = useTranslation();
 
   const [since, setSince] = useState('');
   const [until, setUntil] = useState('');
@@ -73,16 +75,16 @@ export default function Logs() {
         className="mb-6 pt-8 flex items-center justify-between"
       >
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-base-content">Audit Logs</h1>
+          <h1 className="text-3xl font-black tracking-tight text-base-content">{t('logs.title')}</h1>
           <p className="text-base text-base-content/50 mt-1">
-            API request history with full request/response bodies
+            {t('logs.description')}
           </p>
         </div>
         {data?.total != null && (
           <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-base-300/40 bg-base-100 backdrop-blur-sm">
             <FileText className="h-4 w-4 text-base-content/40" />
             <span className="mono text-sm font-medium">{data.total.toLocaleString()}</span>
-            <span className="text-xs text-base-content/40">records</span>
+            <span className="text-xs text-base-content/40">{t('logs.records')}</span>
           </div>
         )}
       </motion.div>
@@ -93,7 +95,7 @@ export default function Logs() {
           <div className="px-5 py-3 border-b border-base-300/60 bg-base-100/60 flex items-center justify-between">
             <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25 flex items-center gap-1.5">
               <Filter className="h-3 w-3" />
-              Filters
+              {t('logs.filters')}
               {filterCount > 0 && (
                 <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] font-bold">
                   {filterCount}
@@ -107,7 +109,7 @@ export default function Logs() {
                 icon={<RotateCcw className="h-3.5 w-3.5" />}
                 onClick={clearFilters}
               >
-                Clear
+                {t('logs.clear')}
               </Button>
             )}
           </div>
@@ -115,7 +117,7 @@ export default function Logs() {
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5">
                 <Clock className="h-3 w-3 inline mr-1" />
-                From
+                {t('logs.from')}
               </label>
               <input
                 type="date"
@@ -127,7 +129,7 @@ export default function Logs() {
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5">
                 <Clock className="h-3 w-3 inline mr-1" />
-                To
+                {t('logs.to')}
               </label>
               <input
                 type="date"
@@ -138,14 +140,14 @@ export default function Logs() {
             </div>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5">
-                API Key
+                {t('logs.apiKey')}
               </label>
               <select
                 value={keyFilter}
                 onChange={(e) => { setKeyFilter(e.target.value); setPage(1); }}
                 className="h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
               >
-                <option value="">All Keys</option>
+                <option value="">{t('logs.allKeys')}</option>
                 {keys?.items?.map((k) => (
                   <option key={k.id} value={k.id}>{k.name}</option>
                 ))}
@@ -167,16 +169,16 @@ export default function Logs() {
               <table className="table table-sm">
                 <thead>
                   <tr className="border-b border-base-300/40">
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Time</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Model</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Channel</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Protocol</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Stream</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Status</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Latency</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Input</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Output</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Actions</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.time')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.model')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.channel')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.protocol')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.stream')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.status')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.latency')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.input')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.output')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -184,8 +186,8 @@ export default function Logs() {
                     <tr>
                       <td colSpan={10} className="text-center py-12 text-base-content/30">
                         <Search className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                        <div>No logs found</div>
-                        {hasFilters && <div className="text-xs mt-1">Try adjusting your filters</div>}
+                        <div>{t('logs.empty.title')}</div>
+                        {hasFilters && <div className="text-xs mt-1">{t('logs.empty.tryAdjusting')}</div>}
                       </td>
                     </tr>
                   )}
@@ -209,7 +211,7 @@ export default function Logs() {
                       </td>
                       <td>
                         {log.stream
-                          ? <Badge variant="blue">stream</Badge>
+                          ? <Badge variant="blue">{t('logs.stream')}</Badge>
                           : <span className="text-base-content/30">-</span>}
                       </td>
                       <td>
@@ -234,7 +236,7 @@ export default function Logs() {
                           className="btn btn-ghost btn-xs gap-1 text-primary"
                         >
                           <FileText className="h-3.5 w-3.5" />
-                          View
+                          {t('logs.table.view')}
                         </button>
                       </td>
                     </tr>
@@ -247,7 +249,7 @@ export default function Logs() {
           {totalPages > 1 && (
             <div className="mt-4 flex items-center justify-between text-sm">
               <span className="text-xs text-base-content/40 mono">
-                {data?.total ?? 0} total
+                {t('logs.total', { count: data?.total ?? 0 })}
               </span>
               <div className="join">
                 <Button
@@ -257,7 +259,7 @@ export default function Logs() {
                   disabled={page <= 1}
                   onClick={() => setPage(page - 1)}
                 >
-                  Previous
+                  {t('usage.pagination.previous')}
                 </Button>
                 <span className="px-3 flex items-center text-sm text-base-content/60 mono">
                   {page} / {totalPages}
@@ -268,7 +270,7 @@ export default function Logs() {
                   disabled={page >= totalPages}
                   onClick={() => setPage(page + 1)}
                 >
-                  Next
+                  {t('usage.pagination.next')}
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -281,7 +283,7 @@ export default function Logs() {
       <Drawer
         open={!!selectedLogId}
         onClose={() => setSelectedLogId(null)}
-        title="Log Detail"
+        title={t('logs.detail.title')}
         width={720}
       >
         {isLoadingDetail && (
@@ -295,32 +297,32 @@ export default function Logs() {
             <div className="rounded-xl border border-base-300/40 bg-base-100 overflow-hidden">
               <div className="px-4 py-3 border-b border-base-300/60 bg-base-100/60">
                 <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25">
-                  REQUEST DETAILS
+                  {t('logs.detail.requestDetails').toUpperCase()}
                 </span>
               </div>
               <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="rounded-lg bg-base-200/60 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Time</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('logs.detail.time')}</div>
                   <div className="mono text-[13px]">{new Date(selectedLog.created_at).toLocaleString()}</div>
                 </div>
                 <div className="rounded-lg bg-base-200/60 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Model</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('logs.detail.model')}</div>
                   <div className="mono text-[13px] font-medium">{selectedLog.model_name}</div>
                 </div>
                 <div className="rounded-lg bg-base-200/60 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Protocol</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('logs.detail.protocol')}</div>
                   <Badge variant={selectedLog.protocol === 'openai' ? 'blue' : 'purple'}>
                     {selectedLog.protocol}
                   </Badge>
                 </div>
                 <div className="rounded-lg bg-base-200/60 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Stream</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('logs.detail.stream')}</div>
                   {selectedLog.stream
-                    ? <Badge variant="blue">stream</Badge>
+                    ? <Badge variant="blue">{t('logs.stream')}</Badge>
                     : <span className="text-base-content/30">-</span>}
                 </div>
                 <div className="rounded-lg bg-base-200/60 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Status</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('logs.detail.status')}</div>
                   <Badge
                     variant={
                       selectedLog.status_code < 400
@@ -334,23 +336,23 @@ export default function Logs() {
                   </Badge>
                 </div>
                 <div className="rounded-lg bg-base-200/60 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Latency</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('logs.detail.latency')}</div>
                   <div className="mono text-[13px]">{selectedLog.latency_ms}ms</div>
                 </div>
                 <div className="rounded-lg bg-base-200/60 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Tokens</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('logs.detail.tokens')}</div>
                   <div className="mono text-[13px]">
-                    {selectedLog.input_tokens ?? 0} in / {selectedLog.output_tokens ?? 0} out
+                    {t('logs.detail.tokenSummary', { input: selectedLog.input_tokens ?? 0, output: selectedLog.output_tokens ?? 0 })}
                   </div>
                 </div>
                 <div className="rounded-lg bg-base-200/60 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Provider</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('logs.detail.provider')}</div>
                   <div className="mono text-[13px] text-base-content/70">
                     {selectedLog.provider_id.slice(0, 8)}…
                   </div>
                 </div>
                 <div className="rounded-lg bg-base-200/60 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">Channel</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('logs.detail.channel')}</div>
                   <div className="mono text-[13px] text-base-content/70">
                     {selectedLog.channel_name ?? '-'}
                   </div>
@@ -363,35 +365,35 @@ export default function Logs() {
               <div className="rounded-xl border border-base-300/40 bg-base-100 overflow-hidden">
                 <div className="px-4 py-3 border-b border-base-300/60 bg-base-100/60">
                   <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25">
-                    ROUTING
+                    {t('logs.detail.routing').toUpperCase()}
                   </span>
                 </div>
                 <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {selectedLog.request_path && (
                     <div>
-                      <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">Request Path</div>
+                      <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">{t('logs.detail.requestPath')}</div>
                       <div className="mono text-[13px] font-medium">{selectedLog.request_path}</div>
                     </div>
                   )}
                   {selectedLog.upstream_url && (
                     <div>
-                      <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">Upstream URL</div>
+                      <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">{t('logs.detail.upstreamUrl')}</div>
                       <div className="mono text-[13px] text-wrap break-all">{selectedLog.upstream_url}</div>
                     </div>
                   )}
                   {selectedLog.original_model && selectedLog.original_model !== selectedLog.model_name && (
                     <>
                       <div>
-                        <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">Original Model</div>
+                        <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">{t('logs.detail.originalModel')}</div>
                         <div className="mono text-[13px]">{selectedLog.original_model}</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">Upstream Model</div>
+                        <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">{t('logs.detail.upstreamModel')}</div>
                         <div className="mono text-[13px]">{selectedLog.upstream_model ?? selectedLog.model_name}</div>
                       </div>
                       {selectedLog.model_override_reason && (
                         <div className="sm:col-span-2">
-                          <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">Override Reason</div>
+                          <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-0.5">{t('logs.detail.overrideReason')}</div>
                           <div className="mono text-[13px]">{selectedLog.model_override_reason}</div>
                         </div>
                       )}
@@ -406,19 +408,19 @@ export default function Logs() {
               <div className="rounded-xl border border-base-300/40 bg-base-100 overflow-hidden">
                 <div className="px-4 py-3 border-b border-base-300/60 bg-base-100/60">
                   <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25">
-                    HEADERS
+                    {t('logs.detail.headers').toUpperCase()}
                   </span>
                 </div>
                 <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {selectedLog.request_headers && (
                     <div>
-                      <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-2">Request</div>
+                      <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-2">{t('logs.detail.request')}</div>
                       <JsonViewer data={selectedLog.request_headers} />
                     </div>
                   )}
                   {selectedLog.response_headers && (
                     <div>
-                      <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-2">Response</div>
+                      <div className="text-[10px] text-base-content/40 uppercase tracking-wider mb-2">{t('logs.detail.response')}</div>
                       <JsonViewer data={selectedLog.response_headers} />
                     </div>
                   )}
@@ -430,7 +432,7 @@ export default function Logs() {
             <div className="rounded-xl border border-base-300/40 bg-base-100 overflow-hidden">
               <div className="px-4 py-3 border-b border-base-300/60 bg-base-100/60">
                 <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25">
-                  REQUEST BODY
+                  {t('logs.detail.requestBody').toUpperCase()}
                 </span>
               </div>
               <div className="p-4">
@@ -442,7 +444,7 @@ export default function Logs() {
             <div className="rounded-xl border border-base-300/40 bg-base-100 overflow-hidden">
               <div className="px-4 py-3 border-b border-base-300/60 bg-base-100/60">
                 <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25">
-                  RESPONSE BODY
+                  {t('logs.detail.responseBody').toUpperCase()}
                 </span>
               </div>
               <div className="p-4">

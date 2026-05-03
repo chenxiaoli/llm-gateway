@@ -52,6 +52,22 @@ jobs:
   backend-test:
     needs: frontend-build
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: llm_gateway_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://test:test@localhost/llm_gateway_test
     steps:
       - uses: actions/checkout@v4
 
@@ -65,13 +81,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-sqlx
-        run: cargo install sqlx-cli --locked
-
-      - name: Create database for sqlx
-        run: mkdir -p data && touch data/gateway.db
+        run: cargo install sqlx-cli --no-default-features --features postgres --locked
 
       - name: Run sqlx prepare
-        run: DATABASE_URL=sqlite:data/gateway.db cargo sqlx prepare --workspace
+        run: DATABASE_URL=postgresql://test:test@localhost/llm_gateway_test cargo sqlx prepare --workspace
 
       - name: Run tests
         run: cargo test --workspace

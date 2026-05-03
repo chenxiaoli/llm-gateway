@@ -1,5 +1,6 @@
 import { MessageSquare, DollarSign, Zap, TrendingUp, Activity, Server, Network, Users, Cpu, KeyRound, ArrowRight, Clock, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useUsageSummary, useChannelUsageSummary } from '../hooks/useUsage';
 import { useLogs } from '../hooks/useLogs';
 import { useProviders } from '../hooks/useProviders';
@@ -25,7 +26,7 @@ function startOfMonth() {
   return d.toISOString();
 }
 
-// ── Metric Card ───��──────────────────────────────────────────────────────────
+// ── Metric Card ──────────────────────────────────────────────────────────────
 function MetricCard({ label, value, icon, sub, index }: {
   label: string;
   value: string;
@@ -64,6 +65,7 @@ function StatusPill({ icon, label, value, unit }: { icon: React.ReactNode; label
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
 
@@ -109,10 +111,10 @@ export default function AdminDashboard() {
         className="mb-8 pt-8"
       >
         <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
-          Admin Dashboard
+          {t('adminDashboard.title')}
         </h1>
         <p className="text-base text-base-content/50">
-          System overview and real-time gateway metrics
+          {t('adminDashboard.description')}
         </p>
       </motion.div>
 
@@ -126,35 +128,35 @@ export default function AdminDashboard() {
         <div className="p-5 flex flex-wrap items-center gap-6">
           <div className="flex items-center gap-3">
             <span className="w-2 h-2 rounded-full bg-success shadow-[0_0_8px_rgba(6,214,160,0.5)]" />
-            <span className="text-sm font-semibold text-base-content/70">System Online</span>
+            <span className="text-sm font-semibold text-base-content/70">{t('adminDashboard.systemOnline')}</span>
           </div>
           {systemInfo && (
             <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-base-content/40">
               <span>{systemInfo.database_driver}</span>
-              <span>timeout {systemInfo.upstream_timeout_secs}s</span>
-              {systemInfo.audit_retention_days && <span>audit {systemInfo.audit_retention_days}d</span>}
+              <span>{t('adminDashboard.timeout', { seconds: systemInfo.upstream_timeout_secs })}</span>
+              {systemInfo.audit_retention_days && <span>{t('adminDashboard.auditRetention', { days: systemInfo.audit_retention_days })}</span>}
             </div>
           )}
           <div className="ml-auto flex items-center gap-4">
             <button onClick={() => navigate('/admin/providers')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               <Server className="h-3.5 w-3.5" />
-              {activeProviders}/{providers?.length ?? 0} providers
+              {t('adminDashboard.providersCount', { active: activeProviders, total: providers?.length ?? 0 })}
             </button>
             <button onClick={() => navigate('/admin/channels')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               <Network className="h-3.5 w-3.5" />
-              {activeChannels}/{channels?.length ?? 0} channels
+              {t('adminDashboard.channelsCount', { active: activeChannels, total: channels?.length ?? 0 })}
             </button>
             <button onClick={() => navigate('/admin/models')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               <Cpu className="h-3.5 w-3.5" />
-              {models?.length ?? 0} models
+              {t('adminDashboard.modelsCount', { count: models?.length ?? 0 })}
             </button>
             <button onClick={() => navigate('/admin/users')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               <Users className="h-3.5 w-3.5" />
-              {users?.total ?? 0} users
+              {t('adminDashboard.usersCount', { count: users?.total ?? 0 })}
             </button>
             <button onClick={() => navigate('/console/keys')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               <KeyRound className="h-3.5 w-3.5" />
-              {keys?.total ?? 0} keys
+              {t('adminDashboard.keysCount', { count: keys?.total ?? 0 })}
             </button>
           </div>
         </div>
@@ -163,30 +165,30 @@ export default function AdminDashboard() {
       {/* Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <MetricCard
-          label="Today's Requests"
+          label={t('adminDashboard.stats.todayRequests')}
           value={todayRequests.toLocaleString()}
           icon={<MessageSquare className="h-4 w-4 text-blue-400" />}
-          sub={`${todayTokens.toLocaleString()} tokens`}
+          sub={t('adminDashboard.stats.todayTokensSub', { count: todayTokens.toLocaleString() })}
           index={0}
         />
         <MetricCard
-          label="Today's Cost"
+          label={t('adminDashboard.stats.todayCost')}
           value={`$${todayCost.toFixed(4)}`}
           icon={<DollarSign className="h-4 w-4 text-emerald-400" />}
           index={1}
         />
         <MetricCard
-          label="Monthly Cost"
+          label={t('adminDashboard.stats.monthlyCost')}
           value={`$${monthCost.toFixed(2)}`}
           icon={<TrendingUp className="h-4 w-4 text-amber-400" />}
-          sub={`${(monthSummary?.reduce((s, r) => s + r.request_count, 0) ?? 0).toLocaleString()} requests`}
+          sub={t('adminDashboard.stats.monthlyRequestsSub', { count: (monthSummary?.reduce((s, r) => s + r.request_count, 0) ?? 0).toLocaleString() })}
           index={2}
         />
         <MetricCard
-          label="Active Models"
+          label={t('adminDashboard.stats.activeModels')}
           value={String(models?.length ?? 0)}
           icon={<Zap className="h-4 w-4 text-violet-400" />}
-          sub={`${topModels.length} with traffic today`}
+          sub={t('adminDashboard.stats.trafficTodaySub', { count: topModels.length })}
           index={3}
         />
       </div>
@@ -198,14 +200,14 @@ export default function AdminDashboard() {
         transition={reducedMotion ? { duration: 0 } : { duration: 0.35, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
         className="flex flex-wrap gap-3 mb-8"
       >
-        <StatusPill icon={<Activity className="h-4 w-4" />} label="Avg Latency" value={String(avgLatency)} unit="ms" />
+        <StatusPill icon={<Activity className="h-4 w-4" />} label={t('adminDashboard.stats.avgLatency')} value={String(avgLatency)} unit={t('adminDashboard.units.ms')} />
         <StatusPill
           icon={errorRate > 5 ? <AlertTriangle className="h-4 w-4 text-amber-400" /> : <TrendingUp className="h-4 w-4" />}
-          label="Error Rate"
+          label={t('adminDashboard.stats.errorRate')}
           value={String(errorRate)}
-          unit="%"
+          unit={t('adminDashboard.units.percent')}
         />
-        <StatusPill icon={<Clock className="h-4 w-4" />} label="Recent" value={String(recentLogs?.items?.length ?? 0)} unit="reqs" />
+        <StatusPill icon={<Clock className="h-4 w-4" />} label={t('adminDashboard.stats.recent')} value={String(recentLogs?.items?.length ?? 0)} unit={t('adminDashboard.units.reqs')} />
       </motion.div>
 
       {/* Three columns: Top Models + Channel Usage + Recent Requests */}
@@ -213,14 +215,14 @@ export default function AdminDashboard() {
         {/* Top Models */}
         <div className="lg:col-span-1">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold text-base-content/70">Top Models Today</h2>
+            <h2 className="text-sm font-bold text-base-content/70">{t('adminDashboard.topModelsToday')}</h2>
             <button onClick={() => navigate('/admin/models')} className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
-              View all <ArrowRight className="h-3 w-3" />
+              {t('adminDashboard.viewAll')} <ArrowRight className="h-3 w-3" />
             </button>
           </div>
           <div className="rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden">
             {topModels.length === 0 ? (
-              <div className="p-8 text-center text-sm text-base-content/40">No traffic today</div>
+              <div className="p-8 text-center text-sm text-base-content/40">{t('adminDashboard.noTrafficToday')}</div>
             ) : (
               <div className="divide-y divide-base-300/20">
                 {topModels.map((m, i) => {
@@ -249,14 +251,14 @@ export default function AdminDashboard() {
         {/* Channel Usage */}
         <div className="lg:col-span-1">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold text-base-content/70">Channel Usage Today</h2>
+            <h2 className="text-sm font-bold text-base-content/70">{t('adminDashboard.channelUsageToday')}</h2>
             <button onClick={() => navigate('/admin/channels')} className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
-              View all <ArrowRight className="h-3 w-3" />
+              {t('adminDashboard.viewAll')} <ArrowRight className="h-3 w-3" />
             </button>
           </div>
           <div className="rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden">
             {channelStats.length === 0 ? (
-              <div className="p-8 text-center text-sm text-base-content/40">No traffic today</div>
+              <div className="p-8 text-center text-sm text-base-content/40">{t('adminDashboard.noTrafficToday')}</div>
             ) : (
               <div className="divide-y divide-base-300/20">
                 {channelStats.map((c) => {
@@ -265,14 +267,14 @@ export default function AdminDashboard() {
                   return (
                     <div key={c.channel_id ?? '_none'} className="px-4 py-3">
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="font-mono text-sm font-medium text-base-content/70 truncate">{c.channel_name ?? 'Direct'}</span>
+                        <span className="font-mono text-sm font-medium text-base-content/70 truncate">{c.channel_name ?? t('adminDashboard.direct')}</span>
                         <span className="font-mono text-xs font-bold">{c.total_requests.toLocaleString()}</span>
                       </div>
                       <div className="h-1 rounded-full bg-base-200/60 overflow-hidden mb-1.5">
                         <div className="h-full rounded-full bg-blue-400/50" style={{ width: `${pct}%` }} />
                       </div>
                       <div className="flex items-center gap-3 text-[10px] font-mono text-base-content/35">
-                        <span>{((c.total_input_tokens ?? 0) + (c.total_output_tokens ?? 0)).toLocaleString()} tokens</span>
+                        <span>{((c.total_input_tokens ?? 0) + (c.total_output_tokens ?? 0)).toLocaleString()} {t('adminDashboard.units.tokens')}</span>
                         <span>${c.total_cost.toFixed(4)}</span>
                       </div>
                     </div>
@@ -286,9 +288,9 @@ export default function AdminDashboard() {
         {/* Recent Requests */}
         <div className="lg:col-span-1">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-bold text-base-content/70">Recent Requests</h2>
+            <h2 className="text-sm font-bold text-base-content/70">{t('adminDashboard.recentRequests')}</h2>
             <button onClick={() => navigate('/admin/logs')} className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
-              View all <ArrowRight className="h-3 w-3" />
+              {t('adminDashboard.viewAll')} <ArrowRight className="h-3 w-3" />
             </button>
           </div>
           <div className="rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden">
@@ -303,12 +305,12 @@ export default function AdminDashboard() {
                 <table className="table table-sm">
                   <thead>
                     <tr className="border-b border-base-300/40">
-                      <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Time</th>
-                      <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Model</th>
-                      <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Protocol</th>
-                      <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Status</th>
-                      <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Tokens</th>
-                      <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Latency</th>
+                      <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('adminDashboard.table.time')}</th>
+                      <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('adminDashboard.table.model')}</th>
+                      <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('adminDashboard.table.protocol')}</th>
+                      <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('adminDashboard.table.status')}</th>
+                      <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('adminDashboard.table.tokens')}</th>
+                      <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('adminDashboard.table.latency')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -329,7 +331,7 @@ export default function AdminDashboard() {
                     {(!recentLogs?.items?.length) && (
                       <tr>
                         <td colSpan={6} className="text-center py-16 text-base-content/40 text-sm">
-                          No requests yet
+                          {t('adminDashboard.noRequests')}
                         </td>
                       </tr>
                     )}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { changePassword } from '../api/auth';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
@@ -11,6 +12,7 @@ import { getErrorMessage } from '../api/client';
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 export default function ChangePassword() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
   const [currentPw, setCurrentPw] = useState('');
@@ -21,20 +23,20 @@ export default function ChangePassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPw !== confirmPw) {
-      toast.error('Passwords do not match');
+      toast.error(t('auth.errorMismatch'));
       return;
     }
     if (newPw.length < 8) {
-      toast.error('Password must be at least 8 characters');
+      toast.error(t('auth.errorShort'));
       return;
     }
     setChangingPw(true);
     try {
       await changePassword({ current_password: currentPw, new_password: newPw });
-      toast.success('Password changed');
+      toast.success(t('auth.successChanged'));
       navigate('/console/account');
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to change password'));
+      toast.error(getErrorMessage(err, t('auth.errorChange')));
     } finally {
       setChangingPw(false);
     }
@@ -49,10 +51,10 @@ export default function ChangePassword() {
         className="mb-8 pt-8"
       >
         <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
-          Change Password
+          {t('auth.changePassword')}
         </h1>
         <p className="text-base text-base-content/50">
-          Update your account password
+          {t('auth.updateAccountPassword')}
         </p>
       </motion.div>
 
@@ -64,12 +66,12 @@ export default function ChangePassword() {
       >
         <div className="flex items-center gap-2 mb-5">
           <Lock className="h-5 w-5 text-base-content/40" />
-          <h2 className="text-lg font-bold">Set New Password</h2>
+          <h2 className="text-lg font-bold">{t('auth.setNewPassword')}</h2>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
             <label htmlFor="current-pw" className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-              Current Password
+              {t('auth.currentPassword')}
             </label>
             <input
               id="current-pw"
@@ -82,7 +84,7 @@ export default function ChangePassword() {
           </div>
           <div className="space-y-1.5">
             <label htmlFor="new-pw" className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-              New Password
+              {t('auth.newPassword')}
             </label>
             <input
               id="new-pw"
@@ -93,11 +95,11 @@ export default function ChangePassword() {
               minLength={8}
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
-            <p className="text-xs text-base-content/30">Minimum 8 characters</p>
+            <p className="text-xs text-base-content/30">{t('auth.minChars')}</p>
           </div>
           <div className="space-y-1.5">
             <label htmlFor="confirm-pw" className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-              Confirm New Password
+              {t('auth.confirmNewPassword')}
             </label>
             <input
               id="confirm-pw"
@@ -110,10 +112,10 @@ export default function ChangePassword() {
           </div>
           <div className="flex items-center gap-2 pt-2">
             <Button type="submit" loading={changingPw} className="flex-1">
-              Update Password
+              {t('auth.updatePassword')}
             </Button>
             <Button type="button" variant="ghost" onClick={() => navigate('/console/account')}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
         </form>

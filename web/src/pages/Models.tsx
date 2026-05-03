@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAllModels, useCreateGlobalModel, useUpdateGlobalModel } from '../hooks/useModels';
 import { usePricingPolicies } from '../hooks/usePricingPolicies';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -8,7 +9,7 @@ import { Plus, Cpu, Pencil, Sparkles, Radio } from 'lucide-react';
 import type { CreateGlobalModelRequest, ModelWithProvider, PricingPolicy } from '../types';
 import { motion } from 'framer-motion';
 
-// ── Price formatter ────────────────────────────────────────────────────────────
+// ── Price formatter ───────────────��────────────────────────────────────────────
 function formatPrice(val: number | undefined): string {
   if (val === undefined) return '—';
   const UNITS_PER_USD = 100_000_000;
@@ -48,6 +49,7 @@ interface ModelCardProps {
 }
 
 function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardProps) {
+  const { t } = useTranslation();
   const isActive = model.channel_names.length > 0;
   const policy = policies.find(p => p.id === model.pricing_policy_id);
   const billingType = policy?.billing_type ?? '';
@@ -103,7 +105,7 @@ function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardP
                   {model.name}
                 </div>
                 <div className="text-xs mt-0.5 text-base-content/50">
-                  {isActive ? `${model.channel_names.length} channel${model.channel_names.length !== 1 ? 's' : ''} active` : 'No routing'}
+                  {isActive ? t('models.card.channelsActive', { count: model.channel_names.length }) : t('models.card.noRouting')}
                 </div>
               </div>
             </div>
@@ -117,7 +119,7 @@ function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardP
               }
             `}>
               <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-400' : 'bg-base-content/20'}`} />
-              {isActive ? 'Live' : 'Idle'}
+              {isActive ? t('models.card.live') : t('models.card.idle')}
             </div>
           </div>
 
@@ -128,7 +130,7 @@ function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardP
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-3">
               <div className="text-xs font-bold uppercase tracking-widest text-base-content/50">
-                Pricing
+                {t('models.card.pricing')}
               </div>
               <div className="flex-1 h-px bg-base-300/20" />
             </div>
@@ -148,7 +150,7 @@ function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardP
                   </span>
                   {isPerToken && (
                     <span className="text-xs text-base-content/40">
-                      per 1M tokens
+                      {t('models.card.per1mTokens')}
                     </span>
                   )}
                 </div>
@@ -157,13 +159,13 @@ function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardP
                 {isPerToken ? (
                   <div className="grid grid-cols-3 gap-1.5 p-2.5 rounded-xl border bg-base-200/20 border-base-300/20">
                     {[
-                      { label: 'Input', key: 'input_price_1m' },
-                      { label: 'Output', key: 'output_price_1m' },
-                      { label: 'Cache', key: 'cache_read_price_1m' },
+                      { label: t('models.card.input'), key: 'input_price_1m' },
+                      { label: t('models.card.output'), key: 'output_price_1m' },
+                      { label: t('models.card.cache'), key: 'cache_read_price_1m' },
                     ].map(({ label, key }) => {
                       const val = (config as Record<string, unknown>)[key] as number | undefined;
                       return (
-                        <div key={label} className="flex flex-col items-center text-center py-1">
+                        <div key={key} className="flex flex-col items-center text-center py-1">
                           <span className="text-xs font-semibold text-base-content/40 mb-1">
                             {label}
                           </span>
@@ -186,7 +188,7 @@ function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardP
               <div className="flex items-center gap-1.5">
                 <div className="w-1 h-1 rounded-full bg-base-content/25" />
                 <span className="text-sm italic text-base-content/40">
-                  No policy — channel-level pricing
+                  {t('models.card.noPolicy')}
                 </span>
               </div>
             )}
@@ -197,7 +199,7 @@ function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardP
             <div className="mb-4">
               <div className="flex items-center gap-2 mb-3">
                 <div className="text-xs font-bold uppercase tracking-widest text-base-content/50">
-                  Channels
+                  {t('models.card.channels')}
                 </div>
                 <div className="flex-1 h-px bg-base-300/20" />
               </div>
@@ -228,7 +230,7 @@ function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardP
             </div>
             <button
               onClick={() => onEdit(model)}
-              aria-label={`Edit ${model.name}`}
+              aria-label={t('common.edit')}
               className={`
                 flex items-center gap-1.5 min-h-[36px] px-3 py-1.5 rounded-lg text-sm font-medium border
                 transition-all duration-200 cursor-pointer
@@ -238,7 +240,7 @@ function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardP
               `}
             >
               <Pencil className="h-3 w-3" />
-              Edit
+              {t('common.edit')}
             </button>
           </div>
         </div>
@@ -249,6 +251,7 @@ function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardP
 
 // ── Empty State ───────────────────────────────────────────────────────────────
 function EmptyState({ onAddClick, reducedMotion }: { onAddClick: () => void; reducedMotion: boolean }) {
+  const { t } = useTranslation();
   return (
     <motion.div
       initial={reducedMotion ? false : { opacity: 0, y: 24 }}
@@ -271,12 +274,12 @@ function EmptyState({ onAddClick, reducedMotion }: { onAddClick: () => void; red
       </div>
 
       <div className="text-center max-w-sm">
-        <h3 className="text-lg font-bold text-base-content/60 mb-2">No models registered</h3>
+        <h3 className="text-lg font-bold text-base-content/60 mb-2">{t('models.empty.title')}</h3>
         <p className="text-base text-base-content/45 leading-relaxed mb-8">
-          Add AI models to enable request routing through the gateway. Each model can be associated with a pricing policy.
+          {t('models.empty.description')}
         </p>
         <Button variant="primary" size="sm" onClick={onAddClick}>
-          Register First Model
+          {t('models.empty.registerFirst')}
         </Button>
       </div>
     </motion.div>
@@ -296,6 +299,7 @@ function AddModelModal({
   onAdd: (data: CreateGlobalModelRequest) => Promise<void>;
   isPending: boolean;
 }) {
+  const { t } = useTranslation();
   const { data: policies } = usePricingPolicies();
   const [name, setName] = useState('');
   const [pricingPolicyId, setPricingPolicyId] = useState('');
@@ -313,10 +317,10 @@ function AddModelModal({
   };
 
   return (
-    <Modal open={open} onClose={handleClose} title="Register Model">
+    <Modal open={open} onClose={handleClose} title={t('models.addModal.title')}>
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
-          <label htmlFor="model-name" className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Model Name</label>
+          <label htmlFor="model-name" className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('models.addModal.modelName')}</label>
           <div className="relative">
             <input
               id="model-name"
@@ -324,7 +328,7 @@ function AddModelModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
-              placeholder="e.g. gpt-4o, claude-3-5-sonnet"
+              placeholder={t('models.addModal.modelNamePlaceholder')}
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 pl-9 pr-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
             <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/40" />
@@ -332,14 +336,14 @@ function AddModelModal({
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="add-pricing-policy" className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</label>
+          <label htmlFor="add-pricing-policy" className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('models.addModal.pricingPolicy')}</label>
           <select
             id="add-pricing-policy"
             value={pricingPolicyId}
             onChange={(e) => setPricingPolicyId(e.target.value)}
             className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
           >
-            <option value="">No policy (pricing handled at channel level)</option>
+            <option value="">{t('models.addModal.noPolicy')}</option>
             {policies?.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -348,10 +352,10 @@ function AddModelModal({
 
         <div className="flex items-center gap-2 pt-1">
           <Button type="submit" variant="primary" loading={isPending} className="flex-1">
-            Register
+            {t('models.addModal.register')}
           </Button>
           <Button type="button" variant="ghost" onClick={handleClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
         </div>
       </form>
@@ -374,6 +378,7 @@ function EditModelModal({
   onSave: (data: { pricing_policy_id?: string | null }) => Promise<void>;
   isPending: boolean;
 }) {
+  const { t } = useTranslation();
   const { data: policies } = usePricingPolicies();
   const [pricingPolicyId, setPricingPolicyId] = useState('');
 
@@ -392,26 +397,26 @@ function EditModelModal({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={`Edit ${model?.name ?? 'Model'}`}>
+    <Modal open={open} onClose={onClose} title={t('models.editModal.title', { name: model?.name ?? 'Model' })}>
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Model Name</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('models.editModal.modelName')}</label>
           <div className="flex items-center gap-2 h-10 px-3 rounded-lg border border-base-300 bg-base-200/50">
             <Sparkles className="h-4 w-4 text-base-content/40 shrink-0" />
             <span className="text-sm font-mono text-base-content/60 truncate">{model?.name ?? '—'}</span>
-            <span className="ml-auto text-xs text-base-content/30">read-only</span>
+            <span className="ml-auto text-xs text-base-content/30">{t('models.editModal.readOnly')}</span>
           </div>
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="edit-pricing-policy" className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Pricing Policy</label>
+          <label htmlFor="edit-pricing-policy" className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('models.editModal.pricingPolicy')}</label>
           <select
             id="edit-pricing-policy"
             value={pricingPolicyId}
             onChange={(e) => setPricingPolicyId(e.target.value)}
             className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
           >
-            <option value="">No policy</option>
+            <option value="">{t('models.editModal.noPolicy')}</option>
             {policies?.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -420,10 +425,10 @@ function EditModelModal({
 
         <div className="flex items-center gap-2 pt-1">
           <Button type="submit" variant="primary" loading={isPending} className="flex-1">
-            Save Changes
+            {t('models.editModal.saveChanges')}
           </Button>
           <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
         </div>
       </form>
@@ -433,6 +438,7 @@ function EditModelModal({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Models() {
+  const { t } = useTranslation();
   const { data: models, isLoading } = useAllModels();
   const createMutation = useCreateGlobalModel();
   const updateMutation = useUpdateGlobalModel();
@@ -478,12 +484,12 @@ export default function Models() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
-              Models
+              {t('models.title')}
             </h1>
             <p className="text-base text-base-content/50">
               {totalModels === 0
-                ? 'Register AI models to route requests through the gateway'
-                : `${activeModels} live · ${totalModels - activeModels} idle · ${totalPolicies} policy${totalPolicies !== 1 ? 'ies' : ''}`
+                ? t('models.description')
+                : t('models.summary', { active: activeModels, idle: totalModels - activeModels, policies: totalPolicies, count: totalPolicies })
               }
             </p>
           </div>
@@ -493,7 +499,7 @@ export default function Models() {
             onClick={() => setIsAdding(true)}
             size="sm"
           >
-            Add Model
+            {t('models.addModel')}
           </Button>
         </div>
 
@@ -505,9 +511,9 @@ export default function Models() {
             transition={reducedMotion ? { duration: 0 } : { duration: 0.4, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
             className="flex flex-wrap gap-2.5 mt-6"
           >
-            <StatPill label="Total" value={totalModels} />
-            <StatPill label="Live" value={activeModels} accent />
-            <StatPill label="Idle" value={totalModels - activeModels} />
+            <StatPill label={t('models.stats.total')} value={totalModels} />
+            <StatPill label={t('models.stats.live')} value={activeModels} accent />
+            <StatPill label={t('models.stats.idle')} value={totalModels - activeModels} />
           </motion.div>
         )}
       </motion.div>

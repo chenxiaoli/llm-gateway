@@ -3,6 +3,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import '../i18n';
 
 function createTestQueryClient() {
   return new QueryClient({

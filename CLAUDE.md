@@ -36,7 +36,7 @@ npm run test:e2e:ui            # Playwright e2e with UI
 crates/
 ├── gateway/      # Server bootstrap, config, assembles all modules
 ├── api/          # HTTP handlers (Axum) — openai.rs, anthropic.rs, management.rs, middleware.rs
-├── storage/      # SQLite/PostgreSQL storage trait + migrations
+├── storage/      # PostgreSQL storage trait + migrations
 ├── auth/         # API key generation and SHA-256 verification
 ├── ratelimit/    # In-memory sliding window rate limiter
 ├── billing/      # Token/request cost calculation

@@ -4,30 +4,13 @@ import {
   ArrowRight, Terminal, Zap, Shield, BarChart3,
   Sun, Moon, ChevronRight, Layers,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../components/ui/Button';
 import { apiClient, getToken } from '../api/client';
 import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../hooks/useSettings';
 
 type Protocol = 'openai' | 'anthropic';
-
-const steps = [
-  {
-    icon: Layers,
-    title: 'Configure Providers',
-    desc: 'Add upstream LLM providers and set up channels with API keys, models, and routing rules.',
-  },
-  {
-    icon: Zap,
-    title: 'Route Requests',
-    desc: 'Send requests through a single endpoint. The gateway handles protocol translation and load balancing.',
-  },
-  {
-    icon: BarChart3,
-    title: 'Monitor Usage',
-    desc: 'Track costs, latency, and token usage per key. Full audit logs for every request.',
-  },
-];
 
 const codeExamples: Record<Protocol, { curl: { lines: string[]; prompt: string }[]; sdk: string }> = {
   openai: {
@@ -66,6 +49,7 @@ const message = await client.messages.create({
 };
 
 export default function Home() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [version, setVersion] = useState('');
   const [activeProtocol, setActiveProtocol] = useState<Protocol>('openai');
@@ -73,6 +57,24 @@ export default function Home() {
   const { data: settings } = useSettings();
 
   const serverHost = settings?.server_host || 'http://localhost:8080';
+
+  const steps = [
+    {
+      icon: Layers,
+      title: t('home.howItWorks.step1Title'),
+      desc: t('home.howItWorks.step1Desc'),
+    },
+    {
+      icon: Zap,
+      title: t('home.howItWorks.step2Title'),
+      desc: t('home.howItWorks.step2Desc'),
+    },
+    {
+      icon: BarChart3,
+      title: t('home.howItWorks.step3Title'),
+      desc: t('home.howItWorks.step3Desc'),
+    },
+  ];
 
   useEffect(() => {
     apiClient.get<{ version: string }>('/version').then((r) => setVersion(r.data.version));
@@ -85,7 +87,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto h-14 flex items-center justify-between px-6">
           <div className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-content font-bold text-sm">GW</div>
-            <span className="font-semibold text-lg">LLM Gateway</span>
+            <span className="font-semibold text-lg">{t('home.brand')}</span>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -100,7 +102,7 @@ export default function Home() {
               size="sm"
               onClick={() => navigate(getToken() ? '/console/dashboard' : '/console/login')}
             >
-              Dashboard
+              {t('home.dashboard')}
             </Button>
           </div>
         </div>
@@ -111,13 +113,12 @@ export default function Home() {
         <div className="max-w-6xl mx-auto">
           <div className="max-w-2xl">
             <h1 className="text-5xl sm:text-6xl font-bold tracking-tight leading-[1.1] mb-6">
-              One API endpoint
+              {t('home.hero.title1')}
               <br />
-              <span className="text-primary">every LLM provider</span>
+              <span className="text-primary">{t('home.hero.title2')}</span>
             </h1>
             <p className="text-lg text-base-content/55 leading-relaxed mb-8 max-w-lg">
-              A unified gateway that manages keys, enforces rate limits, tracks costs, and proxies
-              requests to OpenAI, Anthropic, and more through a single endpoint.
+              {t('home.hero.description')}
             </p>
             <div className="flex items-center gap-3">
               <Button
@@ -126,14 +127,14 @@ export default function Home() {
                 icon={<ArrowRight className="h-4 w-4" />}
                 onClick={() => navigate(getToken() ? '/console/dashboard' : '/console/login')}
               >
-                Get Started
+                {t('home.hero.getStarted')}
               </Button>
               <Button
                 variant="ghost"
                 size="lg"
                 onClick={() => document.getElementById('quickstart')?.scrollIntoView({ behavior: 'smooth' })}
               >
-                See how it works
+                {t('home.hero.seeHowItWorks')}
               </Button>
             </div>
           </div>
@@ -144,7 +145,7 @@ export default function Home() {
       <section className="py-20 px-6">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-base font-semibold uppercase tracking-widest text-base-content/40 text-center mb-16">
-            How it works
+            {t('home.howItWorks.title')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {steps.map((step, i) => {
@@ -177,7 +178,7 @@ export default function Home() {
       <section id="quickstart" className="py-20 px-6">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-base font-semibold uppercase tracking-widest text-base-content/40 text-center mb-16">
-            Quick Start
+            {t('home.quickStart.title')}
           </h2>
           <div className="max-w-3xl mx-auto">
             {/* Protocol tabs */}
@@ -192,7 +193,7 @@ export default function Home() {
                       : 'text-base-content/50 hover:text-base-content/70'
                   }`}
                 >
-                  {p === 'openai' ? 'OpenAI SDK' : 'Anthropic SDK'}
+                  {p === 'openai' ? t('home.quickStart.openaiSdk') : t('home.quickStart.anthropicSdk')}
                 </button>
               ))}
             </div>
@@ -215,7 +216,7 @@ export default function Home() {
               <div className="px-5 py-4 border-b border-base-300/30">
                 <div className="flex items-center gap-2 mb-3">
                   <Terminal className="h-3.5 w-3.5 text-base-content/30" />
-                  <span className="text-xs font-mono text-base-content/40 uppercase tracking-wider">cURL</span>
+                  <span className="text-xs font-mono text-base-content/40 uppercase tracking-wider">{t('home.quickStart.curl')}</span>
                 </div>
                 <div className="font-mono text-sm leading-relaxed">
                   {codeExamples[activeProtocol].curl.map((block, i) => (
@@ -235,7 +236,7 @@ export default function Home() {
                 <div className="flex items-center gap-2 mb-3">
                   <Shield className="h-3.5 w-3.5 text-base-content/30" />
                   <span className="text-xs font-mono text-base-content/40 uppercase tracking-wider">
-                    {activeProtocol === 'openai' ? 'OpenAI SDK' : 'Anthropic SDK'}
+                    {activeProtocol === 'openai' ? t('home.quickStart.sdkLabel', { sdk: 'OpenAI' }) : t('home.quickStart.sdkLabel', { sdk: 'Anthropic' })}
                   </span>
                 </div>
                 <pre className="font-mono text-sm leading-relaxed text-base-content/60 overflow-x-auto">
@@ -244,9 +245,10 @@ export default function Home() {
               </div>
             </div>
 
-            <p className="mt-6 text-center text-base text-base-content/50">
-              Drop in your existing SDK — just change the <code className="font-mono text-base-content/70 bg-base-300/30 px-1.5 py-0.5 rounded">baseURL</code>
-            </p>
+            <p
+              className="mt-6 text-center text-base text-base-content/50"
+              dangerouslySetInnerHTML={{ __html: t('home.quickStart.dropIn') }}
+            />
           </div>
         </div>
       </section>
@@ -255,9 +257,9 @@ export default function Home() {
       <section className="py-20 px-6">
         <div className="max-w-6xl mx-auto text-center">
           <div className="rounded-2xl border border-base-300/50 bg-base-100 p-12">
-            <h2 className="text-3xl font-bold mb-4">Ready to get started?</h2>
+            <h2 className="text-3xl font-bold mb-4">{t('home.cta.title')}</h2>
             <p className="text-base text-base-content/55 mb-8 max-w-md mx-auto">
-              Set up your gateway in minutes. Configure providers, create API keys, and start routing requests.
+              {t('home.cta.description')}
             </p>
             <div className="flex items-center justify-center gap-3">
               <Button
@@ -266,7 +268,7 @@ export default function Home() {
                 icon={<ArrowRight className="h-4 w-4" />}
                 onClick={() => navigate(getToken() ? '/console/dashboard' : '/console/login')}
               >
-                Go to Dashboard
+                {t('home.cta.goToDashboard')}
               </Button>
               <Button
                 variant="ghost"
@@ -278,7 +280,7 @@ export default function Home() {
                   </svg>
                 }
               >
-                Star on GitHub
+                {t('home.cta.starOnGithub')}
               </Button>
             </div>
           </div>
@@ -289,9 +291,9 @@ export default function Home() {
       <footer className="border-t border-base-300/40 py-8 px-6">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <span className="text-sm text-base-content/40 font-mono">
-            LLM Gateway{version ? ` ${version}` : ''}
+            {t('home.footer.brand')}{version ? ` ${version}` : ''}
           </span>
-          <span className="text-sm text-base-content/30">Open Source</span>
+          <span className="text-sm text-base-content/30">{t('home.footer.openSource')}</span>
         </div>
       </footer>
     </div>

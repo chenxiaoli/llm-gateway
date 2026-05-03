@@ -1,12 +1,11 @@
 [package]
 name = "llm-gateway"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 
 [dependencies]
 llm-gateway-api = { path = "../api" }
-llm-gateway-storage = { path = "../storage", features = ["sqlite", "postgres"] }
-llm-gateway-audit = { path = "../audit" }
+llm-gateway-storage = { path = "../storage" }
 llm-gateway-ratelimit = { path = "../ratelimit" }
 llm-gateway-nats-publisher = { path = "../nats-publisher" }
 tokio = { workspace = true }

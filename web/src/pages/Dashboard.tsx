@@ -1,5 +1,6 @@
 import { MessageSquare, DollarSign, Zap, TrendingUp, Activity, Clock, ArrowRight, Wallet, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useLogs } from '../hooks/useLogs';
 import { useUsageSummary } from '../hooks/useUsage';
 import { useMyBalance } from '../hooks/useAccounts';
@@ -49,7 +50,7 @@ function MetricCard({ label, value, icon, index, reducedMotion }: MetricCardProp
   );
 }
 
-// ── Status Pill ──────────────────────────────────────────────────────────────
+// ── Status Pill ──────────────────────────────────────────���───────────────────
 interface StatusPillProps {
   icon: React.ReactNode;
   label: string;
@@ -69,6 +70,7 @@ function StatusPill({ icon, label, value, unit }: StatusPillProps) {
 
 // ── Main Page ────────────────────────────────────────────────────────────────
 export default function Dashboard() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
   const user = useAuthStore((s) => s.user);
@@ -99,10 +101,10 @@ export default function Dashboard() {
         className="mb-8 pt-8"
       >
         <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
-          Dashboard
+          {t('dashboard.title')}
         </h1>
         <p className="text-base text-base-content/50">
-          Real-time overview of your LLM gateway activity
+          {t('dashboard.description')}
         </p>
       </motion.div>
 
@@ -125,7 +127,7 @@ export default function Dashboard() {
                 }
               </div>
               <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-base-content/50">Account Balance</span>
+                <span className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('dashboard.accountBalance')}</span>
                 <div className="font-mono text-3xl font-bold tracking-tight mt-0.5">
                   ${myBalance.balance.toFixed(4)}
                   <span className="text-sm text-base-content/40 ml-2 font-normal">{myBalance.currency}</span>
@@ -134,14 +136,14 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center gap-3">
               {myBalance.balance <= myBalance.threshold && (
-                <Badge variant="amber">Low Balance</Badge>
+                <Badge variant="amber">{t('dashboard.lowBalance')}</Badge>
               )}
               {user && (
                 <button
                   onClick={() => navigate('/console/account')}
                   className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer"
                 >
-                  View Details
+                  {t('dashboard.viewDetails')}
                   <ArrowRight className="h-3 w-3" />
                 </button>
               )}
@@ -153,28 +155,28 @@ export default function Dashboard() {
       {/* Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <MetricCard
-          label="Today's Requests"
+          label={t('dashboard.stats.todayRequests')}
           value={todayRequests.toLocaleString()}
           icon={<MessageSquare className="h-4 w-4 text-blue-400" />}
           index={0}
           reducedMotion={reducedMotion}
         />
         <MetricCard
-          label="Today's Cost"
+          label={t('dashboard.stats.todayCost')}
           value={`$${todayCost.toFixed(4)}`}
           icon={<DollarSign className="h-4 w-4 text-emerald-400" />}
           index={1}
           reducedMotion={reducedMotion}
         />
         <MetricCard
-          label="Monthly Cost"
+          label={t('dashboard.stats.monthlyCost')}
           value={`$${monthCost.toFixed(2)}`}
           icon={<TrendingUp className="h-4 w-4 text-amber-400" />}
           index={2}
           reducedMotion={reducedMotion}
         />
         <MetricCard
-          label="Active Models"
+          label={t('dashboard.stats.activeModels')}
           value={String(totalModels)}
           icon={<Zap className="h-4 w-4 text-violet-400" />}
           index={3}
@@ -191,33 +193,33 @@ export default function Dashboard() {
       >
         <StatusPill
           icon={<Activity className="h-4 w-4" />}
-          label="Avg Latency"
+          label={t('dashboard.stats.avgLatency')}
           value={String(avgLatency)}
-          unit="ms"
+          unit={t('dashboard.units.ms')}
         />
         <StatusPill
           icon={<TrendingUp className="h-4 w-4" />}
-          label="Success Rate"
+          label={t('dashboard.stats.successRate')}
           value={String(successRate)}
-          unit="%"
+          unit={t('dashboard.units.percent')}
         />
         <StatusPill
           icon={<Clock className="h-4 w-4" />}
-          label="Recent"
+          label={t('dashboard.stats.recent')}
           value={String(recentLogs?.items?.length ?? 0)}
-          unit="reqs"
+          unit={t('dashboard.units.reqs')}
         />
       </motion.div>
 
       {/* Recent Requests */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-bold text-base-content/70">Recent Requests</h2>
+          <h2 className="text-sm font-bold text-base-content/70">{t('dashboard.recentRequests')}</h2>
           <button
             onClick={() => navigate('/admin/logs')}
             className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer"
           >
-            View all
+            {t('dashboard.viewAll')}
             <ArrowRight className="h-3 w-3" />
           </button>
         </div>
@@ -234,12 +236,12 @@ export default function Dashboard() {
               <table className="table table-sm">
                 <thead>
                   <tr className="border-b border-base-300/40">
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Time</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Model</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Protocol</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Status</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Tokens</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Latency</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('dashboard.table.time')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('dashboard.table.model')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('dashboard.table.protocol')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('dashboard.table.status')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('dashboard.table.tokens')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('dashboard.table.latency')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -260,7 +262,7 @@ export default function Dashboard() {
                   {(!recentLogs?.items?.length) && (
                     <tr>
                       <td colSpan={6} className="text-center py-16 text-base-content/40 text-sm">
-                        No requests yet
+                        {t('dashboard.noRequests')}
                       </td>
                     </tr>
                   )}

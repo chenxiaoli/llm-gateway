@@ -3,6 +3,7 @@ import { listAllChannels, listChannels, createChannel as createChannelApi, updat
 import type { CreateChannelRequest, UpdateChannelRequest, CreateChannelModelRequest, UpdateChannelModelRequest } from '../types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
+import i18n from '../i18n';
 
 export function useAllChannels() {
   return useQuery({ queryKey: ['channels'], queryFn: listAllChannels });
@@ -35,9 +36,9 @@ export function useCreateChannel(providerId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channels'] });
       queryClient.invalidateQueries({ queryKey: ['channels'] });
-      toast.success('Channel created');
+      toast.success(i18n.t('toasts.channelCreated'));
     },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to create channel')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.channelCreateFailed'))); },
   });
 }
 
@@ -48,9 +49,9 @@ export function useUpdateChannel(providerId: string) {
     onSuccess: (_data, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['channels', id] });
       queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channels'] });
-      toast.success('Channel updated');
+      toast.success(i18n.t('toasts.channelUpdated'));
     },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to update channel')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.channelUpdateFailed'))); },
   });
 }
 
@@ -60,9 +61,9 @@ export function useDeleteChannel(providerId: string) {
     mutationFn: (id: string) => deleteChannelApi(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channels'] });
-      toast.success('Channel deleted');
+      toast.success(i18n.t('toasts.channelDeleted'));
     },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to delete channel')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.channelDeleteFailed'))); },
   });
 }
 
@@ -80,9 +81,9 @@ export function useCreateChannelModel(channelId: string) {
     mutationFn: (input: CreateChannelModelRequest) => createChannelModelByChannel(channelId, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['channel-models', channelId] });
-      toast.success('Channel model created');
+      toast.success(i18n.t('toasts.channelModelCreated'));
     },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to create channel model')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.channelModelCreateFailed'))); },
   });
 }
 
@@ -92,9 +93,9 @@ export function useUpdateChannelModel(channelId: string) {
     mutationFn: ({ id, input }: { id: string; input: UpdateChannelModelRequest }) => updateChannelModel(id, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['channel-models', channelId] });
-      toast.success('Channel model updated');
+      toast.success(i18n.t('toasts.channelModelUpdated'));
     },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to update channel model')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.channelModelUpdateFailed'))); },
   });
 }
 
@@ -104,9 +105,9 @@ export function useDeleteChannelModel(channelId: string) {
     mutationFn: (id: string) => deleteChannelModel(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['channel-models', channelId] });
-      toast.success('Channel model deleted');
+      toast.success(i18n.t('toasts.channelModelDeleted'));
     },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to delete channel model')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.channelModelDeleteFailed'))); },
   });
 }
 
@@ -117,9 +118,9 @@ export function useUpdateChannelApiKey(channelId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['channels', channelId] });
       queryClient.invalidateQueries({ queryKey: ['channels'] });
-      toast.success('API key updated');
+      toast.success(i18n.t('toasts.channelKeyUpdated'));
     },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to update API key')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.channelKeyUpdateFailed'))); },
   });
 }
 

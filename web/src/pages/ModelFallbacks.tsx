@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, Trash2, X, ArrowRight, AlertCircle, ArrowRightLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { useModelFallbacks, useCreateModelFallback, useUpdateModelFallback, useDeleteModelFallback } from '../hooks/useModelFallbacks';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
@@ -10,6 +11,7 @@ import type { ModelFallbackGroup } from '../types';
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 export default function ModelFallbacks() {
+  const { t } = useTranslation();
   const { data: fallbacks, isLoading } = useModelFallbacks();
   const createMutation = useCreateModelFallback();
   const updateMutation = useUpdateModelFallback();
@@ -51,7 +53,7 @@ export default function ModelFallbacks() {
       .filter((g) => g.models.length >= 2);
 
     if (cleanedGroups.length === 0) {
-      setValidationError('Each group needs at least 2 models to define a fallback chain.');
+      setValidationError(t('modelFallbacks.editModal.validationError'));
       return;
     }
     if (editId) {
@@ -129,14 +131,14 @@ export default function ModelFallbacks() {
       >
         <div>
           <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
-            Model Fallbacks
+            {t('modelFallbacks.title')}
           </h1>
           <p className="text-base text-base-content/50">
-            Configure fallback model chains for API keys
+            {t('modelFallbacks.description')}
           </p>
         </div>
         <Button icon={<Plus className="h-4 w-4" />} onClick={openCreate}>
-          Create Fallback
+          {t('modelFallbacks.createFallback')}
         </Button>
       </motion.div>
 
@@ -166,19 +168,19 @@ export default function ModelFallbacks() {
                   <div>
                     <h3 className="text-sm font-bold">{fb.name}</h3>
                     <span className="text-xs text-base-content/45">
-                      {fb.config.length} group{fb.config.length !== 1 ? 's' : ''}
+                      {fb.config.length} {fb.config.length !== 1 ? t('modelFallbacks.groupCount', { count: fb.config.length }).replace(/\d+\s*/, '') : t('modelFallbacks.groupCount', { count: 1 }).replace(/\d+\s*/, '')}
                     </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
                   <Button variant="ghost" size="sm" onClick={() => openEdit(fb.id)}>
-                    Edit
+                    {t('modelFallbacks.edit')}
                   </Button>
                   <button
                     type="button"
                     onClick={() => setDeleteId(fb.id)}
                     className="btn btn-ghost btn-sm text-error/50 hover:text-error cursor-pointer"
-                    aria-label={`Delete ${fb.name}`}
+                    aria-label={t('modelFallbacks.deleteLabel', { name: fb.name })}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -229,10 +231,10 @@ export default function ModelFallbacks() {
                   <ArrowRightLeft className="h-6 w-6 text-base-content/30" />
                 </div>
                 <p className="text-sm text-base-content/40 mb-4">
-                  No model fallback configs yet
+                  {t('modelFallbacks.noFallbacks')}
                 </p>
                 <Button variant="secondary" size="sm" onClick={openCreate}>
-                  Create your first fallback
+                  {t('modelFallbacks.createFirst')}
                 </Button>
               </div>
             </motion.div>
@@ -247,18 +249,18 @@ export default function ModelFallbacks() {
           setCreateOpen(false);
           resetForm();
         }}
-        title={editId ? 'Edit Model Fallback' : 'Create Model Fallback'}
+        title={editId ? t('modelFallbacks.editModal.titleEdit') : t('modelFallbacks.editModal.titleCreate')}
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="form-control">
             <label className="label">
-              <span className="label-text font-medium">Name</span>
+              <span className="label-text font-medium">{t('modelFallbacks.editModal.name')}</span>
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., GPT-4 Fallback Chain"
+              placeholder={t('modelFallbacks.editModal.namePlaceholder')}
               required
               className="input input-bordered w-full"
             />
@@ -267,10 +269,10 @@ export default function ModelFallbacks() {
           <div className="space-y-3">
             <div>
               <label className="label">
-                <span className="label-text font-medium">Fallback Groups</span>
+                <span className="label-text font-medium">{t('modelFallbacks.editModal.fallbackGroups')}</span>
               </label>
               <p className="text-xs text-base-content/40 -mt-1">
-                Each group defines equivalent models. Lower priority number = tried first.
+                {t('modelFallbacks.editModal.fallbackGroupsDesc')}
               </p>
             </div>
 
@@ -291,14 +293,14 @@ export default function ModelFallbacks() {
               >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold uppercase tracking-wider text-base-content/45">
-                    Group {gi + 1}
+                    {t('modelFallbacks.editModal.groupLabel', { number: gi + 1 })}
                   </span>
                   {groups.length > 1 && (
                     <button
                       type="button"
                       onClick={() => removeGroup(gi)}
                       className="text-error/50 hover:text-error cursor-pointer p-1 -m-1"
-                      aria-label={`Remove group ${gi + 1}`}
+                      aria-label={t('modelFallbacks.editModal.removeGroupLabel', { number: gi + 1 })}
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -330,7 +332,7 @@ export default function ModelFallbacks() {
                         type="button"
                         onClick={() => removeModel(gi, mi)}
                         className="text-base-content/30 hover:text-error shrink-0 cursor-pointer p-1"
-                        aria-label={`Remove model ${model || `P${group.priorities[mi]}`}`}
+                        aria-label={t('modelFallbacks.editModal.removeModelLabel')}
                       >
                         <X className="h-4 w-4" />
                       </button>
@@ -343,7 +345,7 @@ export default function ModelFallbacks() {
                   type="button"
                   onClick={() => addModel(gi)}
                 >
-                  + Add Model
+                  {t('modelFallbacks.editModal.addModel')}
                 </Button>
               </div>
             ))}
@@ -353,7 +355,7 @@ export default function ModelFallbacks() {
               type="button"
               onClick={addGroup}
             >
-              + Add Group
+              {t('modelFallbacks.editModal.addGroup')}
             </Button>
           </div>
 
@@ -361,7 +363,7 @@ export default function ModelFallbacks() {
             variant="primary"
             loading={createMutation.isPending || updateMutation.isPending}
           >
-            {editId ? 'Update' : 'Create'}
+            {editId ? t('modelFallbacks.editModal.update') : t('modelFallbacks.editModal.create')}
           </Button>
         </form>
       </Modal>
@@ -370,22 +372,21 @@ export default function ModelFallbacks() {
       <Modal
         open={!!deleteId}
         onClose={() => setDeleteId(null)}
-        title="Delete Model Fallback"
+        title={t('modelFallbacks.deleteModal.title')}
       >
         <p className="text-sm text-base-content/60">
-          Are you sure? API keys referencing this config will lose their fallback
-          chain.
+          {t('modelFallbacks.deleteModal.message')}
         </p>
         <div className="mt-4 flex gap-2 justify-end">
           <Button variant="secondary" onClick={() => setDeleteId(null)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             variant="danger"
             loading={deleteMutation.isPending}
             onClick={handleDelete}
           >
-            Delete
+            {t('common.delete')}
           </Button>
         </div>
       </Modal>

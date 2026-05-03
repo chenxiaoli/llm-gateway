@@ -3,10 +3,8 @@ use axum::routing::{get, post};
 use axum::http::{header, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use llm_gateway_api::{self as api, AppState, SystemInfo, InMemoryChannelRegistry, spawn_registry_refresh};
-use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
-use llm_gateway_storage::sqlite::SqliteStorage;
 use llm_gateway_storage::postgres::PostgresStorage;
 use rust_embed::Embed;
 use sha2::Digest;
@@ -30,44 +28,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config: AppConfig = toml::from_str(&config_str)?;
 
     // Init storage
-    let storage: Arc<dyn Storage> = match config.database.driver.as_str() {
-        "postgres" => {
-            let url = config.database.url.as_deref().ok_or("database.url is required for postgres")?;
-            tracing::info!("Using PostgreSQL: {}", url.split('@').last().unwrap_or("***"));
-            let db = PostgresStorage::new(url).await?;
-            db.run_migrations().await?;
-            db.seed_data().await?;
-            Arc::new(db)
+    let storage: Arc<dyn Storage> = {
+        if config.database.driver.as_str() != "postgres" {
+            return Err(format!("Unsupported database driver '{}'. Only 'postgres' is supported", config.database.driver).into());
         }
-        "sqlite" => {
-            let db_path = config.database.url.as_deref().unwrap_or("./data/gateway.db");
-            tracing::info!("Using SQLite: {}", db_path);
-            let db = SqliteStorage::new(db_path).await?;
-            db.run_migrations().await?;
-            db.seed_data().await?;
-            Arc::new(db)
-        }
-        other => {
-            return Err(format!("Unknown database driver '{}'. Supported: 'sqlite', 'postgres'", other).into());
-        }
+        let url = config.database.url.as_deref().ok_or("database.url is required")?;
+        tracing::info!("Using PostgreSQL: {}", url.split('@').last().unwrap_or("***"));
+        let db = PostgresStorage::new(url).await?;
+        db.run_migrations().await?;
+        db.seed_data().await?;
+        Arc::new(db)
     };
 
-    // Init NATS publisher (optional)
-    let nats_publisher: Option<Arc<llm_gateway_nats_publisher::NatsPublisher>> =
-        if let Some(nats_cfg) = &config.nats {
-            match llm_gateway_nats_publisher::NatsPublisher::new(&nats_cfg.url).await {
-                Ok(pub_) => {
-                    tracing::info!("Connected to NATS: {}", nats_cfg.url);
-                    Some(Arc::new(pub_))
-                }
-                Err(e) => {
-                    tracing::error!("Failed to connect to NATS: {}", e);
-                    return Err(format!("NATS connection failed: {}", e).into());
-                }
+    // Init NATS publisher (required)
+    let nats_cfg = config.nats.as_ref().ok_or("[nats] section is required in config.toml")?;
+    let nats_publisher: Arc<llm_gateway_nats_publisher::NatsPublisher> =
+        match llm_gateway_nats_publisher::NatsPublisher::new(&nats_cfg.url).await {
+            Ok(pub_) => {
+                tracing::info!("Connected to NATS: {}", nats_cfg.url);
+                Arc::new(pub_)
             }
-        } else {
-            tracing::info!("NATS not configured, using in-process mpsc for audit");
-            None
+            Err(e) => {
+                tracing::error!("Failed to connect to NATS: {}", e);
+                return Err(format!("NATS connection failed: {}", e).into());
+            }
         };
 
     // Derive encryption key (32 bytes via SHA256)
@@ -94,30 +78,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Init rate limiter
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.window_size_secs));
 
-    // Init audit logger
-    let audit_logger = Arc::new(AuditLogger::new(storage.clone()));
-
-    // Create MPSC channel for async audit logging
-    let (audit_tx, audit_rx) = tokio::sync::mpsc::channel::<llm_gateway_api::AuditTask>(100);
-    // Spawn background workers (NATS or mpsc depending on config)
-    if let Some(nats) = &nats_publisher {
-        let nats_usage = nats.clone();
-        let nats_audit = nats.clone();
-        let storage_usage = storage.clone();
-        let storage_audit = storage.clone();
-        tokio::spawn(async move {
-            llm_gateway_api::workers::start_nats_usage_worker(storage_usage, nats_usage).await;
-        });
-        tokio::spawn(async move {
-            llm_gateway_api::workers::start_nats_audit_worker(storage_audit, nats_audit).await;
-        });
-    } else {
-        let storage_clone = storage.clone();
-        tokio::spawn(async move {
-            llm_gateway_api::workers::start_audit_worker(storage_clone, audit_rx).await;
-        });
-    }
-
     // Create settlement channel and spawn background worker
     let (settlement_tx, settlement_rx) = tokio::sync::mpsc::channel::<llm_gateway_api::SettlementTrigger>(1);
     let settlement_interval_secs = 60u64;
@@ -139,10 +99,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let state = Arc::new(AppState {
         storage,
         rate_limiter,
-        audit_logger,
         jwt_secret: config.auth.jwt_secret.clone(),
         encryption_key,
-        audit_tx,
         nats_publisher,
         registry,
         settlement_tx,
@@ -206,8 +164,11 @@ jwt_secret = "change-me-jwt-secret!"
 allow_registration = true
 
 [database]
-driver = "sqlite"
-url = "./data/gateway.db"
+driver = "postgres"
+url = "postgresql://user:password@localhost/llm_gateway"
+
+[nats]
+url = "nats://localhost:4222"
 
 [rate_limit]
 flush_interval_secs = 30

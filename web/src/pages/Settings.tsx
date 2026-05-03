@@ -8,6 +8,7 @@ import {
   Timer,
   ExternalLink,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useSettings, useUpdateSettings, useSystemInfo } from '../hooks/useSettings';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
@@ -20,18 +21,19 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 
 type SettingsTab = 'general' | 'security' | 'system' | 'about';
 
-const TABS: { key: SettingsTab; label: string }[] = [
-  { key: 'general', label: 'General' },
-  { key: 'security', label: 'Security & Audit' },
-  { key: 'system', label: 'System Info' },
-  { key: 'about', label: 'About' },
-];
-
 export default function Settings() {
+  const { t } = useTranslation();
   const { data: settings, isLoading } = useSettings();
   const { data: systemInfo } = useSystemInfo();
   const updateMutation = useUpdateSettings();
   const reducedMotion = useReducedMotion();
+
+  const TABS: { key: SettingsTab; label: string }[] = [
+    { key: 'general', label: t('settings.tabs.general') },
+    { key: 'security', label: t('settings.tabs.security') },
+    { key: 'system', label: t('settings.tabs.system') },
+    { key: 'about', label: t('settings.tabs.about') },
+  ];
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [serverHost, setServerHost] = useState('');
@@ -76,8 +78,8 @@ export default function Settings() {
         transition={reducedMotion ? { duration: 0 } : { duration: 0.4, ease: EASE }}
         className="mb-6 pt-8"
       >
-        <h1 className="text-3xl font-black tracking-tight text-base-content">Settings</h1>
-        <p className="text-base text-base-content/50 mt-1">Gateway configuration</p>
+        <h1 className="text-3xl font-black tracking-tight text-base-content">{t('settings.title')}</h1>
+        <p className="text-base text-base-content/50 mt-1">{t('settings.description')}</p>
       </motion.div>
 
       {/* Tab bar */}
@@ -129,15 +131,15 @@ export default function Settings() {
                 <div className="rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden">
                   <div className="px-5 py-3 border-b border-base-300/60 bg-base-100/60">
                     <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25">
-                      GENERAL SETTINGS
+                      {t('settings.general.sectionTitle')}
                     </span>
                   </div>
                   <div className="px-5 divide-y divide-base-200/50">
                     {/* Allow Registration */}
                     <div className="flex items-center justify-between gap-6 py-3">
                       <div>
-                        <div className="text-sm font-medium text-base-content">Allow Registration</div>
-                        <div className="text-xs text-base-content/40 mt-0.5">Permit new users to register on the login page</div>
+                        <div className="text-sm font-medium text-base-content">{t('settings.general.allowRegistration')}</div>
+                        <div className="text-xs text-base-content/40 mt-0.5">{t('settings.general.allowRegistrationDesc')}</div>
                       </div>
                       <Toggle
                         checked={settings?.allow_registration ?? false}
@@ -147,8 +149,8 @@ export default function Settings() {
 
                     {/* Server Host */}
                     <div className="py-3 space-y-2">
-                      <div className="text-sm font-medium text-base-content">Server Host</div>
-                      <div className="text-xs text-base-content/40">Gateway base URL used by the proxy endpoint</div>
+                      <div className="text-sm font-medium text-base-content">{t('settings.general.serverHost')}</div>
+                      <div className="text-xs text-base-content/40">{t('settings.general.serverHostDesc')}</div>
                       <div className="flex gap-2">
                         <input
                           type="text"
@@ -165,7 +167,7 @@ export default function Settings() {
                           disabled={serverHost === (settings?.server_host ?? '')}
                           onClick={handleServerHostSave}
                         >
-                          Save
+                          {t('common.save')}
                         </Button>
                       </div>
                     </div>
@@ -180,15 +182,15 @@ export default function Settings() {
               <div className="rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden">
                 <div className="px-5 py-3 border-b border-base-300/60 bg-base-100/60">
                   <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25">
-                    AUDIT LOGGING
+                    {t('settings.security.sectionTitle')}
                   </span>
                 </div>
                 <div className="px-5 divide-y divide-base-200/50">
                   {/* Log Request Body */}
                   <div className="flex items-center justify-between gap-6 py-3">
                     <div>
-                      <div className="text-sm font-medium text-base-content">Log Request Body</div>
-                      <div className="text-xs text-base-content/40 mt-0.5">Capture and store upstream request payloads in audit logs</div>
+                      <div className="text-sm font-medium text-base-content">{t('settings.security.logRequestBody')}</div>
+                      <div className="text-xs text-base-content/40 mt-0.5">{t('settings.security.logRequestBodyDesc')}</div>
                     </div>
                     <Toggle
                       checked={settings?.audit_log_request ?? true}
@@ -199,8 +201,8 @@ export default function Settings() {
                   {/* Log Response Body */}
                   <div className="flex items-center justify-between gap-6 py-3">
                     <div>
-                      <div className="text-sm font-medium text-base-content">Log Response Body</div>
-                      <div className="text-xs text-base-content/40 mt-0.5">Capture and store upstream response payloads in audit logs</div>
+                      <div className="text-sm font-medium text-base-content">{t('settings.security.logResponseBody')}</div>
+                      <div className="text-xs text-base-content/40 mt-0.5">{t('settings.security.logResponseBodyDesc')}</div>
                     </div>
                     <Toggle
                       checked={settings?.audit_log_response ?? true}
@@ -210,7 +212,7 @@ export default function Settings() {
                 </div>
               </div>
               <Alert variant="info" className="text-xs">
-                Enabling request/response body logging may increase storage usage. Audit logs are retained according to the configured retention period.
+                {t('settings.security.storageNotice')}
               </Alert>
             </div>
           )}
@@ -220,18 +222,18 @@ export default function Settings() {
               <div className="rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden">
                 <div className="px-5 py-3 border-b border-base-300/60 bg-base-100/60">
                   <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25">
-                    INFRASTRUCTURE CONFIGURATION
+                    {t('settings.system.sectionTitle')}
                   </span>
                 </div>
                 <div className="p-5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {systemInfo ? [
-                      { label: 'Server Bind Address', value: systemInfo.server_bind_address, Icon: Globe },
-                      { label: 'Database Driver', value: systemInfo.database_driver, Icon: Database },
-                      { label: 'Rate Limit Window', value: `${systemInfo.rate_limit_window_secs}s`, Icon: Clock },
-                      { label: 'Rate Limit Flush Interval', value: `${systemInfo.rate_limit_flush_interval_secs}s`, Icon: Timer },
-                      { label: 'Upstream Timeout', value: `${systemInfo.upstream_timeout_secs}s`, Icon: Timer },
-                      { label: 'Audit Retention', value: systemInfo.audit_retention_days != null ? `${systemInfo.audit_retention_days} days` : '--', Icon: Clock },
+                      { label: t('settings.system.serverBindAddress'), value: systemInfo.server_bind_address, Icon: Globe },
+                      { label: t('settings.system.databaseDriver'), value: systemInfo.database_driver, Icon: Database },
+                      { label: t('settings.system.rateLimitWindow'), value: `${systemInfo.rate_limit_window_secs}s`, Icon: Clock },
+                      { label: t('settings.system.rateLimitFlushInterval'), value: `${systemInfo.rate_limit_flush_interval_secs}s`, Icon: Timer },
+                      { label: t('settings.system.upstreamTimeout'), value: `${systemInfo.upstream_timeout_secs}s`, Icon: Timer },
+                      { label: t('settings.system.auditRetention'), value: systemInfo.audit_retention_days != null ? t('settings.system.days', { count: systemInfo.audit_retention_days }) : '--', Icon: Clock },
                     ].map(({ label, value, Icon }) => (
                       <div key={label} className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-base-200/60 flex items-center justify-center shrink-0">
@@ -243,13 +245,13 @@ export default function Settings() {
                         </div>
                       </div>
                     )) : (
-                      <div className="col-span-2 text-sm text-base-content/40">Loading...</div>
+                      <div className="col-span-2 text-sm text-base-content/40">{t('common.loading')}</div>
                     )}
                   </div>
                 </div>
               </div>
               <Alert variant="warning" className="text-xs">
-                These values are derived from config.toml. Changes require editing the configuration file and restarting the gateway.
+                {t('settings.system.configNotice')}
               </Alert>
             </div>
           )}
@@ -259,7 +261,7 @@ export default function Settings() {
               <div className="rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden">
                 <div className="px-5 py-3 border-b border-base-300/60 bg-base-100/60">
                   <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25">
-                    GATEWAY INFORMATION
+                    {t('settings.about.sectionTitle')}
                   </span>
                 </div>
                 <div className="p-5">
@@ -269,7 +271,7 @@ export default function Settings() {
                         <Info className="h-4 w-4 text-base-content/40" />
                       </div>
                       <div>
-                        <div className="text-xs text-base-content/40">Version</div>
+                        <div className="text-xs text-base-content/40">{t('settings.about.version')}</div>
                         <div className="text-sm font-mono font-medium">
                           {version || '—'}
                         </div>
@@ -280,7 +282,7 @@ export default function Settings() {
                         <Database className="h-4 w-4 text-base-content/40" />
                       </div>
                       <div>
-                        <div className="text-xs text-base-content/40">Database</div>
+                        <div className="text-xs text-base-content/40">{t('settings.about.database')}</div>
                         <div className="text-sm font-mono font-medium">{systemInfo?.database_driver || '—'}</div>
                       </div>
                     </div>
@@ -291,7 +293,7 @@ export default function Settings() {
               <div className="rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden">
                 <div className="px-5 py-3 border-b border-base-300/60 bg-base-100/60">
                   <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25">
-                    LINKS
+                    {t('settings.about.linksTitle')}
                   </span>
                 </div>
                 <div className="p-3">
@@ -307,8 +309,8 @@ export default function Settings() {
                       </svg>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium">GitHub Repository</div>
-                      <div className="text-xs text-base-content/40">Source code, issues, documentation</div>
+                      <div className="text-sm font-medium">{t('settings.about.githubRepo')}</div>
+                      <div className="text-xs text-base-content/40">{t('settings.about.githubDesc')}</div>
                     </div>
                     <ExternalLink className="h-4 w-4 text-base-content/20 shrink-0" />
                   </a>

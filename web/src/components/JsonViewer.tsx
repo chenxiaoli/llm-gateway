@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface JsonViewerProps {
   data: string;
@@ -8,6 +9,7 @@ interface JsonViewerProps {
 
 export default function JsonViewer({ data, maxHeight = 400 }: JsonViewerProps) {
   const [collapsed, setCollapsed] = useState(true);
+  const { t } = useTranslation();
 
   let formatted: string;
   try {
@@ -23,7 +25,7 @@ export default function JsonViewer({ data, maxHeight = 400 }: JsonViewerProps) {
         className="btn btn-ghost btn-xs gap-1 mb-2 text-base-content/50"
       >
         {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-        {collapsed ? 'Expand' : 'Collapse'}
+        {collapsed ? t('ui.expand') : t('ui.collapse')}
       </button>
       <pre
         className="mono text-[12px] leading-relaxed bg-base-300/50 text-base-content/80 rounded-lg p-3 overflow-auto whitespace-pre-wrap break-all border border-base-300"

@@ -1,0 +1,1066 @@
+{
+  "common": {
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "edit": "编辑",
+    "create": "创建",
+    "search": "搜索...",
+    "loading": "加载中...",
+    "confirm": "确认",
+    "back": "返回",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "yes": "是",
+    "no": "否",
+    "actions": "操作",
+    "name": "名称",
+    "status": "状态",
+    "type": "类型",
+    "description": "描述",
+    "noResults": "未找到结果",
+    "copy": "复制",
+    "copied": "已复制！",
+    "close": "关闭",
+    "refresh": "刷新",
+    "test": "测试",
+    "add": "添加",
+    "remove": "移除",
+    "reset": "重置",
+    "submit": "提交"
+  },
+  "sidebar": {
+    "console": "控制台",
+    "admin": "管理",
+    "dashboard": "仪表盘",
+    "keys": "API 密钥",
+    "modelFallbacks": "模型降级",
+    "models": "模型",
+    "usage": "用量",
+    "channels": "通道",
+    "providers": "提供商",
+    "pricingPolicies": "定价策略",
+    "users": "用户",
+    "settings": "设置",
+    "logs": "审计日志",
+    "collapse": "收起",
+    "expand": "展开侧边栏"
+  },
+  "header": {
+    "account": "账户",
+    "changePassword": "修改密码",
+    "logout": "退出登录"
+  },
+  "auth": {
+    "signIn": "登录",
+    "signUp": "创建账户",
+    "register": "注册",
+    "username": "用户名",
+    "password": "密码",
+    "confirmPassword": "确认密码",
+    "currentPassword": "当前密码",
+    "newPassword": "新密码",
+    "confirmNewPassword": "确认新密码",
+    "changePassword": "修改密码",
+    "setNewPassword": "设置新密码",
+    "updatePassword": "更新密码",
+    "minChars": "至少 8 个字符",
+    "noAccount": "没有账户？",
+    "hasAccount": "已有账户？",
+    "createOne": "创建一个",
+    "signInLink": "登录",
+    "errorInvalid": "用户名或密码错误",
+    "errorMismatch": "两次输入的密码不一致",
+    "errorShort": "密码至少需要 8 个字符",
+    "errorChange": "修改密码失败",
+    "errorRegister": "注册失败",
+    "successChanged": "密码已修改",
+    "updateAccountPassword": "更新您的账户密码",
+    "registrationDisabled": "注册功能已禁用"
+  },
+  "toasts": {
+    "keyCreated": "API 密钥已创建",
+    "keyUpdated": "API 密钥已更新",
+    "keyDeleted": "API 密钥已删除",
+    "keyCreateFailed": "创建 API 密钥失败",
+    "keyUpdateFailed": "更新 API 密钥失败",
+    "keyDeleteFailed": "删除 API 密钥失败",
+    "providerCreated": "提供商已创建",
+    "providerUpdated": "提供商已更新",
+    "providerDeleted": "提供商已删除",
+    "providerCreateFailed": "创建提供商失败",
+    "providerUpdateFailed": "更新提供商失败",
+    "providerDeleteFailed": "删除提供商失败",
+    "providerModelsUpdated": "支持的模型已更新",
+    "providerModelsUpdateFailed": "更新支持的模型失败",
+    "channelCreated": "通道已创建",
+    "channelUpdated": "通道已更新",
+    "channelDeleted": "通道已删除",
+    "channelCreateFailed": "创建通道失败",
+    "channelUpdateFailed": "更新通道失败",
+    "channelDeleteFailed": "删除通道失败",
+    "channelModelCreated": "通道模型已创建",
+    "channelModelUpdated": "通道模型已更新",
+    "channelModelDeleted": "通道模型已删除",
+    "channelModelCreateFailed": "创建通道模型失败",
+    "channelModelUpdateFailed": "更新通道模型失败",
+    "channelModelDeleteFailed": "删除通道模型失败",
+    "channelKeyUpdated": "API 密钥已更新",
+    "channelKeyUpdateFailed": "更新 API 密钥失败",
+    "modelAdded": "模型已添加",
+    "modelUpdated": "模型已更新",
+    "modelDeleted": "模型已删除",
+    "modelAddFailed": "添加模型失败",
+    "modelUpdateFailed": "更新模型失败",
+    "modelDeleteFailed": "删除模型失败",
+    "providerModelAdded": "模型已添加到提供商",
+    "providerModelUpdated": "模型已更新",
+    "providerModelRemoved": "模型已移除",
+    "providerModelAddFailed": "添加模型失败",
+    "providerModelUpdateFailed": "更新模型失败",
+    "providerModelRemoveFailed": "移除模型失败",
+    "userUpdated": "用户已更新",
+    "userDeleted": "用户已删除",
+    "userUpdateFailed": "更新用户失败",
+    "userDeleteFailed": "删除用户失败",
+    "settingsUpdated": "设置已更新",
+    "settingsUpdateFailed": "更新设置失败",
+    "fallbackCreated": "模型降级已创建",
+    "fallbackUpdated": "模型降级已更新",
+    "fallbackDeleted": "模型降级已删除",
+    "fallbackCreateFailed": "创建模型降级失败",
+    "fallbackUpdateFailed": "更新模型降级失败",
+    "fallbackDeleteFailed": "删除模型降级失败",
+    "pricingCreated": "定价策略已创建",
+    "pricingUpdated": "定价策略已更新",
+    "pricingDeleted": "定价策略已删除",
+    "pricingCreateFailed": "创建定价策略失败",
+    "pricingUpdateFailed": "更新定价策略失败",
+    "pricingDeleteFailed": "删除定价策略失败",
+    "balanceRecharged": "余额充值成功",
+    "balanceRechargeFailed": "充值失败",
+    "balanceAdjusted": "余额调整成功",
+    "balanceAdjustFailed": "调整余额失败",
+    "thresholdUpdated": "阈值已更新",
+    "thresholdUpdateFailed": "更新阈值失败",
+    "keyCopiedToClipboard": "密钥已复制到剪贴板"
+  },
+  "keys": {
+    "title": "API 密钥",
+    "description": "管理用于 API 认证的访问密钥",
+    "createKey": "创建密钥",
+    "table": {
+      "name": "名称",
+      "key": "密钥",
+      "status": "状态",
+      "rateLimit": "速率限制 (RPM)",
+      "monthlyBudget": "月度预算",
+      "fallback": "降级策略",
+      "created": "创建时间"
+    },
+    "active": "启用",
+    "disabled": "禁用",
+    "unlimited": "无限制",
+    "none": "无",
+    "empty": "暂无 API 密钥",
+    "createFirst": "创建您的第一个密钥",
+    "pagination": {
+      "total": "共 {{count}} 个",
+      "previous": "上一页",
+      "next": "下一页"
+    },
+    "createModal": {
+      "title": "创建 API 密钥",
+      "copyKey": "复制密钥",
+      "done": "完成",
+      "saveNow": "请立即保存此密钥",
+      "securityNotice": "请务必复制并妥善保存此密钥。",
+      "securityWarning": "此密钥不会再次显示。"
+    },
+    "form": {
+      "name": "名称",
+      "namePlaceholder": "例如：production-app",
+      "rateLimit": "速率限制 (RPM)",
+      "monthlyBudget": "月度预算 ($)",
+      "modelFallback": "模型降级",
+      "noneOption": "无"
+    }
+  },
+  "keyDetail": {
+    "backToKeys": "返回密钥列表",
+    "editKey": "编辑密钥：{{name}}",
+    "keyNotFound": "密钥未找到",
+    "form": {
+      "name": "名称",
+      "enabled": "启用",
+      "rateLimit": "速率限制 (RPM，留空表示无限制)",
+      "monthlyBudget": "月度预算 ($，留空表示无限制)",
+      "modelFallback": "模型降级",
+      "noneOption": "无"
+    },
+    "deleteKey": "删除密钥",
+    "deleteConfirm": "确定删除此密钥？"
+  },
+  "dashboard": {
+    "title": "仪表盘",
+    "description": "LLM 网关活动实时概览",
+    "accountBalance": "账户余额",
+    "lowBalance": "余额不足",
+    "viewDetails": "查看详情",
+    "stats": {
+      "todayRequests": "今日请求",
+      "todayCost": "今日费用",
+      "monthlyCost": "本月费用",
+      "activeModels": "活跃模型",
+      "avgLatency": "平均延迟",
+      "successRate": "成功率",
+      "recent": "近期"
+    },
+    "units": {
+      "ms": "毫秒",
+      "percent": "%",
+      "reqs": "次请求"
+    },
+    "recentRequests": "最近请求",
+    "viewAll": "查看全部",
+    "table": {
+      "time": "时间",
+      "model": "模型",
+      "protocol": "协议",
+      "status": "状态",
+      "tokens": "Token 数",
+      "latency": "延迟"
+    },
+    "noRequests": "暂无请求"
+  },
+  "adminDashboard": {
+    "title": "管理仪表盘",
+    "description": "系统概览与实时网关指标",
+    "systemOnline": "系统运行中",
+    "timeout": "超时 {{seconds}}s",
+    "auditRetention": "审计保留 {{days}}天",
+    "providersCount": "{{active}}/{{total}} 个提供商",
+    "channelsCount": "{{active}}/{{total}} 个通道",
+    "modelsCount": "{{count}} 个模型",
+    "usersCount": "{{count}} 个用户",
+    "keysCount": "{{count}} 个密钥",
+    "stats": {
+      "todayRequests": "今日请求",
+      "todayCost": "今日费用",
+      "monthlyCost": "本月费用",
+      "activeModels": "活跃模型",
+      "todayTokensSub": "{{count}} Token",
+      "monthlyRequestsSub": "{{count}} 次请求",
+      "trafficTodaySub": "{{count}} 个今日有流量",
+      "avgLatency": "平均延迟",
+      "errorRate": "错误率",
+      "recent": "近期"
+    },
+    "units": {
+      "ms": "毫秒",
+      "percent": "%",
+      "reqs": "次请求",
+      "tokens": "Token"
+    },
+    "topModelsToday": "今日热门模型",
+    "channelUsageToday": "今日通道用量",
+    "recentRequests": "最近请求",
+    "viewAll": "查看全部",
+    "noTrafficToday": "今日无流量",
+    "direct": "直连",
+    "table": {
+      "time": "时间",
+      "model": "模型",
+      "protocol": "协议",
+      "status": "状态",
+      "tokens": "Token 数",
+      "latency": "延迟"
+    },
+    "noRequests": "暂无请求"
+  },
+  "models": {
+    "title": "模型",
+    "description": "注册 AI 模型以通过网关路由请求",
+    "summary": "{{active}} 个活跃 · {{idle}} 个空闲 · {{policies}} 个策略",
+    "addModel": "添加模型",
+    "stats": {
+      "total": "总计",
+      "live": "活跃",
+      "idle": "空闲"
+    },
+    "card": {
+      "channelsActive": "{{count}} 个通道活跃",
+      "channelsActive_plural": "{{count}} 个通道活跃",
+      "noRouting": "无路由",
+      "live": "活跃",
+      "idle": "空闲",
+      "pricing": "定价",
+      "per1mTokens": "每百万 Token",
+      "input": "输入",
+      "output": "输出",
+      "cache": "缓存",
+      "noPolicy": "无策略 — 通道级别定价",
+      "channels": "通道"
+    },
+    "empty": {
+      "title": "暂无已注册的模型",
+      "description": "添加 AI 模型以启用网关请求路由。每个模型可关联一个定价策略。",
+      "registerFirst": "注册第一个模型"
+    },
+    "addModal": {
+      "title": "注册模型",
+      "modelName": "模型名称",
+      "modelNamePlaceholder": "例如 gpt-4o, claude-3-5-sonnet",
+      "pricingPolicy": "定价策略",
+      "noPolicy": "无策略（在通道级别处理定价）",
+      "register": "注册"
+    },
+    "editModal": {
+      "title": "编辑 {{name}}",
+      "modelName": "模型名称",
+      "readOnly": "只读",
+      "pricingPolicy": "定价策略",
+      "noPolicy": "无策略",
+      "saveChanges": "保存更改"
+    }
+  },
+  "consoleModels": {
+    "title": "模型",
+    "description": "暂无可用模型",
+    "descriptionCount": "{{count}} 个模型可用",
+    "searchPlaceholder": "搜索模型...",
+    "stats": {
+      "available": "可用"
+    },
+    "card": {
+      "pricing": "定价",
+      "per1mTokens": "每百万 Token",
+      "input": "输入",
+      "output": "输出",
+      "cache": "缓存",
+      "noTiers": "未配置分层",
+      "noPricingPolicy": "无定价策略"
+    },
+    "noMatch": "没有匹配「{{search}}」的模型"
+  },
+  "providers": {
+    "title": "提供商",
+    "description": "上游 LLM 提供商端点和路由配置",
+    "addProvider": "添加提供商",
+    "loading": "正在加载提供商...",
+    "active": "活跃",
+    "disabled": "已禁用",
+    "noEndpoints": "未配置端点",
+    "add": "添加",
+    "endpoints": "{{count}} 个端点",
+    "endpoints_plural": "{{count}} 个端点",
+    "stats": {
+      "providers": "提供商",
+      "active": "活跃",
+      "endpoints": "端点"
+    },
+    "empty": {
+      "title": "暂无已配置的提供商",
+      "description": "连接上游 LLM 提供商以通过网关路由流量。",
+      "addFirst": "添加第一个提供商"
+    },
+    "createDrawer": {
+      "title": "添加提供商",
+      "name": "名称",
+      "namePlaceholder": "例如 OpenAI",
+      "endpoints": "端点",
+      "proxyUrl": "代理 URL",
+      "createProvider": "创建提供商"
+    },
+    "editDrawer": {
+      "title": "编辑提供商",
+      "name": "名称",
+      "namePlaceholder": "例如 OpenAI",
+      "endpoints": "端点",
+      "proxyUrl": "代理 URL",
+      "enabled": "启用",
+      "enabledHint": "提供商必须启用才能接收流量",
+      "saveChanges": "保存更改"
+    },
+    "deleteModal": {
+      "title": "删除提供商",
+      "message": "确定要删除 <strong>{{name}}</strong> 吗？这将同时移除所有关联的通道。"
+    },
+    "editModelModal": {
+      "upstreamName": "上游名称",
+      "upstreamNamePlaceholder": "覆盖上游模型名称",
+      "pricingPolicy": "定价策略",
+      "none": "无"
+    },
+    "addModelModal": {
+      "title": "添加模型",
+      "model": "模型",
+      "selectModel": "选择一个模型",
+      "upstreamName": "上游名称",
+      "upstreamNamePlaceholder": "覆盖上游模型名称",
+      "pricingPolicy": "定价策略",
+      "none": "无",
+      "addModel": "添加模型"
+    }
+  },
+  "channels": {
+    "title": "通道",
+    "description": "配置提供商故障转移端点",
+    "descriptionCount": "{{active}} 个活跃 · {{disabled}} 个已禁用",
+    "loading": "正在加载通道...",
+    "addChannel": "添加通道",
+    "stats": {
+      "totalChannels": "通道总数",
+      "active": "活跃",
+      "disabled": "已禁用"
+    },
+    "empty": {
+      "title": "暂无已配置的通道",
+      "description": "通道连接您的提供商以通过���关路由流量。",
+      "addFirst": "添加第一个通道"
+    },
+    "modelSelect": {
+      "label": "模型",
+      "selected": "（已选 {{count}} 个）",
+      "searchPlaceholder": "搜索模型...",
+      "noMatch": "无匹配",
+      "noModels": "暂无模型"
+    },
+    "addDrawer": {
+      "title": "添加通道",
+      "provider": "提供商",
+      "selectProvider": "选择提供商...",
+      "channelName": "通道名称",
+      "channelNamePlaceholder": "例如 openai-primary, anthropic-failover",
+      "apiKey": "API 密钥",
+      "priority": "优先级",
+      "priorityHint": "（数值越小优先级越高）",
+      "weight": "权重",
+      "weightHint": "（数值越大流量越多）",
+      "enabled": "启用",
+      "enabledHint": "通道必须启用才能接收流量",
+      "createChannel": "创建通道",
+      "selectProviderError": "请选择提供商"
+    },
+    "row": {
+      "noModels": "暂无模型",
+      "available": "可用",
+      "outsideHours": "非服务时间",
+      "active": "活跃",
+      "off": "关闭",
+      "testing": "测试中",
+      "ok": "正常",
+      "fail": "失败",
+      "test": "测试",
+      "testOk": "通道正常 — {{latency}}ms（模型：{{model}}）",
+      "testFailed": "通道测试失败：{{error}}",
+      "unknownError": "未知错误",
+      "testFailedShort": "通道测试失败",
+      "configure": "配置"
+    }
+  },
+  "channelDetail": {
+    "backToChannels": "返回通道列表",
+    "pageTitle": "通道：{{name}}",
+    "providerLabel": "提供商：{{name}}",
+    "channelNotFound": "通道未找到",
+    "status": "状态",
+    "active": "活跃",
+    "disabled": "已禁用",
+    "configuration": "配置",
+    "apiKey": "API 密钥",
+    "notSet": "未设置",
+    "reveal": "显示",
+    "hide": "隐藏",
+    "update": "更新",
+    "priority": "优先级",
+    "weight": "权重",
+    "provider": "提供商",
+    "name": "名称",
+    "endpoints": "端点",
+    "enabled": "启用",
+    "availableHours": "可用时段",
+    "alwaysAvailable": "始终可用（无限制）",
+    "metadata": "元数据",
+    "id": "ID",
+    "created": "创建时间",
+    "updated": "更新时间",
+    "channelModels": "通道模型",
+    "addModel": "添加模型",
+    "upstream": "上游",
+    "pricing": "定价",
+    "noPolicy": "无策略",
+    "markup": "加价",
+    "priorityOverride": "优先级",
+    "defaultPriority": "默认",
+    "noModels": "此通道暂无模型",
+    "addFirstModel": "添加第一个模型",
+    "editModal": {
+      "title": "编辑通道",
+      "name": "名称",
+      "priority": "优先级",
+      "weight": "权重",
+      "weightHint": "数值越大流量越多",
+      "enabled": "启用"
+    },
+    "addModelModal": {
+      "title": "添加模型到通道",
+      "selectModel": "选择模型",
+      "selectPlaceholder": "选择一个模型...",
+      "upstreamModelName": "上游模型名称",
+      "upstreamPlaceholder": "例如 gpt-4o, claude-3-opus",
+      "upstreamHint": "提供商期望的精确模型名称",
+      "pricingPolicy": "定价策略",
+      "noPolicy": "无策略",
+      "markupRatio": "加价比例",
+      "markupHint": "应用于定价策略费用的倍率（例如 1.0 = 无加价）",
+      "enabled": "启用"
+    },
+    "editModelModal": {
+      "title": "编辑 {{name}}",
+      "upstreamModelName": "上游模型名称",
+      "pricingPolicy": "定价策略",
+      "noPolicy": "无策略",
+      "markupRatio": "加价比例",
+      "markupHint": "应用于定价策略费用的倍率",
+      "priorityOverride": "优先级覆盖",
+      "priorityPlaceholder": "留空则使用通道默认值",
+      "enabled": "启用"
+    },
+    "updateApiKeyModal": {
+      "title": "更新 API 密钥",
+      "warning": "这将替换当前的 API 密钥。请确保新密钥有效。",
+      "newApiKey": "新 API 密钥",
+      "placeholder": "输入新的 API 密钥",
+      "updateKey": "更新密钥"
+    },
+    "editHoursModal": {
+      "title": "编辑可用时段",
+      "description": "将此通道限制在特定的日期和时间段。留空表示始终可用。所有时间均为 UTC。",
+      "slot": "时段 {{number}}",
+      "remove": "移除",
+      "start": "开始",
+      "end": "结束",
+      "days": "星期",
+      "addSlot": "+ 添加时段"
+    },
+    "deleteChannel": "确定删除通道「{{name}}」？",
+    "removeModel": "确定从此通道移除「{{name}}」？"
+  },
+  "usage": {
+    "title": "用量",
+    "description": "Token 消耗和费用明细",
+    "records": "条记录",
+    "filters": "筛选",
+    "clear": "清除",
+    "from": "开始",
+    "to": "结束",
+    "apiKey": "API 密钥",
+    "allApiKeys": "所有 API 密钥",
+    "stats": {
+      "totalCost": "总费用",
+      "requests": "请求数",
+      "inputTokens": "输入 Token",
+      "cacheRead": "缓存读取",
+      "cacheCreated": "缓存创建",
+      "outputTokens": "输出 Token"
+    },
+    "chart": {
+      "title": "各模型 Token 用量",
+      "input": "输入",
+      "cacheRead": "缓存读取",
+      "cacheCreated": "缓存创建",
+      "output": "输出",
+      "cost": "费用",
+      "requests": "请求数"
+    },
+    "table": {
+      "time": "时间",
+      "key": "密钥",
+      "model": "模型",
+      "protocol": "协议",
+      "input": "输入",
+      "cacheRead": "缓存读取",
+      "cacheCreated": "缓存创建",
+      "output": "输出",
+      "cost": "费用"
+    },
+    "noData": "所选时段暂无用量数据",
+    "pagination": {
+      "total": "共 {{count}} 条",
+      "previous": "上一页",
+      "next": "下一页"
+    }
+  },
+  "logs": {
+    "title": "审计日志",
+    "description": "包含完整请求/响应体的 API 请求历史",
+    "records": "条记录",
+    "filters": "筛选",
+    "clear": "清除",
+    "from": "开始",
+    "to": "结束",
+    "apiKey": "API 密钥",
+    "allKeys": "所有密钥",
+    "stream": "流式",
+    "table": {
+      "time": "时间",
+      "model": "模型",
+      "channel": "通道",
+      "protocol": "协议",
+      "stream": "流式",
+      "status": "状态",
+      "latency": "延迟",
+      "input": "输入",
+      "output": "输出",
+      "actions": "操作",
+      "view": "查看"
+    },
+    "empty": {
+      "title": "未找到日志",
+      "tryAdjusting": "请尝试调整筛选条件"
+    },
+    "total": "共 {{count}} 条",
+    "detail": {
+      "title": "日志详情",
+      "requestDetails": "请求详情",
+      "time": "时间",
+      "model": "模型",
+      "protocol": "协议",
+      "stream": "流式",
+      "status": "状态",
+      "latency": "延迟",
+      "tokens": "Token 数",
+      "tokenSummary": "{{input}} 输入 / {{output}} 输出",
+      "provider": "提供商",
+      "channel": "通道",
+      "routing": "路由信息",
+      "requestPath": "请求路径",
+      "upstreamUrl": "上游 URL",
+      "originalModel": "原始模型",
+      "upstreamModel": "上游模型",
+      "overrideReason": "覆盖原因",
+      "headers": "请求头",
+      "request": "请求",
+      "response": "响应",
+      "requestBody": "请求体",
+      "responseBody": "响应体"
+    }
+  },
+  "providerDetail": {
+    "backToProviders": "返回提供商列表",
+    "pageTitle": "提供商：{{name}}",
+    "providerNotFound": "未找到提供商",
+    "form": {
+      "name": "名称",
+      "defaultEndpoint": "默认端点",
+      "openaiEndpoint": "OpenAI 端点",
+      "anthropicEndpoint": "Anthropic 端点",
+      "proxyUrl": "代理 URL",
+      "enabled": "启用",
+      "deleteProvider": "删除提供商"
+    },
+    "confirmDeleteProvider": "确定删除此提供商及其所有模型？",
+    "tabs": {
+      "models": "模型",
+      "channels": "通道"
+    },
+    "models": {
+      "title": "通道模型",
+      "addModel": "添加模型",
+      "table": {
+        "modelId": "模型 ID",
+        "upstreamName": "上游名称",
+        "priority": "优先级",
+        "pricingPolicy": "定价策略",
+        "markup": "加价比例",
+        "status": "状态",
+        "actions": "操作"
+      },
+      "active": "活跃",
+      "disabled": "已禁用",
+      "confirmRemove": "确定从该提供商移除模型「{{modelId}}」？",
+      "empty": "未配置模型",
+      "addFirst": "添加第一个模型"
+    },
+    "channels": {
+      "title": "通道",
+      "addChannel": "添加通道",
+      "table": {
+        "name": "名称",
+        "priority": "优先级",
+        "status": "状态",
+        "actions": "操作"
+      },
+      "active": "活跃",
+      "disabled": "已禁用",
+      "confirmDelete": "确定删除通道「{{name}}」？",
+      "empty": "未配置通道",
+      "addFirst": "添加第一个通道"
+    },
+    "modelModal": {
+      "editTitle": "编辑通道模型",
+      "addTitle": "添加通道模型",
+      "modelId": "模型 ID",
+      "modelIdPlaceholder": "例如 gpt-4o",
+      "upstreamModelName": "上游模型名称",
+      "upstreamModelNamePlaceholder": "留空则使用模型 ID",
+      "priorityOverride": "优先级覆盖",
+      "priorityOverridePlaceholder": "使用通道默认值",
+      "pricingPolicy": "定价策略",
+      "noPolicy": "无策略",
+      "markupRatio": "加价比例",
+      "enabled": "启用"
+    },
+    "channelModal": {
+      "editTitle": "编辑通道：{{name}}",
+      "addTitle": "添加通道",
+      "name": "名称",
+      "namePlaceholder": "例如 primary",
+      "apiKey": "API 密钥",
+      "apiKeyPlaceholder": "上游 API 密钥",
+      "priority": "优先级",
+      "enabled": "启用"
+    }
+  },
+  "users": {
+    "title": "用户",
+    "description": "管理用户账户和权限",
+    "table": {
+      "username": "用户名",
+      "role": "角色",
+      "status": "状态",
+      "balance": "余额",
+      "created": "创建时间",
+      "actions": "操作"
+    },
+    "roleAdmin": "管理员",
+    "roleUser": "用户",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "noUsers": "暂无用户",
+    "pagination": {
+      "total": "共 {{count}} 个",
+      "previous": "上一页",
+      "next": "下一页"
+    },
+    "drawer": {
+      "title": "用户详情",
+      "accountBalance": "账户余额",
+      "threshold": "阈值",
+      "lowBalance": "余额不足",
+      "recharge": "充值",
+      "adjust": "调整",
+      "recentTransactions": "最近交易",
+      "noTransactions": "暂无交易记录",
+      "credit": "充值",
+      "debit": "扣费",
+      "adjustment": "调整",
+      "refund": "退款"
+    },
+    "rechargeModal": {
+      "title": "充值余额",
+      "amount": "金额（美元）",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "例如：月度充值",
+      "confirmRecharge": "确认充值"
+    },
+    "adjustModal": {
+      "title": "调整余额",
+      "type": "类型",
+      "creditAdjustment": "信用调整（增加）",
+      "debitRefund": "借记/退款（扣减）",
+      "amount": "金额（美元）",
+      "descriptionLabel": "描述",
+      "descriptionPlaceholder": "例如：客户补偿",
+      "confirmAdjustment": "确认调整"
+    },
+    "detail": "详情",
+    "usage": "用量",
+    "deleteUser": "确定删除此用户？",
+    "usageDrawer": {
+      "title": "用户用量",
+      "noUsage": "该用户暂无用量数据",
+      "totalCost": "总费用",
+      "requests": "请求数",
+      "inputTokens": "输入 Token",
+      "outputTokens": "输出 Token",
+      "tokenUsageByModel": "各模型 Token 用量",
+      "table": {
+        "time": "时间",
+        "model": "模型",
+        "protocol": "协议",
+        "input": "输入",
+        "output": "输出",
+        "cost": "费用"
+      },
+      "noUsageRecords": "暂无用量记录",
+      "pagination": {
+        "total": "共 {{count}} 条",
+        "previous": "上一页",
+        "next": "下一页"
+      }
+    }
+  },
+  "settings": {
+    "title": "设置",
+    "description": "网关配置",
+    "tabs": {
+      "general": "通用",
+      "security": "安全与审计",
+      "system": "系统信息",
+      "about": "关于"
+    },
+    "general": {
+      "sectionTitle": "通用设置",
+      "allowRegistration": "允许注册",
+      "allowRegistrationDesc": "允许新用户在登录页注册",
+      "serverHost": "服务器地址",
+      "serverHostDesc": "代理端点使用的网关基础 URL"
+    },
+    "security": {
+      "sectionTitle": "审计日志",
+      "logRequestBody": "记录请求体",
+      "logRequestBodyDesc": "在审计日志中捕获并存储上游请求负载",
+      "logResponseBody": "记录响应体",
+      "logResponseBodyDesc": "在审计日志中捕获并存储上游响应负载",
+      "storageNotice": "启用请求/响应体记录可能会增加存储用量。审计日志将按照配置的保留期限进行保留。"
+    },
+    "system": {
+      "sectionTitle": "基础设施配置",
+      "serverBindAddress": "服务器绑定地址",
+      "databaseDriver": "数据库驱动",
+      "rateLimitWindow": "速率限制窗口",
+      "rateLimitFlushInterval": "速率限制刷新间隔",
+      "upstreamTimeout": "上游超时",
+      "auditRetention": "审计保留",
+      "days": "{{count}} 天",
+      "configNotice": "这些值来源于 config.toml。更改需要编辑配置文件并重启网关。"
+    },
+    "about": {
+      "sectionTitle": "网关信息",
+      "version": "版本",
+      "database": "数据库",
+      "linksTitle": "链接",
+      "githubRepo": "GitHub 仓库",
+      "githubDesc": "源代码、问题、文档"
+    }
+  },
+  "account": {
+    "administrator": "管理员",
+    "user": "用户",
+    "balance": "余额",
+    "threshold": "阈值",
+    "status": "状态",
+    "lowBalance": "余额不足",
+    "active": "正常",
+    "transactionHistory": "交易记录",
+    "table": {
+      "time": "时间",
+      "type": "类型",
+      "amount": "金额",
+      "balanceAfter": "变动后余额",
+      "description": "描述"
+    },
+    "noTransactions": "暂无交易记录",
+    "pagination": {
+      "total": "共 {{count}} 条",
+      "previous": "上一页",
+      "next": "下一页"
+    },
+    "credit": "充值",
+    "debit": "扣费",
+    "adjustment": "调整",
+    "refund": "退款"
+  },
+  "accountBalance": {
+    "title": "账户余额",
+    "balance": "余额",
+    "threshold": "阈值",
+    "currency": "币种",
+    "recharge": "充值",
+    "adjust": "调整",
+    "table": {
+      "time": "时间",
+      "type": "类型",
+      "amount": "金额",
+      "balanceAfter": "变动后余额",
+      "description": "描述"
+    },
+    "noTransactions": "暂无交易记录",
+    "pagination": {
+      "total": "共 {{count}} 条",
+      "previous": "上一页",
+      "next": "下一页"
+    },
+    "credit": "充值",
+    "debit": "扣费",
+    "adjustment": "调整",
+    "refund": "退款",
+    "rechargeModal": {
+      "title": "充值余额",
+      "amount": "金额（美元）",
+      "descriptionLabel": "描述（可选）",
+      "descriptionPlaceholder": "例如：月度充值",
+      "confirmRecharge": "确认充值"
+    },
+    "adjustModal": {
+      "title": "调整余额",
+      "type": "类型",
+      "creditAdjustment": "信用调整（增加）",
+      "debitRefund": "借记/退款（扣减）",
+      "amount": "金额（美元）",
+      "descriptionLabel": "描述（可选）",
+      "descriptionPlaceholder": "例如：客户补偿",
+      "confirmAdjustment": "确认调整"
+    }
+  },
+  "modelFallbacks": {
+    "title": "模型降级",
+    "description": "为 API 密钥配置降级模型链",
+    "createFallback": "创建降级策略",
+    "groupCount": "{{count}} 个分组",
+    "groupCount_plural": "{{count}} 个分组",
+    "edit": "编辑",
+    "deleteLabel": "删除 {{name}}",
+    "noFallbacks": "暂无模型降级配置",
+    "createFirst": "创建第一个降级策略",
+    "editModal": {
+      "titleEdit": "编辑模型降级",
+      "titleCreate": "创建模型降级",
+      "name": "名称",
+      "namePlaceholder": "例如：GPT-4 降级链",
+      "fallbackGroups": "降级分组",
+      "fallbackGroupsDesc": "每个分组定义等效模型。优先级数字越小越先尝试。",
+      "groupLabel": "分组 {{number}}",
+      "removeGroupLabel": "移除分组 {{number}}",
+      "removeModelLabel": "移除模型",
+      "addModel": "+ 添加模型",
+      "addGroup": "+ 添加分组",
+      "validationError": "每个分组至少需要 2 个模型才能定义降级链。",
+      "update": "更新",
+      "create": "创建"
+    },
+    "deleteModal": {
+      "title": "删除模型降级",
+      "message": "确定删除？引用此配置的 API 密钥将失去降级链。"
+    }
+  },
+  "pricingPolicies": {
+    "title": "定价策略",
+    "description": "为模型和通道配置定价规则",
+    "descriptionCount": "已配置 {{count}} 个定价策略",
+    "loading": "正在加载定价策略...",
+    "addPolicy": "添加策略",
+    "empty": {
+      "title": "暂无定价策略",
+      "description": "创建定价策略以对模型和通道应用计费规则。",
+      "createFirst": "创建第一个策略"
+    },
+    "table": {
+      "name": "名称",
+      "billing": "计费方式",
+      "config": "配置",
+      "models": "模型",
+      "channelModels": "通道模型",
+      "created": "创建时间"
+    },
+    "billingTypes": {
+      "perToken": "按 Token",
+      "perRequest": "按请求",
+      "perCharacter": "按字符",
+      "tieredToken": "分层 Token",
+      "contextTiered": "上下文分层",
+      "hybrid": "混合"
+    },
+    "configCell": {
+      "in": "输入",
+      "out": "输出",
+      "cacheRead": "缓存读",
+      "cacheCreate": "缓存写",
+      "base": "基础",
+      "perCall": "每次调用",
+      "inChar": "输入/字符",
+      "outChar": "输出/字符",
+      "tierCount": "{{count}} 个分层",
+      "tierCount_plural": "{{count}} 个分层"
+    },
+    "form": {
+      "policyName": "策略名称",
+      "policyNamePlaceholder": "例如：标准 GPT-4 定价",
+      "policyNameRequired": "策略名称不能为空",
+      "billingType": "计费方式",
+      "inputPrice": "输入价格（每百万 $）",
+      "outputPrice": "输出价格（每百万 $）",
+      "cacheReadPrice": "缓存读取价格（每百万 $，更便宜）",
+      "cacheReadPlaceholder": "$0.00（默认使用输入价格）",
+      "cacheCreationPrice": "缓存创建价格（每百万 $）",
+      "perRequestPrice": "每次请求价格（$）",
+      "inputPriceChars": "输入价格（每百万字符 $）",
+      "outputPriceChars": "输出价格（每百万字符 $）",
+      "basePrice": "每次调用基础价格（$）",
+      "saveChanges": "保存更改",
+      "createPolicy": "创建策略",
+      "addTitle": "添加定价策略",
+      "editTitle": "编辑 {{name}}"
+    },
+    "contextTiers": {
+      "label": "上下文分层",
+      "addTier": "+ 添加分层",
+      "tierNumber": "分层 {{number}}",
+      "remove": "移除",
+      "upTo": "上限（Token）",
+      "finalTier": "最终分层",
+      "noUpperLimit": "无上限",
+      "inputPrice": "输入（$/百万）",
+      "outputPrice": "输出（$/百万）",
+      "cacheRead": "缓存读取（$/百万）",
+      "cacheCreate": "缓存创建（$/百万）",
+      "upToLabel": "< {{value}}",
+      "aboveLabel": "> {{value}}"
+    },
+    "deletePolicy": "确定删除策略「{{name}}」？"
+  },
+  "ui": {
+    "expand": "展开",
+    "collapse": "收起"
+  },
+  "home": {
+    "brand": "LLM Gateway",
+    "dashboard": "控制台",
+    "hero": {
+      "title1": "一个 API 端点",
+      "title2": "连接所有 LLM 提供商",
+      "description": "统一网关，管理密钥、执行速率限制、追踪成本，并通过单一端点将请求代理到 OpenAI、Anthropic 等提供商。",
+      "getStarted": "开始使用",
+      "seeHowItWorks": "了解工作原理"
+    },
+    "howItWorks": {
+      "title": "工作原理",
+      "step1Title": "配置提供商",
+      "step1Desc": "添加上游 LLM 提供商，设置包含 API 密钥、模型和路由规则的通道。",
+      "step2Title": "路由请求",
+      "step2Desc": "通过单一端点发送请求。网关处理协议转换和负载均衡。",
+      "step3Title": "监控用量",
+      "step3Desc": "按密钥追踪成本、延迟和 Token 用量。每个请求都有完整的审计日志。"
+    },
+    "quickStart": {
+      "title": "快速开始",
+      "openaiSdk": "OpenAI SDK",
+      "anthropicSdk": "Anthropic SDK",
+      "curl": "cURL",
+      "sdkLabel": "{{sdk}} SDK",
+      "dropIn": "直接使用现有 SDK — 只需更改 <code>baseURL</code>"
+    },
+    "cta": {
+      "title": "准备好开始了吗？",
+      "description": "几分钟内即可设置网关。配置提供商、创建 API 密钥，开始路由请求。",
+      "goToDashboard": "进入控制台",
+      "starOnGithub": "在 GitHub 上加星"
+    },
+    "footer": {
+      "brand": "LLM Gateway",
+      "openSource": "开源项目"
+    }
+  }
+}

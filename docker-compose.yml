@@ -7,4 +7,17 @@ services:
       - "3080:8080"
     volumes:
       - /opt/dev/llm-gateway/config.toml:/app/config.toml:ro
-      - /opt/dev/llm-gateway/data:/app/data
+
+  usage-worker:
+    image: ghcr.io/${IMAGE_NAME:-chenxiaoli/llm-gateway}:develop
+    restart: unless-stopped
+    entrypoint: ["/app/llm-gateway-usage-worker"]
+    volumes:
+      - /opt/dev/llm-gateway/config.toml:/app/config.toml:ro
+
+  audit-worker:
+    image: ghcr.io/${IMAGE_NAME:-chenxiaoli/llm-gateway}:develop
+    restart: unless-stopped
+    entrypoint: ["/app/llm-gateway-audit-worker"]
+    volumes:
+      - /opt/dev/llm-gateway/config.toml:/app/config.toml:ro

@@ -69,9 +69,9 @@ impl NatsPublisher {
         let client = async_nats::connect(url).await?;
         let js = jetstream::new(client);
 
-        // Create GATEWAY_USAGE stream (1 M messages, 7-day retention).
+        // Create LLM_GATEWAY_USAGE stream (1 M messages, 7-day retention).
         js.create_stream(jetstream::stream::Config {
-            name: "GATEWAY_USAGE".into(),
+            name: "LLM_GATEWAY_USAGE".into(),
             subjects: vec!["gateway.usage".into()],
             max_messages: 1_000_000,
             retention: jetstream::stream::RetentionPolicy::Limits,
@@ -82,9 +82,9 @@ impl NatsPublisher {
         .await
         .ok(); // idempotent -- ignore already-exists
 
-        // Create GATEWAY_AUDIT stream (5 M messages, 30-day retention).
+        // Create LLM_GATEWAY_AUDIT stream (5 M messages, 30-day retention).
         js.create_stream(jetstream::stream::Config {
-            name: "GATEWAY_AUDIT".into(),
+            name: "LLM_GATEWAY_AUDIT".into(),
             subjects: vec!["gateway.audit".into()],
             max_messages: 5_000_000,
             retention: jetstream::stream::RetentionPolicy::Limits,
@@ -136,7 +136,7 @@ impl NatsPublisher {
                     deliver_subject: "usage-worker-delivery".to_string(),
                     ..Default::default()
                 },
-                "GATEWAY_USAGE",
+                "LLM_GATEWAY_USAGE",
             )
             .await?;
         Ok(consumer)
@@ -154,7 +154,7 @@ impl NatsPublisher {
                     deliver_subject: "audit-worker-delivery".to_string(),
                     ..Default::default()
                 },
-                "GATEWAY_AUDIT",
+                "LLM_GATEWAY_AUDIT",
             )
             .await?;
         Ok(consumer)
