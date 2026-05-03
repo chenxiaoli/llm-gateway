@@ -503,7 +503,7 @@ pub async fn test_channel(
         .unwrap_or("")
         .trim_end_matches('/');
 
-    let upstream_url = format!("{}/chat/completions", base_url);
+    let upstream_url = format!("{}/v1/chat/completions", base_url);
 
     let api_key = decrypt(&channel.api_key, &state.encryption_key)
         .unwrap_or_else(|_| channel.api_key.clone());
