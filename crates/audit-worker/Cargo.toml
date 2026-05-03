@@ -1,0 +1,21 @@
+[package]
+name = "llm-gateway-audit-worker"
+version = "1.0.0"
+edition = "2021"
+
+[[bin]]
+name = "llm-gateway-audit-worker"
+path = "src/main.rs"
+
+[dependencies]
+llm-gateway-storage = { path = "../storage" }
+llm-gateway-audit = { path = "../audit" }
+llm-gateway-nats-publisher = { path = "../nats-publisher" }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+toml = { workspace = true }
+serde = { workspace = true }
+serde_json = "1"
+futures = "0.3"
+shellexpand = "3"

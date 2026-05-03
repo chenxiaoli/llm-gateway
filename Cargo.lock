@@ -1347,6 +1347,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "llm-gateway-audit-worker"
+version = "1.0.0"
+dependencies = [
+ "futures",
+ "llm-gateway-audit",
+ "llm-gateway-nats-publisher",
+ "llm-gateway-storage",
+ "serde",
+ "serde_json",
+ "shellexpand",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "llm-gateway-auth"
 version = "1.0.0"
 dependencies = [
@@ -1425,13 +1442,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "llm-gateway-worker"
+name = "llm-gateway-usage-worker"
 version = "1.0.0"
 dependencies = [
- "async-trait",
  "chrono",
  "futures",
- "llm-gateway-audit",
  "llm-gateway-nats-publisher",
  "llm-gateway-storage",
  "serde",
@@ -1441,7 +1456,6 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]
