@@ -3,8 +3,8 @@
     {
       "name": "OpenAI",
       "endpoints": {
-        "default": "https://api.openai.com/v1",
-        "openai": "https://api.openai.com/v1"
+        "default": "https://api.openai.com",
+        "openai": "https://api.openai.com"
       },
       "enabled": true
     },
@@ -19,8 +19,8 @@
     {
       "name": "MiniMax",
       "endpoints": {
-        "default": "https://api.minimaxi.com/v1",
-        "openai": "https://api.minimaxi.com/v1",
+        "default": "https://api.minimaxi.com",
+        "openai": "https://api.minimaxi.com",
         "anthropic": "https://api.minimaxi.com/anthropic"
       },
       "enabled": true
@@ -37,8 +37,8 @@
     {
       "name": "Alibaba",
       "endpoints": {
-        "default": "https://coding.dashscope.aliyuncs.com/v1",
-        "openai": "https://coding.dashscope.aliyuncs.com/v1",
+        "default": "https://coding.dashscope.aliyuncs.com",
+        "openai": "https://coding.dashscope.aliyuncs.com",
         "anthropic": "https://coding.dashscope.aliyuncs.com/apps/anthropic"
       },
       "enabled": true

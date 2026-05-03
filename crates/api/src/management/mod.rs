@@ -74,6 +74,10 @@ pub fn management_router() -> Router<Arc<AppState>> {
             patch(channels::update_channel_api_key),
         )
         .route(
+            "/api/v1/admin/channels/{id}/test",
+            post(channels::test_channel),
+        )
+        .route(
             "/api/v1/admin/models",
             get(models::list_all_models).post(models::create_model_global),
         )

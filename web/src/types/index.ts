@@ -88,6 +88,20 @@ export interface UpdateModelRequest {
   pricing_policy_id?: string | null;
 }
 
+export interface UserPricingInfo {
+  billing_type: string;
+  config: PricingConfig;
+}
+
+export interface UserModelView {
+  name: string;
+  model_type: string | null;
+  pricing_policy_name: string | null;
+  pricing: UserPricingInfo | null;
+  is_available: boolean;
+  created_at: string;
+}
+
 export interface UsageRecord {
   id: string;
   key_id: string;
@@ -311,6 +325,13 @@ export interface UpdateChannelRequest {
 
 export interface UpdateChannelApiKeyRequest {
   api_key: string;
+}
+
+export interface ChannelTestResult {
+  success: boolean;
+  latency_ms: number;
+  model: string;
+  error: string | null;
 }
 
 // ── Model Fallback Types ──────────────────────────────────────────────────
