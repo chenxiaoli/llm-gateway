@@ -3,6 +3,7 @@ import { listProviders, getProvider, createProvider, updateProvider, deleteProvi
 import type { CreateProviderRequest, UpdateProviderRequest } from '../types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
+import i18n from '../i18n';
 
 export function useProviders() {
   return useQuery({ queryKey: ['providers'], queryFn: listProviders });
@@ -16,8 +17,8 @@ export function useCreateProvider() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateProviderRequest) => createProvider(input),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); toast.success('Provider created'); },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to create provider')); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); toast.success(i18n.t('toasts.providerCreated')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.providerCreateFailed'))); },
   });
 }
 
@@ -28,9 +29,9 @@ export function useUpdateProvider() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['providers'] });
       queryClient.invalidateQueries({ queryKey: ['providers', variables.id] });
-      toast.success('Provider updated');
+      toast.success(i18n.t('toasts.providerUpdated'));
     },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to update provider')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.providerUpdateFailed'))); },
   });
 }
 
@@ -38,8 +39,8 @@ export function useDeleteProvider() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteProvider(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); toast.success('Provider deleted'); },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to delete provider')); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers'] }); toast.success(i18n.t('toasts.providerDeleted')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.providerDeleteFailed'))); },
   });
 }
 
@@ -58,8 +59,8 @@ export function useUpdateProviderModels() {
       updateProviderModels(providerId, models),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['providers', variables.providerId, 'models'] });
-      toast.success('Supported models updated');
+      toast.success(i18n.t('toasts.providerModelsUpdated'));
     },
-    onError: (err) => { toast.error(getErrorMessage(err, 'Failed to update supported models')); },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.providerModelsUpdateFailed'))); },
   });
 }

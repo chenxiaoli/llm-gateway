@@ -9,6 +9,7 @@ import {
 import type { CreateTransactionRequest, UpdateThresholdRequest } from '../types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
+import i18n from '../i18n';
 
 export function useUserBalance(userId: string, page = 1, pageSize = 20) {
   return useQuery({
@@ -32,10 +33,10 @@ export function useRechargeUser() {
       queryClient.invalidateQueries({
         queryKey: ['user-balance', variables.userId],
       });
-      toast.success('Balance recharged successfully');
+      toast.success(i18n.t('toasts.balanceRecharged'));
     },
     onError: (err) => {
-      toast.error(getErrorMessage(err, 'Failed to recharge'));
+      toast.error(getErrorMessage(err, i18n.t('toasts.balanceRechargeFailed')));
     },
   });
 }
@@ -54,10 +55,10 @@ export function useAdjustUser() {
       queryClient.invalidateQueries({
         queryKey: ['user-balance', variables.userId],
       });
-      toast.success('Balance adjusted successfully');
+      toast.success(i18n.t('toasts.balanceAdjusted'));
     },
     onError: (err) => {
-      toast.error(getErrorMessage(err, 'Failed to adjust balance'));
+      toast.error(getErrorMessage(err, i18n.t('toasts.balanceAdjustFailed')));
     },
   });
 }
@@ -76,10 +77,10 @@ export function useUpdateThreshold() {
       queryClient.invalidateQueries({
         queryKey: ['user-balance', variables.userId],
       });
-      toast.success('Threshold updated');
+      toast.success(i18n.t('toasts.thresholdUpdated'));
     },
     onError: (err) => {
-      toast.error(getErrorMessage(err, 'Failed to update threshold'));
+      toast.error(getErrorMessage(err, i18n.t('toasts.thresholdUpdateFailed')));
     },
   });
 }

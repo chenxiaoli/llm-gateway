@@ -3,6 +3,7 @@ import { listPricingPolicies, createPricingPolicy, updatePricingPolicy, deletePr
 import type { CreatePricingPolicy, UpdatePricingPolicy } from '../types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
+import i18n from '../i18n';
 
 export function usePricingPolicies() {
   return useQuery({ queryKey: ['pricing-policies'], queryFn: listPricingPolicies });
@@ -14,10 +15,10 @@ export function useCreatePricingPolicy() {
     mutationFn: (input: CreatePricingPolicy) => createPricingPolicy(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pricing-policies'] });
-      toast.success('Pricing policy created');
+      toast.success(i18n.t('toasts.pricingCreated'));
     },
     onError: (err) => {
-      toast.error(getErrorMessage(err, 'Failed to create pricing policy'));
+      toast.error(getErrorMessage(err, i18n.t('toasts.pricingCreateFailed')));
     },
   });
 }
@@ -28,10 +29,10 @@ export function useUpdatePricingPolicy() {
     mutationFn: ({ id, input }: { id: string; input: UpdatePricingPolicy }) => updatePricingPolicy(id, input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pricing-policies'] });
-      toast.success('Pricing policy updated');
+      toast.success(i18n.t('toasts.pricingUpdated'));
     },
     onError: (err) => {
-      toast.error(getErrorMessage(err, 'Failed to update pricing policy'));
+      toast.error(getErrorMessage(err, i18n.t('toasts.pricingUpdateFailed')));
     },
   });
 }
@@ -42,10 +43,10 @@ export function useDeletePricingPolicy() {
     mutationFn: (id: string) => deletePricingPolicy(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pricing-policies'] });
-      toast.success('Pricing policy deleted');
+      toast.success(i18n.t('toasts.pricingDeleted'));
     },
     onError: (err) => {
-      toast.error(getErrorMessage(err, 'Failed to delete pricing policy'));
+      toast.error(getErrorMessage(err, i18n.t('toasts.pricingDeleteFailed')));
     },
   });
 }
