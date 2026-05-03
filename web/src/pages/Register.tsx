@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
 import { getAuthConfig } from '../api/auth';
 import { Button } from '../components/ui/Button';
@@ -9,6 +10,7 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
 
 export default function Register() {
+  const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -27,7 +29,7 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirm) {
-      toast.error('Passwords do not match');
+      toast.error(t('auth.errorMismatch'));
       return;
     }
     if (!username || !password) return;
@@ -36,7 +38,7 @@ export default function Register() {
       await register({ username, password });
       navigate('/console/dashboard');
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Registration failed'));
+      toast.error(getErrorMessage(err, t('auth.errorRegister')));
     } finally {
       setLoading(false);
     }
@@ -50,21 +52,21 @@ export default function Register() {
             <div className="h-11 w-11 rounded-xl bg-primary flex items-center justify-center font-bold text-lg text-primary-content tracking-tight">
               GW
             </div>
-            <span className="font-bold text-xl">Create Account</span>
+            <span className="font-bold text-xl">{t('auth.signUp')}</span>
           </div>
 
           {registrationDisabled && (
-            <Alert variant="warning" className="mb-4">Registration is currently disabled</Alert>
+            <Alert variant="warning" className="mb-4">{t('auth.registrationDisabled')}</Alert>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">
             <div className="form-control">
-              <label className="label"><span className="label-text font-medium">Username</span></label>
+              <label className="label"><span className="label-text font-medium">{t('auth.username')}</span></label>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username"
+                placeholder={t('auth.username')}
                 required
                 minLength={3}
                 disabled={registrationDisabled}
@@ -72,12 +74,12 @@ export default function Register() {
               />
             </div>
             <div className="form-control">
-              <label className="label"><span className="label-text font-medium">Password</span></label>
+              <label className="label"><span className="label-text font-medium">{t('auth.password')}</span></label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
+                placeholder={t('auth.password')}
                 required
                 minLength={6}
                 disabled={registrationDisabled}
@@ -85,12 +87,12 @@ export default function Register() {
               />
             </div>
             <div className="form-control">
-              <label className="label"><span className="label-text font-medium">Confirm Password</span></label>
+              <label className="label"><span className="label-text font-medium">{t('auth.confirmPassword')}</span></label>
               <input
                 type="password"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
-                placeholder="Confirm password"
+                placeholder={t('auth.confirmPassword')}
                 required
                 disabled={registrationDisabled}
                 className="input input-bordered w-full"
@@ -98,14 +100,14 @@ export default function Register() {
             </div>
             <div className="pt-2">
               <Button variant="primary" size="lg" loading={loading} disabled={registrationDisabled} className="w-full">
-                Register
+                {t('auth.register')}
               </Button>
             </div>
           </form>
 
           <p className="text-center text-sm text-base-content/50 mt-5">
-            Already have an account?{' '}
-            <Link to="/console/login" className="link link-primary">Sign in</Link>
+            {t('auth.hasAccount')}{' '}
+            <Link to="/console/login" className="link link-primary">{t('auth.signInLink')}</Link>
           </p>
         </div>
       </div>

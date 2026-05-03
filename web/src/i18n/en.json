@@ -50,5 +50,32 @@
     "account": "Account",
     "changePassword": "Change Password",
     "logout": "Logout"
+  },
+  "auth": {
+    "signIn": "Sign In",
+    "signUp": "Create Account",
+    "register": "Register",
+    "username": "Username",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmNewPassword": "Confirm New Password",
+    "changePassword": "Change Password",
+    "setNewPassword": "Set New Password",
+    "updatePassword": "Update Password",
+    "minChars": "Minimum 8 characters",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "createOne": "Create one",
+    "signInLink": "Sign in",
+    "errorInvalid": "Invalid username or password",
+    "errorMismatch": "Passwords do not match",
+    "errorShort": "Password must be at least 8 characters",
+    "errorChange": "Failed to change password",
+    "errorRegister": "Registration failed",
+    "successChanged": "Password changed",
+    "updateAccountPassword": "Update your account password",
+    "registrationDisabled": "Registration is currently disabled"
   }
 }
