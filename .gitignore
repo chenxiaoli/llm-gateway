@@ -8,6 +8,7 @@ node_modules/
 
 # Data & logs
 data/
+*.db
 test-results/
 *.log
 
