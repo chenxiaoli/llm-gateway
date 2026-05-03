@@ -3,7 +3,6 @@ use axum::routing::{get, post};
 use axum::http::{header, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use llm_gateway_api::{self as api, AppState, SystemInfo, InMemoryChannelRegistry, spawn_registry_refresh};
-use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
 use llm_gateway_storage::postgres::PostgresStorage;
@@ -79,23 +78,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Init rate limiter
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.window_size_secs));
 
-    // Init audit logger
-    let audit_logger = Arc::new(AuditLogger::new(storage.clone()));
-
-    // Spawn NATS consumer workers
-    {
-        let nats_usage = nats_publisher.clone();
-        let nats_audit = nats_publisher.clone();
-        let storage_usage = storage.clone();
-        let storage_audit = storage.clone();
-        tokio::spawn(async move {
-            llm_gateway_api::workers::start_nats_usage_worker(storage_usage, nats_usage).await;
-        });
-        tokio::spawn(async move {
-            llm_gateway_api::workers::start_nats_audit_worker(storage_audit, nats_audit).await;
-        });
-    }
-
     // Create settlement channel and spawn background worker
     let (settlement_tx, settlement_rx) = tokio::sync::mpsc::channel::<llm_gateway_api::SettlementTrigger>(1);
     let settlement_interval_secs = 60u64;
@@ -117,7 +99,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let state = Arc::new(AppState {
         storage,
         rate_limiter,
-        audit_logger,
         jwt_secret: config.auth.jwt_secret.clone(),
         encryption_key,
         nats_publisher,

@@ -11,7 +11,6 @@ pub mod management;
 pub use crate::proxy::{ChannelRegistry, InMemoryChannelRegistry, ResolvedChannel, spawn_registry_refresh};
 pub use settlement::{start_settlement_worker, SettlementTrigger};
 
-use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::Storage;
 use std::sync::Arc;
@@ -20,7 +19,6 @@ use tokio::sync::mpsc;
 pub struct AppState {
     pub storage: Arc<dyn Storage>,
     pub rate_limiter: Arc<RateLimiter>,
-    pub audit_logger: Arc<AuditLogger>,
     pub jwt_secret: String,
     pub encryption_key: [u8; 32],
     pub nats_publisher: std::sync::Arc<llm_gateway_nats_publisher::NatsPublisher>,

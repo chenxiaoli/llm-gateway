@@ -1,21 +1,24 @@
 [package]
-name = "llm-gateway"
+name = "llm-gateway-worker"
 version = "1.0.0"
 edition = "2021"
 
+[[bin]]
+name = "llm-gateway-worker"
+path = "src/main.rs"
+
 [dependencies]
-llm-gateway-api = { path = "../api" }
 llm-gateway-storage = { path = "../storage" }
-llm-gateway-ratelimit = { path = "../ratelimit" }
+llm-gateway-audit = { path = "../audit" }
 llm-gateway-nats-publisher = { path = "../nats-publisher" }
 tokio = { workspace = true }
-axum = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 toml = { workspace = true }
 serde = { workspace = true }
-tower = { workspace = true }
-rust-embed = { version = "8", features = ["mime-guess"] }
-mime_guess = "2"
-sha2 = "0.10"
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+futures = "0.3"
+async-trait = { workspace = true }
 shellexpand = "3"
