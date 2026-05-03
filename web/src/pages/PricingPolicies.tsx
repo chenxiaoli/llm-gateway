@@ -24,7 +24,7 @@ const useSchema = (t: (key: string) => string) => z.object({
   request_price: z.string().optional(),
 });
 
-type FormValues = z.infer<ReturnType typeof useSchema>;
+type FormValues = z.infer<ReturnType<typeof useSchema>>;
 
 // Prices are stored as integer subunits (100_000_000 per USD) matching the backend.
 const UNITS_PER_USD = 100_000_000;
