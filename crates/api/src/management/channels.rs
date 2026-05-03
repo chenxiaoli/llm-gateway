@@ -447,3 +447,112 @@ pub async fn delete_channel(
 
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
+
+pub async fn test_channel(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<llm_gateway_storage::ChannelTestResult>, ApiError> {
+    require_admin(&headers, &state.jwt_secret)?;
+
+    let channel = state
+        .storage
+        .get_channel(&id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound(format!("Channel '{}' not found", id)))?;
+
+    let provider = state
+        .storage
+        .get_provider(&channel.provider_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound(format!("Provider '{}' not found", channel.provider_id)))?;
+
+    let channel_models = state
+        .storage
+        .list_channel_models_by_channel(&id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let cm = channel_models
+        .iter()
+        .find(|cm| cm.enabled)
+        .ok_or(ApiError::BadRequest("No enabled models on this channel".to_string()))?;
+
+    let model_name = match &cm.upstream_model_name {
+        Some(name) => name.clone(),
+        None => state
+            .storage
+            .get_model_by_id(&cm.model_id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+            .map(|m| m.name)
+            .unwrap_or_else(|| cm.model_id.clone()),
+    };
+
+    let endpoints: serde_json::Value = provider
+        .endpoints
+        .and_then(|e| serde_json::from_str(&e).ok())
+        .unwrap_or(serde_json::Value::Null);
+
+    let base_url = endpoints
+        .get("openai")
+        .and_then(|v| v.as_str())
+        .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
+        .unwrap_or("")
+        .trim_end_matches('/');
+
+    let upstream_url = format!("{}/chat/completions", base_url);
+
+    let api_key = decrypt(&channel.api_key, &state.encryption_key)
+        .unwrap_or_else(|_| channel.api_key.clone());
+
+    let body = serde_json::json!({
+        "model": model_name,
+        "messages": [{"role": "user", "content": "Hi"}],
+        "max_tokens": 5
+    });
+
+    let start = std::time::Instant::now();
+    let client = reqwest::Client::new();
+    let result = client
+        .post(&upstream_url)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .timeout(std::time::Duration::from_secs(30))
+        .json(&body)
+        .send()
+        .await;
+
+    let latency_ms = start.elapsed().as_millis() as u64;
+
+    match result {
+        Ok(resp) => {
+            let status = resp.status();
+            if status.is_success() {
+                Ok(Json(llm_gateway_storage::ChannelTestResult {
+                    success: true,
+                    latency_ms,
+                    model: model_name,
+                    error: None,
+                }))
+            } else {
+                let status_code = status.as_u16();
+                let error_body = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                Ok(Json(llm_gateway_storage::ChannelTestResult {
+                    success: false,
+                    latency_ms,
+                    model: model_name,
+                    error: Some(format!("{} {}", status_code, error_body)),
+                }))
+            }
+        }
+        Err(e) => Ok(Json(llm_gateway_storage::ChannelTestResult {
+            success: false,
+            latency_ms,
+            model: model_name,
+            error: Some(e.to_string()),
+        })),
+    }
+}
