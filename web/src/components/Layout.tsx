@@ -28,40 +28,8 @@ import {
 import { useAuthStore } from '../stores/authStore';
 import { useTheme } from '../hooks/useTheme';
 import { apiClient } from '../api/client';
-
-const consoleItems = [
-  { key: '/console/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { key: '/console/keys', icon: KeyRound, label: 'API Keys' },
-  { key: '/console/model-fallbacks', icon: ArrowRightLeft, label: 'Model Fallbacks' },
-  { key: '/console/models', icon: SquareStack, label: 'Models' },
-  { key: '/console/usage', icon: BarChart3, label: 'Usage' },
-];
-
-const adminItems = [
-  { key: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { key: '/admin/channels', icon: Network, label: 'Channels' },
-  { key: '/admin/providers', icon: Server, label: 'Providers' },
-  { key: '/admin/models', icon: Cpu, label: 'Models' },
-  { key: '/admin/pricing-policies', icon: DollarSign, label: 'Pricing Policies' },
-  { key: '/admin/users', icon: Users, label: 'Users' },
-  { key: '/admin/settings', icon: Settings, label: 'Settings' },
-  { key: '/admin/logs', icon: FileText, label: 'Logs' },
-];
-
-// Map paths to display names for breadcrumbs
-const routeLabels: Record<string, string> = {
-  dashboard: 'Dashboard',
-  keys: 'API Keys',
-  'model-fallbacks': 'Model Fallbacks',
-  usage: 'Usage',
-  providers: 'Providers',
-  channels: 'Channels',
-  models: 'Models',
-  'pricing-policies': 'Pricing Policies',
-  users: 'Users',
-  settings: 'Settings',
-  logs: 'Audit Logs',
-};
+import { useTranslation } from 'react-i18next';
+import { Globe } from 'lucide-react';
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -75,6 +43,46 @@ export default function AppLayout() {
   const logout = useAuthStore((s) => s.logout);
   const isAdmin = user?.role === 'admin';
   const { theme, toggleTheme } = useTheme();
+  const { t, i18n } = useTranslation();
+  const toggleLanguage = () => {
+    const next = i18n.language === 'zh' ? 'en' : 'zh';
+    i18n.changeLanguage(next);
+    localStorage.setItem('i18n-language', next);
+  };
+
+  const consoleItems = [
+    { key: '/console/dashboard', icon: LayoutDashboard, label: t('sidebar.dashboard') },
+    { key: '/console/keys', icon: KeyRound, label: t('sidebar.keys') },
+    { key: '/console/model-fallbacks', icon: ArrowRightLeft, label: t('sidebar.modelFallbacks') },
+    { key: '/console/models', icon: SquareStack, label: t('sidebar.models') },
+    { key: '/console/usage', icon: BarChart3, label: t('sidebar.usage') },
+  ];
+
+  const adminItems = [
+    { key: '/admin/dashboard', icon: LayoutDashboard, label: t('sidebar.dashboard') },
+    { key: '/admin/channels', icon: Network, label: t('sidebar.channels') },
+    { key: '/admin/providers', icon: Server, label: t('sidebar.providers') },
+    { key: '/admin/models', icon: Cpu, label: t('sidebar.models') },
+    { key: '/admin/pricing-policies', icon: DollarSign, label: t('sidebar.pricingPolicies') },
+    { key: '/admin/users', icon: Users, label: t('sidebar.users') },
+    { key: '/admin/settings', icon: Settings, label: t('sidebar.settings') },
+    { key: '/admin/logs', icon: FileText, label: t('sidebar.logs') },
+  ];
+
+  // Map paths to display names for breadcrumbs
+  const routeLabels: Record<string, string> = {
+    dashboard: t('sidebar.dashboard'),
+    keys: t('sidebar.keys'),
+    'model-fallbacks': t('sidebar.modelFallbacks'),
+    usage: t('sidebar.usage'),
+    providers: t('sidebar.providers'),
+    channels: t('sidebar.channels'),
+    models: t('sidebar.models'),
+    'pricing-policies': t('sidebar.pricingPolicies'),
+    users: t('sidebar.users'),
+    settings: t('sidebar.settings'),
+    logs: t('sidebar.logs'),
+  };
 
   useEffect(() => {
     apiClient.get<{ version: string }>('/version').then((r) => setVersion(r.data.version));
@@ -148,7 +156,7 @@ export default function AppLayout() {
       <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 flex flex-col gap-0.5" role="navigation" aria-label="Main navigation">
         {!collapsed && (
           <div className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-1 pb-2">
-            Console
+            {t('sidebar.console')}
           </div>
         )}
         {consoleItems.map((item) => navItem(item, location.pathname === item.key))}
@@ -157,7 +165,7 @@ export default function AppLayout() {
           <>
             {!collapsed && (
               <div className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-5 pb-2">
-                Admin
+                {t('sidebar.admin')}
               </div>
             )}
             {adminItems.map((item) => navItem(item, location.pathname === item.key || location.pathname.startsWith(item.key + '/')))}
@@ -190,7 +198,7 @@ export default function AppLayout() {
             {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : (
               <>
                 <PanelLeftClose className="h-4 w-4 text-base-content/30" />
-                <span className="text-xs text-base-content/30">Collapse</span>
+                <span className="text-xs text-base-content/30">{t('sidebar.collapse')}</span>
               </>
             )}
           </button>
@@ -226,7 +234,7 @@ export default function AppLayout() {
             {/* Reuse nav items at full width */}
             <nav className="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-0.5" role="navigation" aria-label="Main navigation">
               <div className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-1 pb-2">
-                Console
+                {t('sidebar.console')}
               </div>
               {consoleItems.map((item) => {
                 const Icon = item.icon;
@@ -250,7 +258,7 @@ export default function AppLayout() {
               {isAdmin && (
                 <>
                   <div className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-5 pb-2">
-                    Admin
+                    {t('sidebar.admin')}
                   </div>
                   {adminItems.map((item) => {
                     const Icon = item.icon;
@@ -302,7 +310,7 @@ export default function AppLayout() {
                   onClick={() => navigate('/console/dashboard')}
                   className="text-base-content/30 hover:text-base-content/50 transition-colors shrink-0 font-medium"
                 >
-                  Console
+                  {t('sidebar.console')}
                 </button>
                 {breadcrumbSegment !== 'dashboard' && (
                   <>
@@ -323,6 +331,15 @@ export default function AppLayout() {
                 aria-label="Toggle theme"
               >
                 {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </button>
+
+              <button
+                className="btn btn-ghost btn-sm btn-circle"
+                onClick={toggleLanguage}
+                aria-label="Toggle language"
+                title={i18n.language === 'zh' ? 'Switch to English' : '切换到中文'}
+              >
+                <Globe className="h-4 w-4" />
               </button>
 
               <div className="h-4 w-px bg-base-300/60 mx-1" />
@@ -348,14 +365,14 @@ export default function AppLayout() {
                       onClick={() => { setDropdownOpen(false); navigate('/console/account'); }}
                     >
                       <User className="h-4 w-4 text-base-content/40" />
-                      Account
+                      {t('header.account')}
                     </button>
                     <button
                       className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors cursor-pointer"
                       onClick={() => { setDropdownOpen(false); navigate('/console/change-password'); }}
                     >
                       <Lock className="h-4 w-4 text-base-content/40" />
-                      Change Password
+                      {t('header.changePassword')}
                     </button>
                     <div className="my-1.5 border-t border-base-300/40" />
                     <button
@@ -363,7 +380,7 @@ export default function AppLayout() {
                       onClick={() => { setDropdownOpen(false); logout(); }}
                     >
                       <LogOut className="h-4 w-4" />
-                      Logout
+                      {t('header.logout')}
                     </button>
                   </div>
                 )}
