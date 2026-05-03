@@ -25,8 +25,8 @@ A unified API gateway for LLM providers with OpenAI and Anthropic compatible end
 └──────────┘     └──────────────────────────────────────┘     └──────────────┘
                         │              │
                     ┌───┴──┐       ┌────┴────┐
-                    │SQLite │       │  React  │
-                    │/PgSQL │       │Dashboard│
+                    │ PgSQL │       │  React  │
+                    │       │       │Dashboard│
                     └───────┘       └─────────┘
 ```
 
@@ -36,7 +36,7 @@ Built as a Rust workspace with 9 crates:
 |-------|---------------|
 | `gateway` | Server bootstrap, config, assembles all modules |
 | `api` | HTTP handlers (Axum), middleware, routing |
-| `storage` | SQLite/PostgreSQL storage trait + migrations |
+| `storage` | PostgreSQL storage trait + migrations |
 | `auth` | API key generation, SHA-256 verification, JWT + refresh tokens |
 | `ratelimit` | In-memory sliding window rate limiter |
 | `billing` | Token/request cost calculation using typed pricing configs |
@@ -89,9 +89,8 @@ jwt_secret = "your-jwt-secret-min-32-chars"
 allow_registration = true  # default: true
 
 [database]
-driver = "sqlite"   # or "postgres"
-url = "./data/gateway.db"                          # for sqlite
-# url = "postgresql://user:pass@localhost/gateway"  # for postgres
+driver = "postgres"
+url = "postgresql://user:pass@localhost/gateway"
 
 [rate_limit]
 flush_interval_secs = 30
