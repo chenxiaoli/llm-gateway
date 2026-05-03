@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DollarSign, MessageSquare, Zap, ArrowDownToLine, ArrowUpFromLine, BarChart3, Filter, RotateCcw, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { motion } from 'framer-motion';
@@ -38,6 +39,7 @@ function MetricCard({ label, value, icon, index, reducedMotion }: MetricCardProp
 }
 
 export default function Usage() {
+  const { t } = useTranslation();
   const [since, setSince] = useState('');
   const [until, setUntil] = useState('');
   const [keyFilter, setKeyFilter] = useState('');
@@ -91,17 +93,17 @@ export default function Usage() {
       >
         <div>
           <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
-            Usage
+            {t('usage.title')}
           </h1>
           <p className="text-base text-base-content/50">
-            Token consumption and cost breakdown
+            {t('usage.description')}
           </p>
         </div>
         {!isLoading && data && (
           <div className="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-xl border border-base-300/40 bg-base-100 shrink-0">
             <BarChart3 className="h-4 w-4 text-base-content/40" />
             <span className="font-mono text-sm font-medium">{data.total.toLocaleString()}</span>
-            <span className="text-xs text-base-content/40">records</span>
+            <span className="text-xs text-base-content/40">{t('usage.records')}</span>
           </div>
         )}
       </motion.div>
@@ -117,7 +119,7 @@ export default function Usage() {
           <div className="px-5 py-3 border-b border-base-300/60 bg-base-100/60 flex items-center justify-between">
             <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25 flex items-center gap-1.5">
               <Filter className="h-3 w-3" />
-              Filters
+              {t('usage.filters')}
               {[since, until, keyFilter].filter(Boolean).length > 0 && (
                 <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary/20 text-primary text-[10px] font-bold">
                   {[since, until, keyFilter].filter(Boolean).length}
@@ -131,7 +133,7 @@ export default function Usage() {
                 icon={<RotateCcw className="h-3.5 w-3.5" />}
                 onClick={() => { setSince(''); setUntil(''); setKeyFilter(''); setPage(1); }}
               >
-                Clear
+                {t('usage.clear')}
               </Button>
             )}
           </div>
@@ -139,23 +141,23 @@ export default function Usage() {
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5">
                 <Clock className="h-3 w-3 inline mr-1" />
-                From
+                {t('usage.from')}
               </label>
               <input type="date" value={since} onChange={(e) => { setSince(e.target.value); setPage(1); }} className={inputStyle} />
             </div>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5">
                 <Clock className="h-3 w-3 inline mr-1" />
-                To
+                {t('usage.to')}
               </label>
               <input type="date" value={until} onChange={(e) => { setUntil(e.target.value); setPage(1); }} className={inputStyle} />
             </div>
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5">
-                API Key
+                {t('usage.apiKey')}
               </label>
               <select value={keyFilter} onChange={(e) => { setKeyFilter(e.target.value); setPage(1); }} className={selectStyle}>
-                <option value="">All API Keys</option>
+                <option value="">{t('usage.allApiKeys')}</option>
                 {keys?.items?.map((k) => (<option key={k.id} value={k.id}>{k.name}</option>))}
               </select>
             </div>
@@ -167,42 +169,42 @@ export default function Usage() {
       {!summaryLoading && (
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
           <MetricCard
-            label="Total Cost"
+            label={t('usage.stats.totalCost')}
             value={`$${grandTotals.cost.toFixed(4)}`}
             icon={<DollarSign className="h-4 w-4 text-emerald-400" />}
             index={0}
             reducedMotion={reducedMotion}
           />
           <MetricCard
-            label="Requests"
+            label={t('usage.stats.requests')}
             value={grandTotals.requests.toLocaleString()}
             icon={<MessageSquare className="h-4 w-4 text-blue-400" />}
             index={1}
             reducedMotion={reducedMotion}
           />
           <MetricCard
-            label="Input Tokens"
+            label={t('usage.stats.inputTokens')}
             value={grandTotals.inputTokens.toLocaleString()}
             icon={<ArrowDownToLine className="h-4 w-4 text-violet-400" />}
             index={2}
             reducedMotion={reducedMotion}
           />
           <MetricCard
-            label="Cache Read"
+            label={t('usage.stats.cacheRead')}
             value={grandTotals.cacheReadTokens.toLocaleString()}
             icon={<Zap className="h-4 w-4 text-amber-400" />}
             index={3}
             reducedMotion={reducedMotion}
           />
           <MetricCard
-            label="Cache Created"
+            label={t('usage.stats.cacheCreated')}
             value={grandTotals.cacheCreationTokens.toLocaleString()}
             icon={<Zap className="h-4 w-4 text-orange-400" />}
             index={4}
             reducedMotion={reducedMotion}
           />
           <MetricCard
-            label="Output Tokens"
+            label={t('usage.stats.outputTokens')}
             value={grandTotals.outputTokens.toLocaleString()}
             icon={<ArrowUpFromLine className="h-4 w-4 text-rose-400" />}
             index={5}
@@ -219,7 +221,7 @@ export default function Usage() {
           transition={reducedMotion ? { duration: 0 } : { duration: 0.35, delay: 0.15, ease: EASE }}
           className="mb-6 rounded-2xl border border-base-300/40 bg-base-100 p-4 sm:p-5 overflow-hidden"
         >
-          <h2 className="text-sm font-bold text-base-content/70 mb-4">Token Usage by Model</h2>
+          <h2 className="text-sm font-bold text-base-content/70 mb-4">{t('usage.chart.title')}</h2>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-base-300)" opacity={0.4} />
@@ -228,16 +230,16 @@ export default function Usage() {
               <Tooltip
                 contentStyle={{ background: 'var(--color-base-200)', border: '1px solid var(--color-base-300)', borderRadius: 12, fontSize: 13 }}
                 formatter={(value: number, name: string) => {
-                  if (name === 'cost') return [`$${value.toFixed(4)}`, 'Cost'];
-                  if (name === 'requests') return [value.toLocaleString(), 'Requests'];
+                  if (name === 'cost') return [`$${value.toFixed(4)}`, t('usage.chart.cost')];
+                  if (name === 'requests') return [value.toLocaleString(), t('usage.chart.requests')];
                   return [value.toLocaleString(), name.charAt(0).toUpperCase() + name.slice(1)];
                 }}
               />
               <Legend wrapperStyle={{ fontSize: 12, opacity: 0.6 }} />
-              <Bar dataKey="input" stackId="a" fill="var(--color-primary)" name="Input" />
-              <Bar dataKey="cache" stackId="a" fill="#60a5fa" name="Cache Read" />
-              <Bar dataKey="cacheCreation" stackId="a" fill="#fb923c" name="Cache Created" />
-              <Bar dataKey="output" stackId="a" fill="var(--color-secondary)" name="Output" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="input" stackId="a" fill="var(--color-primary)" name={t('usage.chart.input')} />
+              <Bar dataKey="cache" stackId="a" fill="#60a5fa" name={t('usage.chart.cacheRead')} />
+              <Bar dataKey="cacheCreation" stackId="a" fill="#fb923c" name={t('usage.chart.cacheCreated')} />
+              <Bar dataKey="output" stackId="a" fill="var(--color-secondary)" name={t('usage.chart.output')} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </motion.div>
@@ -259,15 +261,15 @@ export default function Usage() {
               <table className="table table-sm">
                 <thead>
                   <tr className="border-b border-base-300/40">
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Time</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Key</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Model</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">Protocol</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">Input</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">Cache Read</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">Cache Created</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">Output</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">Cost</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('usage.table.time')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('usage.table.key')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('usage.table.model')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('usage.table.protocol')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">{t('usage.table.input')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">{t('usage.table.cacheRead')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">{t('usage.table.cacheCreated')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">{t('usage.table.output')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">{t('usage.table.cost')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -289,7 +291,7 @@ export default function Usage() {
                   {usageItems.length === 0 && (
                     <tr>
                       <td colSpan={9} className="text-center py-12 text-base-content/40 text-sm">
-                        No usage data for the selected period
+                        {t('usage.noData')}
                       </td>
                     </tr>
                   )}
@@ -299,16 +301,16 @@ export default function Usage() {
 
             {totalPages > 1 && (
               <div className="mt-4 flex items-center justify-between text-sm">
-                <span className="text-xs text-base-content/40">Total {data?.total ?? 0}</span>
+                <span className="text-xs text-base-content/40">{t('usage.pagination.total', { count: data?.total ?? 0 })}</span>
                 <div className="join">
                   <Button variant="ghost" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-                    Previous
+                    {t('usage.pagination.previous')}
                   </Button>
                   <span className="px-3 flex items-center text-sm text-base-content/60">
                     {page} / {totalPages}
                   </span>
                   <Button variant="ghost" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
-                    Next
+                    {t('usage.pagination.next')}
                   </Button>
                 </div>
               </div>
