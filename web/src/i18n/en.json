@@ -1019,6 +1019,10 @@
     },
     "deletePolicy": "Delete \"{{name}}\"?"
   },
+  "ui": {
+    "expand": "Expand",
+    "collapse": "Collapse"
+  },
   "home": {
     "brand": "LLM Gateway",
     "dashboard": "Dashboard",

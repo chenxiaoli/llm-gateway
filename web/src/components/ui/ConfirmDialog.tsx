@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from './Button';
+import i18n from '../../i18n';
 
 export interface ConfirmDialogProps {
   title: string;
@@ -12,7 +13,7 @@ export interface ConfirmDialogProps {
   variant?: 'danger' | 'default';
 }
 
-export function ConfirmDialog({ title, onConfirm, children, okText = 'Confirm', cancelText = 'Cancel', variant = 'default' }: ConfirmDialogProps) {
+export function ConfirmDialog({ title, onConfirm, children, okText = i18n.t('common.confirm'), cancelText = i18n.t('common.cancel'), variant = 'default' }: ConfirmDialogProps) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
