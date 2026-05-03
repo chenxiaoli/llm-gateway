@@ -10,6 +10,7 @@ members = [
     "crates/audit",
     "crates/storage",
     "crates/encryption",
+    "crates/nats-publisher",
 ]
 
 [workspace.dependencies]
