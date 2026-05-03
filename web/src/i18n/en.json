@@ -281,7 +281,7 @@
   "models": {
     "title": "Models",
     "description": "Register AI models to route requests through the gateway",
-    "summary": "{{active}} live · {{idle}} idle · {{policies}} polic{{count}}",
+    "summary": "{{active}} live · {{idle}} idle · {{policies}} pricing policies",
     "addModel": "Add Model",
     "stats": {
       "total": "Total",
@@ -454,6 +454,8 @@
       "test": "Test",
       "testOk": "Channel OK — {{latency}}ms (model: {{model}})",
       "testFailed": "Channel test failed: {{error}}",
+      "unknownError": "Unknown error",
+      "testFailedShort": "Channel test failed",
       "configure": "Configure"
     }
   },

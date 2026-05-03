@@ -196,7 +196,7 @@ function AddChannelDrawer({
       toast.success(i18n.t('toasts.channelCreated'));
       handleClose();
     } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to create channel'));
+      toast.error(getErrorMessage(err, i18n.t('toasts.channelCreateFailed')));
     } finally {
       setIsPending(false);
     }
@@ -374,12 +374,12 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
           toast.success(i18n.t('channels.row.testOk', { latency: result.latency_ms, model: result.model }));
         } else {
           setTestStatus('error');
-          toast.error(i18n.t('channels.row.testFailed', { error: result.error ?? 'Unknown error' }));
+          toast.error(i18n.t('channels.row.testFailed', { error: result.error ?? i18n.t('channels.row.unknownError') }));
         }
       },
       onError: (err) => {
         setTestStatus('error');
-        toast.error(getErrorMessage(err, 'Channel test failed'));
+        toast.error(getErrorMessage(err, i18n.t('channels.row.testFailedShort')));
       },
     });
   };
