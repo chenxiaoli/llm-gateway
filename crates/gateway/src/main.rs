@@ -52,6 +52,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
     };
 
+    // Init NATS publisher (optional)
+    let nats_publisher: Option<Arc<llm_gateway_nats_publisher::NatsPublisher>> =
+        if let Some(nats_cfg) = &config.nats {
+            match llm_gateway_nats_publisher::NatsPublisher::new(&nats_cfg.url).await {
+                Ok(pub_) => {
+                    tracing::info!("Connected to NATS: {}", nats_cfg.url);
+                    Some(Arc::new(pub_))
+                }
+                Err(e) => {
+                    tracing::error!("Failed to connect to NATS: {}", e);
+                    return Err(format!("NATS connection failed: {}", e).into());
+                }
+            }
+        } else {
+            tracing::info!("NATS not configured, using in-process mpsc for audit");
+            None
+        };
+
     // Derive encryption key (32 bytes via SHA256)
     let encryption_key: [u8; 32] = {
         use sha2::Sha256;
@@ -81,8 +99,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Create MPSC channel for async audit logging
     let (audit_tx, audit_rx) = tokio::sync::mpsc::channel::<llm_gateway_api::AuditTask>(100);
-    // Spawn background audit worker
-    tokio::spawn(llm_gateway_api::workers::start_audit_worker(storage.clone(), audit_rx));
+    // Spawn background workers (NATS or mpsc depending on config)
+    if let Some(nats) = &nats_publisher {
+        let nats_usage = nats.clone();
+        let nats_audit = nats.clone();
+        let storage_usage = storage.clone();
+        let storage_audit = storage.clone();
+        tokio::spawn(async move {
+            llm_gateway_api::workers::start_nats_usage_worker(storage_usage, nats_usage).await;
+        });
+        tokio::spawn(async move {
+            llm_gateway_api::workers::start_nats_audit_worker(storage_audit, nats_audit).await;
+        });
+    } else {
+        let storage_clone = storage.clone();
+        tokio::spawn(async move {
+            llm_gateway_api::workers::start_audit_worker(storage_clone, audit_rx).await;
+        });
+    }
 
     // Create settlement channel and spawn background worker
     let (settlement_tx, settlement_rx) = tokio::sync::mpsc::channel::<llm_gateway_api::SettlementTrigger>(1);
@@ -109,6 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         jwt_secret: config.auth.jwt_secret.clone(),
         encryption_key,
         audit_tx,
+        nats_publisher,
         registry,
         settlement_tx,
         system_info,

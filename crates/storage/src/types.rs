@@ -917,6 +917,7 @@ pub struct AppConfig {
     pub rate_limit: RateLimitConfig,
     pub upstream: UpstreamConfig,
     pub audit: AuditConfig,
+    pub nats: Option<NatsConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -952,4 +953,9 @@ pub struct UpstreamConfig {
 #[derive(Debug, Deserialize)]
 pub struct AuditConfig {
     pub retention_days: Option<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NatsConfig {
+    pub url: String,
 }

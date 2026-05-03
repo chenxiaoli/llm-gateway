@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.0] - 2026-05-03
+
+### Added
+- NATS JetStream integration for decoupled audit and usage event processing
+- `nats-publisher` crate with `UsageEvent` and `AuditEvent` types, stream management, and push consumers
+- Two separate JetStream streams: `GATEWAY_USAGE` (7d retention) and `GATEWAY_AUDIT` (30d retention)
+- In-process NATS consumers write to DB; external consumers can attach independently
+- Backward compatible — when `[nats]` config is absent, falls back to in-process mpsc channel
+- Console Models page — read-only model listing for all authenticated users with search, pricing display (per_token and context_tiered)
+- `GET /api/v1/user/models` endpoint for console model data
+- Channel Test button on admin Channels page — tests upstream connectivity with inline status feedback
+- `POST /api/v1/admin/channels/{id}/test` endpoint for channel testing
+
+### Fixed
+- Normalize request model name to database canonical form for consistent usage/audit records
+- Console Models page only shows live (available) models
+- Price conversion (subunits → USD) for all billing types on console model cards
+- Channel test endpoint upstream URL missing /v1 prefix
+- Removed /v1 from seed provider endpoints to prevent URL path doubling
+
 ## [0.14.1] - 2026-05-03
 
 ### Fixed

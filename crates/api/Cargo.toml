@@ -1,6 +1,6 @@
 [package]
 name = "llm-gateway-api"
-version = "0.14.1"
+version = "1.0.0"
 edition = "2021"
 
 [dependencies]
@@ -10,6 +10,7 @@ llm-gateway-auth = { path = "../auth" }
 llm-gateway-provider = { path = "../provider" }
 llm-gateway-billing = { path = "../billing" }
 llm-gateway-audit = { path = "../audit" }
+llm-gateway-nats-publisher = { path = "../nats-publisher" }
 llm-gateway-ratelimit = { path = "../ratelimit" }
 llm-gateway-encryption = { workspace = true }
 serde = { workspace = true }
