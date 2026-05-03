@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { listAllChannels, listChannels, createChannel as createChannelApi, updateChannel as updateChannelApi, deleteChannel as deleteChannelApi, getChannel, listChannelModelsByChannel, createChannelModelByChannel, updateChannelModel, deleteChannelModel, updateChannelApiKey, listProviderModels } from '../api/providers';
+import { listAllChannels, listChannels, createChannel as createChannelApi, updateChannel as updateChannelApi, deleteChannel as deleteChannelApi, getChannel, listChannelModelsByChannel, createChannelModelByChannel, updateChannelModel, deleteChannelModel, updateChannelApiKey, listProviderModels, testChannel } from '../api/providers';
 import type { CreateChannelRequest, UpdateChannelRequest, CreateChannelModelRequest, UpdateChannelModelRequest } from '../types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
@@ -120,5 +120,11 @@ export function useUpdateChannelApiKey(channelId: string) {
       toast.success('API key updated');
     },
     onError: (err) => { toast.error(getErrorMessage(err, 'Failed to update API key')); },
+  });
+}
+
+export function useTestChannel() {
+  return useMutation({
+    mutationFn: (id: string) => testChannel(id),
   });
 }
