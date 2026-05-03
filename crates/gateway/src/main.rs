@@ -6,7 +6,6 @@ use llm_gateway_api::{self as api, AppState, SystemInfo, InMemoryChannelRegistry
 use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
-use llm_gateway_storage::sqlite::SqliteStorage;
 use llm_gateway_storage::postgres::PostgresStorage;
 use rust_embed::Embed;
 use sha2::Digest;
@@ -30,26 +29,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config: AppConfig = toml::from_str(&config_str)?;
 
     // Init storage
-    let storage: Arc<dyn Storage> = match config.database.driver.as_str() {
-        "postgres" => {
-            let url = config.database.url.as_deref().ok_or("database.url is required for postgres")?;
-            tracing::info!("Using PostgreSQL: {}", url.split('@').last().unwrap_or("***"));
-            let db = PostgresStorage::new(url).await?;
-            db.run_migrations().await?;
-            db.seed_data().await?;
-            Arc::new(db)
+    let storage: Arc<dyn Storage> = {
+        if config.database.driver.as_str() != "postgres" {
+            return Err(format!("Unsupported database driver '{}'. Only 'postgres' is supported", config.database.driver).into());
         }
-        "sqlite" => {
-            let db_path = config.database.url.as_deref().unwrap_or("./data/gateway.db");
-            tracing::info!("Using SQLite: {}", db_path);
-            let db = SqliteStorage::new(db_path).await?;
-            db.run_migrations().await?;
-            db.seed_data().await?;
-            Arc::new(db)
-        }
-        other => {
-            return Err(format!("Unknown database driver '{}'. Supported: 'sqlite', 'postgres'", other).into());
-        }
+        let url = config.database.url.as_deref().ok_or("database.url is required")?;
+        tracing::info!("Using PostgreSQL: {}", url.split('@').last().unwrap_or("***"));
+        let db = PostgresStorage::new(url).await?;
+        db.run_migrations().await?;
+        db.seed_data().await?;
+        Arc::new(db)
     };
 
     // Init NATS publisher (optional)
@@ -206,8 +195,8 @@ jwt_secret = "change-me-jwt-secret!"
 allow_registration = true
 
 [database]
-driver = "sqlite"
-url = "./data/gateway.db"
+driver = "postgres"
+url = "postgresql://user:password@localhost/llm_gateway"
 
 [rate_limit]
 flush_interval_secs = 30

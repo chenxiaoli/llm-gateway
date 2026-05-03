@@ -3,11 +3,6 @@ name = "llm-gateway-storage"
 version = "1.0.0"
 edition = "2021"
 
-[features]
-default = ["sqlite"]
-sqlite = []
-postgres = []
-
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
