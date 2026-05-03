@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.0] - 2026-05-03
+
+### Added
+- Console Models page — read-only model listing visible to all authenticated users, showing name, type, pricing, and availability status
+- `GET /api/v1/user/models` endpoint for console model data (admin-only details excluded)
+- Channel Test button on admin Channels page — sends a minimal chat completion request through the channel's upstream provider and reports success/failure with latency
+- `POST /api/v1/admin/channels/{id}/test` endpoint for channel connectivity testing
+- `ChannelTestResult` type (backend + frontend)
+
+### Fixed
+- Channel test endpoint upstream URL was missing `/v1` prefix, causing 404 errors on OpenAI-compatible providers
+- Removed `/v1` from seed provider endpoints (OpenAI, MiniMax, Alibaba) to prevent URL path doubling
+- Console Models page now handles non-array API responses gracefully
+
 ## [0.13.5] - 2026-05-02
 
 ### Fixed
