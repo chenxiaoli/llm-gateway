@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus, Pencil, Trash2, Copy, Check, Globe, Zap, Radio, Layers, Shield } from 'lucide-react';
 import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider, useProviderModels, useUpdateProviderModels } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
@@ -104,6 +105,7 @@ function ProviderModule({ provider, onEdit, onDelete, onEditModel, onAddModel, i
   onAddModel: (p: Provider) => void;
   index: number;
 }) {
+  const { t } = useTranslation();
   const { data: providerModels } = useProviderModels(provider.id);
   const endpointEntries = provider.endpoints ? Object.entries(provider.endpoints) : [];
   const hasEndpoints = endpointEntries.length > 0;
@@ -169,7 +171,7 @@ function ProviderModule({ provider, onEdit, onDelete, onEditModel, onAddModel, i
                       } : { background: 'rgba(255,255,255,0.15)' }}
                     />
                     <span className={`text-base font-medium ${provider.enabled ? 'text-base-content/60' : 'text-base-content/35'}`}>
-                      {provider.enabled ? 'Active' : 'Disabled'}
+                      {provider.enabled ? t('providers.active') : t('providers.disabled')}
                     </span>
                   </span>
 
@@ -199,14 +201,14 @@ function ProviderModule({ provider, onEdit, onDelete, onEditModel, onAddModel, i
               <button
                 onClick={() => onEdit(provider)}
                 className="w-8 h-8 rounded-lg flex items-center justify-center text-base-content/45 hover:text-base-content/70 hover:bg-base-200/60 transition-all duration-150 cursor-pointer"
-                aria-label="Edit provider"
+                aria-label={t('common.edit')}
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={() => onDelete(provider)}
                 className="w-8 h-8 rounded-lg flex items-center justify-center text-base-content/45 hover:text-danger hover:bg-danger/10 transition-all duration-150 cursor-pointer"
-                aria-label="Delete provider"
+                aria-label={t('common.delete')}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -222,7 +224,7 @@ function ProviderModule({ provider, onEdit, onDelete, onEditModel, onAddModel, i
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-base-300/25 py-4 flex items-center justify-center">
-              <span className="text-base text-base-content/35 italic">No endpoints configured</span>
+              <span className="text-base text-base-content/35 italic">{t('providers.noEndpoints')}</span>
             </div>
           )}
 
@@ -253,7 +255,7 @@ function ProviderModule({ provider, onEdit, onDelete, onEditModel, onAddModel, i
               className="inline-flex items-center gap-1 px-2 py-1 rounded border border-dashed border-base-300/30 hover:border-accent/40 text-sm text-base-content/30 hover:text-accent transition-all duration-200 cursor-pointer"
             >
               <Plus className="h-3 w-3" />
-              <span className="font-mono text-xs">add</span>
+              <span className="font-mono text-xs">{t('providers.add')}</span>
             </button>
           </div>
 
@@ -265,7 +267,7 @@ function ProviderModule({ provider, onEdit, onDelete, onEditModel, onAddModel, i
             {provider.enabled && hasEndpoints && (
               <span className="flex items-center gap-1.5 text-xs text-base-content/35">
                 <Radio className="h-3 w-3" />
-                {endpointEntries.length} endpoint{endpointEntries.length > 1 ? 's' : ''}
+                {t('providers.endpoints', { count: endpointEntries.length })}
               </span>
             )}
           </div>
@@ -282,6 +284,7 @@ function ProviderEditModelModal({ open, onClose, provider, model }: {
   provider: Provider;
   model: { model_id: string; model_name: string; upstream_name: string | null; pricing_policy_id: string | null };
 }) {
+  const { t } = useTranslation();
   const { data: providerModels } = useProviderModels(provider.id);
   const { data: pricingPolicies } = usePricingPolicies();
   const updateMutation = useUpdateProviderModels();
@@ -321,24 +324,24 @@ function ProviderEditModelModal({ open, onClose, provider, model }: {
     <Modal open={open} onClose={onClose} title={model.model_name} width={400}>
       <div className="space-y-5">
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">Upstream Name</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">{t('providers.editModelModal.upstreamName')}</label>
           <input
             type="text"
             value={upstreamName}
             onChange={(e) => setUpstreamName(e.target.value)}
-            placeholder="Override upstream model name"
+            placeholder={t('providers.editModelModal.upstreamNamePlaceholder')}
             className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
           />
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">Pricing Policy</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">{t('providers.editModelModal.pricingPolicy')}</label>
           <select
             value={pricingPolicyId}
             onChange={(e) => setPricingPolicyId(e.target.value)}
             className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors cursor-pointer"
           >
-            <option value="">None</option>
+            <option value="">{t('providers.editModelModal.none')}</option>
             {pricingPolicies?.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -347,11 +350,11 @@ function ProviderEditModelModal({ open, onClose, provider, model }: {
 
         <div className="flex items-center justify-between pt-2 border-t border-base-300/15">
           <Button variant="danger" size="sm" onClick={handleRemove} loading={updateMutation.isPending}>
-            Remove
+            {t('common.remove')}
           </Button>
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button variant="primary" onClick={handleSave} loading={updateMutation.isPending}>Save</Button>
+            <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+            <Button variant="primary" onClick={handleSave} loading={updateMutation.isPending}>{t('common.save')}</Button>
           </div>
         </div>
       </div>
@@ -406,6 +409,7 @@ function AddProviderModelModal({ open, onClose, availableModels, pricingPolicies
   pricingPolicies: { id: string; name: string }[];
   onAdd: (modelId: string, upstreamName: string, pricingPolicyId: string | null) => void;
 }) {
+  const { t } = useTranslation();
   const [selectedModelId, setSelectedModelId] = useState('');
   const [upstreamName, setUpstreamName] = useState('');
   const [pricingPolicyId, setPricingPolicyId] = useState<string | null>(null);
@@ -429,17 +433,17 @@ function AddProviderModelModal({ open, onClose, availableModels, pricingPolicies
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Add Model" width={420}>
+    <Modal open={open} onClose={onClose} title={t('providers.addModelModal.title')} width={420}>
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">Model</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">{t('providers.addModelModal.model')}</label>
           <select
             value={selectedModelId}
             onChange={(e) => setSelectedModelId(e.target.value)}
             required
             className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors cursor-pointer"
           >
-            <option value="" disabled>Select a model</option>
+            <option value="" disabled>{t('providers.addModelModal.selectModel')}</option>
             {availableModels.map(m => (
               <option key={m.id} value={m.id}>{m.name}</option>
             ))}
@@ -447,24 +451,24 @@ function AddProviderModelModal({ open, onClose, availableModels, pricingPolicies
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">Upstream Name</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">{t('providers.addModelModal.upstreamName')}</label>
           <input
             type="text"
             value={upstreamName}
             onChange={(e) => setUpstreamName(e.target.value)}
-            placeholder="Override upstream model name"
+            placeholder={t('providers.addModelModal.upstreamNamePlaceholder')}
             className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
           />
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">Pricing Policy</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">{t('providers.addModelModal.pricingPolicy')}</label>
           <select
             value={pricingPolicyId ?? ''}
             onChange={(e) => setPricingPolicyId(e.target.value || null)}
             className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm font-mono text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors cursor-pointer"
           >
-            <option value="">None</option>
+            <option value="">{t('providers.addModelModal.none')}</option>
             {pricingPolicies.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -472,8 +476,8 @@ function AddProviderModelModal({ open, onClose, availableModels, pricingPolicies
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="primary" disabled={!selectedModelId}>Add Model</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button type="submit" variant="primary" disabled={!selectedModelId}>{t('providers.addModelModal.addModel')}</Button>
         </div>
       </form>
     </Modal>
@@ -482,6 +486,7 @@ function AddProviderModelModal({ open, onClose, availableModels, pricingPolicies
 
 // ── Empty State ─────────────────────────────────────────────────────────────
 function EmptyState({ onAddClick }: { onAddClick: () => void }) {
+  const { t } = useTranslation();
   return (
     <motion.div
       initial={{ opacity: 0, y: 24 }}
@@ -499,9 +504,9 @@ function EmptyState({ onAddClick }: { onAddClick: () => void }) {
         </div>
       </div>
 
-      <h3 className="text-lg font-semibold text-base-content/60 mb-2">No providers configured</h3>
+      <h3 className="text-lg font-semibold text-base-content/60 mb-2">{t('providers.empty.title')}</h3>
       <p className="text-base text-base-content/40 mb-8 text-center max-w-sm leading-relaxed">
-        Connect upstream LLM providers to route traffic through the gateway.
+        {t('providers.empty.description')}
       </p>
 
       <button
@@ -509,7 +514,7 @@ function EmptyState({ onAddClick }: { onAddClick: () => void }) {
         className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent/10 hover:bg-accent/15 border border-accent/25 text-accent text-base font-semibold transition-all duration-200 cursor-pointer"
       >
         <Plus className="h-4.5 w-4.5" />
-        Add First Provider
+        {t('providers.empty.addFirst')}
       </button>
     </motion.div>
   );
@@ -517,6 +522,7 @@ function EmptyState({ onAddClick }: { onAddClick: () => void }) {
 
 // ── Stats ───────────────────────────────────────────────────────────────────
 function StatsBar({ providers }: { providers: Provider[] }) {
+  const { t } = useTranslation();
   const total = providers.length;
   const active = providers.filter(p => p.enabled).length;
   const endpointCount = providers.reduce((acc, p) => {
@@ -531,9 +537,9 @@ function StatsBar({ providers }: { providers: Provider[] }) {
       className="grid grid-cols-3 gap-3 mb-8"
     >
       {[
-        { label: 'Providers', value: total, color: 'text-base-content/70', border: 'border-base-300/40' },
-        { label: 'Active', value: active, color: 'text-success', border: 'border-success/15' },
-        { label: 'Endpoints', value: endpointCount, color: 'text-base-content/60', border: 'border-base-300/30' },
+        { label: t('providers.stats.providers'), value: total, color: 'text-base-content/70', border: 'border-base-300/40' },
+        { label: t('providers.stats.active'), value: active, color: 'text-success', border: 'border-success/15' },
+        { label: t('providers.stats.endpoints'), value: endpointCount, color: 'text-base-content/60', border: 'border-base-300/30' },
       ].map((stat) => (
         <div key={stat.label} className={`rounded-xl border bg-base-100/40 px-4 py-3 ${stat.border}`}>
           <div className="text-xs uppercase tracking-[0.12em] text-base-content/45 font-semibold mb-1">
@@ -550,6 +556,7 @@ function StatsBar({ providers }: { providers: Provider[] }) {
 
 // ── Main Page ───────────────────────────────────────────────────────────────
 export default function Providers() {
+  const { t } = useTranslation();
   const { data: providers, isLoading } = useProviders();
   const createMutation = useCreateProvider();
   const updateMutation = useUpdateProvider();
@@ -659,7 +666,7 @@ export default function Providers() {
       >
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-xl font-bold tracking-tight text-base-content">Providers</h1>
+            <h1 className="text-xl font-bold tracking-tight text-base-content">{t('providers.title')}</h1>
             {totalProviders > 0 && (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold uppercase tracking-[0.12em] bg-base-200/70 text-base-content/45 border border-base-300/40">
                 {totalProviders}
@@ -667,7 +674,7 @@ export default function Providers() {
             )}
           </div>
           <p className="text-base text-base-content/50">
-            Upstream LLM provider endpoints and routing configuration
+            {t('providers.description')}
           </p>
         </div>
 
@@ -684,7 +691,7 @@ export default function Providers() {
                 size="sm"
                 onClick={() => setCreateOpen(true)}
               >
-                Add Provider
+                {t('providers.addProvider')}
               </Button>
             </motion.div>
           )}
@@ -699,7 +706,7 @@ export default function Providers() {
         <div className="flex items-center justify-center py-24">
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 rounded-full border-2 border-accent/30 border-t-accent animate-spin" />
-            <span className="text-base text-base-content/45 font-medium">Loading providers...</span>
+            <span className="text-base text-base-content/45 font-medium">{t('providers.loading')}</span>
           </div>
         </div>
       ) : totalProviders === 0 ? (
@@ -726,18 +733,18 @@ export default function Providers() {
       )}
 
       {/* Create Drawer */}
-      <Drawer open={createOpen} onClose={() => setCreateOpen(false)} title="Add Provider" width={440}>
+      <Drawer open={createOpen} onClose={() => setCreateOpen(false)} title={t('providers.createDrawer.title')} width={440}>
         <form onSubmit={handleCreate} className="space-y-6">
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55 flex items-center gap-1.5">
               <Globe className="h-3.5 w-3.5" />
-              Name
+              {t('providers.createDrawer.name')}
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., OpenAI"
+              placeholder={t('providers.createDrawer.namePlaceholder')}
               required
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-base font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
@@ -745,13 +752,13 @@ export default function Providers() {
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55 flex items-center gap-1.5">
               <Zap className="h-3.5 w-3.5" />
-              Endpoints
+              {t('providers.createDrawer.endpoints')}
             </label>
             <EndpointsEditor value={createEndpoints} onChange={setCreateEndpoints} />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">
-              Proxy URL
+              {t('providers.createDrawer.proxyUrl')}
             </label>
             <input
               type="text"
@@ -763,28 +770,28 @@ export default function Providers() {
           </div>
           <div className="flex items-center gap-2 pt-2">
             <Button type="submit" variant="primary" loading={createMutation.isPending} className="flex-1">
-              Create Provider
+              {t('providers.createDrawer.createProvider')}
             </Button>
             <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
         </form>
       </Drawer>
 
       {/* Edit Drawer */}
-      <Drawer open={editOpen} onClose={() => setEditOpen(false)} title="Edit Provider" width={440}>
+      <Drawer open={editOpen} onClose={() => setEditOpen(false)} title={t('providers.editDrawer.title')} width={440}>
         <form onSubmit={handleUpdate} className="space-y-6">
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55 flex items-center gap-1.5">
               <Globe className="h-3.5 w-3.5" />
-              Name
+              {t('providers.editDrawer.name')}
             </label>
             <input
               type="text"
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
-              placeholder="e.g., OpenAI"
+              placeholder={t('providers.editDrawer.namePlaceholder')}
               required
               className="w-full h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-base font-mono text-base-content placeholder:text-base-content/20 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
             />
@@ -792,13 +799,13 @@ export default function Providers() {
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55 flex items-center gap-1.5">
               <Zap className="h-3.5 w-3.5" />
-              Endpoints
+              {t('providers.editDrawer.endpoints')}
             </label>
             <EndpointsEditor value={editEndpoints} onChange={setEditEndpoints} />
           </div>
           <div className="space-y-1.5">
             <label className="text-xs font-semibold uppercase tracking-wider text-base-content/55">
-              Proxy URL
+              {t('providers.editDrawer.proxyUrl')}
             </label>
             <input
               type="text"
@@ -810,8 +817,8 @@ export default function Providers() {
           </div>
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <span className="text-base font-medium text-base-content">Enabled</span>
-              <p className="text-xs text-base-content/50">Provider must be enabled to receive traffic</p>
+              <span className="text-base font-medium text-base-content">{t('providers.editDrawer.enabled')}</span>
+              <p className="text-xs text-base-content/50">{t('providers.editDrawer.enabledHint')}</p>
             </div>
             <input
               type="checkbox"
@@ -822,25 +829,24 @@ export default function Providers() {
           </div>
           <div className="flex items-center gap-2 pt-2">
             <Button type="submit" variant="primary" loading={updateMutation.isPending} className="flex-1">
-              Save Changes
+              {t('providers.editDrawer.saveChanges')}
             </Button>
             <Button type="button" variant="ghost" onClick={() => setEditOpen(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
         </form>
       </Drawer>
 
       {/* Delete Confirmation */}
-      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Provider">
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title={t('providers.deleteModal.title')}>
         <div className="space-y-4">
-          <p className="text-base-content/70">
-            Are you sure you want to delete <strong className="text-base-content">{deletingProvider?.name}</strong>?
-            This will also remove all associated channels.
-          </p>
+          <p className="text-base-content/70" dangerouslySetInnerHTML={{
+            __html: t('providers.deleteModal.message', { name: deletingProvider?.name ?? '' })
+          }} />
           <div className="flex justify-end gap-2">
-            <Button onClick={() => setDeleteOpen(false)}>Cancel</Button>
-            <Button variant="danger" loading={deleteMutation.isPending} onClick={confirmDelete}>Delete</Button>
+            <Button onClick={() => setDeleteOpen(false)}>{t('common.cancel')}</Button>
+            <Button variant="danger" loading={deleteMutation.isPending} onClick={confirmDelete}>{t('common.delete')}</Button>
           </div>
         </div>
       </Modal>

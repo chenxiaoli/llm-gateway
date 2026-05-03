@@ -277,5 +277,206 @@
       "latency": "延迟"
     },
     "noRequests": "暂无请求"
+  },
+  "models": {
+    "title": "模型",
+    "description": "注册 AI 模型以通过网关路由请求",
+    "summary": "{{active}} 个活跃 · {{idle}} 个空闲 · {{policies}} 个策略",
+    "addModel": "添加模型",
+    "stats": {
+      "total": "总计",
+      "live": "活跃",
+      "idle": "空闲"
+    },
+    "card": {
+      "channelsActive": "{{count}} 个通道活跃",
+      "channelsActive_plural": "{{count}} 个通道活跃",
+      "noRouting": "无路由",
+      "live": "活跃",
+      "idle": "空闲",
+      "pricing": "定价",
+      "per1mTokens": "每百万 Token",
+      "input": "输入",
+      "output": "输出",
+      "cache": "缓存",
+      "noPolicy": "无策略 — 通道级别定价",
+      "channels": "通道"
+    },
+    "empty": {
+      "title": "暂无已注册的模型",
+      "description": "添加 AI 模型以启用网关请求路由。每个模型可关联一个定价策略。",
+      "registerFirst": "注册第一个模型"
+    },
+    "addModal": {
+      "title": "注册模型",
+      "modelName": "模型名称",
+      "modelNamePlaceholder": "例如 gpt-4o, claude-3-5-sonnet",
+      "pricingPolicy": "定价策略",
+      "noPolicy": "无策略（在通道级别处理定价）",
+      "register": "注册"
+    },
+    "editModal": {
+      "title": "编辑 {{name}}",
+      "modelName": "模型名称",
+      "readOnly": "只读",
+      "pricingPolicy": "定价策略",
+      "noPolicy": "无策略",
+      "saveChanges": "保存更改"
+    }
+  },
+  "consoleModels": {
+    "title": "模型",
+    "description": "暂无可用模型",
+    "descriptionCount": "{{count}} 个模型可用",
+    "searchPlaceholder": "搜索模型...",
+    "stats": {
+      "available": "可用"
+    },
+    "card": {
+      "pricing": "定价",
+      "per1mTokens": "每百万 Token",
+      "input": "输入",
+      "output": "输出",
+      "cache": "缓存",
+      "noTiers": "未配置分层",
+      "noPricingPolicy": "无定价策略"
+    },
+    "noMatch": "没有匹配「{{search}}」的模型"
+  },
+  "providers": {
+    "title": "提供商",
+    "description": "上游 LLM 提供商端点和路由配置",
+    "addProvider": "添加提供商",
+    "loading": "正在加载提供商...",
+    "active": "活跃",
+    "disabled": "已禁用",
+    "noEndpoints": "未配置端点",
+    "add": "添加",
+    "endpoints": "{{count}} 个端点",
+    "endpoints_plural": "{{count}} 个端点",
+    "stats": {
+      "providers": "提供商",
+      "active": "活跃",
+      "endpoints": "端点"
+    },
+    "empty": {
+      "title": "暂无已配置的提供商",
+      "description": "连接上游 LLM 提供商以通过网关路由流量。",
+      "addFirst": "添加第一个提供商"
+    },
+    "createDrawer": {
+      "title": "添加提供商",
+      "name": "名称",
+      "namePlaceholder": "例如 OpenAI",
+      "endpoints": "端点",
+      "proxyUrl": "代理 URL",
+      "createProvider": "创建提供商"
+    },
+    "editDrawer": {
+      "title": "编辑提供商",
+      "name": "名称",
+      "namePlaceholder": "例如 OpenAI",
+      "endpoints": "端点",
+      "proxyUrl": "代理 URL",
+      "enabled": "启用",
+      "enabledHint": "提供商必须启用才能接收流量",
+      "saveChanges": "保存更改"
+    },
+    "deleteModal": {
+      "title": "删除提供商",
+      "message": "确定要删除 <strong>{{name}}</strong> 吗？这将同时移除所有关联的通道。"
+    },
+    "editModelModal": {
+      "upstreamName": "上游名称",
+      "upstreamNamePlaceholder": "覆盖上游模型名称",
+      "pricingPolicy": "定价策略",
+      "none": "无"
+    },
+    "addModelModal": {
+      "title": "添加模型",
+      "model": "模型",
+      "selectModel": "选择一个模型",
+      "upstreamName": "上游名称",
+      "upstreamNamePlaceholder": "覆盖上游模型名称",
+      "pricingPolicy": "定价策略",
+      "none": "无",
+      "addModel": "添加模型"
+    }
+  },
+  "providerDetail": {
+    "backToProviders": "返回提供商列表",
+    "pageTitle": "提供商：{{name}}",
+    "providerNotFound": "未找到提供商",
+    "form": {
+      "name": "名称",
+      "defaultEndpoint": "默认端点",
+      "openaiEndpoint": "OpenAI 端点",
+      "anthropicEndpoint": "Anthropic 端点",
+      "proxyUrl": "代理 URL",
+      "enabled": "启用",
+      "deleteProvider": "删除提供商"
+    },
+    "confirmDeleteProvider": "确定删除此提供商及其所有模型？",
+    "tabs": {
+      "models": "模型",
+      "channels": "通道"
+    },
+    "models": {
+      "title": "通道模型",
+      "addModel": "添加模型",
+      "table": {
+        "modelId": "模型 ID",
+        "upstreamName": "上游名称",
+        "priority": "优先级",
+        "pricingPolicy": "定价策略",
+        "markup": "加价比例",
+        "status": "状态",
+        "actions": "操作"
+      },
+      "active": "活跃",
+      "disabled": "已禁用",
+      "confirmRemove": "确定从该提供商移除模型「{{modelId}}」？",
+      "empty": "未配置模型",
+      "addFirst": "添加第一个模型"
+    },
+    "channels": {
+      "title": "通道",
+      "addChannel": "添加通道",
+      "table": {
+        "name": "名称",
+        "priority": "优先级",
+        "status": "状态",
+        "actions": "操作"
+      },
+      "active": "活跃",
+      "disabled": "已禁用",
+      "confirmDelete": "确定删除通道「{{name}}」？",
+      "empty": "未配置通道",
+      "addFirst": "添加第一个通道"
+    },
+    "modelModal": {
+      "editTitle": "编辑通道模型",
+      "addTitle": "添加通道模型",
+      "modelId": "模型 ID",
+      "modelIdPlaceholder": "例如 gpt-4o",
+      "upstreamModelName": "上游模型名称",
+      "upstreamModelNamePlaceholder": "留空则使用模型 ID",
+      "priorityOverride": "优先级覆盖",
+      "priorityOverridePlaceholder": "使用通道默认值",
+      "pricingPolicy": "定价策略",
+      "noPolicy": "无策略",
+      "markupRatio": "加价比例",
+      "enabled": "启用"
+    },
+    "channelModal": {
+      "editTitle": "编辑通道：{{name}}",
+      "addTitle": "添加通道",
+      "name": "名称",
+      "namePlaceholder": "例如 primary",
+      "apiKey": "API 密钥",
+      "apiKeyPlaceholder": "上游 API 密钥",
+      "priority": "优先级",
+      "enabled": "启用"
+    }
   }
 }

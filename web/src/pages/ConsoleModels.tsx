@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { Cpu, Search } from 'lucide-react';
 import { useUserModels } from '../hooks/useUserModels';
@@ -32,6 +33,7 @@ function StatPill({ label, value, accent }: { label: string; value: number; acce
 }
 
 function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelView; index: number; reducedMotion: boolean }) {
+  const { t } = useTranslation();
   const policy = model.pricing;
   const billingType = policy?.billing_type ?? '';
   const config = (policy?.config ?? {}) as Record<string, unknown>;
@@ -71,7 +73,7 @@ function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelVie
           {/* Pricing section */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <div className="text-xs font-bold uppercase tracking-widest text-base-content/50">Pricing</div>
+              <div className="text-xs font-bold uppercase tracking-widest text-base-content/50">{t('consoleModels.card.pricing')}</div>
               <div className="flex-1 h-px bg-base-300/20" />
             </div>
 
@@ -82,20 +84,20 @@ function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelVie
                     {model.pricing_policy_name}
                   </span>
                   {(isPerToken || isContextTiered) && (
-                    <span className="text-xs text-base-content/40">per 1M tokens</span>
+                    <span className="text-xs text-base-content/40">{t('consoleModels.card.per1mTokens')}</span>
                   )}
                 </div>
 
                 {isPerToken ? (
                   <div className="grid grid-cols-3 gap-1.5 p-2.5 rounded-xl border bg-base-200/20 border-base-300/20">
                     {[
-                      { label: 'Input', key: 'input_price_1m' },
-                      { label: 'Output', key: 'output_price_1m' },
-                      { label: 'Cache', key: 'cache_read_price_1m' },
+                      { label: t('consoleModels.card.input'), key: 'input_price_1m' },
+                      { label: t('consoleModels.card.output'), key: 'output_price_1m' },
+                      { label: t('consoleModels.card.cache'), key: 'cache_read_price_1m' },
                     ].map(({ label, key }) => {
                       const val = config[key] as number | undefined;
                       return (
-                        <div key={label} className="flex flex-col items-center text-center py-1">
+                        <div key={key} className="flex flex-col items-center text-center py-1">
                           <span className="text-xs font-semibold text-base-content/40 mb-1">{label}</span>
                           <span className="font-mono text-lg font-bold text-base-content">
                             {formatPrice(val)}
@@ -115,22 +117,22 @@ function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelVie
                           <div className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-1.5">{label} ctx</div>
                           <div className="grid grid-cols-3 gap-1.5">
                             <div className="flex flex-col items-center text-center">
-                              <span className="text-xs font-semibold text-base-content/40 mb-0.5">Input</span>
+                              <span className="text-xs font-semibold text-base-content/40 mb-0.5">{t('consoleModels.card.input')}</span>
                               <span className="font-mono text-sm font-bold text-base-content">{formatPrice(tier.input_price_1m)}</span>
                             </div>
                             <div className="flex flex-col items-center text-center">
-                              <span className="text-xs font-semibold text-base-content/40 mb-0.5">Output</span>
+                              <span className="text-xs font-semibold text-base-content/40 mb-0.5">{t('consoleModels.card.output')}</span>
                               <span className="font-mono text-sm font-bold text-base-content">{formatPrice(tier.output_price_1m)}</span>
                             </div>
                             <div className="flex flex-col items-center text-center">
-                              <span className="text-xs font-semibold text-base-content/40 mb-0.5">Cache</span>
+                              <span className="text-xs font-semibold text-base-content/40 mb-0.5">{t('consoleModels.card.cache')}</span>
                               <span className="font-mono text-sm font-bold text-base-content">{formatPrice(tier.cache_read_price_1m)}</span>
                             </div>
                           </div>
                         </div>
                       );
                     }) ?? (
-                      <div className="text-sm italic text-base-content/40">No tiers configured</div>
+                      <div className="text-sm italic text-base-content/40">{t('consoleModels.card.noTiers')}</div>
                     )}
                   </div>
                 ) : (
@@ -142,7 +144,7 @@ function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelVie
             ) : (
               <div className="flex items-center gap-1.5">
                 <div className="w-1 h-1 rounded-full bg-base-content/25" />
-                <span className="text-sm italic text-base-content/40">No pricing policy</span>
+                <span className="text-sm italic text-base-content/40">{t('consoleModels.card.noPricingPolicy')}</span>
               </div>
             )}
           </div>
@@ -153,6 +155,7 @@ function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelVie
 }
 
 export default function ConsoleModels() {
+  const { t } = useTranslation();
   const { data: models, isLoading } = useUserModels();
   const [search, setSearch] = useState('');
   const reducedMotion = useReducedMotion();
@@ -193,12 +196,12 @@ export default function ConsoleModels() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1">
-              Models
+              {t('consoleModels.title')}
             </h1>
             <p className="text-base text-base-content/50">
               {totalModels === 0
-                ? 'No models available yet'
-                : `${totalModels} models available`
+                ? t('consoleModels.description')
+                : t('consoleModels.descriptionCount', { count: totalModels })
               }
             </p>
           </div>
@@ -208,7 +211,7 @@ export default function ConsoleModels() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-base-content/40" />
             <input
               type="text"
-              placeholder="Search models..."
+              placeholder={t('consoleModels.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="input input-sm input-bordered pl-9 w-56 bg-base-200/40 border-base-300/40 focus:border-accent/40 focus:outline-none"
@@ -224,7 +227,7 @@ export default function ConsoleModels() {
             transition={reducedMotion ? { duration: 0 } : { duration: 0.4, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
             className="flex flex-wrap gap-2.5 mt-6"
           >
-            <StatPill label="Available" value={totalModels} accent />
+            <StatPill label={t('consoleModels.stats.available')} value={totalModels} accent />
           </motion.div>
         )}
       </motion.div>
@@ -233,7 +236,7 @@ export default function ConsoleModels() {
       {filtered.length === 0 && totalModels > 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Search className="h-10 w-10 text-base-content/20 mb-4" />
-          <p className="text-base-content/40">No models match "{search}"</p>
+          <p className="text-base-content/40">{t('consoleModels.noMatch', { search })}</p>
         </div>
       )}
 

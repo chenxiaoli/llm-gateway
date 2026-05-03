@@ -277,5 +277,206 @@
       "latency": "Latency"
     },
     "noRequests": "No requests yet"
+  },
+  "models": {
+    "title": "Models",
+    "description": "Register AI models to route requests through the gateway",
+    "summary": "{{active}} live · {{idle}} idle · {{policies}} polic{{count}}",
+    "addModel": "Add Model",
+    "stats": {
+      "total": "Total",
+      "live": "Live",
+      "idle": "Idle"
+    },
+    "card": {
+      "channelsActive": "{{count}} channel active",
+      "channelsActive_plural": "{{count}} channels active",
+      "noRouting": "No routing",
+      "live": "Live",
+      "idle": "Idle",
+      "pricing": "Pricing",
+      "per1mTokens": "per 1M tokens",
+      "input": "Input",
+      "output": "Output",
+      "cache": "Cache",
+      "noPolicy": "No policy — channel-level pricing",
+      "channels": "Channels"
+    },
+    "empty": {
+      "title": "No models registered",
+      "description": "Add AI models to enable request routing through the gateway. Each model can be associated with a pricing policy.",
+      "registerFirst": "Register First Model"
+    },
+    "addModal": {
+      "title": "Register Model",
+      "modelName": "Model Name",
+      "modelNamePlaceholder": "e.g. gpt-4o, claude-3-5-sonnet",
+      "pricingPolicy": "Pricing Policy",
+      "noPolicy": "No policy (pricing handled at channel level)",
+      "register": "Register"
+    },
+    "editModal": {
+      "title": "Edit {{name}}",
+      "modelName": "Model Name",
+      "readOnly": "read-only",
+      "pricingPolicy": "Pricing Policy",
+      "noPolicy": "No policy",
+      "saveChanges": "Save Changes"
+    }
+  },
+  "consoleModels": {
+    "title": "Models",
+    "description": "No models available yet",
+    "descriptionCount": "{{count}} models available",
+    "searchPlaceholder": "Search models...",
+    "stats": {
+      "available": "Available"
+    },
+    "card": {
+      "pricing": "Pricing",
+      "per1mTokens": "per 1M tokens",
+      "input": "Input",
+      "output": "Output",
+      "cache": "Cache",
+      "noTiers": "No tiers configured",
+      "noPricingPolicy": "No pricing policy"
+    },
+    "noMatch": "No models match \"{{search}}\""
+  },
+  "providers": {
+    "title": "Providers",
+    "description": "Upstream LLM provider endpoints and routing configuration",
+    "addProvider": "Add Provider",
+    "loading": "Loading providers...",
+    "active": "Active",
+    "disabled": "Disabled",
+    "noEndpoints": "No endpoints configured",
+    "add": "add",
+    "endpoints": "{{count}} endpoint",
+    "endpoints_plural": "{{count}} endpoints",
+    "stats": {
+      "providers": "Providers",
+      "active": "Active",
+      "endpoints": "Endpoints"
+    },
+    "empty": {
+      "title": "No providers configured",
+      "description": "Connect upstream LLM providers to route traffic through the gateway.",
+      "addFirst": "Add First Provider"
+    },
+    "createDrawer": {
+      "title": "Add Provider",
+      "name": "Name",
+      "namePlaceholder": "e.g., OpenAI",
+      "endpoints": "Endpoints",
+      "proxyUrl": "Proxy URL",
+      "createProvider": "Create Provider"
+    },
+    "editDrawer": {
+      "title": "Edit Provider",
+      "name": "Name",
+      "namePlaceholder": "e.g., OpenAI",
+      "endpoints": "Endpoints",
+      "proxyUrl": "Proxy URL",
+      "enabled": "Enabled",
+      "enabledHint": "Provider must be enabled to receive traffic",
+      "saveChanges": "Save Changes"
+    },
+    "deleteModal": {
+      "title": "Delete Provider",
+      "message": "Are you sure you want to delete <strong>{{name}}</strong>? This will also remove all associated channels."
+    },
+    "editModelModal": {
+      "upstreamName": "Upstream Name",
+      "upstreamNamePlaceholder": "Override upstream model name",
+      "pricingPolicy": "Pricing Policy",
+      "none": "None"
+    },
+    "addModelModal": {
+      "title": "Add Model",
+      "model": "Model",
+      "selectModel": "Select a model",
+      "upstreamName": "Upstream Name",
+      "upstreamNamePlaceholder": "Override upstream model name",
+      "pricingPolicy": "Pricing Policy",
+      "none": "None",
+      "addModel": "Add Model"
+    }
+  },
+  "providerDetail": {
+    "backToProviders": "Back to Providers",
+    "pageTitle": "Provider: {{name}}",
+    "providerNotFound": "Provider not found",
+    "form": {
+      "name": "Name",
+      "defaultEndpoint": "Default Endpoint",
+      "openaiEndpoint": "OpenAI Endpoint",
+      "anthropicEndpoint": "Anthropic Endpoint",
+      "proxyUrl": "Proxy URL",
+      "enabled": "Enabled",
+      "deleteProvider": "Delete Provider"
+    },
+    "confirmDeleteProvider": "Delete this provider and all its models?",
+    "tabs": {
+      "models": "Models",
+      "channels": "Channels"
+    },
+    "models": {
+      "title": "Channel Models",
+      "addModel": "Add Model",
+      "table": {
+        "modelId": "Model ID",
+        "upstreamName": "Upstream Name",
+        "priority": "Priority",
+        "pricingPolicy": "Pricing Policy",
+        "markup": "Markup",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "active": "Active",
+      "disabled": "Disabled",
+      "confirmRemove": "Remove model \"{{modelId}}\" from this provider?",
+      "empty": "No models configured",
+      "addFirst": "Add your first model"
+    },
+    "channels": {
+      "title": "Channels",
+      "addChannel": "Add Channel",
+      "table": {
+        "name": "Name",
+        "priority": "Priority",
+        "status": "Status",
+        "actions": "Actions"
+      },
+      "active": "Active",
+      "disabled": "Disabled",
+      "confirmDelete": "Delete channel \"{{name}}\"?",
+      "empty": "No channels configured",
+      "addFirst": "Add your first channel"
+    },
+    "modelModal": {
+      "editTitle": "Edit Channel Model",
+      "addTitle": "Add Channel Model",
+      "modelId": "Model ID",
+      "modelIdPlaceholder": "e.g., gpt-4o",
+      "upstreamModelName": "Upstream Model Name",
+      "upstreamModelNamePlaceholder": "Leave blank to use model ID",
+      "priorityOverride": "Priority Override",
+      "priorityOverridePlaceholder": "Use channel default",
+      "pricingPolicy": "Pricing Policy",
+      "noPolicy": "No policy",
+      "markupRatio": "Markup Ratio",
+      "enabled": "Enabled"
+    },
+    "channelModal": {
+      "editTitle": "Edit Channel: {{name}}",
+      "addTitle": "Add Channel",
+      "name": "Name",
+      "namePlaceholder": "e.g., primary",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "Upstream API key",
+      "priority": "Priority",
+      "enabled": "Enabled"
+    }
   }
 }
