@@ -24,6 +24,7 @@ pub struct AppState {
     pub jwt_secret: String,
     pub encryption_key: [u8; 32],
     pub audit_tx: mpsc::Sender<AuditTask>,
+    pub nats_publisher: Option<std::sync::Arc<llm_gateway_nats_publisher::NatsPublisher>>,
     pub registry: Arc<dyn ChannelRegistry>,
     pub settlement_tx: mpsc::Sender<settlement::SettlementTrigger>,
     pub system_info: SystemInfo,
