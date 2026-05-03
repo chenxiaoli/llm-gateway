@@ -63,5 +63,7 @@ pub async fn list_user_models(
         });
     }
 
-    Ok(Json(views))
+    let live: Vec<UserModelView> = views.into_iter().filter(|v| v.is_available).collect();
+
+    Ok(Json(live))
 }
