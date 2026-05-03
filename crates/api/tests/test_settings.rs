@@ -16,7 +16,7 @@ fn build_app(state: Arc<AppState>) -> axum::Router {
     management::management_router().with_state(state)
 }
 
-fn make_state(db: Arc<llm_gateway_storage::sqlite::SqliteStorage>) -> Arc<AppState> {
+fn make_state(db: Arc<llm_gateway_storage::postgres::PostgresStorage>) -> Arc<AppState> {
     let (audit_tx, _rx) = mpsc::channel(100);
     let (settlement_tx, _rx2) = mpsc::channel(1);
     Arc::new(AppState {
@@ -31,7 +31,7 @@ fn make_state(db: Arc<llm_gateway_storage::sqlite::SqliteStorage>) -> Arc<AppSta
         settlement_tx,
         system_info: SystemInfo {
             server_bind_address: "0.0.0.0:8080".to_string(),
-            database_driver: "sqlite".to_string(),
+            database_driver: "postgres".to_string(),
             rate_limit_window_secs: 60,
             rate_limit_flush_interval_secs: 30,
             upstream_timeout_secs: 30,
