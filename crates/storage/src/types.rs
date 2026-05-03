@@ -472,6 +472,14 @@ pub struct ChannelModel {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, serde::Serialize)]
+pub struct ChannelTestResult {
+    pub success: bool,
+    pub latency_ms: u64,
+    pub model: String,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateChannelModel {
     pub channel_id: Option<String>,
