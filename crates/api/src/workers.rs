@@ -1,6 +1,5 @@
 use llm_gateway_audit::AuditLogger;
-use llm_gateway_billing::PricingCalculator;
-use llm_gateway_storage::{PricingPolicy, Protocol, Usage, UsageRecord};
+use llm_gateway_storage::{Protocol, UsageRecord};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -10,7 +9,7 @@ use crate::AuditTask;
 /// Returns (input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens).
 /// For streaming (SSE): extract from last JSON chunk before "data: [DONE]"
 /// For non-streaming (JSON): extract from "usage" field.
-fn parse_usage(bytes: &[u8], stream: bool, proto: Protocol) -> (Option<i64>, Option<i64>, Option<i64>, Option<i64>) {
+pub fn parse_usage(bytes: &[u8], stream: bool, proto: Protocol) -> (Option<i64>, Option<i64>, Option<i64>, Option<i64>) {
     let parse_value = |usage: Option<&serde_json::Value>| -> (Option<i64>, Option<i64>, Option<i64>, Option<i64>) {
         match proto {
             Protocol::Openai => {
@@ -81,6 +80,44 @@ fn parse_usage(bytes: &[u8], stream: bool, proto: Protocol) -> (Option<i64>, Opt
     }
 }
 
+/// Calculate cost from token usage and pricing policy.
+pub fn calculate_cost(
+    pricing_policy_config: &Option<serde_json::Value>,
+    pricing_policy_billing_type: &str,
+    markup_ratio: i64,
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+    cache_read_tokens: Option<i64>,
+    cache_creation_tokens: Option<i64>,
+) -> i64 {
+    use llm_gateway_billing::PricingCalculator;
+    use llm_gateway_storage::{PricingPolicy, Usage};
+
+    if let Some(config) = pricing_policy_config {
+        let policy = PricingPolicy {
+            id: String::new(),
+            name: String::new(),
+            billing_type: pricing_policy_billing_type.to_string(),
+            config: config.clone(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        let usage = Usage {
+            input_tokens: input_tokens.unwrap_or(0),
+            output_tokens: output_tokens.unwrap_or(0),
+            input_chars: None,
+            output_chars: None,
+            request_count: 1,
+            cache_read_tokens,
+            cache_creation_tokens,
+        };
+        let raw_cost = PricingCalculator.calculate_cost(&policy, &usage);
+        raw_cost * markup_ratio / 10_000
+    } else {
+        0
+    }
+}
+
 /// Background worker: receives audit tasks, parses usage, calculates cost, writes DB
 pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, mut rx: mpsc::Receiver<AuditTask>) {
     tracing::info!("[AUDIT-WORKER] Starting audit worker");
@@ -98,29 +135,15 @@ pub async fn start_audit_worker(storage: Arc<dyn llm_gateway_storage::Storage>, 
             parse_usage(&task.response_bytes, task.stream, proto);
 
         // Calculate cost using PricingCalculator with policy config
-        let cost = if let Some(config) = &task.pricing_policy_config {
-            let policy = PricingPolicy {
-                id: String::new(),
-                name: String::new(),
-                billing_type: task.pricing_policy_billing_type.clone(),
-                config: config.clone(),
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
-            };
-            let usage = Usage {
-                input_tokens: input_tokens.unwrap_or(0),
-                output_tokens: output_tokens.unwrap_or(0),
-                input_chars: None,
-                output_chars: None,
-                request_count: 1,
-                cache_read_tokens,
-                cache_creation_tokens,
-            };
-            let raw_cost = PricingCalculator.calculate_cost(&policy, &usage);
-            raw_cost * task.markup_ratio / 10_000
-        } else {
-            0
-        };
+        let cost = calculate_cost(
+            &task.pricing_policy_config,
+            &task.pricing_policy_billing_type,
+            task.markup_ratio,
+            input_tokens,
+            output_tokens,
+            cache_read_tokens,
+            cache_creation_tokens,
+        );
 
         tracing::info!(
             "[AUDIT-WORKER] Parsed: input={:?}, output={:?}, cache_read={:?}, cache_creation={:?}, cost={}",
