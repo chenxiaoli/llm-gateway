@@ -327,6 +327,13 @@ export interface UpdateChannelApiKeyRequest {
   api_key: string;
 }
 
+export interface ChannelTestResult {
+  success: boolean;
+  latency_ms: number;
+  model: string;
+  error: string | null;
+}
+
 // ── Model Fallback Types ──────────────────────────────────────────────────
 
 export interface ModelFallbackGroup {
