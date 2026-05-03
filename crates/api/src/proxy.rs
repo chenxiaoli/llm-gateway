@@ -639,6 +639,9 @@ pub async fn proxy(
         }
     };
 
+    // Normalize model_name to database canonical form for consistent usage/audit records
+    let model_name = model_entry.model.name.clone();
+
     tracing::debug!("[PROXY] Found model: {} (id: {})", model_entry.model.name, model_entry.model.id);
 
     // === Step 3: Route via ChannelRegistry (cache-first) ===

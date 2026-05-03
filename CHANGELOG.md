@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.1] - 2026-05-03
+
+### Fixed
+- Normalize request model name to database canonical form for consistent usage/audit records regardless of request casing
+- Console Models page now only shows live (available) models
+- Add context_tiered pricing display with tier-by-tier breakdown on model cards
+- Fix price conversion (subunits → USD) for all billing types on console model cards
+- Channel test endpoint upstream URL was missing /v1 prefix
+- Removed /v1 from seed provider endpoints to prevent URL path doubling
+
 ## [0.14.0] - 2026-05-03
 
 ### Added

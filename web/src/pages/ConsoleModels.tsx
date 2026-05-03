@@ -3,11 +3,19 @@ import { motion } from 'framer-motion';
 import { Cpu, Search } from 'lucide-react';
 import { useUserModels } from '../hooks/useUserModels';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import type { UserModelView } from '../types';
+import type { UserModelView, ContextTier } from '../types';
+
+const UNITS_PER_USD = 100_000_000;
 
 function formatPrice(val: number | undefined): string {
   if (val === undefined || val === null) return '—';
-  return `$${val.toFixed(2)}`;
+  return `$${(val / UNITS_PER_USD).toFixed(2)}`;
+}
+
+function formatTokenCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n % 1_000 === 0 ? 0 : 1)}K`;
+  return String(n);
 }
 
 function StatPill({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
@@ -28,6 +36,7 @@ function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelVie
   const billingType = policy?.billing_type ?? '';
   const config = (policy?.config ?? {}) as Record<string, unknown>;
   const isPerToken = billingType === 'per_token';
+  const isContextTiered = billingType === 'context_tiered';
 
   return (
     <motion.div
@@ -35,27 +44,15 @@ function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelVie
       animate={{ opacity: 1, y: 0 }}
       transition={reducedMotion ? { duration: 0 } : { duration: 0.4, delay: 0.05 + Math.min(index, 12) * 0.04, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div className={`
-        relative rounded-2xl overflow-hidden transition-all duration-300
-        ${model.is_available
-          ? 'bg-base-100 border border-base-300/50 hover:border-accent/30 hover:shadow-[0_0_24px_-4px_rgba(var(--accent),0.08)]'
-          : 'bg-base-100/40 border border-base-300/30 hover:border-base-300/60 hover:bg-base-100/70'
-        }
-        hover:-translate-y-0.5
-      `}>
-        {model.is_available && (
-          <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-accent/60 rounded-l-2xl" />
-        )}
+      <div className="relative rounded-2xl overflow-hidden transition-all duration-300 bg-base-100 border border-base-300/50 hover:border-accent/30 hover:shadow-[0_0_24px_-4px_rgba(var(--accent),0.08)] hover:-translate-y-0.5">
+        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-accent/60 rounded-l-2xl" />
 
         <div className="relative p-5">
           {/* Header */}
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className={`
-                w-10 h-10 rounded-xl flex items-center justify-center shrink-0
-                ${model.is_available ? 'bg-accent/10' : 'bg-base-200/60'}
-              `}>
-                <Cpu className={`h-5 w-5 ${model.is_available ? 'text-accent' : 'text-base-content/40'}`} />
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-accent/10">
+                <Cpu className="h-5 w-5 text-accent" />
               </div>
               <div className="min-w-0">
                 <div className="font-mono text-lg font-bold text-base-content leading-tight truncate max-w-[200px]" title={model.name}>
@@ -65,18 +62,6 @@ function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelVie
                   <div className="text-xs mt-0.5 text-base-content/50">{model.model_type}</div>
                 )}
               </div>
-            </div>
-
-            {/* Status badge */}
-            <div className={`
-              shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider border
-              ${model.is_available
-                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                : 'bg-base-200/40 text-base-content/40 border-base-300/40'
-              }
-            `}>
-              <span className={`w-1.5 h-1.5 rounded-full ${model.is_available ? 'bg-emerald-400' : 'bg-base-content/20'}`} />
-              {model.is_available ? 'Live' : 'Idle'}
             </div>
           </div>
 
@@ -93,16 +78,10 @@ function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelVie
             {policy ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className={`
-                    inline-flex items-center px-2 py-0.5 rounded-md text-sm font-semibold border
-                    ${model.is_available
-                      ? 'bg-base-200/50 text-base-content/70 border-base-300/40'
-                      : 'bg-base-200/50 text-base-content/60 border-base-300/40'
-                    }
-                  `}>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-sm font-semibold border bg-base-200/50 text-base-content/70 border-base-300/40">
                     {model.pricing_policy_name}
                   </span>
-                  {isPerToken && (
+                  {(isPerToken || isContextTiered) && (
                     <span className="text-xs text-base-content/40">per 1M tokens</span>
                   )}
                 </div>
@@ -118,12 +97,41 @@ function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelVie
                       return (
                         <div key={label} className="flex flex-col items-center text-center py-1">
                           <span className="text-xs font-semibold text-base-content/40 mb-1">{label}</span>
-                          <span className={`font-mono text-lg font-bold ${model.is_available ? 'text-base-content' : 'text-base-content/60'}`}>
+                          <span className="font-mono text-lg font-bold text-base-content">
                             {formatPrice(val)}
                           </span>
                         </div>
                       );
                     })}
+                  </div>
+                ) : isContextTiered ? (
+                  <div className="space-y-1.5">
+                    {(config['tiers'] as ContextTier[] | undefined)?.map((tier, i, tiers) => {
+                      const label = tier.up_to != null
+                        ? `< ${formatTokenCount(tier.up_to)}`
+                        : `> ${i > 0 && tiers[i - 1].up_to != null ? formatTokenCount(tiers[i - 1].up_to!) : '0'}`;
+                      return (
+                        <div key={i} className="p-2 rounded-xl border bg-base-200/20 border-base-300/20">
+                          <div className="text-xs font-semibold uppercase tracking-wider text-base-content/40 mb-1.5">{label} ctx</div>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <div className="flex flex-col items-center text-center">
+                              <span className="text-xs font-semibold text-base-content/40 mb-0.5">Input</span>
+                              <span className="font-mono text-sm font-bold text-base-content">{formatPrice(tier.input_price_1m)}</span>
+                            </div>
+                            <div className="flex flex-col items-center text-center">
+                              <span className="text-xs font-semibold text-base-content/40 mb-0.5">Output</span>
+                              <span className="font-mono text-sm font-bold text-base-content">{formatPrice(tier.output_price_1m)}</span>
+                            </div>
+                            <div className="flex flex-col items-center text-center">
+                              <span className="text-xs font-semibold text-base-content/40 mb-0.5">Cache</span>
+                              <span className="font-mono text-sm font-bold text-base-content">{formatPrice(tier.cache_read_price_1m)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }) ?? (
+                      <div className="text-sm italic text-base-content/40">No tiers configured</div>
+                    )}
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
@@ -154,8 +162,6 @@ export default function ConsoleModels() {
   ) ?? [];
 
   const totalModels = models?.length ?? 0;
-  const liveModels = models?.filter(m => m.is_available)?.length ?? 0;
-  const idleModels = totalModels - liveModels;
 
   if (isLoading) {
     return (
@@ -192,7 +198,7 @@ export default function ConsoleModels() {
             <p className="text-base text-base-content/50">
               {totalModels === 0
                 ? 'No models available yet'
-                : `${liveModels} live · ${idleModels} idle`
+                : `${totalModels} models available`
               }
             </p>
           </div>
@@ -218,9 +224,7 @@ export default function ConsoleModels() {
             transition={reducedMotion ? { duration: 0 } : { duration: 0.4, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
             className="flex flex-wrap gap-2.5 mt-6"
           >
-            <StatPill label="Total" value={totalModels} />
-            <StatPill label="Live" value={liveModels} accent />
-            <StatPill label="Idle" value={idleModels} />
+            <StatPill label="Available" value={totalModels} accent />
           </motion.div>
         )}
       </motion.div>
