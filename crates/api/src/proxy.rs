@@ -875,14 +875,22 @@ pub async fn proxy(
         // Use upstream_model_name if provided, otherwise use the model name from request
         let upstream_name = channel_model.upstream_model_name.as_deref().unwrap_or(&model_name);
 
-        let modified_body = if upstream_name != &model_name {
+        let modified_body = {
             let mut req_json_modified = req_json.clone();
-            if let Some(model_obj) = req_json_modified.get_mut("model") {
-                *model_obj = serde_json::Value::String(upstream_name.to_string());
+            if upstream_name != &model_name {
+                if let Some(model_obj) = req_json_modified.get_mut("model") {
+                    *model_obj = serde_json::Value::String(upstream_name.to_string());
+                }
+            }
+            if is_stream && matches!(protocol, ProxyProtocol::OpenAI) && req_json_modified.get("stream_options").is_none() {
+                if let Some(obj) = req_json_modified.as_object_mut() {
+                    obj.insert(
+                        "stream_options".to_string(),
+                        serde_json::json!({"include_usage": true}),
+                    );
+                }
             }
             serde_json::to_string(&req_json_modified).unwrap_or_else(|_| body.clone())
-        } else {
-            body.clone()
         };
 
         let api_key_value = channel.upstream_api_key.clone();
