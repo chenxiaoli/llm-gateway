@@ -53,6 +53,7 @@ impl AuditLogger {
         upstream_url: Option<&str>,
         request_headers: Option<&str>,
         response_headers: Option<&str>,
+        request_id: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let settings = self.get_settings().await;
         let request_body = if settings.audit_log_request {
@@ -67,6 +68,7 @@ impl AuditLogger {
         };
         let log = AuditLog {
             id: uuid::Uuid::new_v4().to_string(),
+            request_id: request_id.map(String::from),
             key_id: key_id.to_string(),
             user_id: user_id.map(String::from),
             model_name: model_name.to_string(),
