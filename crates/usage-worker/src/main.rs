@@ -1,6 +1,6 @@
 use futures::StreamExt;
 use llm_gateway_nats_publisher::AckKind;
-use llm_gateway_storage::{postgres::PostgresStorage, AppConfig, Protocol, Storage, UsageRecord};
+use llm_gateway_storage::{postgres::PostgresStorage, AppConfig, DeductBalance, DeductBalanceResult, Protocol, Storage, TransactionType, UsageRecord};
 use std::sync::Arc;
 
 #[tokio::main]
@@ -64,6 +64,7 @@ async fn run_usage_worker(storage: Arc<dyn Storage>, nats: Arc<llm_gateway_nats_
 
         let record = UsageRecord {
             id: event.id,
+            request_id: event.request_id,
             key_id: event.key_id,
             user_id: event.user_id,
             model_name: event.model_name,
@@ -87,6 +88,58 @@ async fn run_usage_worker(storage: Arc<dyn Storage>, nats: Arc<llm_gateway_nats_
             tracing::warn!("[USAGE-WORKER] Failed to record usage: {}", e);
             let _ = msg.ack_with(AckKind::Nak(None)).await;
             continue;
+        }
+
+        // Per-request deduction
+        if let Some(ref user_id) = record.user_id {
+            if record.cost > 0 {
+                match storage.get_account_by_user_id(user_id).await {
+                    Ok(Some(account)) => {
+                        // Idempotency: skip if already deducted for this request
+                        match storage.get_transaction_by_request_id(&record.request_id).await {
+                            Ok(None) => {
+                                let req = DeductBalance {
+                                    account_id: account.id,
+                                    amount: record.cost,
+                                    transaction_type: TransactionType::Debit,
+                                    description: Some(format!("{} - {}", record.model_name, record.request_id)),
+                                    reference_id: None,
+                                    request_id: Some(record.request_id.clone()),
+                                };
+                                match storage.deduct_balance(&req).await {
+                                    Ok(DeductBalanceResult::Success(_)) => {}
+                                    Ok(DeductBalanceResult::InsufficientBalance { current_balance, requested }) => {
+                                        tracing::warn!(
+                                            "[USAGE] Insufficient balance for user={}, balance={}, cost={}",
+                                            user_id, current_balance, requested
+                                        );
+                                    }
+                                    Ok(DeductBalanceResult::AccountNotFound) => {
+                                        tracing::warn!("[USAGE] Account not found for user={}", user_id);
+                                    }
+                                    Err(e) => {
+                                        tracing::error!("[USAGE] Deduction failed for request_id={}: {}", record.request_id, e);
+                                        // NACK so NATS redelivers — but usage was already recorded
+                                        // Don't return error here since usage IS recorded
+                                    }
+                                }
+                            }
+                            Ok(Some(_)) => {
+                                tracing::debug!("[USAGE] Already deducted for request_id={}", record.request_id);
+                            }
+                            Err(e) => {
+                                tracing::error!("[USAGE] Idempotency check failed for request_id={}: {}", record.request_id, e);
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        tracing::debug!("[USAGE] No account for user={}, skipping deduction", user_id);
+                    }
+                    Err(e) => {
+                        tracing::error!("[USAGE] Failed to lookup account for user={}: {}", user_id, e);
+                    }
+                }
+            }
         }
 
         let _ = msg.ack().await;
