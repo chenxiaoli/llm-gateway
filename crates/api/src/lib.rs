@@ -4,18 +4,13 @@ pub mod extractors;
 pub mod models;
 pub mod user_models;
 pub mod proxy;
-pub mod settlement;
 pub mod workers;
 pub mod management;
 
 pub use crate::proxy::{ChannelRegistry, InMemoryChannelRegistry, ResolvedChannel, spawn_registry_refresh};
-pub use settlement::{start_settlement_worker, SettlementTrigger};
-
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::Storage;
 use std::sync::Arc;
-use tokio::sync::mpsc;
-
 pub struct AppState {
     pub storage: Arc<dyn Storage>,
     pub rate_limiter: Arc<RateLimiter>,
@@ -23,7 +18,6 @@ pub struct AppState {
     pub encryption_key: [u8; 32],
     pub nats_publisher: std::sync::Arc<llm_gateway_nats_publisher::NatsPublisher>,
     pub registry: Arc<dyn ChannelRegistry>,
-    pub settlement_tx: mpsc::Sender<settlement::SettlementTrigger>,
     pub system_info: SystemInfo,
 }
 

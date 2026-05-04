@@ -78,15 +78,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Init rate limiter
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.window_size_secs));
 
-    // Create settlement channel and spawn background worker
-    let (settlement_tx, settlement_rx) = tokio::sync::mpsc::channel::<llm_gateway_api::SettlementTrigger>(1);
-    let settlement_interval_secs = 60u64;
-    tokio::spawn(llm_gateway_api::start_settlement_worker(
-        storage.clone(),
-        settlement_rx,
-        settlement_interval_secs,
-    ));
-
     // App state
     let system_info = SystemInfo {
         server_bind_address: format!("{}:{}", config.server.host, config.server.port),
@@ -103,7 +94,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         encryption_key,
         nats_publisher,
         registry,
-        settlement_tx,
         system_info,
     });
 
