@@ -357,6 +357,7 @@ async fn publish_audit_events(
 
     let usage_event = UsageEvent {
         id: uuid::Uuid::new_v4().to_string(),
+        request_id: task.request_id.clone(),
         key_id: task.key_id.clone(),
         user_id: task.user_id.clone(),
         model_name: task.model_name.clone(),
@@ -374,6 +375,7 @@ async fn publish_audit_events(
 
     let audit_event = AuditEvent {
         id: uuid::Uuid::new_v4().to_string(),
+        request_id: task.request_id.clone(),
         key_id: task.key_id.clone(),
         user_id: task.user_id.clone(),
         model_name: task.model_name.clone(),
@@ -425,6 +427,7 @@ async fn dispatch_audit_task(
 
 /// Parameters for SSE AuditTask construction
 pub struct SseAuditParams {
+    pub request_id: String,
     pub key_id: String,
     pub user_id: Option<String>,
     pub model_name: String,
@@ -530,6 +533,7 @@ async fn process_sse_stream(
     tracing::info!("[PROXY] SSE stream complete, latency={}ms", latency_ms);
 
     let task = AuditTask {
+        request_id: audit_params.request_id,
         key_id: audit_params.key_id,
         user_id: audit_params.user_id,
         model_name: audit_params.model_name,
@@ -642,6 +646,8 @@ pub async fn proxy(
     protocol: ProxyProtocol,
     request_path: String,
 ) -> Result<axum::response::Response, ApiError> {
+    let request_id = uuid::Uuid::new_v4().to_string();
+
     // === Step 1: Auth ===
     let raw_token = extract_bearer_token(&headers)?;
     let token_hash = hash_api_key(&raw_token);
@@ -1008,6 +1014,7 @@ if status != 200 && status < 500 {
             tracing::debug!("[PROXY] Upstream error response: status={}, body_len={}", status, error_body.len());
 
             let task = AuditTask {
+                request_id: request_id.clone(),
                 key_id: api_key.id.clone(),
                 user_id: api_key.created_by.clone(),
                 model_name: upstream_name.to_string(),
@@ -1090,6 +1097,7 @@ if status != 200 && status < 500 {
             };
 
             let audit_params = SseAuditParams {
+                request_id: request_id.clone(),
                 key_id: api_key.id.clone(),
                 user_id: api_key.created_by.clone(),
                 model_name: upstream_name.to_string(),
@@ -1178,6 +1186,7 @@ if status != 200 && status < 500 {
             ProxyProtocol::Anthropic => Protocol::Anthropic,
         };
         let task = AuditTask {
+            request_id: request_id.clone(),
             key_id: api_key.id.clone(),
             user_id: api_key.created_by.clone(),
             model_name: upstream_name.to_string(),
