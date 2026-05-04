@@ -519,6 +519,7 @@ export interface Transaction {
   balance_after: number;
   description: string | null;
   reference_id: string | null;
+  request_id: string | null;
   created_at: string;
 }
 
@@ -543,4 +544,66 @@ export interface CreateTransactionRequest {
 
 export interface UpdateThresholdRequest {
   threshold: number;
+}
+
+// ── Request Details (transaction drill-down) ──────────────────────────────
+
+export interface RequestTransaction {
+  id: string;
+  account_id: string;
+  type: string;
+  amount: number;
+  balance_after: number;
+  description: string | null;
+  reference_id: string | null;
+  request_id: string | null;
+  created_at: string;
+}
+
+export interface RequestUsage {
+  id: string;
+  request_id: string;
+  key_id: string;
+  model_name: string;
+  provider_id: string;
+  channel_id: string | null;
+  protocol: string;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_creation_tokens: number | null;
+  cost: number;
+  created_at: string;
+}
+
+export interface RequestAudit {
+  id: string;
+  request_id: string | null;
+  key_id: string;
+  model_name: string;
+  provider_id: string;
+  channel_id: string | null;
+  channel_name: string | null;
+  protocol: string;
+  stream: boolean;
+  request_body: string;
+  response_body: string;
+  status_code: number;
+  latency_ms: number;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  created_at: string;
+  original_model: string | null;
+  upstream_model: string | null;
+  model_override_reason: string | null;
+  request_path: string | null;
+  upstream_url: string | null;
+  request_headers: string | null;
+  response_headers: string | null;
+}
+
+export interface RequestDetailsResponse {
+  transaction: RequestTransaction | null;
+  usage: RequestUsage | null;
+  audit: RequestAudit | null;
 }

@@ -5,6 +5,7 @@ import {
   adjustUserBalance,
   updateUserThreshold,
   getMyBalance,
+  getRequestDetails,
 } from '../api/accounts';
 import type { CreateTransactionRequest, UpdateThresholdRequest } from '../types';
 import { toast } from 'sonner';
@@ -89,5 +90,13 @@ export function useMyBalance(page = 1, pageSize = 20) {
   return useQuery({
     queryKey: ['my-balance', page, pageSize],
     queryFn: () => getMyBalance(page, pageSize),
+  });
+}
+
+export function useRequestDetails(requestId: string | null) {
+  return useQuery({
+    queryKey: ['request-details', requestId],
+    queryFn: () => getRequestDetails(requestId!),
+    enabled: !!requestId,
   });
 }
