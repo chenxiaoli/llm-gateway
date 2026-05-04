@@ -40,6 +40,7 @@ pub struct SystemInfo {
 /// Intermediate task for audit/usage processing.
 /// Parsed in proxy, published as UsageEvent + AuditEvent to NATS.
 pub struct AuditTask {
+    pub request_id: String,
     pub key_id: String,
     pub user_id: Option<String>,
     pub model_name: String,
