@@ -7,6 +7,7 @@ pub mod providers;
 pub mod models;
 pub mod usage;
 pub mod logs;
+pub mod requests;
 pub mod users;
 pub mod settings;
 pub mod channel_models;
@@ -109,6 +110,8 @@ pub fn management_router() -> Router<Arc<AppState>> {
         // Logs (admin)
         .route("/api/v1/admin/logs", get(logs::get_logs))
         .route("/api/v1/admin/logs/{id}", get(logs::get_log))
+        // Request details (admin)
+        .route("/api/v1/admin/requests/{request_id}", get(requests::get_request_details))
         // Users (admin)
         .route("/api/v1/admin/users", get(users::list_users))
         .route(

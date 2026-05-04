@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.0] - 2026-05-04
+
+### Added
+- Per-request balance deduction replaces batch settlement — usage worker deducts immediately after recording each request
+- Shared `request_id` across `usage_records`, `audit_logs`, and `transactions` for 1:1:1 traceability
+- `GET /api/v1/admin/requests/:request_id` endpoint to look up usage record, audit log, and transaction by request_id
+- Frontend transaction drill-down — click a debit transaction to see usage details (model, tokens, cost, latency)
+- Gateway auto-injects `stream_options: { include_usage: true }` for OpenAI streaming requests missing the field
+
+### Changed
+- Batch settlement worker (`crates/api/src/settlement.rs`) removed — no more 60s interval aggregation
+
+### Fixed
+- OpenAI-compatible streaming requests without `stream_options` in the body no longer silently skip billing
+
 ## [1.1.0] - 2026-05-03
 
 ### Added

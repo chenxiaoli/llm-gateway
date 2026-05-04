@@ -11,6 +11,7 @@ pub use async_nats::jetstream::AckKind;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageEvent {
     pub id: String,
+    pub request_id: String,
     pub key_id: String,
     pub user_id: Option<String>,
     pub model_name: String,
@@ -29,6 +30,7 @@ pub struct UsageEvent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEvent {
     pub id: String,
+    pub request_id: String,
     pub key_id: String,
     pub user_id: Option<String>,
     pub model_name: String,

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { DollarSign } from 'lucide-react';
+import { DollarSign, Eye } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useUserBalance, useRechargeUser, useAdjustUser } from '../hooks/useAccounts';
+import { useUserBalance, useRechargeUser, useAdjustUser, useRequestDetails } from '../hooks/useAccounts';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
+import { Drawer } from '../components/ui/Drawer';
 
 export default function AccountBalance() {
   const { t } = useTranslation();
@@ -18,10 +19,12 @@ export default function AccountBalance() {
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustType, setAdjustType] = useState<'credit_adjustment' | 'debit_refund'>('credit_adjustment');
   const [description, setDescription] = useState('');
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
 
   const { data, isLoading } = useUserBalance(userId ?? '', page, pageSize);
   const rechargeMutation = useRechargeUser();
   const adjustMutation = useAdjustUser();
+  const { data: requestDetails, isLoading: detailsLoading } = useRequestDetails(selectedRequestId);
 
   const account = data?.account;
   const transactions = data?.transactions;
@@ -69,6 +72,20 @@ export default function AccountBalance() {
       }
     );
   };
+
+  function DetailRow({ label, value }: { label: string; value: string }) {
+    return (
+      <div className="flex items-center justify-between text-sm">
+        <span className="text-base-content/60">{label}</span>
+        <span className="font-medium text-base-content">{value}</span>
+      </div>
+    );
+  }
+
+  function formatTokens(val: number | null): string {
+    if (val === null) return '-';
+    return val.toLocaleString();
+  }
 
   return (
     <div>
@@ -129,8 +146,13 @@ export default function AccountBalance() {
                 {transactions?.items.map((tx) => {
                   const info = TX_TYPE_LABELS[tx.type] ?? { label: tx.type, color: 'gray' as const };
                   const isCredit = tx.type === 'credit' || tx.type === 'credit_adjustment';
+                  const canDrillDown = !!tx.request_id;
                   return (
-                    <tr key={tx.id} className="border-b border-base-200 hover">
+                    <tr
+                      key={tx.id}
+                      className={`border-b border-base-200 hover ${canDrillDown ? 'cursor-pointer' : ''}`}
+                      onClick={() => canDrillDown && setSelectedRequestId(tx.request_id)}
+                    >
                       <td className="mono text-[13px]">
                         {new Date(tx.created_at).toLocaleString()}
                       </td>
@@ -141,7 +163,14 @@ export default function AccountBalance() {
                         {isCredit ? '+' : '-'}${tx.amount.toFixed(4)}
                       </td>
                       <td className="mono text-right">${tx.balance_after.toFixed(4)}</td>
-                      <td className="text-sm">{tx.description ?? '-'}</td>
+                      <td className="text-sm">
+                        <div className="flex items-center gap-1">
+                          <span>{tx.description ?? '-'}</span>
+                          {canDrillDown && (
+                            <Eye className="h-3.5 w-3.5 text-base-content/30 shrink-0" />
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -279,6 +308,92 @@ export default function AccountBalance() {
           </div>
         </div>
       </Modal>
+
+      {/* Request Details Drawer */}
+      <Drawer
+        open={!!selectedRequestId}
+        onClose={() => setSelectedRequestId(null)}
+        title={t('accountBalance.requestDetails.title')}
+        width={520}
+      >
+        {detailsLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <span className="loading loading-spinner loading-md" />
+          </div>
+        ) : requestDetails ? (
+          <div className="space-y-6">
+            {/* Transaction Info */}
+            {requestDetails.transaction && (
+              <section>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-3">
+                  {t('accountBalance.requestDetails.transactionInfo')}
+                </h4>
+                <div className="space-y-2">
+                  <DetailRow label={t('accountBalance.table.amount')} value={`$${requestDetails.transaction.amount.toFixed(4)}`} />
+                  <DetailRow label={t('accountBalance.table.balanceAfter')} value={`$${requestDetails.transaction.balance_after.toFixed(4)}`} />
+                  <DetailRow label={t('accountBalance.table.description')} value={requestDetails.transaction.description ?? '-'} />
+                </div>
+              </section>
+            )}
+
+            {/* Request ID */}
+            <section>
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-3">
+                {t('accountBalance.requestDetails.requestId')}
+              </h4>
+              <div className="bg-base-200 rounded-md px-3 py-2 font-mono text-xs break-all select-all">
+                {selectedRequestId}
+              </div>
+            </section>
+
+            {/* Usage Record */}
+            {requestDetails.usage ? (
+              <section>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-3">
+                  {t('accountBalance.requestDetails.usageInfo')}
+                </h4>
+                <div className="space-y-2">
+                  <DetailRow label={t('accountBalance.requestDetails.model')} value={requestDetails.usage.model_name} />
+                  <DetailRow label={t('accountBalance.requestDetails.inputTokens')} value={formatTokens(requestDetails.usage.input_tokens)} />
+                  <DetailRow label={t('accountBalance.requestDetails.outputTokens')} value={formatTokens(requestDetails.usage.output_tokens)} />
+                  <DetailRow label={t('accountBalance.requestDetails.cacheReadTokens')} value={formatTokens(requestDetails.usage.cache_read_tokens)} />
+                  <DetailRow label={t('accountBalance.requestDetails.cacheCreationTokens')} value={formatTokens(requestDetails.usage.cache_creation_tokens)} />
+                  <DetailRow label={t('accountBalance.requestDetails.cost')} value={`$${requestDetails.usage.cost.toFixed(4)}`} />
+                </div>
+              </section>
+            ) : (
+              <section>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-3">
+                  {t('accountBalance.requestDetails.usageInfo')}
+                </h4>
+                <p className="text-sm text-base-content/40">{t('accountBalance.requestDetails.noData')}</p>
+              </section>
+            )}
+
+            {/* Audit Info */}
+            {requestDetails.audit ? (
+              <section>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-3">
+                  {t('accountBalance.requestDetails.auditInfo')}
+                </h4>
+                <div className="space-y-2">
+                  <DetailRow label={t('accountBalance.requestDetails.status')} value={`${requestDetails.audit.status_code}`} />
+                  <DetailRow label={t('accountBalance.requestDetails.latency')} value={`${requestDetails.audit.latency_ms}ms`} />
+                  <DetailRow label={t('accountBalance.requestDetails.protocol')} value={requestDetails.audit.protocol} />
+                  <DetailRow label={t('accountBalance.requestDetails.stream')} value={requestDetails.audit.stream ? t('common.yes') : t('common.no')} />
+                  {requestDetails.audit.channel_name && (
+                    <DetailRow label={t('accountBalance.requestDetails.channel')} value={requestDetails.audit.channel_name} />
+                  )}
+                </div>
+              </section>
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center py-12">
+            <p className="text-sm text-base-content/40">{t('accountBalance.requestDetails.noData')}</p>
+          </div>
+        )}
+      </Drawer>
     </div>
   );
 }

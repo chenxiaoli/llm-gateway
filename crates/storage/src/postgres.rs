@@ -150,6 +150,7 @@ impl From<PgModelWithProviderRow> for ModelWithProvider {
 #[derive(FromRow)]
 struct PgUsageRow {
     id: String,
+    request_id: String,
     key_id: String,
     model_name: String,
     provider_id: String,
@@ -168,6 +169,7 @@ impl From<PgUsageRow> for UsageRecord {
     fn from(r: PgUsageRow) -> Self {
         UsageRecord {
             id: r.id,
+            request_id: r.request_id,
             key_id: r.key_id,
             model_name: r.model_name,
             provider_id: r.provider_id,
@@ -235,6 +237,7 @@ impl From<PgChannelUsageSummaryRow> for ChannelUsageSummaryRecord {
 #[derive(FromRow)]
 struct PgAuditSummaryRow {
     id: String,
+    request_id: Option<String>,
     key_id: String,
     model_name: String,
     provider_id: String,
@@ -261,6 +264,7 @@ impl From<PgAuditSummaryRow> for AuditLogSummary {
     fn from(r: PgAuditSummaryRow) -> Self {
         AuditLogSummary {
             id: r.id,
+            request_id: r.request_id,
             key_id: r.key_id,
             model_name: r.model_name,
             provider_id: r.provider_id,
@@ -288,6 +292,7 @@ impl From<PgAuditSummaryRow> for AuditLogSummary {
 #[derive(FromRow)]
 struct PgAuditRow {
     id: String,
+    request_id: Option<String>,
     key_id: String,
     model_name: String,
     provider_id: String,
@@ -316,6 +321,7 @@ impl From<PgAuditRow> for AuditLog {
     fn from(r: PgAuditRow) -> Self {
         AuditLog {
             id: r.id,
+            request_id: r.request_id,
             key_id: r.key_id,
             model_name: r.model_name,
             provider_id: r.provider_id,
@@ -536,6 +542,7 @@ struct PgTransactionRow {
     balance_after: i64,
     description: Option<String>,
     reference_id: Option<String>,
+    request_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -556,6 +563,7 @@ impl From<PgTransactionRow> for Transaction {
             balance_after: r.balance_after,
             description: r.description,
             reference_id: r.reference_id,
+            request_id: r.request_id,
             created_at: r.created_at,
         }
     }
@@ -1179,10 +1187,11 @@ impl crate::Storage for PostgresStorage {
 
     async fn record_usage(&self, usage: &UsageRecord) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO usage_records (id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+            "INSERT INTO usage_records (id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
         )
         .bind(&usage.id)
+        .bind(&usage.request_id)
         .bind(&usage.key_id)
         .bind(&usage.model_name)
         .bind(&usage.provider_id)
@@ -1203,7 +1212,7 @@ impl crate::Storage for PostgresStorage {
     async fn query_usage(&self, filter: &UsageFilter) -> Result<Vec<UsageRecord>, DbErr> {
         // Build query dynamically based on filter - for now, just fetch all
         let rows: Vec<PgUsageRow> = sqlx::query_as(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at
+            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at
              FROM usage_records ORDER BY created_at DESC",
         )
         .fetch_all(&self.pool)
@@ -1260,7 +1269,7 @@ impl crate::Storage for PostgresStorage {
 
         let offset = (page - 1) * page_size;
         let data_sql = format!(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at \
+            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at \
              FROM usage_records{} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
             where_clause,
             param_idx,
@@ -1411,29 +1420,28 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(ChannelUsageSummaryRecord::from).collect())
     }
 
-    async fn query_usage_cost_by_user(&self, since: chrono::DateTime<chrono::Utc>, until: chrono::DateTime<chrono::Utc>) -> Result<Vec<(String, i64)>, Box<dyn std::error::Error + Send + Sync>> {
-        let rows: Vec<(String, i64)> = sqlx::query_as(
-            "SELECT user_id, SUM(cost)::BIGINT FROM usage_records \
-             WHERE user_id IS NOT NULL AND created_at >= $1 AND created_at < $2 \
-             GROUP BY user_id"
+    async fn get_usage_by_request_id(&self, request_id: &str) -> Result<Option<UsageRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        let row: Option<PgUsageRow> = sqlx::query_as(
+            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at
+             FROM usage_records WHERE request_id = $1",
         )
-        .bind(since)
-        .bind(until)
-        .fetch_all(&self.pool)
+        .bind(request_id)
+        .fetch_optional(&self.pool)
         .await?;
-        Ok(rows)
+        Ok(row.map(UsageRecord::from))
     }
 
     // ---- Audit ----
 
     async fn insert_log(&self, log: &AuditLog) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO audit_logs (id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
+            "INSERT INTO audit_logs (id, request_id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
              request_path, upstream_url, request_headers, response_headers, user_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)",
         )
         .bind(&log.id)
+        .bind(&log.request_id)
         .bind(&log.key_id)
         .bind(&log.model_name)
         .bind(&log.provider_id)
@@ -1462,7 +1470,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn query_logs(&self, filter: &LogFilter) -> Result<Vec<AuditLog>, DbErr> {
         let mut sql = String::from(
-            "SELECT id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
+            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
              request_path, upstream_url, request_headers, response_headers
              FROM audit_logs WHERE 1=1",
@@ -1534,7 +1542,7 @@ impl crate::Storage for PostgresStorage {
 
         let offset = (page - 1) * page_size;
         let data_sql = format!(
-            "SELECT a.id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream,
+            "SELECT a.id, a.request_id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream,
              a.status_code, a.latency_ms, a.input_tokens, a.output_tokens, a.created_at, a.original_model, a.upstream_model, a.model_override_reason,
              a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id
              FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id{} ORDER BY a.created_at DESC LIMIT ${} OFFSET ${}",
@@ -1559,12 +1567,25 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_log(&self, id: &str) -> Result<Option<AuditLog>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgAuditRow> = sqlx::query_as(
-            "SELECT a.id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream, a.request_body, a.response_body,
+            "SELECT a.id, a.request_id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream, a.request_body, a.response_body,
              a.status_code, a.latency_ms, a.input_tokens, a.output_tokens, a.created_at, a.original_model, a.upstream_model, a.model_override_reason,
              a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id
              FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id WHERE a.id = $1",
         )
         .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(AuditLog::from))
+    }
+
+    async fn get_audit_by_request_id(&self, request_id: &str) -> Result<Option<AuditLog>, Box<dyn std::error::Error + Send + Sync>> {
+        let row: Option<PgAuditRow> = sqlx::query_as(
+            "SELECT a.id, a.request_id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream, a.request_body, a.response_body,
+             a.status_code, a.latency_ms, a.input_tokens, a.output_tokens, a.created_at, a.original_model, a.upstream_model, a.model_override_reason,
+             a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id
+             FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id WHERE a.request_id = $1",
+        )
+        .bind(request_id)
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.map(AuditLog::from))
@@ -1973,8 +1994,8 @@ impl crate::Storage for PostgresStorage {
         // Create transaction record
         let tx_id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
-            "INSERT INTO transactions (id, account_id, type, amount, balance_after, description, reference_id, created_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+            "INSERT INTO transactions (id, account_id, type, amount, balance_after, description, reference_id, request_id, created_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
         )
         .bind(&tx_id)
         .bind(&req.account_id)
@@ -1983,6 +2004,7 @@ impl crate::Storage for PostgresStorage {
         .bind(new_balance)
         .bind(&req.description)
         .bind(&req.reference_id)
+        .bind(&req.request_id)
         .bind(now)
         .execute(&mut *tx)
         .await?;
@@ -1997,6 +2019,7 @@ impl crate::Storage for PostgresStorage {
             balance_after: new_balance,
             description: req.description.clone(),
             reference_id: req.reference_id.clone(),
+            request_id: req.request_id.clone(),
             created_at: now,
         }))
     }
@@ -2054,6 +2077,7 @@ impl crate::Storage for PostgresStorage {
             balance_after: new_balance,
             description: req.description.clone(),
             reference_id: req.reference_id.clone(),
+            request_id: None,
             created_at: now,
         }))
     }
@@ -2329,7 +2353,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_transaction(&self, transaction: &Transaction) -> Result<Transaction, Box<dyn std::error::Error + Send + Sync>> {
         sqlx::query(
-            "INSERT INTO transactions (id, account_id, type, amount, balance_after, description, reference_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+            "INSERT INTO transactions (id, account_id, type, amount, balance_after, description, reference_id, request_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
         )
         .bind(&transaction.id)
         .bind(&transaction.account_id)
@@ -2338,6 +2362,7 @@ impl crate::Storage for PostgresStorage {
         .bind(transaction.balance_after)
         .bind(&transaction.description)
         .bind(&transaction.reference_id)
+        .bind(&transaction.request_id)
         .bind(transaction.created_at)
         .execute(self.pool())
         .await?;
@@ -2346,7 +2371,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_transaction(&self, id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE id = $1"
+            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, request_id, created_at FROM transactions WHERE id = $1"
         )
         .bind(id)
         .fetch_optional(self.pool())
@@ -2356,10 +2381,20 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_transaction_by_reference(&self, account_id: &str, reference_id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = $1 AND reference_id = $2"
+            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, request_id, created_at FROM transactions WHERE account_id = $1 AND reference_id = $2"
         )
         .bind(account_id)
         .bind(reference_id)
+        .fetch_optional(self.pool())
+        .await?;
+        Ok(row.map(Transaction::from))
+    }
+
+    async fn get_transaction_by_request_id(&self, request_id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
+        let row: Option<PgTransactionRow> = sqlx::query_as(
+            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, request_id, created_at FROM transactions WHERE request_id = $1"
+        )
+        .bind(request_id)
         .fetch_optional(self.pool())
         .await?;
         Ok(row.map(Transaction::from))
@@ -2369,7 +2404,7 @@ impl crate::Storage for PostgresStorage {
         let offset = (page - 1) * page_size;
 
         let rows: Vec<PgTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, created_at FROM transactions WHERE account_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, request_id, created_at FROM transactions WHERE account_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
         )
         .bind(account_id)
         .bind(page_size)

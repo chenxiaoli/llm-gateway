@@ -4,6 +4,7 @@ import type {
   AccountBalanceResponse,
   CreateTransactionRequest,
   MeBalanceResponse,
+  RequestDetailsResponse,
   UpdateThresholdRequest,
 } from '../types';
 
@@ -61,4 +62,27 @@ export async function getMyBalance(
     { params: { page, page_size: pageSize } }
   );
   return response.data;
+}
+
+const UNITS_PER_USD = 100_000_000;
+function unitsToUsd(units: number): number {
+  return units / UNITS_PER_USD;
+}
+
+export async function getRequestDetails(
+  requestId: string
+): Promise<RequestDetailsResponse> {
+  const response = await adminApiClient.get<RequestDetailsResponse>(
+    `/requests/${requestId}`
+  );
+  const data = response.data;
+  // Convert raw i64 monetary units to USD floats
+  if (data.transaction) {
+    data.transaction.amount = unitsToUsd(data.transaction.amount);
+    data.transaction.balance_after = unitsToUsd(data.transaction.balance_after);
+  }
+  if (data.usage) {
+    data.usage.cost = unitsToUsd(data.usage.cost);
+  }
+  return data;
 }

@@ -913,6 +913,27 @@
       "descriptionLabel": "描述（可选）",
       "descriptionPlaceholder": "例如：客户补偿",
       "confirmAdjustment": "确认调整"
+    },
+    "requestDetails": {
+      "title": "请求详情",
+      "transactionInfo": "交易信息",
+      "usageInfo": "用量记录",
+      "auditInfo": "审计信息",
+      "model": "模型",
+      "inputTokens": "输入 Token",
+      "outputTokens": "输出 Token",
+      "cacheReadTokens": "缓存读取",
+      "cacheCreationTokens": "缓存创建",
+      "cost": "费用",
+      "latency": "延迟",
+      "viewDetails": "查看详情",
+      "noData": "暂无数据",
+      "requestId": "请求 ID",
+      "status": "状态",
+      "protocol": "协议",
+      "stream": "流式",
+      "provider": "提供商",
+      "channel": "通道"
     }
   },
   "modelFallbacks": {

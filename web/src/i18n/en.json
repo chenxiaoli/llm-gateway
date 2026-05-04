@@ -913,6 +913,27 @@
       "descriptionLabel": "Description (optional)",
       "descriptionPlaceholder": "e.g. Customer compensation",
       "confirmAdjustment": "Confirm Adjustment"
+    },
+    "requestDetails": {
+      "title": "Request Details",
+      "transactionInfo": "Transaction",
+      "usageInfo": "Usage Record",
+      "auditInfo": "Audit Info",
+      "model": "Model",
+      "inputTokens": "Input Tokens",
+      "outputTokens": "Output Tokens",
+      "cacheReadTokens": "Cache Read",
+      "cacheCreationTokens": "Cache Creation",
+      "cost": "Cost",
+      "latency": "Latency",
+      "viewDetails": "View Details",
+      "noData": "No data available",
+      "requestId": "Request ID",
+      "status": "Status",
+      "protocol": "Protocol",
+      "stream": "Stream",
+      "provider": "Provider",
+      "channel": "Channel"
     }
   },
   "modelFallbacks": {

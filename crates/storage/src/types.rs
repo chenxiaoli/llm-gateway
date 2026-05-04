@@ -515,6 +515,7 @@ pub struct KeyModelRateLimit {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageRecord {
     pub id: String,
+    pub request_id: String,
     pub key_id: String,
     pub model_name: String,
     pub provider_id: String,
@@ -583,6 +584,7 @@ pub struct UsageFilter {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditLog {
     pub id: String,
+    pub request_id: Option<String>,
     pub key_id: String,
     pub model_name: String,
     pub provider_id: String,
@@ -610,6 +612,7 @@ pub struct AuditLog {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditLogSummary {
     pub id: String,
+    pub request_id: Option<String>,
     pub key_id: String,
     pub model_name: String,
     pub provider_id: String,
@@ -709,6 +712,7 @@ pub struct Transaction {
     pub balance_after: i64,
     pub description: Option<String>,
     pub reference_id: Option<String>,
+    pub request_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -761,6 +765,7 @@ pub struct DeductBalance {
     pub transaction_type: TransactionType,
     pub description: Option<String>,
     pub reference_id: Option<String>,
+    pub request_id: Option<String>,
 }
 
 /// Result of a deduct_balance operation.

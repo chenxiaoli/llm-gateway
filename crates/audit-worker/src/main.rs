@@ -93,6 +93,7 @@ async fn run_audit_worker(
             event.upstream_url.as_deref(),
             event.request_headers.as_deref(),
             event.response_headers.as_deref(),
+            Some(&event.request_id),
         ).await {
             tracing::warn!("[AUDIT-WORKER] Failed to log audit: {}", e);
             let _ = msg.ack_with(AckKind::Nak(None)).await;
