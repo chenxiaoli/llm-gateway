@@ -612,6 +612,7 @@ pub struct AuditLog {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditLogSummary {
     pub id: String,
+    pub request_id: Option<String>,
     pub key_id: String,
     pub model_name: String,
     pub provider_id: String,
