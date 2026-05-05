@@ -172,6 +172,7 @@ export default function Logs() {
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.time')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.model')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.channel')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.key')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.protocol')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.stream')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.status')}</th>
@@ -184,7 +185,7 @@ export default function Logs() {
                 <tbody>
                   {data?.items?.length === 0 && (
                     <tr>
-                      <td colSpan={10} className="text-center py-12 text-base-content/30">
+                      <td colSpan={11} className="text-center py-12 text-base-content/30">
                         <Search className="h-8 w-8 mx-auto mb-2 opacity-40" />
                         <div>{t('logs.empty.title')}</div>
                         {hasFilters && <div className="text-xs mt-1">{t('logs.empty.tryAdjusting')}</div>}
@@ -203,6 +204,9 @@ export default function Logs() {
                       <td className="mono font-medium">{log.model_name}</td>
                       <td className="mono text-[13px] text-base-content/55">
                         {log.channel_name ?? '-'}
+                      </td>
+                      <td className="mono text-[13px] text-base-content/55">
+                        <span className="px-1.5 py-0.5 rounded bg-base-200/80 text-base-content/70 font-medium">{log.key_id.slice(0, 8)}…</span>
                       </td>
                       <td>
                         <Badge variant={log.protocol === 'openai' ? 'blue' : 'purple'}>
@@ -356,6 +360,10 @@ export default function Logs() {
                   <div className="mono text-[13px] text-base-content/70">
                     {selectedLog.channel_name ?? '-'}
                   </div>
+                </div>
+                <div className="rounded-lg bg-base-200/60 p-3">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('logs.detail.apiKey')}</div>
+                  <div className="mono text-[13px] text-base-content/70">{selectedLog.key_id}</div>
                 </div>
               </div>
             </div>
