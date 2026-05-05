@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Pencil, Trash2, KeyRound, Hash, Plus, Building2, LinkIcon, Power, Eye, EyeOff, Clock, Scale } from 'lucide-react';
-import { useChannel, useUpdateChannel, useDeleteChannel, useChannelModels, useCreateChannelModel, useDeleteChannelModel, useUpdateChannelModel, useUpdateChannelApiKey, useProviderModels } from '../hooks/useChannels';
+import { toast } from 'sonner';
+import i18n from 'i18next';
+import { ArrowLeft, Pencil, Trash2, KeyRound, Hash, Plus, Building2, LinkIcon, Power, Eye, EyeOff, Clock, Scale, Zap } from 'lucide-react';
+import { useChannel, useUpdateChannel, useDeleteChannel, useChannelModels, useCreateChannelModel, useDeleteChannelModel, useUpdateChannelModel, useUpdateChannelApiKey, useProviderModels, useTestChannel } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
+import { getErrorMessage } from '../api/client';
 import { usePricingPolicies } from '../hooks/usePricingPolicies';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
@@ -28,12 +31,16 @@ export default function ChannelDetail() {
   const deleteModelMutation = useDeleteChannelModel(channel?.id || '');
   const updateModelMutation = useUpdateChannelModel(channel?.id || '');
   const updateApiKeyMutation = useUpdateChannelApiKey(channel?.id || '');
+  const testMutation = useTestChannel();
+  const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
   const [isEditing, setIsEditing] = useState(false);
+  const [endpointTestStatus, setEndpointTestStatus] = useState<Record<string, 'idle' | 'loading' | 'success' | 'error'>>({});
   const [channelName, setChannelName] = useState('');
   const [channelPriority, setChannelPriority] = useState('0');
   const [channelWeight, setChannelWeight] = useState('');
   const [channelEnabled, setChannelEnabled] = useState(false);
+  const [channelGroup, setChannelGroup] = useState('');
   const [revealKey, setRevealKey] = useState(false);
 
   const [isUpdatingApiKey, setIsUpdatingApiKey] = useState(false);
@@ -56,9 +63,63 @@ export default function ChannelDetail() {
       setChannelPriority(String(channel.priority));
       setChannelWeight(channel.weight != null ? String(channel.weight) : '');
       setChannelEnabled(channel.enabled);
+      setChannelGroup(channel.group ?? '');
       setHoursSlots(channel.available_hours ?? []);
     }
   }, [channel]);
+
+  useEffect(() => {
+    if (testStatus === 'success' || testStatus === 'error') {
+      const timer = setTimeout(() => setTestStatus('idle'), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [testStatus]);
+
+  useEffect(() => {
+    const hasDone = Object.values(endpointTestStatus).some((s) => s === 'success' || s === 'error');
+    if (hasDone) {
+      const timer = setTimeout(() => setEndpointTestStatus({}), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [endpointTestStatus]);
+
+  const handleTest = () => {
+    setTestStatus('loading');
+    testMutation.mutate({ id: channel!.id }, {
+      onSuccess: (result) => {
+        if (result.success) {
+          setTestStatus('success');
+          toast.success(i18n.t('channels.row.testOk', { latency: result.latency_ms, model: result.model }));
+        } else {
+          setTestStatus('error');
+          toast.error(i18n.t('channels.row.testFailed', { error: result.error ?? i18n.t('channels.row.unknownError') }));
+        }
+      },
+      onError: (err) => {
+        setTestStatus('error');
+        toast.error(getErrorMessage(err, i18n.t('channels.row.testFailedShort')));
+      },
+    });
+  };
+
+  const handleTestEndpoint = (endpointKey: string) => {
+    setEndpointTestStatus((prev) => ({ ...prev, [endpointKey]: 'loading' }));
+    testMutation.mutate({ id: channel!.id, endpointKey }, {
+      onSuccess: (result) => {
+        if (result.success) {
+          setEndpointTestStatus((prev) => ({ ...prev, [endpointKey]: 'success' }));
+          toast.success(i18n.t('channels.row.testOk', { latency: result.latency_ms, model: result.model }));
+        } else {
+          setEndpointTestStatus((prev) => ({ ...prev, [endpointKey]: 'error' }));
+          toast.error(i18n.t('channels.row.testFailed', { error: result.error ?? i18n.t('channels.row.unknownError') }));
+        }
+      },
+      onError: (err) => {
+        setEndpointTestStatus((prev) => ({ ...prev, [endpointKey]: 'error' }));
+        toast.error(getErrorMessage(err, i18n.t('channels.row.testFailedShort')));
+      },
+    });
+  };
 
   if (isLoading) {
     return (
@@ -88,6 +149,7 @@ export default function ChannelDetail() {
       priority: Number(channelPriority),
       weight: channelWeight ? Number(channelWeight) : null,
       enabled: channelEnabled,
+      group: channelGroup || null,
     };
     await updateMutation.mutateAsync({ id: channel.id, input });
     setIsEditing(false);
@@ -103,6 +165,7 @@ export default function ChannelDetail() {
     setChannelPriority(String(channel.priority));
     setChannelWeight(channel.weight != null ? String(channel.weight) : '');
     setChannelEnabled(channel.enabled);
+    setChannelGroup(channel.group ?? '');
     setIsEditing(false);
   };
 
@@ -128,6 +191,15 @@ export default function ChannelDetail() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            icon={<Zap className="h-4 w-4" />}
+            onClick={handleTest}
+            loading={testStatus === 'loading'}
+            disabled={testStatus === 'loading'}
+          >
+            {testStatus === 'loading' ? t('channels.row.testing') : testStatus === 'success' ? t('channels.row.ok') : testStatus === 'error' ? t('channels.row.fail') : t('channels.row.test')}
+          </Button>
           <Button variant="secondary" icon={<Pencil className="h-4 w-4" />} onClick={() => setIsEditing(true)}>
             {t('common.edit')}
           </Button>
@@ -222,6 +294,18 @@ export default function ChannelDetail() {
                 </div>
               </div>
             </div>
+
+            {channel.group && (
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-info/10 flex items-center justify-center shrink-0">
+                  <Hash className="h-4 w-4 text-info" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-xs text-base-content/40 uppercase tracking-wider">{t('channelDetail.group')}</div>
+                  <div className="text-sm font-mono text-base-content/80">{channel.group}</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -249,11 +333,26 @@ export default function ChannelDetail() {
                     <div className="text-xs text-base-content/40 uppercase tracking-wider mb-2">{t('channelDetail.endpoints')}</div>
                     <div className="grid grid-cols-2 gap-2">
                       {Object.entries(provider.endpoints).map(([key, value]) => (
-                        <div key={key} className="bg-base-200/50 rounded px-2 py-1.5">
-                          <div className="text-xs text-secondary font-medium capitalize">{key}</div>
-                          <div className="text-xs font-mono text-base-content/60 truncate" title={value}>
-                            {value}
+                        <div key={key} className="bg-base-200/50 rounded px-2 py-1.5 flex items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs text-secondary font-medium capitalize">{key}</div>
+                            <div className="text-xs font-mono text-base-content/60 truncate" title={value}>
+                              {value}
+                            </div>
                           </div>
+                          <button
+                            className="btn btn-ghost btn-xs text-primary shrink-0"
+                            disabled={endpointTestStatus[key] === 'loading'}
+                            onClick={() => handleTestEndpoint(key)}
+                          >
+                            {endpointTestStatus[key] === 'loading'
+                              ? <span className="loading loading-spinner loading-xs" />
+                              : endpointTestStatus[key] === 'success'
+                                ? <span className="text-success text-xs">{t('channels.row.ok')}</span>
+                                : endpointTestStatus[key] === 'error'
+                                  ? <span className="text-error text-xs">{t('channels.row.fail')}</span>
+                                  : <Zap className="h-3 w-3" />}
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -463,6 +562,17 @@ export default function ChannelDetail() {
               onChange={(e) => setChannelWeight(e.target.value)}
               min={0}
               placeholder="100"
+              className="input input-bordered w-full"
+            />
+          </div>
+
+          <div>
+            <label className="label"><span className="label-text font-medium">{t('channelDetail.editModal.group')}</span></label>
+            <input
+              type="text"
+              value={channelGroup}
+              onChange={(e) => setChannelGroup(e.target.value)}
+              placeholder={t('channelDetail.editModal.groupPlaceholder')}
               className="input input-bordered w-full"
             />
           </div>

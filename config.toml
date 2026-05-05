@@ -19,7 +19,7 @@ window_size_secs = 60
 timeout_secs = 30
 
 [nats]
-url = "nats://10.0.17.3:4222"
+url = "nats://nats:4222"
 
 [audit]
 retention_days = 90

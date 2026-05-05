@@ -475,6 +475,7 @@
     "update": "Update",
     "priority": "Priority",
     "weight": "Weight",
+    "group": "Group",
     "provider": "Provider",
     "name": "Name",
     "endpoints": "Endpoints",
@@ -501,7 +502,9 @@
       "priority": "Priority",
       "weight": "Weight",
       "weightHint": "higher = more traffic",
-      "enabled": "Enabled"
+      "enabled": "Enabled",
+      "group": "Group",
+      "groupPlaceholder": "e.g., production, canary"
     },
     "addModelModal": {
       "title": "Add Model to Channel",
@@ -838,6 +841,14 @@
       "auditRetention": "Audit Retention",
       "days": "{{count}} days",
       "configNotice": "These values are derived from config.toml. Changes require editing the configuration file and restarting the gateway."
+    },
+    "nats": {
+      "sectionTitle": "NATS STREAMS",
+      "messages": "Messages",
+      "size": "Size",
+      "consumers": "Consumers",
+      "retention": "Retention",
+      "days": "{{count}} days"
     },
     "about": {
       "sectionTitle": "GATEWAY INFORMATION",

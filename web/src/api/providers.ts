@@ -64,8 +64,9 @@ export async function deleteChannel(id: string): Promise<void> {
   await adminApiClient.delete(`/channels/${id}`);
 }
 
-export async function testChannel(id: string): Promise<ChannelTestResult> {
-  const { data } = await adminApiClient.post<ChannelTestResult>(`/channels/${id}/test`);
+export async function testChannel(id: string, endpointKey?: string): Promise<ChannelTestResult> {
+  const params = endpointKey ? `?endpoint_key=${encodeURIComponent(endpointKey)}` : '';
+  const { data } = await adminApiClient.post<ChannelTestResult>(`/channels/${id}/test${params}`);
   return data;
 }
 

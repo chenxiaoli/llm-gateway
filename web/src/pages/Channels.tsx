@@ -158,6 +158,7 @@ function AddChannelDrawer({
   const [priority, setPriority] = useState('1');
   const [weight, setWeight] = useState('');
   const [enabled, setEnabled] = useState(false);
+  const [group, setGroup] = useState('');
   const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
 
   const reset = () => {
@@ -167,6 +168,7 @@ function AddChannelDrawer({
     setPriority('1');
     setWeight('');
     setEnabled(false);
+    setGroup('');
     setSelectedModelIds(new Set());
   };
 
@@ -190,6 +192,7 @@ function AddChannelDrawer({
         weight: weight ? parseInt(weight) : null,
         enabled,
         models,
+        group: group || undefined,
       };
       await createChannel(input);
       queryClient.invalidateQueries({ queryKey: ['channels'] });
@@ -327,6 +330,17 @@ function AddChannelDrawer({
           <Toggle checked={enabled} onChange={setEnabled} />
         </div>
 
+        <div>
+          <label className="label"><span className="label-text font-medium">{t('channelDetail.editModal.group')}</span></label>
+          <input
+            type="text"
+            value={group}
+            onChange={(e) => setGroup(e.target.value)}
+            placeholder={t('channelDetail.editModal.groupPlaceholder')}
+            className="input input-bordered w-full"
+          />
+        </div>
+
         {/* Actions */}
         <div className="flex items-center gap-2 pt-2">
           <Button
@@ -367,7 +381,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
 
   const handleTest = () => {
     setTestStatus('loading');
-    testMutation.mutate(channel.id, {
+    testMutation.mutate({ id: channel.id }, {
       onSuccess: (result) => {
         if (result.success) {
           setTestStatus('success');
@@ -439,6 +453,14 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
             <span className="text-md font-mono font-semibold text-accent/60">{channel.weight ?? 100}</span>
           </div>
         </div>
+
+        {channel.group && (
+          <div className="shrink-0">
+            <span className="inline-flex items-center px-2 py-1 rounded bg-info/10 text-info text-xs font-medium">
+              {channel.group}
+            </span>
+          </div>
+        )}
 
         {/* Models */}
         <div className="flex-1 min-w-0">

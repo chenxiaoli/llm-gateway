@@ -1,4 +1,4 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
 use serde::Deserialize;
@@ -44,6 +44,7 @@ pub struct ChannelWithModels {
     pub weight: Option<i32>,
     pub enabled: bool,
     pub available_hours: Option<Vec<TimeSlot>>,
+    pub group: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub models: Vec<ChannelModelInfo>,
@@ -66,6 +67,7 @@ pub struct ChannelResponse {
     pub enabled: bool,
     pub available_hours: Option<Vec<TimeSlot>>,
     pub created_by: Option<String>,
+    pub group: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -87,6 +89,7 @@ impl From<Channel> for ChannelResponse {
             enabled: c.enabled,
             available_hours: c.available_hours,
             created_by: c.created_by,
+            group: c.group,
             created_at: c.created_at.to_rfc3339(),
             updated_at: c.updated_at.to_rfc3339(),
         }
@@ -120,6 +123,7 @@ pub struct CreateChannelRequest {
     pub enabled: Option<bool>,
     pub available_hours: Option<Vec<TimeSlot>>,
     pub models: Option<Vec<CreateChannelModelInput>>,
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -134,6 +138,7 @@ pub struct UpdateChannelRequest {
     pub balance: Option<Option<f64>>,
     pub weight: Option<Option<i32>>,
     pub available_hours: Option<Option<Vec<TimeSlot>>>,
+    pub group: Option<Option<String>>,
 }
 
 pub async fn create_channel(
@@ -177,6 +182,7 @@ pub async fn create_channel(
         enabled: input.enabled.unwrap_or(true),
         available_hours: input.available_hours,
         created_by: Some(claims.sub),
+        group: input.group,
         created_at: now,
         updated_at: now,
     };
@@ -307,6 +313,7 @@ pub async fn list_all_channels(
                 weight: c.weight,
                 enabled: c.enabled,
                 available_hours: c.available_hours,
+                group: c.group,
                 created_at: c.created_at.to_rfc3339(),
                 updated_at: c.updated_at.to_rfc3339(),
                 models,
@@ -387,6 +394,9 @@ pub async fn update_channel(
     if let Some(available_hours) = input.available_hours {
         channel.available_hours = available_hours;
     }
+    if let Some(group) = input.group {
+        channel.group = group;
+    }
     channel.updated_at = chrono::Utc::now();
 
     let updated = state
@@ -448,10 +458,16 @@ pub async fn delete_channel(
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
+#[derive(serde::Deserialize)]
+pub struct TestChannelQuery {
+    pub endpoint_key: Option<String>,
+}
+
 pub async fn test_channel(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Path(id): Path<String>,
+    Query(query): Query<TestChannelQuery>,
 ) -> Result<Json<llm_gateway_storage::ChannelTestResult>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
@@ -496,34 +512,57 @@ pub async fn test_channel(
         .and_then(|e| serde_json::from_str(&e).ok())
         .unwrap_or(serde_json::Value::Null);
 
+    let endpoint_key = query.endpoint_key.as_deref().unwrap_or("openai");
     let base_url = endpoints
-        .get("openai")
+        .get(endpoint_key)
         .and_then(|v| v.as_str())
         .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
         .unwrap_or("")
         .trim_end_matches('/');
 
-    let upstream_url = format!("{}/v1/chat/completions", base_url);
+    let is_anthropic = endpoint_key == "anthropic";
+    let upstream_url = if is_anthropic {
+        format!("{}/v1/messages", base_url)
+    } else {
+        format!("{}/v1/chat/completions", base_url)
+    };
 
     let api_key = decrypt(&channel.api_key, &state.encryption_key)
         .unwrap_or_else(|_| channel.api_key.clone());
 
-    let body = serde_json::json!({
-        "model": model_name,
-        "messages": [{"role": "user", "content": "Hi"}],
-        "max_tokens": 5
-    });
-
     let start = std::time::Instant::now();
     let client = reqwest::Client::new();
-    let result = client
-        .post(&upstream_url)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .header("Content-Type", "application/json")
-        .timeout(std::time::Duration::from_secs(30))
-        .json(&body)
-        .send()
-        .await;
+
+    let result = if is_anthropic {
+        let body = serde_json::json!({
+            "model": model_name,
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 5
+        });
+        client
+            .post(&upstream_url)
+            .header("x-api-key", &api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(30))
+            .json(&body)
+            .send()
+            .await
+    } else {
+        let body = serde_json::json!({
+            "model": model_name,
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 5
+        });
+        client
+            .post(&upstream_url)
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .timeout(std::time::Duration::from_secs(30))
+            .json(&body)
+            .send()
+            .await
+    };
 
     let latency_ms = start.elapsed().as_millis() as u64;
 

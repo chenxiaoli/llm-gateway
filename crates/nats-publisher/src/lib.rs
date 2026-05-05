@@ -56,6 +56,22 @@ pub struct AuditEvent {
 // NATS publisher
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Stream status info
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, serde::Serialize)]
+pub struct StreamStatusInfo {
+    pub name: String,
+    pub messages: u64,
+    pub bytes: u64,
+    pub consumer_count: usize,
+    pub first_sequence: u64,
+    pub last_sequence: u64,
+    pub max_messages: i64,
+    pub max_age_secs: u64,
+}
+
 const SEVEN_DAYS: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 3600);
 const THIRTY_DAYS: std::time::Duration = std::time::Duration::from_secs(30 * 24 * 3600);
 
@@ -165,5 +181,21 @@ impl NatsPublisher {
     /// Return a reference to the underlying JetStream context.
     pub fn js_context(&self) -> &Context {
         &self.js
+    }
+
+    /// Fetch status information for a named JetStream stream.
+    pub async fn stream_info(&self, name: &str) -> Result<StreamStatusInfo, String> {
+        let mut stream = self.js.get_stream(name).await.map_err(|e| e.to_string())?;
+        let info = stream.info().await.map_err(|e| e.to_string())?;
+        Ok(StreamStatusInfo {
+            name: info.config.name.clone(),
+            messages: info.state.messages,
+            bytes: info.state.bytes,
+            consumer_count: info.state.consumer_count,
+            first_sequence: info.state.first_sequence,
+            last_sequence: info.state.last_sequence,
+            max_messages: info.config.max_messages,
+            max_age_secs: info.config.max_age.as_secs(),
+        })
     }
 }

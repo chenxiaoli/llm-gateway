@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getSettings, updateSettings, getSystemInfo } from '../api/settings';
+import { getSettings, updateSettings, getSystemInfo, getNatsStatus } from '../api/settings';
 import type { UpdateSettingsRequest } from '../types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
@@ -20,4 +20,8 @@ export function useUpdateSettings() {
 
 export function useSystemInfo() {
   return useQuery({ queryKey: ['system-info'], queryFn: getSystemInfo });
+}
+
+export function useNatsStatus() {
+  return useQuery({ queryKey: ['nats-status'], queryFn: getNatsStatus });
 }

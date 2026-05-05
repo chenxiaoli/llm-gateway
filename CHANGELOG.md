@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.0] - 2026-05-04
+
+### Added
+- Channel group field for logical grouping of channels (backend migration, API, frontend forms/display)
+- Per-endpoint test buttons on channel detail page with Anthropic protocol support
+- NATS JetStream status endpoint (`GET /api/v1/admin/nats/status`) showing real-time stream stats
+- NATS stream status cards in Settings System tab (messages, size, consumers, retention)
+
 ## [1.2.2] - 2026-05-05
 
 ### Fixed
