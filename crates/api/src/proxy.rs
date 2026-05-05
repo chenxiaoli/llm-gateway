@@ -54,6 +54,17 @@ pub struct ResolvedChannel {
     pub available_hours: Option<Vec<TimeSlot>>,
 }
 
+/// Builds the upstream URL by combining a base endpoint with the request path,
+/// stripping the `/v1` prefix for OpenAI protocol.
+pub fn build_upstream_url(base_url: &str, request_path: &str, protocol: ProxyProtocol) -> String {
+    let base = base_url.trim_end_matches('/');
+    let suffix = match protocol {
+        ProxyProtocol::OpenAI => request_path.strip_prefix("/v1").unwrap_or(request_path),
+        ProxyProtocol::Anthropic => request_path,
+    };
+    format!("{}{}", base, suffix)
+}
+
 impl ResolvedChannel {
     /// Returns the upstream URL for the given protocol.
     pub fn upstream_url(&self, request_path: &str, protocol: ProxyProtocol) -> String {
@@ -61,16 +72,7 @@ impl ResolvedChannel {
             ProxyProtocol::OpenAI => self.endpoint_openai.as_deref(),
             ProxyProtocol::Anthropic => self.endpoint_anthropic.as_deref(),
         };
-        let base = base.unwrap_or_default().trim_end_matches('/');
-        // For OpenAI, strip the "/v1" prefix from request_path since the base URL
-        // already includes a version segment (e.g. "/v1", "/v4").
-        // For Anthropic, keep request_path as-is since non-standard providers
-        // (e.g. Minimaxi, BigModel) need the full "/v1/messages" appended.
-        let suffix = match protocol {
-            ProxyProtocol::OpenAI => request_path.strip_prefix("/v1").unwrap_or(request_path),
-            ProxyProtocol::Anthropic => request_path,
-        };
-        format!("{}{}", base, suffix)
+        build_upstream_url(base.unwrap_or_default(), request_path, protocol)
     }
 }
 
