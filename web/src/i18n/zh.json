@@ -214,7 +214,9 @@
       "activeModels": "活跃模型",
       "avgLatency": "平均延迟",
       "successRate": "成功率",
-      "recent": "近期"
+      "recent": "近期",
+      "natsUsage": "USAGE 待消费",
+      "natsAudit": "AUDIT 待消费"
     },
     "units": {
       "ms": "毫秒",
