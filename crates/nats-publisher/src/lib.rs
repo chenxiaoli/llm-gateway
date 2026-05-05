@@ -202,9 +202,14 @@ impl NatsPublisher {
 
         let mut pending_messages: u64 = 0;
         let consumer_names: Vec<String> = futures::TryStreamExt::try_collect(stream.consumer_names()).await.map_err(|e| e.to_string())?;
-        for cname in &consumer_names {
-            if let Ok(ci) = stream.consumer_info(cname).await {
-                pending_messages += ci.num_pending;
+        if consumer_names.is_empty() {
+            // No consumers exist → all stream messages are unconsumed
+            pending_messages = messages;
+        } else {
+            for cname in &consumer_names {
+                if let Ok(ci) = stream.consumer_info(cname).await {
+                    pending_messages += ci.num_pending;
+                }
             }
         }
 
