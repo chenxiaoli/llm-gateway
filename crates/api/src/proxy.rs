@@ -55,15 +55,22 @@ pub struct ResolvedChannel {
 }
 
 impl ResolvedChannel {
-    /// Returns the upstream URL for the given protocol by appending
-    /// the request path to the appropriate endpoint.
+    /// Returns the upstream URL for the given protocol.
     pub fn upstream_url(&self, request_path: &str, protocol: ProxyProtocol) -> String {
         let base = match protocol {
             ProxyProtocol::OpenAI => self.endpoint_openai.as_deref(),
             ProxyProtocol::Anthropic => self.endpoint_anthropic.as_deref(),
         };
         let base = base.unwrap_or_default().trim_end_matches('/');
-        format!("{}{}", base, request_path)
+        // For OpenAI, strip the "/v1" prefix from request_path since the base URL
+        // already includes a version segment (e.g. "/v1", "/v4").
+        // For Anthropic, keep request_path as-is since non-standard providers
+        // (e.g. Minimaxi, BigModel) need the full "/v1/messages" appended.
+        let suffix = match protocol {
+            ProxyProtocol::OpenAI => request_path.strip_prefix("/v1").unwrap_or(request_path),
+            ProxyProtocol::Anthropic => request_path,
+        };
+        format!("{}{}", base, suffix)
     }
 }
 

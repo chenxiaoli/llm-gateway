@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.2] - 2026-05-05
+
+### Fixed
+- OpenAI-compatible providers with versioned base URLs (e.g. `/v4`, `/v1`) no longer produce doubled paths
+- Anthropic-compatible providers on non-standard hosts correctly append `/v1/messages`
+
 ## [1.2.1] - 2026-05-05
 
 ### Fixed
