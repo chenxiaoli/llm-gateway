@@ -334,12 +334,13 @@ export default function AppLayout() {
               </button>
 
               <button
-                className="btn btn-ghost btn-sm btn-circle"
+                className="btn btn-ghost btn-sm h-8 min-h-0 px-2.5 gap-1 text-xs font-medium text-base-content/50 hover:text-base-content/70"
                 onClick={toggleLanguage}
                 aria-label="Toggle language"
                 title={i18n.language === 'zh' ? 'Switch to English' : '切换到中文'}
               >
-                <Globe className="h-4 w-4" />
+                <Globe className="h-3.5 w-3.5" />
+                {i18n.language === 'zh' ? '中' : 'EN'}
               </button>
 
               <div className="h-4 w-px bg-base-300/60 mx-1" />

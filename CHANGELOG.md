@@ -375,6 +375,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Initial release with OpenAI and Anthropic compatible endpoints
 - API key management, provider/channel configuration, billing, rate limiting
 - React frontend with dashboard, logs, usage tracking
+## [1.3.7] - 2026-05-05
+
+### Changed
+- Language switch now shows current language code (EN/中) instead of bare icon
+
 ## [1.3.6] - 2026-05-05
 
 ### Fixed
