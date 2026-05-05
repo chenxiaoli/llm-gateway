@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.1] - 2026-05-05
+
+### Fixed
+- Show API key ID on audit log table rows and detail drawer
+- Fix Register test placeholder capitalization after i18n migration
+
 ## [1.2.0] - 2026-05-04
 
 ### Added
