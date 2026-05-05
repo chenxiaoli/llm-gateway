@@ -274,15 +274,7 @@ export default function Settings() {
                           </div>
                           <div>
                             <div className="text-[10px] text-base-content/40 uppercase tracking-wider">{t('settings.nats.pending')}</div>
-                            <div className="text-sm font-mono font-medium text-warning">
-                              {stream.pending_messages.toLocaleString()}
-                              <span className="text-base-content/30 ml-1">
-                                ({stream.pending_bytes < 1024 ? `${stream.pending_bytes} B`
-                                  : stream.pending_bytes < 1048576 ? `${(stream.pending_bytes / 1024).toFixed(1)} KB`
-                                  : stream.pending_bytes < 1073741824 ? `${(stream.pending_bytes / 1048576).toFixed(1)} MB`
-                                  : `${(stream.pending_bytes / 1073741824).toFixed(2)} GB`})
-                              </span>
-                            </div>
+                            <div className="text-sm font-mono font-medium text-warning">{stream.pending_messages.toLocaleString()}</div>
                           </div>
                           <div>
                             <div className="text-[10px] text-base-content/40 uppercase tracking-wider">{t('settings.nats.size')}</div>
