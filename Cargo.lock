@@ -815,9 +815,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.4.13"
+version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f44da3a8150a6703ed5d34e164b875fd14c2cdab9af1252a9a1020bde2bdc54"
+checksum = "171fefbc92fe4a4de27e0698d6a5b392d6a0e333506bc49133760b3bcf948733"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -1259,7 +1259,7 @@ dependencies = [
  "bitflags",
  "libc",
  "plain",
- "redox_syscall 0.7.4",
+ "redox_syscall 0.7.5",
 ]
 
 [[package]]
@@ -1286,7 +1286,7 @@ checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
 name = "llm-gateway"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "axum",
  "llm-gateway-api",
@@ -1307,7 +1307,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-api"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -1338,7 +1338,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-audit"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1348,7 +1348,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-audit-worker"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "futures",
  "llm-gateway-audit",
@@ -1365,7 +1365,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-auth"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "bcrypt",
  "chrono",
@@ -1378,7 +1378,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-billing"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1397,7 +1397,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-nats-publisher"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "async-nats",
  "chrono",
@@ -1410,7 +1410,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-provider"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -1422,14 +1422,14 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-ratelimit"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
 name = "llm-gateway-storage"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1443,7 +1443,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-usage-worker"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "chrono",
  "futures",
@@ -1966,9 +1966,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.7.4"
+version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f450ad9c3b1da563fb6948a8e0fb0fb9269711c9c73d9ea1de5058c79c8d643a"
+checksum = "4666a1a60d8412eab19d94f6d13dcc9cea0a5ef4fdf6a5db306537413c661b1b"
 dependencies = [
  "bitflags",
 ]

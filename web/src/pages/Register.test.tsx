@@ -24,7 +24,7 @@ describe('Register page', () => {
     expect(screen.getByText('Create Account')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Confirm password')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Confirm Password')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Register' })).toBeInTheDocument();
   });
 
@@ -33,7 +33,7 @@ describe('Register page', () => {
 
     await userEvent.type(screen.getByPlaceholderText('Username'), 'testuser');
     await userEvent.type(screen.getByPlaceholderText('Password'), 'password123');
-    await userEvent.type(screen.getByPlaceholderText('Confirm password'), 'different');
+    await userEvent.type(screen.getByPlaceholderText('Confirm Password'), 'different');
     await userEvent.click(screen.getByRole('button', { name: 'Register' }));
 
     await waitFor(() => {
