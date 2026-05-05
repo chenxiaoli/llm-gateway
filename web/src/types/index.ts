@@ -275,7 +275,6 @@ export interface NatsStreamInfo {
   max_messages: number;
   max_age_secs: number;
   pending_messages: number;
-  pending_bytes: number;
 }
 
 export interface NatsStatusResponse {

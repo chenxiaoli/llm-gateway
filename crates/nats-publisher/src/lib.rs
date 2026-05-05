@@ -71,7 +71,6 @@ pub struct StreamStatusInfo {
     pub max_messages: i64,
     pub max_age_secs: u64,
     pub pending_messages: u64,
-    pub pending_bytes: u64,
 }
 
 const SEVEN_DAYS: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 3600);
@@ -209,12 +208,6 @@ impl NatsPublisher {
             }
         }
 
-        let pending_bytes = if messages > 0 {
-            (pending_messages as u128 * bytes as u128 / messages as u128) as u64
-        } else {
-            0
-        };
-
         Ok(StreamStatusInfo {
             name: stream_name,
             messages,
@@ -225,7 +218,6 @@ impl NatsPublisher {
             max_messages,
             max_age_secs,
             pending_messages,
-            pending_bytes,
         })
     }
 }
