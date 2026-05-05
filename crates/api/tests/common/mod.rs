@@ -1,6 +1,9 @@
-use llm_gateway_storage::{postgres::PostgresStorage, Storage};
+use llm_gateway_storage::postgres::PostgresStorage;
+use llm_gateway_storage::Storage;
 use llm_gateway_auth::create_jwt;
-use llm_gateway_api::{ChannelRegistry, ResolvedChannel};
+use llm_gateway_api::{AppState, ChannelRegistry, ResolvedChannel, SystemInfo};
+use llm_gateway_ratelimit::RateLimiter;
+use sqlx::postgres::PgPool;
 use std::sync::Arc;
 
 pub struct MockChannelRegistry;
@@ -29,33 +32,24 @@ pub struct TestUser {
     pub token: String,
 }
 
-/// Set up a test database connection.
-/// Requires DATABASE_URL env var to point at a PostgreSQL instance.
-/// Truncates all tables to ensure test isolation.
-pub async fn setup_test_db() -> Arc<PostgresStorage> {
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL env var must be set for tests");
-    let storage = PostgresStorage::new(&database_url)
-        .await
-        .expect("Failed to connect to test PostgreSQL");
-    storage.run_migrations().await.expect("Failed to run migrations");
-
-    // Truncate all tables for test isolation
-    let tables = [
-        "transactions", "accounts", "usage_records", "audit_logs",
-        "rate_limit_counters", "channel_models", "channels",
-        "provider_models", "provider_models_pricing", "models",
-        "providers", "api_keys", "users", "settings",
-        "pricing_policies", "model_fallbacks",
-    ];
-    for table in &tables {
-        sqlx::query(&format!("TRUNCATE TABLE {} CASCADE", table))
-            .execute(storage.pool())
-            .await
-            .expect("Failed to truncate table");
-    }
-
-    Arc::new(storage)
+pub fn make_state(pool: PgPool) -> Arc<AppState> {
+    let db = PostgresStorage::from_pool(pool);
+    Arc::new(AppState {
+        storage: Arc::new(db) as Arc<dyn Storage>,
+        rate_limiter: Arc::new(RateLimiter::new(60)),
+        jwt_secret: TEST_JWT_SECRET.to_string(),
+        encryption_key: [0u8; 32],
+        nats_publisher: None,
+        registry: Arc::new(MockChannelRegistry),
+        system_info: SystemInfo {
+            server_bind_address: "0.0.0.0:8080".to_string(),
+            database_driver: "postgres".to_string(),
+            rate_limit_window_secs: 60,
+            rate_limit_flush_interval_secs: 30,
+            upstream_timeout_secs: 30,
+            audit_retention_days: Some(90),
+        },
+    })
 }
 
 #[allow(dead_code)]

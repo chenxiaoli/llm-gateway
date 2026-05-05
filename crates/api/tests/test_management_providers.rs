@@ -1,12 +1,10 @@
 mod common;
 
-use common::MockChannelRegistry;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
-use llm_gateway_api::{management, AppState, SystemInfo};
-use llm_gateway_ratelimit::RateLimiter;
-use llm_gateway_storage::Storage;
+use llm_gateway_api::{management, AppState};
 use serde_json::{json, Value};
+use sqlx::PgPool;
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -14,33 +12,13 @@ fn build_app(state: Arc<AppState>) -> axum::Router {
     management::management_router().with_state(state)
 }
 
-fn make_state(db: Arc<llm_gateway_storage::postgres::PostgresStorage>) -> Arc<AppState> {
-    Arc::new(AppState {
-        storage: db.clone() as Arc<dyn Storage>,
-        rate_limiter: Arc::new(RateLimiter::new(60)),
-        jwt_secret: common::TEST_JWT_SECRET.to_string(),
-        encryption_key: [0u8; 32],
-        nats_publisher: None,
-        registry: Arc::new(MockChannelRegistry),
-        system_info: SystemInfo {
-            server_bind_address: "0.0.0.0:8080".to_string(),
-            database_driver: "postgres".to_string(),
-            rate_limit_window_secs: 60,
-            rate_limit_flush_interval_secs: 30,
-            upstream_timeout_secs: 30,
-            audit_retention_days: Some(90),
-        },
-    })
-}
-
 fn bearer_token(token: &str) -> String {
     format!("Bearer {}", token)
 }
 
-#[tokio::test]
-async fn test_create_provider() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_create_provider(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
     let resp = app
@@ -69,10 +47,9 @@ async fn test_create_provider() {
     assert_eq!(endpoints["default"], "https://api.openai.com/v1");
 }
 
-#[tokio::test]
-async fn test_create_provider_dual_protocol() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_create_provider_dual_protocol(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
     let resp = app
@@ -104,10 +81,9 @@ async fn test_create_provider_dual_protocol() {
     assert!(endpoints.get("anthropic").and_then(|v| v.as_str()).is_some());
 }
 
-#[tokio::test]
-async fn test_list_providers() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_list_providers(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
     // Create two providers
@@ -148,10 +124,9 @@ async fn test_list_providers() {
     assert_eq!(body.as_array().unwrap().len(), 2);
 }
 
-#[tokio::test]
-async fn test_provider_model_lifecycle() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_provider_model_lifecycle(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
     // Create provider
@@ -250,10 +225,9 @@ async fn test_provider_model_lifecycle() {
     assert_eq!(del_resp.status(), StatusCode::NO_CONTENT);
 }
 
-#[tokio::test]
-async fn test_create_and_list_channels() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_create_and_list_channels(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
     let create_resp = app
@@ -328,10 +302,9 @@ async fn test_create_and_list_channels() {
     assert_eq!(channels[1]["name"], "backup");
 }
 
-#[tokio::test]
-async fn test_update_and_delete_channel() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_update_and_delete_channel(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
     let create_resp = app
