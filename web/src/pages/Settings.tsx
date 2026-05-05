@@ -267,10 +267,14 @@ export default function Settings() {
                           <Activity className="h-4 w-4 text-success" />
                           <span className="text-sm font-semibold font-mono">{stream.name}</span>
                         </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                           <div>
                             <div className="text-[10px] text-base-content/40 uppercase tracking-wider">{t('settings.nats.messages')}</div>
                             <div className="text-sm font-mono font-medium">{stream.messages.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-base-content/40 uppercase tracking-wider">{t('settings.nats.pending')}</div>
+                            <div className="text-sm font-mono font-medium text-warning">{stream.pending_messages.toLocaleString()}</div>
                           </div>
                           <div>
                             <div className="text-[10px] text-base-content/40 uppercase tracking-wider">{t('settings.nats.size')}</div>
