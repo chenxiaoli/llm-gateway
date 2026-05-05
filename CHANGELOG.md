@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.4] - 2026-05-05
+
+### Added
+- NATS stream status pills on admin dashboard showing USAGE and AUDIT pending message counts
+
 ## [1.3.3] - 2026-05-05
 
 ### Changed
