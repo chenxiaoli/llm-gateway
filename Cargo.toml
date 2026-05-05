@@ -33,4 +33,5 @@ thiserror = "2"
 async-trait = "0.1"
 tower = "0.5"
 hyper = "1"
+futures = "0.3"
 llm-gateway-encryption = { path = "crates/encryption" }

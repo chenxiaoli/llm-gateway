@@ -70,6 +70,7 @@ pub struct StreamStatusInfo {
     pub last_sequence: u64,
     pub max_messages: i64,
     pub max_age_secs: u64,
+    pub pending_messages: u64,
 }
 
 const SEVEN_DAYS: std::time::Duration = std::time::Duration::from_secs(7 * 24 * 3600);
@@ -187,15 +188,36 @@ impl NatsPublisher {
     pub async fn stream_info(&self, name: &str) -> Result<StreamStatusInfo, String> {
         let mut stream = self.js.get_stream(name).await.map_err(|e| e.to_string())?;
         let info = stream.info().await.map_err(|e| e.to_string())?;
+
+        // Extract owned values so the mutable borrow on `info` is dropped.
+        let stream_name = info.config.name.clone();
+        let messages = info.state.messages;
+        let bytes = info.state.bytes;
+        let consumer_count = info.state.consumer_count;
+        let first_sequence = info.state.first_sequence;
+        let last_sequence = info.state.last_sequence;
+        let max_messages = info.config.max_messages;
+        let max_age_secs = info.config.max_age.as_secs();
+        let _ = info;
+
+        let mut pending_messages: u64 = 0;
+        let consumer_names: Vec<String> = futures::TryStreamExt::try_collect(stream.consumer_names()).await.map_err(|e| e.to_string())?;
+        for cname in &consumer_names {
+            if let Ok(ci) = stream.consumer_info(cname).await {
+                pending_messages += ci.num_pending;
+            }
+        }
+
         Ok(StreamStatusInfo {
-            name: info.config.name.clone(),
-            messages: info.state.messages,
-            bytes: info.state.bytes,
-            consumer_count: info.state.consumer_count,
-            first_sequence: info.state.first_sequence,
-            last_sequence: info.state.last_sequence,
-            max_messages: info.config.max_messages,
-            max_age_secs: info.config.max_age.as_secs(),
+            name: stream_name,
+            messages,
+            bytes,
+            consumer_count,
+            first_sequence,
+            last_sequence,
+            max_messages,
+            max_age_secs,
+            pending_messages,
         })
     }
 }

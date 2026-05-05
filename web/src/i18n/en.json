@@ -845,6 +845,7 @@
     "nats": {
       "sectionTitle": "NATS STREAMS",
       "messages": "Messages",
+      "pending": "Pending",
       "size": "Size",
       "consumers": "Consumers",
       "retention": "Retention",

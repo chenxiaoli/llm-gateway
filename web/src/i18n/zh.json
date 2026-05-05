@@ -845,6 +845,7 @@
     "nats": {
       "sectionTitle": "NATS 流",
       "messages": "消息数",
+      "pending": "未消费",
       "size": "大小",
       "consumers": "消费者",
       "retention": "保留期",
