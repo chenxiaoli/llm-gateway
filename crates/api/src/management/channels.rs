@@ -520,12 +520,17 @@ pub async fn test_channel(
         .unwrap_or("")
         .trim_end_matches('/');
 
-    let is_anthropic = endpoint_key == "anthropic";
-    let upstream_url = if is_anthropic {
-        format!("{}/v1/messages", base_url)
+    let protocol = if endpoint_key == "anthropic" {
+        crate::proxy::ProxyProtocol::Anthropic
     } else {
-        format!("{}/v1/chat/completions", base_url)
+        crate::proxy::ProxyProtocol::OpenAI
     };
+    let request_path = match protocol {
+        crate::proxy::ProxyProtocol::OpenAI => "/v1/chat/completions",
+        crate::proxy::ProxyProtocol::Anthropic => "/v1/messages",
+    };
+    let upstream_url = crate::proxy::build_upstream_url(base_url, request_path, protocol);
+    let is_anthropic = matches!(protocol, crate::proxy::ProxyProtocol::Anthropic);
 
     let api_key = decrypt(&channel.api_key, &state.encryption_key)
         .unwrap_or_else(|_| channel.api_key.clone());
