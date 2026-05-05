@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.10] - 2026-05-05
+
+### Fixed
+- Channel test now uses the same URL construction logic as proxy, fixing 404 on providers with non-standard version segments (e.g. /v4)
+
 ## [1.3.9] - 2026-05-05
 
 ### Changed
