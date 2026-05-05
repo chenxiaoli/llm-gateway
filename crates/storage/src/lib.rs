@@ -3,6 +3,8 @@ pub mod seed;
 pub mod money;
 pub mod postgres;
 
+pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations/postgres");
+
 pub use money::*;
 
 pub use types::{

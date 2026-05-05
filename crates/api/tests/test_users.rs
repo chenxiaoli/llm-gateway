@@ -1,37 +1,16 @@
 mod common;
 
-use common::MockChannelRegistry;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use llm_gateway_api::management;
-use llm_gateway_api::{AppState, SystemInfo};
-use llm_gateway_ratelimit::RateLimiter;
-use llm_gateway_storage::Storage;
+use llm_gateway_api::AppState;
 use serde_json::{json, Value};
+use sqlx::PgPool;
 use std::sync::Arc;
 use tower::ServiceExt;
 
 fn build_app(state: Arc<AppState>) -> axum::Router {
     management::management_router().with_state(state)
-}
-
-fn make_state(db: Arc<llm_gateway_storage::postgres::PostgresStorage>) -> Arc<AppState> {
-    Arc::new(AppState {
-        storage: db.clone() as Arc<dyn Storage>,
-        rate_limiter: Arc::new(RateLimiter::new(60)),
-        jwt_secret: common::TEST_JWT_SECRET.to_string(),
-        encryption_key: [0u8; 32],
-        nats_publisher: None,
-        registry: Arc::new(MockChannelRegistry),
-        system_info: SystemInfo {
-            server_bind_address: "0.0.0.0:8080".to_string(),
-            database_driver: "postgres".to_string(),
-            rate_limit_window_secs: 60,
-            rate_limit_flush_interval_secs: 30,
-            upstream_timeout_secs: 30,
-            audit_retention_days: Some(90),
-        },
-    })
 }
 
 fn bearer_token(token: &str) -> String {
@@ -62,10 +41,9 @@ async fn register_user(
     serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap()).unwrap()
 }
 
-#[tokio::test]
-async fn test_list_users_admin() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_list_users_admin(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register first user (admin)
     let admin_body = register_user(&app, "admin", "password123").await;
@@ -97,10 +75,9 @@ async fn test_list_users_admin() {
     assert_eq!(body["items"].as_array().unwrap().len(), 2);
 }
 
-#[tokio::test]
-async fn test_list_users_without_auth_returns_401() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_list_users_without_auth_returns_401(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     let resp = app
         .oneshot(
@@ -116,10 +93,9 @@ async fn test_list_users_without_auth_returns_401() {
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
-async fn test_update_user_role_admin_to_user() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_update_user_role_admin_to_user(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register admin
     let admin_body = register_user(&app, "admin", "password123").await;
@@ -169,10 +145,9 @@ async fn test_update_user_role_admin_to_user() {
     assert_eq!(body["role"], "user");
 }
 
-#[tokio::test]
-async fn test_update_user_role_user_to_admin() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_update_user_role_user_to_admin(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register admin
     let admin_body = register_user(&app, "admin", "password123").await;
@@ -205,10 +180,9 @@ async fn test_update_user_role_user_to_admin() {
     assert_eq!(body["role"], "admin");
 }
 
-#[tokio::test]
-async fn test_cannot_disable_last_admin_user() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_cannot_disable_last_admin_user(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register admin
     let admin_body = register_user(&app, "admin", "password123").await;
@@ -233,10 +207,9 @@ async fn test_cannot_disable_last_admin_user() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
-#[tokio::test]
-async fn test_cannot_demote_last_admin_user() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_cannot_demote_last_admin_user(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register admin
     let admin_body = register_user(&app, "admin", "password123").await;
@@ -261,10 +234,9 @@ async fn test_cannot_demote_last_admin_user() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
-#[tokio::test]
-async fn test_delete_user() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_delete_user(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register admin
     let admin_body = register_user(&app, "admin", "password123").await;
@@ -311,10 +283,9 @@ async fn test_delete_user() {
     assert_eq!(list_body["items"].as_array().unwrap().len(), 1);
 }
 
-#[tokio::test]
-async fn test_cannot_delete_last_admin_user() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_cannot_delete_last_admin_user(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register admin
     let admin_body = register_user(&app, "admin", "password123").await;
@@ -338,10 +309,9 @@ async fn test_cannot_delete_last_admin_user() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
-#[tokio::test]
-async fn test_update_nonexistent_user_returns_404() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_update_nonexistent_user_returns_404(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register admin
     let admin_body = register_user(&app, "admin", "password123").await;
@@ -364,10 +334,9 @@ async fn test_update_nonexistent_user_returns_404() {
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
 
-#[tokio::test]
-async fn test_delete_nonexistent_user_returns_404() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_delete_nonexistent_user_returns_404(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register admin
     let admin_body = register_user(&app, "admin", "password123").await;

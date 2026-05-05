@@ -1,13 +1,12 @@
 mod common;
 
-use common::MockChannelRegistry;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use llm_gateway_api::management;
-use llm_gateway_api::{AppState, SystemInfo};
-use llm_gateway_ratelimit::RateLimiter;
+use llm_gateway_api::AppState;
 use llm_gateway_storage::Storage;
 use serde_json::{json, Value};
+use sqlx::PgPool;
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -15,33 +14,13 @@ fn build_app(state: Arc<AppState>) -> axum::Router {
     management::management_router().with_state(state)
 }
 
-fn make_state(db: Arc<llm_gateway_storage::postgres::PostgresStorage>) -> Arc<AppState> {
-    Arc::new(AppState {
-        storage: db.clone() as Arc<dyn Storage>,
-        rate_limiter: Arc::new(RateLimiter::new(60)),
-        jwt_secret: common::TEST_JWT_SECRET.to_string(),
-        encryption_key: [0u8; 32],
-        nats_publisher: None,
-        registry: Arc::new(MockChannelRegistry),
-        system_info: SystemInfo {
-            server_bind_address: "0.0.0.0:8080".to_string(),
-            database_driver: "postgres".to_string(),
-            rate_limit_window_secs: 60,
-            rate_limit_flush_interval_secs: 30,
-            upstream_timeout_secs: 30,
-            audit_retention_days: Some(90),
-        },
-    })
-}
-
 fn bearer_token(token: &str) -> String {
     format!("Bearer {}", token)
 }
 
-#[tokio::test]
-async fn test_register_first_user_becomes_admin() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_register_first_user_becomes_admin(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     let resp = app
         .oneshot(
@@ -66,10 +45,9 @@ async fn test_register_first_user_becomes_admin() {
     assert!(body["token"].is_string());
 }
 
-#[tokio::test]
-async fn test_register_second_user_becomes_regular() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_register_second_user_becomes_regular(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register first user (admin)
     app.clone()
@@ -110,10 +88,9 @@ async fn test_register_second_user_becomes_regular() {
     assert!(body["token"].is_string());
 }
 
-#[tokio::test]
-async fn test_login_with_valid_credentials() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_login_with_valid_credentials(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register a user first
     app.clone()
@@ -154,10 +131,9 @@ async fn test_login_with_valid_credentials() {
     assert_eq!(body["user"]["username"], "testuser");
 }
 
-#[tokio::test]
-async fn test_login_with_wrong_password_returns_401() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_login_with_wrong_password_returns_401(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register a user first
     app.clone()
@@ -192,10 +168,9 @@ async fn test_login_with_wrong_password_returns_401() {
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
-async fn test_login_with_nonexistent_user_returns_401() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_login_with_nonexistent_user_returns_401(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     let resp = app
         .oneshot(
@@ -214,10 +189,9 @@ async fn test_login_with_nonexistent_user_returns_401() {
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
-async fn test_register_duplicate_username_returns_400() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_register_duplicate_username_returns_400(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register first user
     app.clone()
@@ -252,10 +226,9 @@ async fn test_register_duplicate_username_returns_400() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
-#[tokio::test]
-async fn test_auth_config_returns_allow_registration_true() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_auth_config_returns_allow_registration_true(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     let resp = app
         .oneshot(
@@ -276,10 +249,9 @@ async fn test_auth_config_returns_allow_registration_true() {
     assert_eq!(body["allow_registration"], true);
 }
 
-#[tokio::test]
-async fn test_auth_me_returns_user_info_when_authenticated() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_auth_me_returns_user_info_when_authenticated(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register a user
     let register_resp = app
@@ -325,10 +297,9 @@ async fn test_auth_me_returns_user_info_when_authenticated() {
     assert!(me_body["role"].is_string());
 }
 
-#[tokio::test]
-async fn test_auth_me_returns_401_when_not_authenticated() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_auth_me_returns_401_when_not_authenticated(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     let resp = app
         .oneshot(
@@ -344,10 +315,9 @@ async fn test_auth_me_returns_401_when_not_authenticated() {
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
-async fn test_refresh_returns_new_tokens() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_refresh_returns_new_tokens(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register a user first
     let register_resp = app
@@ -433,10 +403,9 @@ async fn test_refresh_returns_new_tokens() {
     assert_eq!(old_refresh_resp.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
-async fn test_refresh_with_invalid_token_returns_401() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_refresh_with_invalid_token_returns_401(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     let resp = app
         .oneshot(
@@ -455,10 +424,9 @@ async fn test_refresh_with_invalid_token_returns_401() {
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
-async fn test_change_password_success() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_change_password_success(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register a user
     let register_resp = app
@@ -533,10 +501,9 @@ async fn test_change_password_success() {
     assert_eq!(old_login_resp.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
-async fn test_change_password_wrong_current_returns_400() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_change_password_wrong_current_returns_400(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register a user
     let register_resp = app
@@ -578,10 +545,9 @@ async fn test_change_password_wrong_current_returns_400() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
-#[tokio::test]
-async fn test_change_password_unauthenticated_returns_401() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_change_password_unauthenticated_returns_401(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     let resp = app
         .oneshot(
@@ -599,10 +565,9 @@ async fn test_change_password_unauthenticated_returns_401() {
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
-async fn test_register_short_password_returns_400() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_register_short_password_returns_400(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     let resp = app
         .oneshot(
@@ -621,10 +586,9 @@ async fn test_register_short_password_returns_400() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
-#[tokio::test]
-async fn test_register_invalid_username_returns_400() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_register_invalid_username_returns_400(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     let resp = app
         .oneshot(
@@ -643,11 +607,10 @@ async fn test_register_invalid_username_returns_400() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
-#[tokio::test]
-async fn test_refresh_with_revoked_token_returns_401() {
-    let db = common::setup_test_db().await;
-    let state = make_state(db.clone());
-    let app = build_app(state);
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_refresh_with_revoked_token_returns_401(pool: PgPool) {
+    let db = llm_gateway_storage::postgres::PostgresStorage::from_pool(pool.clone());
+    let app = build_app(common::make_state(pool));
 
     // Register a user
     let register_resp = app

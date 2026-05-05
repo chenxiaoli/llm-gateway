@@ -1,13 +1,11 @@
 mod common;
 
-use common::MockChannelRegistry;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use llm_gateway_api::management;
-use llm_gateway_api::{AppState, SystemInfo};
-use llm_gateway_ratelimit::RateLimiter;
-use llm_gateway_storage::Storage;
+use llm_gateway_api::AppState;
 use serde_json::{json, Value};
+use sqlx::PgPool;
 use std::sync::Arc;
 use tower::ServiceExt;
 
@@ -15,33 +13,13 @@ fn build_app(state: Arc<AppState>) -> axum::Router {
     management::management_router().with_state(state)
 }
 
-fn make_state(db: Arc<llm_gateway_storage::postgres::PostgresStorage>) -> Arc<AppState> {
-    Arc::new(AppState {
-        storage: db.clone() as Arc<dyn Storage>,
-        rate_limiter: Arc::new(RateLimiter::new(60)),
-        jwt_secret: common::TEST_JWT_SECRET.to_string(),
-        encryption_key: [0u8; 32],
-        nats_publisher: None,
-        registry: Arc::new(MockChannelRegistry),
-        system_info: SystemInfo {
-            server_bind_address: "0.0.0.0:8080".to_string(),
-            database_driver: "postgres".to_string(),
-            rate_limit_window_secs: 60,
-            rate_limit_flush_interval_secs: 30,
-            upstream_timeout_secs: 30,
-            audit_retention_days: Some(90),
-        },
-    })
-}
-
 fn bearer_token(token: &str) -> String {
     format!("Bearer {}", token)
 }
 
-#[tokio::test]
-async fn test_create_key() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_create_key(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
     let resp = app
@@ -67,10 +45,9 @@ async fn test_create_key() {
     assert_eq!(body["enabled"], true);
 }
 
-#[tokio::test]
-async fn test_list_keys() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_list_keys(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
     app.clone()
@@ -107,10 +84,9 @@ async fn test_list_keys() {
     assert_eq!(body["items"].as_array().unwrap().len(), 1);
 }
 
-#[tokio::test]
-async fn test_unauthorized_access() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_unauthorized_access(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     let resp = app
         .oneshot(
@@ -127,10 +103,9 @@ async fn test_unauthorized_access() {
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
-async fn test_update_key() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_update_key(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
     let create_resp = app
@@ -173,10 +148,9 @@ async fn test_update_key() {
     assert_eq!(updated["name"], "updated");
 }
 
-#[tokio::test]
-async fn test_delete_key() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_delete_key(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
     let create_resp = app
@@ -226,10 +200,9 @@ async fn test_delete_key() {
     assert_eq!(get_resp.status(), StatusCode::NOT_FOUND);
 }
 
-#[tokio::test]
-async fn test_register_first_user_is_admin() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_register_first_user_is_admin(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     let resp = app
         .oneshot(
@@ -252,10 +225,9 @@ async fn test_register_first_user_is_admin() {
     assert!(body["token"].is_string());
 }
 
-#[tokio::test]
-async fn test_login_and_me() {
-    let db = common::setup_test_db().await;
-    let app = build_app(make_state(db));
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_login_and_me(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
 
     // Register
     let register_resp = app
