@@ -172,6 +172,7 @@ pub struct Channel {
     pub enabled: bool,
     pub available_hours: Option<Vec<TimeSlot>>,
     pub created_by: Option<String>,
+    pub group: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -191,6 +192,7 @@ pub struct CreateChannel {
     pub enabled: Option<bool>,
     pub available_hours: Option<Vec<TimeSlot>>,
     pub models: Option<Vec<CreateChannelModel>>,
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -207,6 +209,7 @@ pub struct UpdateChannel {
     pub balance: Option<Option<i64>>,
     pub weight: Option<Option<i32>>,
     pub available_hours: Option<Vec<TimeSlot>>,
+    pub group: Option<Option<String>>,
 }
 
 /// Dedicated payload for updating a channel's API key.

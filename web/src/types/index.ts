@@ -265,6 +265,21 @@ export interface SystemInfo {
   audit_retention_days: number | null;
 }
 
+export interface NatsStreamInfo {
+  name: string;
+  messages: number;
+  bytes: number;
+  consumer_count: number;
+  first_sequence: number;
+  last_sequence: number;
+  max_messages: number;
+  max_age_secs: number;
+}
+
+export interface NatsStatusResponse {
+  streams: NatsStreamInfo[];
+}
+
 export interface TimeSlot {
   days: string[];
   start: string;
@@ -286,6 +301,7 @@ export interface Channel {
   enabled: boolean;
   available_hours?: TimeSlot[] | null;
   created_by?: string | null;
+  group?: string | null;
   created_at: string;
   updated_at: string;
   models?: ChannelModelInfo[];
@@ -311,6 +327,7 @@ export interface CreateChannelRequest {
   enabled?: boolean;
   available_hours?: TimeSlot[];
   models?: CreateChannelModelRequest[];
+  group?: string;
 }
 
 export interface UpdateChannelRequest {
@@ -321,6 +338,7 @@ export interface UpdateChannelRequest {
   weight?: number | null;
   enabled?: boolean;
   available_hours?: TimeSlot[];
+  group?: string | null;
 }
 
 export interface UpdateChannelApiKeyRequest {

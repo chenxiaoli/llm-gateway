@@ -475,6 +475,7 @@
     "update": "更新",
     "priority": "优先级",
     "weight": "权重",
+    "group": "分组",
     "provider": "提供商",
     "name": "名称",
     "endpoints": "端点",
@@ -501,7 +502,9 @@
       "priority": "优先级",
       "weight": "权重",
       "weightHint": "数值越大流量越多",
-      "enabled": "启用"
+      "enabled": "启用",
+      "group": "分组",
+      "groupPlaceholder": "例如：production, canary"
     },
     "addModelModal": {
       "title": "添加模型到通道",
@@ -838,6 +841,14 @@
       "auditRetention": "审计保留",
       "days": "{{count}} 天",
       "configNotice": "这些值来源于 config.toml。更改需要编辑配置文件并重启网关。"
+    },
+    "nats": {
+      "sectionTitle": "NATS 流",
+      "messages": "消息数",
+      "size": "大小",
+      "consumers": "消费者",
+      "retention": "保留期",
+      "days": "{{count}} 天"
     },
     "about": {
       "sectionTitle": "网关信息",

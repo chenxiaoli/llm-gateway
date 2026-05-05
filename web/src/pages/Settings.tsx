@@ -7,9 +7,10 @@ import {
   Clock,
   Timer,
   ExternalLink,
+  Activity,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useSettings, useUpdateSettings, useSystemInfo } from '../hooks/useSettings';
+import { useSettings, useUpdateSettings, useSystemInfo, useNatsStatus } from '../hooks/useSettings';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
 import { Toggle } from '../components/ui/Toggle';
@@ -25,6 +26,7 @@ export default function Settings() {
   const { t } = useTranslation();
   const { data: settings, isLoading } = useSettings();
   const { data: systemInfo } = useSystemInfo();
+  const { data: natsStatus } = useNatsStatus();
   const updateMutation = useUpdateSettings();
   const reducedMotion = useReducedMotion();
 
@@ -250,6 +252,50 @@ export default function Settings() {
                   </div>
                 </div>
               </div>
+
+              {natsStatus && (
+                <div className="rounded-2xl border border-base-300/40 bg-base-100 overflow-hidden">
+                  <div className="px-5 py-3 border-b border-base-300/60 bg-base-100/60">
+                    <span className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25">
+                      {t('settings.nats.sectionTitle')}
+                    </span>
+                  </div>
+                  <div className="p-5 space-y-4">
+                    {natsStatus?.streams?.map((stream) => (
+                      <div key={stream.name} className="bg-base-200/40 rounded-xl p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Activity className="h-4 w-4 text-success" />
+                          <span className="text-sm font-semibold font-mono">{stream.name}</span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div>
+                            <div className="text-[10px] text-base-content/40 uppercase tracking-wider">{t('settings.nats.messages')}</div>
+                            <div className="text-sm font-mono font-medium">{stream.messages.toLocaleString()}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-base-content/40 uppercase tracking-wider">{t('settings.nats.size')}</div>
+                            <div className="text-sm font-mono font-medium">
+                              {stream.bytes < 1024 ? `${stream.bytes} B`
+                                : stream.bytes < 1048576 ? `${(stream.bytes / 1024).toFixed(1)} KB`
+                                : stream.bytes < 1073741824 ? `${(stream.bytes / 1048576).toFixed(1)} MB`
+                                : `${(stream.bytes / 1073741824).toFixed(2)} GB`}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-base-content/40 uppercase tracking-wider">{t('settings.nats.consumers')}</div>
+                            <div className="text-sm font-mono font-medium">{stream.consumer_count}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-base-content/40 uppercase tracking-wider">{t('settings.nats.retention')}</div>
+                            <div className="text-sm font-mono font-medium">{t('settings.nats.days', { count: Math.round(stream.max_age_secs / 86400) })}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <Alert variant="warning" className="text-xs">
                 {t('settings.system.configNotice')}
               </Alert>

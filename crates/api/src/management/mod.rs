@@ -13,6 +13,7 @@ pub mod settings;
 pub mod channel_models;
 pub mod pricing_policies;
 pub mod seed;
+pub mod nats;
 
 use axum::extract::State;
 use axum::routing::{get, patch, post};
@@ -152,6 +153,8 @@ pub fn management_router() -> Router<Arc<AppState>> {
         .route("/api/v1/version", get(version))
         // System info (admin)
         .route("/api/v1/admin/system-info", get(system_info))
+        // NATS status (admin)
+        .route("/api/v1/admin/nats/status", get(nats::get_nats_status))
 }
 
 async fn version(State(_state): State<Arc<AppState>>) -> Json<serde_json::Value> {
