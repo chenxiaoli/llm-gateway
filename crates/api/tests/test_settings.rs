@@ -4,12 +4,10 @@ use common::MockChannelRegistry;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
 use llm_gateway_api::{management, AppState, SystemInfo};
-use llm_gateway_audit::AuditLogger;
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::Storage;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use tower::ServiceExt;
 
 fn build_app(state: Arc<AppState>) -> axum::Router {
@@ -17,14 +15,11 @@ fn build_app(state: Arc<AppState>) -> axum::Router {
 }
 
 fn make_state(db: Arc<llm_gateway_storage::postgres::PostgresStorage>) -> Arc<AppState> {
-    let (audit_tx, _rx) = mpsc::channel(100);
     Arc::new(AppState {
         storage: db.clone() as Arc<dyn Storage>,
         rate_limiter: Arc::new(RateLimiter::new(60)),
-        audit_logger: Arc::new(AuditLogger::new(db as Arc<dyn Storage>)),
         jwt_secret: common::TEST_JWT_SECRET.to_string(),
         encryption_key: [0u8; 32],
-        audit_tx,
         nats_publisher: None,
         registry: Arc::new(MockChannelRegistry),
         system_info: SystemInfo {

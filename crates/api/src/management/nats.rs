@@ -18,9 +18,13 @@ pub async fn get_nats_status(
 ) -> Result<Json<NatsStatusResponse>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
+    let nats = state.nats_publisher.as_ref().ok_or_else(|| {
+        ApiError::Internal("NATS is not configured".to_string())
+    })?;
+
     let mut streams = Vec::new();
     for name in &["LLM_GATEWAY_USAGE", "LLM_GATEWAY_AUDIT"] {
-        match state.nats_publisher.stream_info(name).await {
+        match nats.stream_info(name).await {
             Ok(info) => streams.push(info),
             Err(e) => {
                 return Err(ApiError::Internal(format!(

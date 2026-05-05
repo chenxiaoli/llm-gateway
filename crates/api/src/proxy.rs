@@ -359,7 +359,10 @@ async fn publish_audit_events(
     cache_creation_tokens: Option<i64>,
     cost: i64,
 ) {
-    let nats = &state.nats_publisher;
+    let nats = match &state.nats_publisher {
+        Some(n) => n,
+        None => return,
+    };
     let now = chrono::Utc::now();
 
     let usage_event = UsageEvent {
