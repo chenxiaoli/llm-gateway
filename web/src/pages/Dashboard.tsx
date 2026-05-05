@@ -5,7 +5,6 @@ import { useLogs } from '../hooks/useLogs';
 import { useUsageSummary } from '../hooks/useUsage';
 import { useMyBalance } from '../hooks/useAccounts';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import { useNatsStatus } from '../hooks/useSettings';
 import { useAuthStore } from '../stores/authStore';
 import { Badge } from '../components/ui/Badge';
 import { motion } from 'framer-motion';
@@ -79,7 +78,6 @@ export default function Dashboard() {
   const { data: monthSummary } = useUsageSummary({ since: startOfMonth() });
   const { data: recentLogs, isLoading: logsLoading } = useLogs({}, 1, 10);
   const { data: myBalance } = useMyBalance(1, 1);
-  const { data: natsStatus } = useNatsStatus();
 
   const todayRequests = todaySummary?.reduce((sum, r) => sum + r.request_count, 0) ?? 0;
   const todayCost = todaySummary?.reduce((sum, r) => sum + r.total_cost, 0) ?? 0;
@@ -92,9 +90,6 @@ export default function Dashboard() {
   const successRate = recentLogs?.items?.length
     ? Math.round((recentLogs.items.filter(r => r.status_code < 400).length / recentLogs.items.length) * 100)
     : 100;
-
-  const usagePending = natsStatus?.streams?.find(s => s.name === 'LLM_GATEWAY_USAGE')?.pending_messages ?? 0;
-  const auditPending = natsStatus?.streams?.find(s => s.name === 'LLM_GATEWAY_AUDIT')?.pending_messages ?? 0;
 
   return (
     <div className="px-6 pb-8">
@@ -213,18 +208,6 @@ export default function Dashboard() {
           label={t('dashboard.stats.recent')}
           value={String(recentLogs?.items?.length ?? 0)}
           unit={t('dashboard.units.reqs')}
-        />
-        <StatusPill
-          icon={<Activity className="h-4 w-4" />}
-          label={t('dashboard.stats.natsUsage')}
-          value={String(usagePending)}
-          unit={usagePending > 0 ? '⚠' : '✓'}
-        />
-        <StatusPill
-          icon={<Activity className="h-4 w-4" />}
-          label={t('dashboard.stats.natsAudit')}
-          value={String(auditPending)}
-          unit={auditPending > 0 ? '⚠' : '✓'}
         />
       </motion.div>
 

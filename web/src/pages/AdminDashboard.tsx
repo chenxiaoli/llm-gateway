@@ -8,7 +8,7 @@ import { useAllChannels } from '../hooks/useChannels';
 import { useAllModels } from '../hooks/useModels';
 import { useUsers } from '../hooks/useUsers';
 import { useKeys } from '../hooks/useKeys';
-import { useSystemInfo } from '../hooks/useSettings';
+import { useSystemInfo, useNatsStatus } from '../hooks/useSettings';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Badge } from '../components/ui/Badge';
 import { motion } from 'framer-motion';
@@ -79,6 +79,7 @@ export default function AdminDashboard() {
   const { data: users } = useUsers(1, 1);
   const { data: keys } = useKeys(1, 1);
   const { data: systemInfo } = useSystemInfo();
+  const { data: natsStatus } = useNatsStatus();
 
   const todayRequests = todaySummary?.reduce((sum, r) => sum + r.request_count, 0) ?? 0;
   const todayCost = todaySummary?.reduce((sum, r) => sum + r.total_cost, 0) ?? 0;
@@ -208,6 +209,8 @@ export default function AdminDashboard() {
           unit={t('adminDashboard.units.percent')}
         />
         <StatusPill icon={<Clock className="h-4 w-4" />} label={t('adminDashboard.stats.recent')} value={String(recentLogs?.items?.length ?? 0)} unit={t('adminDashboard.units.reqs')} />
+        <StatusPill icon={<Activity className="h-4 w-4" />} label={t('adminDashboard.stats.natsUsage')} value={String(natsStatus?.streams?.find(s => s.name === 'LLM_GATEWAY_USAGE')?.pending_messages ?? 0)} unit={(natsStatus?.streams?.find(s => s.name === 'LLM_GATEWAY_USAGE')?.pending_messages ?? 0) > 0 ? '⚠' : '✓'} />
+        <StatusPill icon={<Activity className="h-4 w-4" />} label={t('adminDashboard.stats.natsAudit')} value={String(natsStatus?.streams?.find(s => s.name === 'LLM_GATEWAY_AUDIT')?.pending_messages ?? 0)} unit={(natsStatus?.streams?.find(s => s.name === 'LLM_GATEWAY_AUDIT')?.pending_messages ?? 0) > 0 ? '⚠' : '✓'} />
       </motion.div>
 
       {/* Three columns: Top Models + Channel Usage + Recent Requests */}
