@@ -39,7 +39,13 @@ function RequireAuth() {
 
 function RequireAdmin() {
   const user = useAuthStore((s) => s.user);
-  if (!user || user.role !== 'admin') return <Navigate to="/console/dashboard" replace />;
+  const { isLoading } = useAuthBootstrap();
+  if (isLoading) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
+  if (!user) {
+    if (getToken()) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
+    return <Navigate to="/console/login" replace />;
+  }
+  if (user.role !== 'admin') return <Navigate to="/console/dashboard" replace />;
   return <Outlet />;
 }
 
