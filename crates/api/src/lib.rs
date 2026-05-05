@@ -16,7 +16,7 @@ pub struct AppState {
     pub rate_limiter: Arc<RateLimiter>,
     pub jwt_secret: String,
     pub encryption_key: [u8; 32],
-    pub nats_publisher: std::sync::Arc<llm_gateway_nats_publisher::NatsPublisher>,
+    pub nats_publisher: Option<std::sync::Arc<llm_gateway_nats_publisher::NatsPublisher>>,
     pub registry: Arc<dyn ChannelRegistry>,
     pub system_info: SystemInfo,
 }

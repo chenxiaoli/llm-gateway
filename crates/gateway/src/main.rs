@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         rate_limiter,
         jwt_secret: config.auth.jwt_secret.clone(),
         encryption_key,
-        nats_publisher,
+        nats_publisher: Some(nats_publisher),
         registry,
         system_info,
     });
