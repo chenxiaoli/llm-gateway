@@ -981,6 +981,12 @@ pub async fn proxy(
             continue;
         }
 
+        if status == 429 {
+            tracing::warn!("[PROXY] Rate limited (429) on channel '{}', trying next", channel.name);
+            last_error = format!("Rate limited (429) on channel '{}'", channel.name);
+            continue;
+        }
+
 if status != 200 && status < 500 {
             // Capture response headers before consuming body
             let response_headers_for_worker: String = {
