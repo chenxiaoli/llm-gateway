@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.12] - 2026-05-07
+
+### Added
+- Retry next available channel when upstream returns 429 rate limit
+
 ## [1.3.11] - 2026-05-05
 
 ### Fixed
