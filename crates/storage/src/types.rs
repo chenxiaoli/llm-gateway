@@ -700,7 +700,6 @@ pub struct Account {
     pub user_id: String,
     pub balance: i64,
     pub threshold: i64,
-    pub currency: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -801,7 +800,6 @@ pub struct AccountResponse {
     pub user_id: String,
     pub balance: i64,
     pub threshold: i64,
-    pub currency: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -813,7 +811,6 @@ impl From<&Account> for AccountResponse {
             user_id: a.user_id.clone(),
             balance: a.balance,
             threshold: a.threshold,
-            currency: a.currency.clone(),
             created_at: a.created_at.to_rfc3339(),
             updated_at: a.updated_at.to_rfc3339(),
         }
@@ -868,14 +865,12 @@ mod tests {
             user_id: "user-1".to_string(),
             balance: 10050,
             threshold: 100,
-            currency: "USD".to_string(),
             created_at: now,
             updated_at: now,
         };
         let response = AccountResponse::from(&account);
         assert_eq!(response.id, "acc-1");
         assert_eq!(response.balance, 10050);
-        assert_eq!(response.currency, "USD");
     }
 }
 

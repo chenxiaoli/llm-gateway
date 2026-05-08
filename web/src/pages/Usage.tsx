@@ -5,6 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { motion } from 'framer-motion';
 import { useUsage, useUsageSummary } from '../hooks/useUsage';
 import { useKeys } from '../hooks/useKeys';
+import { useCurrencyStore, formatCurrency } from '../stores/currency';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -40,6 +41,7 @@ function MetricCard({ label, value, icon, index, reducedMotion }: MetricCardProp
 
 export default function Usage() {
   const { t } = useTranslation();
+  const symbol = useCurrencyStore((s) => s.symbol);
   const [since, setSince] = useState('');
   const [until, setUntil] = useState('');
   const [keyFilter, setKeyFilter] = useState('');
@@ -170,7 +172,7 @@ export default function Usage() {
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
           <MetricCard
             label={t('usage.stats.totalCost')}
-            value={`$${grandTotals.cost.toFixed(4)}`}
+            value={formatCurrency(grandTotals.cost, symbol, 4)}
             icon={<DollarSign className="h-4 w-4 text-emerald-400" />}
             index={0}
             reducedMotion={reducedMotion}
@@ -230,7 +232,7 @@ export default function Usage() {
               <Tooltip
                 contentStyle={{ background: 'var(--color-base-200)', border: '1px solid var(--color-base-300)', borderRadius: 12, fontSize: 13 }}
                 formatter={(value: number, name: string) => {
-                  if (name === 'cost') return [`$${value.toFixed(4)}`, t('usage.chart.cost')];
+                  if (name === 'cost') return [formatCurrency(value, symbol, 4), t('usage.chart.cost')];
                   if (name === 'requests') return [value.toLocaleString(), t('usage.chart.requests')];
                   return [value.toLocaleString(), name.charAt(0).toUpperCase() + name.slice(1)];
                 }}
@@ -285,7 +287,7 @@ export default function Usage() {
                       <td className="font-mono text-sm text-right text-base-content/55">{(item.cache_read_tokens ?? 0).toLocaleString()}</td>
                       <td className="font-mono text-sm text-right text-base-content/55">{(item.cache_creation_tokens ?? 0).toLocaleString()}</td>
                       <td className="font-mono text-sm text-right text-base-content/55">{(item.output_tokens ?? 0).toLocaleString()}</td>
-                      <td className="font-mono text-sm text-right">${item.cost.toFixed(6)}</td>
+                      <td className="font-mono text-sm text-right">{formatCurrency(item.cost, symbol, 6)}</td>
                     </tr>
                   ))}
                   {usageItems.length === 0 && (

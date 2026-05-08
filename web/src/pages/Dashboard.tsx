@@ -6,6 +6,7 @@ import { useUsageSummary } from '../hooks/useUsage';
 import { useMyBalance } from '../hooks/useAccounts';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useAuthStore } from '../stores/authStore';
+import { useCurrencyStore, formatCurrency } from '../stores/currency';
 import { Badge } from '../components/ui/Badge';
 import { motion } from 'framer-motion';
 
@@ -74,6 +75,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
   const user = useAuthStore((s) => s.user);
+  const symbol = useCurrencyStore((s) => s.symbol);
   const { data: todaySummary } = useUsageSummary({ since: startOfDay() });
   const { data: monthSummary } = useUsageSummary({ since: startOfMonth() });
   const { data: recentLogs, isLoading: logsLoading } = useLogs({}, 1, 10);
@@ -129,8 +131,7 @@ export default function Dashboard() {
               <div>
                 <span className="text-xs font-semibold uppercase tracking-wider text-base-content/50">{t('dashboard.accountBalance')}</span>
                 <div className="font-mono text-3xl font-bold tracking-tight mt-0.5">
-                  ${myBalance.balance.toFixed(4)}
-                  <span className="text-sm text-base-content/40 ml-2 font-normal">{myBalance.currency}</span>
+                  {formatCurrency(myBalance.balance, symbol, 4)}
                 </div>
               </div>
             </div>
@@ -163,14 +164,14 @@ export default function Dashboard() {
         />
         <MetricCard
           label={t('dashboard.stats.todayCost')}
-          value={`$${todayCost.toFixed(4)}`}
+          value={formatCurrency(todayCost, symbol, 4)}
           icon={<DollarSign className="h-4 w-4 text-emerald-400" />}
           index={1}
           reducedMotion={reducedMotion}
         />
         <MetricCard
           label={t('dashboard.stats.monthlyCost')}
-          value={`$${monthCost.toFixed(2)}`}
+          value={formatCurrency(monthCost, symbol, 2)}
           icon={<TrendingUp className="h-4 w-4 text-amber-400" />}
           index={2}
           reducedMotion={reducedMotion}

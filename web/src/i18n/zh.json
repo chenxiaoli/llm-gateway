@@ -823,7 +823,9 @@
       "allowRegistration": "允许注册",
       "allowRegistrationDesc": "允许新用户在登录页注册",
       "serverHost": "服务器地址",
-      "serverHostDesc": "代理端点使用的网关基础 URL"
+      "serverHostDesc": "代理端点使用的网关基础 URL",
+      "currency": "货币",
+      "currencyDesc": "仪表板中金额显示的货币单位"
     },
     "security": {
       "sectionTitle": "审计日志",

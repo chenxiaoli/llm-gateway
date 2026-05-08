@@ -3,6 +3,7 @@ import { DollarSign } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
+import { useCurrencyStore, formatCurrency } from '../stores/currency';
 import { useMyBalance } from '../hooks/useAccounts';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
@@ -13,6 +14,7 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 export default function Account() {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
+  const symbol = useCurrencyStore((s) => s.symbol);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const reducedMotion = useReducedMotion();
@@ -68,15 +70,14 @@ export default function Account() {
               {t('account.balance')}
             </div>
             <div className="font-mono text-3xl font-bold tracking-tight">
-              ${data.balance.toFixed(4)}
-              <span className="text-sm text-base-content/40 ml-2 font-normal">{data.currency}</span>
+              {formatCurrency(data.balance, symbol, 4)}
             </div>
           </div>
           <div className="rounded-2xl border border-base-300/40 bg-base-100 p-5">
             <div className="text-xs font-semibold uppercase tracking-wider text-base-content/45 mb-2">
               {t('account.threshold')}
             </div>
-            <div className="font-mono text-3xl font-bold tracking-tight">${data.threshold.toFixed(2)}</div>
+            <div className="font-mono text-3xl font-bold tracking-tight">{formatCurrency(data.threshold, symbol, 2)}</div>
           </div>
           <div className="rounded-2xl border border-base-300/40 bg-base-100 p-5">
             <div className="text-xs font-semibold uppercase tracking-wider text-base-content/45 mb-2">
@@ -128,9 +129,9 @@ export default function Account() {
                         </td>
                         <td><Badge variant={info.color}>{info.label}</Badge></td>
                         <td className={`font-mono text-right text-sm ${isCredit ? 'text-green-500' : 'text-red-500'}`}>
-                          {isCredit ? '+' : '-'}${tx.amount.toFixed(4)}
+                          {isCredit ? '+' : '-'}{formatCurrency(tx.amount, symbol, 4)}
                         </td>
-                        <td className="font-mono text-right text-sm text-base-content/55">${tx.balance_after.toFixed(4)}</td>
+                        <td className="font-mono text-right text-sm text-base-content/55">{formatCurrency(tx.balance_after, symbol, 4)}</td>
                         <td className="text-sm text-base-content/55">{tx.description ?? '-'}</td>
                       </tr>
                     );

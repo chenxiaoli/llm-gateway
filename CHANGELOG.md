@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.13] - 2026-05-08
+
+### Added
+- Multi-currency display support (USD/CNY) as a system-level setting
+- Currency selector in Settings > General for admins
+- `currency` field in `/auth/config` and settings API responses
+- Frontend currency store (Zustand) with symbol-aware formatting across all pages
+
+### Changed
+- Removed per-account `currency` field in favor of global system currency
+- All monetary amounts now display using the configured currency symbol
+
 ## [1.3.12] - 2026-05-07
 
 ### Added

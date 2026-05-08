@@ -10,6 +10,7 @@ import { useUsers } from '../hooks/useUsers';
 import { useKeys } from '../hooks/useKeys';
 import { useSystemInfo, useNatsStatus } from '../hooks/useSettings';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useCurrencyStore, formatCurrency } from '../stores/currency';
 import { Badge } from '../components/ui/Badge';
 import { motion } from 'framer-motion';
 
@@ -68,6 +69,7 @@ export default function AdminDashboard() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
+  const symbol = useCurrencyStore((s) => s.symbol);
 
   const { data: todaySummary } = useUsageSummary({ since: startOfDay() });
   const { data: monthSummary } = useUsageSummary({ since: startOfMonth() });
@@ -174,13 +176,13 @@ export default function AdminDashboard() {
         />
         <MetricCard
           label={t('adminDashboard.stats.todayCost')}
-          value={`$${todayCost.toFixed(4)}`}
+          value={formatCurrency(todayCost, symbol, 4)}
           icon={<DollarSign className="h-4 w-4 text-emerald-400" />}
           index={1}
         />
         <MetricCard
           label={t('adminDashboard.stats.monthlyCost')}
-          value={`$${monthCost.toFixed(2)}`}
+          value={formatCurrency(monthCost, symbol, 2)}
           icon={<TrendingUp className="h-4 w-4 text-amber-400" />}
           sub={t('adminDashboard.stats.monthlyRequestsSub', { count: (monthSummary?.reduce((s, r) => s + r.request_count, 0) ?? 0).toLocaleString() })}
           index={2}
@@ -241,7 +243,7 @@ export default function AdminDashboard() {
                       </div>
                       <div className="text-right shrink-0">
                         <div className="font-mono text-xs font-bold">{m.request_count.toLocaleString()}</div>
-                        <div className="font-mono text-[10px] text-base-content/35">${m.total_cost.toFixed(4)}</div>
+                        <div className="font-mono text-[10px] text-base-content/35">{formatCurrency(m.total_cost, symbol, 4)}</div>
                       </div>
                     </div>
                   );
@@ -278,7 +280,7 @@ export default function AdminDashboard() {
                       </div>
                       <div className="flex items-center gap-3 text-[10px] font-mono text-base-content/35">
                         <span>{((c.total_input_tokens ?? 0) + (c.total_output_tokens ?? 0)).toLocaleString()} {t('adminDashboard.units.tokens')}</span>
-                        <span>${c.total_cost.toFixed(4)}</span>
+                        <span>{formatCurrency(c.total_cost, symbol, 4)}</span>
                       </div>
                     </div>
                   );

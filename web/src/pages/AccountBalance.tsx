@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { DollarSign, Eye } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useUserBalance, useRechargeUser, useAdjustUser, useRequestDetails } from '../hooks/useAccounts';
+import { useCurrencyStore, formatCurrency } from '../stores/currency';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
@@ -10,6 +11,7 @@ import { Drawer } from '../components/ui/Drawer';
 
 export default function AccountBalance() {
   const { t } = useTranslation();
+  const symbol = useCurrencyStore((s) => s.symbol);
   const { userId } = useParams<{ userId: string }>();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
@@ -95,21 +97,17 @@ export default function AccountBalance() {
 
       {/* Balance Header */}
       {account && (
-        <div className="mb-6 grid grid-cols-3 gap-4 max-lg:grid-cols-2">
+        <div className="mb-6 grid grid-cols-2 gap-4 max-lg:grid-cols-2">
           <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
             <div className="stat-title text-base-content/50">
               <DollarSign className="h-4 w-4 inline mr-1" />
               {t('accountBalance.balance')}
             </div>
-            <div className="stat-value text-3xl font-mono">${account.balance.toFixed(4)}</div>
+            <div className="stat-value text-3xl font-mono">{formatCurrency(account.balance, symbol, 4)}</div>
           </div>
           <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
             <div className="stat-title text-base-content/50">{t('accountBalance.threshold')}</div>
-            <div className="stat-value text-2xl font-mono">${account.threshold.toFixed(2)}</div>
-          </div>
-          <div className="stat bg-base-100 rounded-box p-4 shadow-sm">
-            <div className="stat-title text-base-content/50">{t('accountBalance.currency')}</div>
-            <div className="stat-value text-2xl">{account.currency}</div>
+            <div className="stat-value text-2xl font-mono">{formatCurrency(account.threshold, symbol, 2)}</div>
           </div>
         </div>
       )}
@@ -160,9 +158,9 @@ export default function AccountBalance() {
                         <Badge variant={info.color}>{info.label}</Badge>
                       </td>
                       <td className={`mono text-right ${isCredit ? 'text-green-500' : 'text-red-500'}`}>
-                        {isCredit ? '+' : '-'}${tx.amount.toFixed(4)}
+                        {isCredit ? '+' : '-'}{formatCurrency(tx.amount, symbol, 4)}
                       </td>
-                      <td className="mono text-right">${tx.balance_after.toFixed(4)}</td>
+                      <td className="mono text-right">{formatCurrency(tx.balance_after, symbol, 4)}</td>
                       <td className="text-sm">
                         <div className="flex items-center gap-1">
                           <span>{tx.description ?? '-'}</span>
@@ -329,8 +327,8 @@ export default function AccountBalance() {
                   {t('accountBalance.requestDetails.transactionInfo')}
                 </h4>
                 <div className="space-y-2">
-                  <DetailRow label={t('accountBalance.table.amount')} value={`$${requestDetails.transaction.amount.toFixed(4)}`} />
-                  <DetailRow label={t('accountBalance.table.balanceAfter')} value={`$${requestDetails.transaction.balance_after.toFixed(4)}`} />
+                  <DetailRow label={t('accountBalance.table.amount')} value={formatCurrency(requestDetails.transaction.amount, symbol, 4)} />
+                  <DetailRow label={t('accountBalance.table.balanceAfter')} value={formatCurrency(requestDetails.transaction.balance_after, symbol, 4)} />
                   <DetailRow label={t('accountBalance.table.description')} value={requestDetails.transaction.description ?? '-'} />
                 </div>
               </section>
@@ -358,7 +356,7 @@ export default function AccountBalance() {
                   <DetailRow label={t('accountBalance.requestDetails.outputTokens')} value={formatTokens(requestDetails.usage.output_tokens)} />
                   <DetailRow label={t('accountBalance.requestDetails.cacheReadTokens')} value={formatTokens(requestDetails.usage.cache_read_tokens)} />
                   <DetailRow label={t('accountBalance.requestDetails.cacheCreationTokens')} value={formatTokens(requestDetails.usage.cache_creation_tokens)} />
-                  <DetailRow label={t('accountBalance.requestDetails.cost')} value={`$${requestDetails.usage.cost.toFixed(4)}`} />
+                  <DetailRow label={t('accountBalance.requestDetails.cost')} value={formatCurrency(requestDetails.usage.cost, symbol, 4)} />
                 </div>
               </section>
             ) : (

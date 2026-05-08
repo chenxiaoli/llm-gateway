@@ -30,7 +30,6 @@ pub struct AccountJsonResponse {
     pub user_id: String,
     pub balance: f64,
     pub threshold: f64,
-    pub currency: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -42,7 +41,6 @@ impl From<StorageAccountResponse> for AccountJsonResponse {
             user_id: a.user_id,
             balance: units_to_usd(a.balance),
             threshold: units_to_usd(a.threshold),
-            currency: a.currency,
             created_at: a.created_at,
             updated_at: a.updated_at,
         }
@@ -163,7 +161,6 @@ pub async fn recharge(
                 user_id,
                 balance: tx.balance_after,
                 threshold: account.threshold,
-                currency: account.currency,
                 created_at: account.created_at,
                 updated_at: tx.created_at,
             }))))
@@ -230,7 +227,6 @@ pub async fn adjust(
                 user_id,
                 balance: tx.balance_after,
                 threshold: account.threshold,
-                currency: account.currency,
                 created_at: account.created_at,
                 updated_at: tx.created_at,
             }))))

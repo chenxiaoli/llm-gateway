@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { DollarSign, Plus, Cpu, Globe, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { usePricingPolicies, useCreatePricingPolicy, useUpdatePricingPolicy, useDeletePricingPolicy } from '../hooks/usePricingPolicies';
+import { useCurrencyStore } from '../stores/currency';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
@@ -68,8 +69,8 @@ function buildConfig(data: FormValues): PricingConfig {
 }
 
 // ── Config renderer for table cells ───────────────────────────────────────────
-function fmt(val: unknown): string {
-  if (typeof val === 'number') return `$${(val / UNITS_PER_USD).toFixed(4)}/M`;
+function fmt(val: unknown, symbol: string): string {
+  if (typeof val === 'number') return `${symbol}${(val / UNITS_PER_USD).toFixed(4)}/M`;
   if (typeof val === 'object' && val !== null) return JSON.stringify(val);
   return String(val);
 }
@@ -82,6 +83,7 @@ function formatTokenCount(n: number): string {
 
 function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
   const { t } = useTranslation();
+  const symbol = useCurrencyStore((s) => s.symbol);
   const cfg = policy.config as Record<string, unknown>;
   const bt = policy.billing_type;
 
@@ -96,31 +98,31 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
         {input != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.in')}</span>
-            <span className="text-xs font-mono font-bold text-base-content">{fmt(input)}</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(input, symbol)}</span>
           </span>
         )}
         {output != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.out')}</span>
-            <span className="text-xs font-mono font-bold text-base-content">{fmt(output)}</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(output, symbol)}</span>
           </span>
         )}
         {cache != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.cacheRead')}</span>
-            <span className="text-xs font-mono font-bold text-base-content">{fmt(cache)}</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(cache, symbol)}</span>
           </span>
         )}
         {cacheCreate != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.cacheCreate')}</span>
-            <span className="text-xs font-mono font-bold text-base-content">{fmt(cacheCreate)}</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(cacheCreate, symbol)}</span>
           </span>
         )}
         {bt === 'hybrid' && base != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.base')}</span>
-            <span className="text-xs font-mono font-bold text-base-content">{fmt(base)}</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(base, symbol)}</span>
           </span>
         )}
       </div>
@@ -149,7 +151,7 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
             <div key={i} className="flex items-center gap-1">
               <span className="text-sm font-semibold uppercase tracking-wider text-base-content/40 min-w-[48px]">{label}</span>
               <span className="text-sm font-mono text-base-content/70">
-                {t('pricingPolicies.configCell.in')} {fmt(tier.input_price_1m)} · {t('pricingPolicies.configCell.out')} {fmt(tier.output_price_1m)}
+                {t('pricingPolicies.configCell.in')} {fmt(tier.input_price_1m, symbol)} · {t('pricingPolicies.configCell.out')} {fmt(tier.output_price_1m, symbol)}
               </span>
             </div>
           );
@@ -163,7 +165,7 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
     return (
       <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30">
         <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.perCall')}</span>
-        <span className="text-xs font-mono font-bold text-base-content">{p != null ? fmt(p) : '—'}</span>
+        <span className="text-xs font-mono font-bold text-base-content">{p != null ? fmt(p, symbol) : '—'}</span>
       </span>
     );
   }
@@ -176,13 +178,13 @@ function ConfigCell({ policy }: { policy: PricingPolicyWithCounts }) {
         {input != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.inChar')}</span>
-            <span className="text-xs font-mono font-bold text-base-content">{fmt(input)}</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(input, symbol)}</span>
           </span>
         )}
         {output != null && (
           <span className="inline-flex flex-col items-center px-2 py-1 rounded bg-base-200/60 border border-base-300/30 min-w-[64px]">
             <span className="text-[9px] font-bold uppercase tracking-wider text-base-content/30">{t('pricingPolicies.configCell.outChar')}</span>
-            <span className="text-xs font-mono font-bold text-base-content">{fmt(output)}</span>
+            <span className="text-xs font-mono font-bold text-base-content">{fmt(output, symbol)}</span>
           </span>
         )}
       </div>
