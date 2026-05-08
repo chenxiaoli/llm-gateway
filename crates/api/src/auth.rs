@@ -48,6 +48,7 @@ pub struct MeResponse {
 #[derive(Serialize)]
 pub struct AuthConfigResponse {
     pub allow_registration: bool,
+    pub currency: String,
 }
 
 #[derive(Deserialize)]
@@ -192,7 +193,6 @@ pub async fn register(
         user_id: user.id.clone(),
         balance: 0,
         threshold: llm_gateway_storage::usd_to_units(1.0),
-        currency: "USD".to_string(),
         created_at: now,
         updated_at: now,
     };
@@ -281,7 +281,6 @@ pub async fn me_balance(
     Ok(Json(serde_json::json!({
         "balance": units_to_usd(account.balance),
         "threshold": units_to_usd(account.threshold),
-        "currency": account.currency,
         "transactions": {
             "items": tx_responses,
             "total": transactions.total,
@@ -295,9 +294,13 @@ pub async fn auth_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<AuthConfigResponse>, ApiError> {
     let allow_reg = get_allow_registration(&state).await;
+    let currency = state.storage.get_setting("currency").await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .unwrap_or_else(|| "USD".to_string());
 
     Ok(Json(AuthConfigResponse {
         allow_registration: allow_reg,
+        currency,
     }))
 }
 

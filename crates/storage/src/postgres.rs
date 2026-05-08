@@ -518,7 +518,6 @@ struct PgAccountRow {
     user_id: String,
     balance: i64,
     threshold: i64,
-    currency: String,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -530,7 +529,6 @@ impl From<PgAccountRow> for Account {
             user_id: r.user_id,
             balance: r.balance,
             threshold: r.threshold,
-            currency: r.currency,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -2311,13 +2309,12 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_account(&self, account: &Account) -> Result<Account, Box<dyn std::error::Error + Send + Sync>> {
         sqlx::query(
-            "INSERT INTO accounts (id, user_id, balance, threshold, currency, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)"
+            "INSERT INTO accounts (id, user_id, balance, threshold, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)"
         )
         .bind(&account.id)
         .bind(&account.user_id)
         .bind(account.balance)
         .bind(account.threshold)
-        .bind(&account.currency)
         .bind(account.created_at)
         .bind(account.updated_at)
         .execute(self.pool())
@@ -2327,7 +2324,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_account(&self, id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgAccountRow> = sqlx::query_as(
-            "SELECT id, user_id, balance, threshold, currency, created_at, updated_at FROM accounts WHERE id = $1"
+            "SELECT id, user_id, balance, threshold, created_at, updated_at FROM accounts WHERE id = $1"
         )
         .bind(id)
         .fetch_optional(self.pool())
@@ -2337,7 +2334,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_account_by_user_id(&self, user_id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgAccountRow> = sqlx::query_as(
-            "SELECT id, user_id, balance, threshold, currency, created_at, updated_at FROM accounts WHERE user_id = $1"
+            "SELECT id, user_id, balance, threshold, created_at, updated_at FROM accounts WHERE user_id = $1"
         )
         .bind(user_id)
         .fetch_optional(self.pool())

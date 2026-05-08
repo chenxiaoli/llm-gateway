@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAllModels, useCreateGlobalModel, useUpdateGlobalModel } from '../hooks/useModels';
 import { usePricingPolicies } from '../hooks/usePricingPolicies';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useCurrencyStore } from '../stores/currency';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Plus, Cpu, Pencil, Sparkles, Radio } from 'lucide-react';
@@ -10,10 +11,10 @@ import type { CreateGlobalModelRequest, ModelWithProvider, PricingPolicy } from 
 import { motion } from 'framer-motion';
 
 // ── Price formatter ───────────────��────────────────────────────────────────────
-function formatPrice(val: number | undefined): string {
+function formatPrice(val: number | undefined, symbol: string): string {
   if (val === undefined) return '—';
   const UNITS_PER_USD = 100_000_000;
-  return `$${(val / UNITS_PER_USD).toFixed(4)}`;
+  return `${symbol}${(val / UNITS_PER_USD).toFixed(4)}`;
 }
 
 // ── Page-level stat pill ──────────────────────────────────────────────────────
@@ -50,6 +51,7 @@ interface ModelCardProps {
 
 function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardProps) {
   const { t } = useTranslation();
+  const symbol = useCurrencyStore((s) => s.symbol);
   const isActive = model.channel_names.length > 0;
   const policy = policies.find(p => p.id === model.pricing_policy_id);
   const billingType = policy?.billing_type ?? '';
@@ -170,7 +172,7 @@ function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardP
                             {label}
                           </span>
                           <span className={`font-mono text-lg font-bold ${isActive ? 'text-base-content' : 'text-base-content/60'}`}>
-                            {formatPrice(val)}
+                            {formatPrice(val, symbol)}
                           </span>
                         </div>
                       );

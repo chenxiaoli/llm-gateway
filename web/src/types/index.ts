@@ -214,6 +214,7 @@ export interface MeResponse {
 
 export interface AuthConfigResponse {
   allow_registration: boolean;
+  currency: string;
 }
 
 export interface RefreshResponse {
@@ -247,6 +248,7 @@ export interface SettingsResponse {
   server_host: string;
   audit_log_request: boolean;
   audit_log_response: boolean;
+  currency: string;
 }
 
 export interface UpdateSettingsRequest {
@@ -254,6 +256,7 @@ export interface UpdateSettingsRequest {
   server_host?: string;
   audit_log_request?: boolean;
   audit_log_response?: boolean;
+  currency?: string;
 }
 
 export interface SystemInfo {
@@ -525,7 +528,6 @@ export interface Account {
   user_id: string;
   balance: number;
   threshold: number;
-  currency: string;
   created_at: string;
   updated_at: string;
 }
@@ -550,7 +552,6 @@ export interface AccountBalanceResponse {
 export interface MeBalanceResponse {
   balance: number;
   threshold: number;
-  currency: string;
   transactions: PaginatedResponse<Transaction>;
 }
 

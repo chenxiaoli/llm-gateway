@@ -4,13 +4,14 @@ import { motion } from 'framer-motion';
 import { Cpu, Search } from 'lucide-react';
 import { useUserModels } from '../hooks/useUserModels';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useCurrencyStore } from '../stores/currency';
 import type { UserModelView, ContextTier } from '../types';
 
 const UNITS_PER_USD = 100_000_000;
 
-function formatPrice(val: number | undefined): string {
+function formatPrice(val: number | undefined, symbol: string): string {
   if (val === undefined || val === null) return '—';
-  return `$${(val / UNITS_PER_USD).toFixed(2)}`;
+  return `${symbol}${(val / UNITS_PER_USD).toFixed(2)}`;
 }
 
 function formatTokenCount(n: number): string {
@@ -34,6 +35,7 @@ function StatPill({ label, value, accent }: { label: string; value: number; acce
 
 function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelView; index: number; reducedMotion: boolean }) {
   const { t } = useTranslation();
+  const symbol = useCurrencyStore((s) => s.symbol);
   const policy = model.pricing;
   const billingType = policy?.billing_type ?? '';
   const config = (policy?.config ?? {}) as Record<string, unknown>;
@@ -100,7 +102,7 @@ function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelVie
                         <div key={key} className="flex flex-col items-center text-center py-1">
                           <span className="text-xs font-semibold text-base-content/40 mb-1">{label}</span>
                           <span className="font-mono text-lg font-bold text-base-content">
-                            {formatPrice(val)}
+                            {formatPrice(val, symbol)}
                           </span>
                         </div>
                       );
@@ -118,15 +120,15 @@ function ConsoleModelCard({ model, index, reducedMotion }: { model: UserModelVie
                           <div className="grid grid-cols-3 gap-1.5">
                             <div className="flex flex-col items-center text-center">
                               <span className="text-xs font-semibold text-base-content/40 mb-0.5">{t('consoleModels.card.input')}</span>
-                              <span className="font-mono text-sm font-bold text-base-content">{formatPrice(tier.input_price_1m)}</span>
+                              <span className="font-mono text-sm font-bold text-base-content">{formatPrice(tier.input_price_1m, symbol)}</span>
                             </div>
                             <div className="flex flex-col items-center text-center">
                               <span className="text-xs font-semibold text-base-content/40 mb-0.5">{t('consoleModels.card.output')}</span>
-                              <span className="font-mono text-sm font-bold text-base-content">{formatPrice(tier.output_price_1m)}</span>
+                              <span className="font-mono text-sm font-bold text-base-content">{formatPrice(tier.output_price_1m, symbol)}</span>
                             </div>
                             <div className="flex flex-col items-center text-center">
                               <span className="text-xs font-semibold text-base-content/40 mb-0.5">{t('consoleModels.card.cache')}</span>
-                              <span className="font-mono text-sm font-bold text-base-content">{formatPrice(tier.cache_read_price_1m)}</span>
+                              <span className="font-mono text-sm font-bold text-base-content">{formatPrice(tier.cache_read_price_1m, symbol)}</span>
                             </div>
                           </div>
                         </div>
