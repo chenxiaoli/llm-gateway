@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useKeys, useCreateKey } from '../hooks/useKeys';
 import { useModelFallbacks } from '../hooks/useModelFallbacks';
+import { useCurrencyStore, formatCurrency } from '../stores/currency';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
@@ -17,6 +18,7 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 
 export default function Keys() {
   const { t } = useTranslation();
+  const symbol = useCurrencyStore((s) => s.symbol);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const { data, isLoading } = useKeys(page, pageSize);
@@ -131,7 +133,7 @@ export default function Keys() {
                     </td>
                     <td><Badge variant={key.enabled ? 'green' : 'red'}>{key.enabled ? t('keys.active') : t('keys.disabled')}</Badge></td>
                     <td className="font-mono text-sm text-base-content/55">{key.rate_limit ?? t('keys.unlimited')}</td>
-                    <td className="font-mono text-sm text-base-content/55">{key.budget_monthly != null ? `$${key.budget_monthly.toFixed(2)}` : t('keys.unlimited')}</td>
+                    <td className="font-mono text-sm text-base-content/55">{key.budget_monthly != null ? formatCurrency(key.budget_monthly, symbol, 2) : t('keys.unlimited')}</td>
                     <td className="text-sm text-base-content/55">{key.model_fallback_id ? (fallbacks?.find(f => f.id === key.model_fallback_id)?.name ?? '—') : t('keys.none')}</td>
                     <td className="font-mono text-sm text-base-content/50">{new Date(key.created_at).toLocaleDateString()}</td>
                   </motion.tr>

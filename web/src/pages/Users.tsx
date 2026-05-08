@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useUsers, useUpdateUser, useDeleteUser } from '../hooks/useUsers';
 import { useUserBalance, useRechargeUser, useAdjustUser } from '../hooks/useAccounts';
 import { useUsage, useUsageSummary } from '../hooks/useUsage';
+import { useCurrencyStore, formatCurrency } from '../stores/currency';
 import { useQueryClient } from '@tanstack/react-query';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
@@ -84,6 +85,7 @@ function DrawerShell({ title, isOpen, onClose, width = 560, children }: {
 
 function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () => void }) {
   const { t } = useTranslation();
+  const symbol = useCurrencyStore((s) => s.symbol);
   const queryClient = useQueryClient();
   const { data, isLoading } = useUserBalance(userId ?? '', 1, 10);
   const rechargeMutation = useRechargeUser();
@@ -159,11 +161,10 @@ function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () =>
                 </div>
               </div>
               <div className="font-mono text-3xl font-bold tracking-tight mb-3">
-                ${account.balance.toFixed(4)}
-                <span className="text-sm text-base-content/40 ml-2 font-normal">{account.currency}</span>
+                {formatCurrency(account.balance, symbol, 4)}
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-xs text-base-content/40">{t('users.drawer.threshold')}: ${account.threshold.toFixed(2)}</span>
+                <span className="text-xs text-base-content/40">{t('users.drawer.threshold')}: {formatCurrency(account.threshold, symbol, 2)}</span>
                 {account.balance <= account.threshold && <Badge variant="amber">{t('users.drawer.lowBalance')}</Badge>}
               </div>
             </div>
@@ -193,7 +194,7 @@ function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () =>
                       </div>
                       <div className="text-right shrink-0">
                         <div className={`font-mono text-sm font-medium ${isCredit ? 'text-green-500' : 'text-red-500'}`}>
-                          {isCredit ? '+' : '-'}${tx.amount.toFixed(4)}
+                          {isCredit ? '+' : '-'}{formatCurrency(tx.amount, symbol, 4)}
                         </div>
                         <div className="text-[11px] text-base-content/30">{new Date(tx.created_at).toLocaleDateString()}</div>
                       </div>
@@ -288,6 +289,7 @@ function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () =>
 
 function UsageDrawer({ userId, onClose }: { userId: string | null; onClose: () => void }) {
   const { t } = useTranslation();
+  const symbol = useCurrencyStore((s) => s.symbol);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const usageFilter = userId ? { user_id: userId } : {};
@@ -338,7 +340,7 @@ function UsageDrawer({ userId, onClose }: { userId: string | null; onClose: () =
                 <DollarSign className="h-4 w-4 text-emerald-400" />
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-base-content/50">{t('users.usageDrawer.totalCost')}</span>
               </div>
-              <div className="font-mono text-2xl font-bold">${totals.cost.toFixed(4)}</div>
+              <div className="font-mono text-2xl font-bold">{formatCurrency(totals.cost, symbol, 4)}</div>
             </div>
             <div className="rounded-2xl border border-base-300/40 bg-base-100 p-4">
               <div className="flex items-center gap-2 mb-2">
@@ -407,7 +409,7 @@ function UsageDrawer({ userId, onClose }: { userId: string | null; onClose: () =
                     <td><Badge variant={item.protocol === 'openai' ? 'blue' : 'purple'}>{item.protocol}</Badge></td>
                     <td className="font-mono text-xs text-right text-base-content/55">{(item.input_tokens ?? 0).toLocaleString()}</td>
                     <td className="font-mono text-xs text-right text-base-content/55">{(item.output_tokens ?? 0).toLocaleString()}</td>
-                    <td className="font-mono text-xs text-right">${item.cost.toFixed(6)}</td>
+                    <td className="font-mono text-xs text-right">{formatCurrency(item.cost, symbol, 6)}</td>
                   </tr>
                 ))}
                 {items.length === 0 && (
@@ -448,6 +450,7 @@ function UsageDrawer({ userId, onClose }: { userId: string | null; onClose: () =
 
 export default function Users() {
   const { t } = useTranslation();
+  const symbol = useCurrencyStore((s) => s.symbol);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const reducedMotion = useReducedMotion();
@@ -533,7 +536,7 @@ export default function Users() {
                         onClick={() => setDrawerUserId(user.id)}
                       >
                         <span className={user.balance <= user.threshold ? 'text-amber-500' : 'text-base-content/70'}>
-                          ${user.balance.toFixed(2)}
+                          {formatCurrency(user.balance, symbol, 2)}
                         </span>
                       </button>
                     </td>

@@ -823,7 +823,9 @@
       "allowRegistration": "Allow Registration",
       "allowRegistrationDesc": "Permit new users to register on the login page",
       "serverHost": "Server Host",
-      "serverHostDesc": "Gateway base URL used by the proxy endpoint"
+      "serverHostDesc": "Gateway base URL used by the proxy endpoint",
+      "currency": "Currency",
+      "currencyDesc": "Display currency for amounts across the dashboard"
     },
     "security": {
       "sectionTitle": "AUDIT LOGGING",

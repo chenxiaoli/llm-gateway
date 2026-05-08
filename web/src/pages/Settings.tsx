@@ -8,10 +8,12 @@ import {
   Timer,
   ExternalLink,
   Activity,
+  Coins,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSettings, useUpdateSettings, useSystemInfo, useNatsStatus } from '../hooks/useSettings';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useCurrencyStore } from '../stores/currency';
 import { Button } from '../components/ui/Button';
 import { Toggle } from '../components/ui/Toggle';
 import { Alert } from '../components/ui/Alert';
@@ -29,6 +31,7 @@ export default function Settings() {
   const { data: natsStatus } = useNatsStatus();
   const updateMutation = useUpdateSettings();
   const reducedMotion = useReducedMotion();
+  const { currency, setCurrency } = useCurrencyStore();
 
   const TABS: { key: SettingsTab; label: string }[] = [
     { key: 'general', label: t('settings.tabs.general') },
@@ -171,6 +174,36 @@ export default function Settings() {
                         >
                           {t('common.save')}
                         </Button>
+                      </div>
+                    </div>
+
+                    {/* Currency */}
+                    <div className="flex items-center justify-between gap-6 py-3">
+                      <div className="flex items-center gap-3">
+                        <Coins className="h-4 w-4 text-base-content/40" />
+                        <div>
+                          <div className="text-sm font-medium text-base-content">{t('settings.general.currency')}</div>
+                          <div className="text-xs text-base-content/40 mt-0.5">{t('settings.general.currencyDesc')}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 bg-base-200/50 rounded-lg p-0.5">
+                        {(['USD', 'CNY'] as const).map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => {
+                              updateMutation.mutate({ currency: c });
+                              setCurrency(c);
+                            }}
+                            className={cn(
+                              'px-3 py-1.5 text-xs font-medium rounded-md transition-colors cursor-pointer',
+                              currency === c
+                                ? 'bg-base-100 text-base-content shadow-sm'
+                                : 'text-base-content/40 hover:text-base-content/60',
+                            )}
+                          >
+                            {c === 'USD' ? '$ USD' : '¥ CNY'}
+                          </button>
+                        ))}
                       </div>
                     </div>
                   </div>

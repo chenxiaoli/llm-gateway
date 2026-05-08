@@ -14,6 +14,7 @@ pub struct UpdateSettingsRequest {
     pub server_host: Option<String>,
     pub audit_log_request: Option<bool>,
     pub audit_log_response: Option<bool>,
+    pub currency: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -22,6 +23,7 @@ pub struct SettingsResponse {
     pub server_host: String,
     pub audit_log_request: bool,
     pub audit_log_response: bool,
+    pub currency: String,
 }
 
 pub async fn get_settings(
@@ -34,12 +36,14 @@ pub async fn get_settings(
     let server_host = state.storage.get_setting("server_host").await.map_err(|e| ApiError::Internal(e.to_string()))?;
     let audit_req = state.storage.get_setting("audit_log_request").await.map_err(|e| ApiError::Internal(e.to_string()))?;
     let audit_res = state.storage.get_setting("audit_log_response").await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let currency = state.storage.get_setting("currency").await.map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(SettingsResponse {
         allow_registration: allow_reg.map(|v| v == "true").unwrap_or(true),
         server_host: server_host.unwrap_or_default(),
         audit_log_request: audit_req.map(|v| v == "true").unwrap_or(true),
         audit_log_response: audit_res.map(|v| v == "true").unwrap_or(true),
+        currency: currency.unwrap_or_else(|| "USD".to_string()),
     }))
 }
 
@@ -66,17 +70,27 @@ pub async fn update_settings(
         state.storage.set_setting("audit_log_response", if alp { "true" } else { "false" })
             .await.map_err(|e| ApiError::Internal(e.to_string()))?;
     }
+    if let Some(c) = input.currency {
+        let c = c.to_uppercase();
+        if c != "USD" && c != "CNY" {
+            return Err(ApiError::BadRequest("Currency must be USD or CNY".to_string()));
+        }
+        state.storage.set_setting("currency", &c)
+            .await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    }
 
     // Return updated settings
     let allow_reg = state.storage.get_setting("allow_registration").await.map_err(|e| ApiError::Internal(e.to_string()))?;
     let server_host = state.storage.get_setting("server_host").await.map_err(|e| ApiError::Internal(e.to_string()))?;
     let audit_req = state.storage.get_setting("audit_log_request").await.map_err(|e| ApiError::Internal(e.to_string()))?;
     let audit_res = state.storage.get_setting("audit_log_response").await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let currency = state.storage.get_setting("currency").await.map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(SettingsResponse {
         allow_registration: allow_reg.map(|v| v == "true").unwrap_or(true),
         server_host: server_host.unwrap_or_default(),
         audit_log_request: audit_req.map(|v| v == "true").unwrap_or(true),
         audit_log_response: audit_res.map(|v| v == "true").unwrap_or(true),
+        currency: currency.unwrap_or_else(|| "USD".to_string()),
     }))
 }

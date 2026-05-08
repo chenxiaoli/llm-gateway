@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMe, login as apiLogin, register as apiRegister } from '../api/auth';
 import { getToken, setToken, clearToken, setRefreshToken, clearRefreshToken } from '../api/client';
+import { useCurrencyStore } from './currency';
 import type { User, LoginRequest, RegisterRequest, AuthResponse } from '../types';
 
 interface AuthState {
@@ -64,6 +65,7 @@ export const useAuthStore = create<AuthState>((set) => ({
  */
 export function useAuthBootstrap() {
   const setUser = useAuthStore((s) => s.setUser);
+  const initCurrency = useCurrencyStore((s) => s.init);
   const { data: me, isLoading } = useQuery({
     queryKey: ['me'],
     queryFn: getMe,
@@ -88,6 +90,11 @@ export function useAuthBootstrap() {
       setUser({ id: me.id, username: me.username, role: me.role });
     }
   }, [me, setUser]);
+
+  // Initialize currency from auth config
+  useEffect(() => {
+    initCurrency();
+  }, [initCurrency]);
 
   return { isLoading };
 }
