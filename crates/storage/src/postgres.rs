@@ -1231,6 +1231,7 @@ impl crate::Storage for PostgresStorage {
         let mut conditions = Vec::new();
         let mut param_idx = 1;
         let mut bind_user: Option<String> = None;
+        let mut bind_key: Option<String> = None;
         let mut bind_model: Option<String> = None;
         let mut bind_since: Option<chrono::DateTime<chrono::Utc>> = None;
         let mut bind_until: Option<chrono::DateTime<chrono::Utc>> = None;
@@ -1239,9 +1240,10 @@ impl crate::Storage for PostgresStorage {
             conditions.push(format!("user_id = ${}", param_idx));
             bind_user = Some(user_id.clone());
             param_idx += 1;
-        } else if let Some(ref key_id) = filter.key_id {
+        }
+        if let Some(ref key_id) = filter.key_id {
             conditions.push(format!("key_id = ${}", param_idx));
-            bind_user = Some(key_id.clone());
+            bind_key = Some(key_id.clone());
             param_idx += 1;
         }
         if let Some(ref model_name) = filter.model_name {
@@ -1269,6 +1271,7 @@ impl crate::Storage for PostgresStorage {
         let count_sql = format!("SELECT COUNT(*) FROM usage_records{}", where_clause);
         let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
         if let Some(ref v) = bind_user { count_query = count_query.bind(v); }
+        if let Some(ref v) = bind_key { count_query = count_query.bind(v); }
         if let Some(ref v) = bind_model { count_query = count_query.bind(v); }
         if let Some(ref v) = bind_since { count_query = count_query.bind(*v); }
         if let Some(ref v) = bind_until { count_query = count_query.bind(*v); }
@@ -1284,6 +1287,7 @@ impl crate::Storage for PostgresStorage {
         );
         let mut data_query = sqlx::query_as::<_, PgUsageRow>(&data_sql);
         if let Some(v) = bind_user { data_query = data_query.bind(v); }
+        if let Some(v) = bind_key { data_query = data_query.bind(v); }
         if let Some(v) = bind_model { data_query = data_query.bind(v); }
         if let Some(v) = bind_since { data_query = data_query.bind(v); }
         if let Some(v) = bind_until { data_query = data_query.bind(v); }
@@ -1302,6 +1306,7 @@ impl crate::Storage for PostgresStorage {
         let mut conditions = Vec::new();
         let mut param_idx = 1;
         let mut bind_user: Option<String> = None;
+        let mut bind_key: Option<String> = None;
         let mut bind_model: Option<String> = None;
         let mut bind_since: Option<chrono::DateTime<chrono::Utc>> = None;
         let mut bind_until: Option<chrono::DateTime<chrono::Utc>> = None;
@@ -1310,9 +1315,10 @@ impl crate::Storage for PostgresStorage {
             conditions.push(format!("user_id = ${}", param_idx));
             bind_user = Some(user_id.clone());
             param_idx += 1;
-        } else if let Some(ref key_id) = filter.key_id {
+        }
+        if let Some(ref key_id) = filter.key_id {
             conditions.push(format!("key_id = ${}", param_idx));
-            bind_user = Some(key_id.clone());
+            bind_key = Some(key_id.clone());
             param_idx += 1;
         }
         if let Some(ref model_name) = filter.model_name {
@@ -1354,6 +1360,7 @@ impl crate::Storage for PostgresStorage {
 
         let mut query = sqlx::query_as::<_, PgUsageSummaryRow>(&sql);
         if let Some(v) = bind_user { query = query.bind(v); }
+        if let Some(v) = bind_key { query = query.bind(v); }
         if let Some(v) = bind_model { query = query.bind(v); }
         if let Some(v) = bind_since { query = query.bind(v); }
         if let Some(v) = bind_until { query = query.bind(v); }
@@ -1373,7 +1380,8 @@ impl crate::Storage for PostgresStorage {
             conditions.push(format!("u.user_id = ${}", param_idx));
             bind_vals.push(user_id.clone());
             param_idx += 1;
-        } else if let Some(ref key_id) = filter.key_id {
+        }
+        if let Some(ref key_id) = filter.key_id {
             conditions.push(format!("u.key_id = ${}", param_idx));
             bind_vals.push(key_id.clone());
             param_idx += 1;

@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { useUsage, useUsageSummary } from '../hooks/useUsage';
 import { useKeys } from '../hooks/useKeys';
 import { useCurrencyStore, formatCurrency } from '../stores/currency';
+import { useAuthStore } from '../stores/authStore';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -42,6 +43,7 @@ function MetricCard({ label, value, icon, index, reducedMotion }: MetricCardProp
 export default function Usage() {
   const { t } = useTranslation();
   const symbol = useCurrencyStore((s) => s.symbol);
+  const user = useAuthStore((s) => s.user);
   const [since, setSince] = useState('');
   const [until, setUntil] = useState('');
   const [keyFilter, setKeyFilter] = useState('');
@@ -49,7 +51,7 @@ export default function Usage() {
   const [pageSize] = useState(20);
   const reducedMotion = useReducedMotion();
 
-  const filter = { since: since || undefined, until: until || undefined, key_id: keyFilter || undefined };
+  const filter = { since: since || undefined, until: until || undefined, key_id: keyFilter || undefined, user_id: user?.id };
 
   const { data, isLoading } = useUsage(filter, page, pageSize);
   const { data: summaryData, isLoading: summaryLoading } = useUsageSummary(filter);
