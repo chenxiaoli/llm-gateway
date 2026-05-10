@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.14] - 2026-05-10
+
+### Fixed
+- Usage page (`/console/usage`) now always filters by current logged-in user (admins previously saw all users' data)
+- Key filter on usage page now works correctly alongside user filter (was ignored due to `else if` logic)
+- Added index on `usage_records(user_id, created_at)` for query performance
+
 ## [1.3.13] - 2026-05-08
 
 ### Added
