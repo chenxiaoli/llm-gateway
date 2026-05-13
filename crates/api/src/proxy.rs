@@ -585,11 +585,21 @@ fn try_model_fallback<'a>(
     Box::pin(async move {
         let fallback_id = match api_key.model_fallback_id.as_ref() {
             Some(id) => id,
-            None => return None,
+            None => {
+                tracing::debug!("[PROXY] No model_fallback_id on API key '{}' — fallback skipped", api_key.id);
+                return None;
+            }
         };
         let fallback_config = match state.storage.get_model_fallback(fallback_id).await {
             Ok(Some(c)) => c,
-            _ => return None,
+            Ok(None) => {
+                tracing::warn!("[PROXY] model_fallback_id '{}' not found in DB — fallback skipped", fallback_id);
+                return None;
+            }
+            Err(e) => {
+                tracing::warn!("[PROXY] Failed to load model_fallback_id '{}': {:?} — fallback skipped", fallback_id, e);
+                return None;
+            }
         };
         let model_lower = original_model.to_lowercase();
 
@@ -597,7 +607,13 @@ fn try_model_fallback<'a>(
             g.models.iter().any(|m| m.to_lowercase() == model_lower)
         }) {
             Some(g) => g,
-            None => return None,
+            None => {
+                tracing::debug!(
+                    "[PROXY] No fallback group contains model '{}' (config '{}' has {} groups) — fallback skipped",
+                    original_model, fallback_config.name, fallback_config.config.len()
+                );
+                return None;
+            }
         };
 
         let mut fallbacks: Vec<(&String, i32)> = group
@@ -615,9 +631,12 @@ fn try_model_fallback<'a>(
             let fallback_body = {
                 let req_json: serde_json::Value = match serde_json::from_str(body) {
                     Ok(v) => v,
-                    Err(_) => return None,
+                    Err(e) => {
+                        tracing::warn!("[PROXY] Failed to parse request body for fallback: {} — fallback skipped", e);
+                        return None;
+                    }
                 };
-                let mut modified = req_json.clone();
+                let mut modified = req_json;
                 if let Some(model_obj) = modified.get_mut("model") {
                     *model_obj = serde_json::Value::String(fallback_model.to_string());
                 }
