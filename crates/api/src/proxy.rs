@@ -625,12 +625,13 @@ fn try_model_fallback<'a>(
             };
 
             // Box the recursive proxy call to satisfy the compiler's sizing requirement
-            let result = Box::pin(proxy(
-                State(state.clone()),
+            let result = Box::pin(proxy_inner(
+                state.clone(),
                 headers.clone(),
                 fallback_body,
                 protocol,
                 request_path.to_string(),
+                1, // fallback depth — prevents re-triggering fallback in recursive call
             )).await;
 
             match result {
@@ -651,12 +652,13 @@ fn try_model_fallback<'a>(
 
 /// Unified proxy: receives request → forwards to upstream → returns response
 /// Usage/Cost/Audit are handled in spawned async tasks
-pub async fn proxy(
-    State(state): State<Arc<AppState>>,
+async fn proxy_inner(
+    state: Arc<AppState>,
     headers: HeaderMap,
     body: String,
     protocol: ProxyProtocol,
     request_path: String,
+    fallback_depth: u32,
 ) -> Result<axum::response::Response, ApiError> {
     let request_id = uuid::Uuid::new_v4().to_string();
 
@@ -728,10 +730,12 @@ pub async fn proxy(
     {
         Some(m) => m,
         None => {
-            if let Some(resp) = try_model_fallback(
-                &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
-            ).await {
-                return Ok(resp);
+            if fallback_depth == 0 {
+                if let Some(resp) = try_model_fallback(
+                    &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+                ).await {
+                    return Ok(resp);
+                }
             }
             return Err(ApiError::NotFound(format!("Model '{}' not found", model_name)));
         }
@@ -767,10 +771,12 @@ pub async fn proxy(
             }
         }
         if candidates.is_empty() {
-            if let Some(resp) = try_model_fallback(
-                &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
-            ).await {
-                return Ok(resp);
+            if fallback_depth == 0 {
+                if let Some(resp) = try_model_fallback(
+                    &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+                ).await {
+                    return Ok(resp);
+                }
             }
             return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
         }
@@ -862,10 +868,12 @@ pub async fn proxy(
         }
         candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
         if candidates.is_empty() {
-            if let Some(resp) = try_model_fallback(
-                &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
-            ).await {
-                return Ok(resp);
+            if fallback_depth == 0 {
+                if let Some(resp) = try_model_fallback(
+                    &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+                ).await {
+                    return Ok(resp);
+                }
             }
             return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
         }
@@ -1241,20 +1249,33 @@ if status != 200 && status < 500 {
     }
 
     // All channels failed — try model fallback
-    if let Some(resp) = try_model_fallback(
-        &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
-    ).await {
-        return Ok(resp);
+    if fallback_depth == 0 {
+        if let Some(resp) = try_model_fallback(
+            &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+        ).await {
+            return Ok(resp);
+        }
     }
     Err(ApiError::UpstreamError(502, format!("All channels failed. Last error: {}", last_error)))
 }
+/// Axum handler for proxy requests.
+pub async fn proxy(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: String,
+    protocol: ProxyProtocol,
+    request_path: String,
+) -> Result<axum::response::Response, ApiError> {
+    proxy_inner(state, headers, body, protocol, request_path, 0).await
+}
+
 /// Wrapper for /v1/chat/completions - uses OpenAI protocol
 pub async fn proxy_with_protocol(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
-    proxy(State(state), headers, body, ProxyProtocol::OpenAI, "/v1/chat/completions".to_string()).await
+    proxy_inner(state, headers, body, ProxyProtocol::OpenAI, "/v1/chat/completions".to_string(), 0).await
 }
 
 /// Wrapper for /v1/messages - uses Anthropic protocol
@@ -1263,7 +1284,7 @@ pub async fn messages(
     headers: HeaderMap,
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
-    proxy(State(state), headers, body, ProxyProtocol::Anthropic, "/v1/messages".to_string()).await
+    proxy_inner(state, headers, body, ProxyProtocol::Anthropic, "/v1/messages".to_string(), 0).await
 }
 
 #[cfg(test)]

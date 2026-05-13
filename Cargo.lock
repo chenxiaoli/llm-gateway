@@ -1286,7 +1286,7 @@ checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
 name = "llm-gateway"
-version = "1.3.13"
+version = "1.3.14"
 dependencies = [
  "axum",
  "llm-gateway-api",
@@ -1307,7 +1307,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-api"
-version = "1.3.13"
+version = "1.3.14"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -1338,7 +1338,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-audit"
-version = "1.3.13"
+version = "1.3.14"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1348,7 +1348,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-audit-worker"
-version = "1.3.13"
+version = "1.3.14"
 dependencies = [
  "futures",
  "llm-gateway-audit",
@@ -1365,7 +1365,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-auth"
-version = "1.3.13"
+version = "1.3.14"
 dependencies = [
  "bcrypt",
  "chrono",
@@ -1378,7 +1378,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-billing"
-version = "1.3.13"
+version = "1.3.14"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1397,7 +1397,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-nats-publisher"
-version = "1.3.13"
+version = "1.3.14"
 dependencies = [
  "async-nats",
  "chrono",
@@ -1411,7 +1411,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-provider"
-version = "1.3.13"
+version = "1.3.14"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -1423,14 +1423,14 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-ratelimit"
-version = "1.3.13"
+version = "1.3.14"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
 name = "llm-gateway-storage"
-version = "1.3.13"
+version = "1.3.14"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1444,7 +1444,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-usage-worker"
-version = "1.3.13"
+version = "1.3.14"
 dependencies = [
  "chrono",
  "futures",
