@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.17] - 2026-05-13
+
+### Fixed
+- Model fallback now logs the specific reason when skipped (missing config on key, config not found in DB, no matching group, body parse failure) instead of silently returning None
+
 ## [1.3.16] - 2026-05-13
 
 ### Fixed
