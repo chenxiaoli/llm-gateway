@@ -9,6 +9,17 @@ export function useAllChannels() {
   return useQuery({ queryKey: ['channels'], queryFn: listAllChannels });
 }
 
+export function useToggleChannel() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => updateChannelApi(id, { enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['channels'] });
+    },
+    onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.channelUpdateFailed'))); },
+  });
+}
+
 export function useProviderModels(providerId: string) {
   return useQuery({
     queryKey: ['provider-models', providerId],
