@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
-import { useAllChannels, useTestChannel } from '../hooks/useChannels';
+import { useAllChannels, useTestChannel, useToggleChannel } from '../hooks/useChannels';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
 import { createChannel } from '../api/providers';
@@ -369,6 +369,7 @@ interface ChannelRowProps {
 
 function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
   const testMutation = useTestChannel();
+  const toggleMutation = useToggleChannel();
   const { t } = useTranslation();
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
 
@@ -517,14 +518,11 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
           </div>
         )}
 
-        {/* Status badge */}
-        <div
-          className={`shrink-0 text-base font-semibold uppercase tracking-wider ${
-            channel.enabled ? 'text-success/80' : 'text-base-content/30'
-          }`}
-        >
-          {channel.enabled ? t('channels.row.active') : t('channels.row.off')}
-        </div>
+        {/* Enable toggle */}
+        <Toggle
+          checked={channel.enabled}
+          onChange={(enabled) => toggleMutation.mutate({ id: channel.id, enabled })}
+        />
 
         {/* Quick actions */}
         <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">

@@ -820,20 +820,33 @@ async fn proxy_inner(
             .map(|c| (c.id.as_str(), c))
             .collect();
 
-        // Find provider_id from first enabled channel_model + channel
-        let provider_id = {
-            let mut pid: Option<&str> = None;
-            for cm in channel_models.iter().filter(|cm| cm.enabled) {
-                if let Some(ch) = channel_map.get(cm.channel_id.as_str()) {
-                    if ch.enabled {
-                        pid = Some(ch.provider_id.as_str());
-                        break;
-                    }
+        // Collect enabled + available channels first
+        let available_channels: Vec<(&llm_gateway_storage::ChannelModel, &llm_gateway_storage::Channel)> =
+            channel_models.iter()
+                .filter(|cm| cm.enabled)
+                .filter_map(|cm| {
+                    channel_map.get(cm.channel_id.as_str()).and_then(|ch| {
+                        if ch.enabled && is_available_now(&ch.available_hours) {
+                            Some((cm, *ch))
+                        } else {
+                            None
+                        }
+                    })
+                })
+                .collect();
+
+        if available_channels.is_empty() {
+            if fallback_depth == 0 {
+                if let Some(resp) = try_model_fallback(
+                    &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+                ).await {
+                    return Ok(resp);
                 }
             }
-            pid.ok_or_else(|| ApiError::Internal("No provider ID available".to_string()))?
-        };
+            return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
+        }
 
+        let provider_id = available_channels[0].1.provider_id.as_str();
         let provider = state
             .storage
             .get_provider(provider_id)
@@ -842,48 +855,44 @@ async fn proxy_inner(
             .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
 
         let mut candidates: Vec<(ResolvedChannel, llm_gateway_storage::ChannelModel)> = Vec::new();
-        for cm in channel_models.iter().filter(|cm| cm.enabled) {
-            if let Some(channel) = channel_map.get(cm.channel_id.as_str()) {
-                if channel.enabled {
-                    let endpoints: serde_json::Value = provider
-                        .endpoints
-                        .as_ref()
-                        .and_then(|e| serde_json::from_str(e).ok())
-                        .unwrap_or(serde_json::Value::Null);
-                    let endpoint_openai = endpoints
-                        .get("openai")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
-                        .map(|s| s.to_string());
-                    let endpoint_anthropic = endpoints
-                        .get("anthropic")
-                        .and_then(|v| v.as_str())
-                        .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
-                        .map(|s| s.to_string());
+        for (cm, channel) in &available_channels {
+            let endpoints: serde_json::Value = provider
+                .endpoints
+                .as_ref()
+                .and_then(|e| serde_json::from_str(e).ok())
+                .unwrap_or(serde_json::Value::Null);
+            let endpoint_openai = endpoints
+                .get("openai")
+                .and_then(|v| v.as_str())
+                .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
+                .map(|s| s.to_string());
+            let endpoint_anthropic = endpoints
+                .get("anthropic")
+                .and_then(|v| v.as_str())
+                .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
+                .map(|s| s.to_string());
 
-                    let proxy_url = provider.proxy_url.clone();
+            let proxy_url = provider.proxy_url.clone();
 
-                    let api_key = llm_gateway_encryption::decrypt(&channel.api_key, &state.encryption_key)
-                        .unwrap_or_else(|_| channel.api_key.clone());
+            let api_key = llm_gateway_encryption::decrypt(&channel.api_key, &state.encryption_key)
+                .unwrap_or_else(|_| channel.api_key.clone());
 
-                    let resolved = ResolvedChannel {
-                        channel_id: Uuid::parse_str(&channel.id).unwrap_or_else(|_| Uuid::new_v4()),
-                        provider_id: channel.provider_id.clone(),
-                        name: channel.name.clone(),
-                        endpoint_openai,
-                        endpoint_anthropic,
-                        upstream_api_key: api_key,
-                        adapter: protocol,
-                        timeout_ms: 60_000,
-                        priority: channel.priority,
-                        weight: channel.weight,
-                        model_overrides: HashMap::new(), // not used in cache-miss path
-                        proxy_url,
-                        available_hours: channel.available_hours.clone(),
-                    };
-                    candidates.push((resolved, cm.clone()));
-                }
-            }
+            let resolved = ResolvedChannel {
+                channel_id: Uuid::parse_str(&channel.id).unwrap_or_else(|_| Uuid::new_v4()),
+                provider_id: channel.provider_id.clone(),
+                name: channel.name.clone(),
+                endpoint_openai,
+                endpoint_anthropic,
+                upstream_api_key: api_key,
+                adapter: protocol,
+                timeout_ms: 60_000,
+                priority: channel.priority,
+                weight: channel.weight,
+                model_overrides: HashMap::new(), // not used in cache-miss path
+                proxy_url,
+                available_hours: channel.available_hours.clone(),
+            };
+            candidates.push((resolved, (*cm).clone()));
         }
         candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
         if candidates.is_empty() {
