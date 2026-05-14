@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.18] - 2026-05-14
+
+### Fixed
+- Cache-miss routing path now checks channel available_hours — channels outside scheduled hours trigger model fallback instead of being selected as candidates
+- Model fallback triggers correctly when all channels for the primary model are outside their available hours
+
+### Added
+- Enable/disable toggle button on channel rows in admin Channels page (replaces static ACTIVE/OFF badge)
+
 ## [1.3.17] - 2026-05-13
 
 ### Fixed
