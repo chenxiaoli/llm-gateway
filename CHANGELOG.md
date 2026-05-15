@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.19] - 2026-05-15
+
+### Fixed
+- Channel test detects top-level `error` field in HTTP 200 JSON responses and marks as failed
+- Channel test detail shows in Modal instead of inline
+
+### Added
+- Channel filter on `/admin/logs` audit log page
+- `response_data` field in `ChannelTestResult` returned from backend
+- Test result detail in Modal with latency, model, error, and formatted JSON response body
+
 ## [1.3.18] - 2026-05-14
 
 ### Fixed
