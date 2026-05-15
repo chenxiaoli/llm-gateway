@@ -480,6 +480,7 @@ pub struct ChannelTestResult {
     pub success: bool,
     pub latency_ms: u64,
     pub model: String,
+    pub endpoint_key: String,
     pub error: Option<String>,
     pub response_data: Option<String>,
 }

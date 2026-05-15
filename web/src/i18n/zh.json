@@ -456,6 +456,7 @@
       "test": "测试",
       "testOk": "通道正常 — {{latency}}ms（模型：{{model}}）",
       "testFailed": "通道测试失败：{{error}}",
+      "testFailedMultiple": "部分端点失败",
       "unknownError": "未知错误",
       "testFailedShort": "通道测试失败",
       "configure": "配置",

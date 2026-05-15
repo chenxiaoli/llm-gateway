@@ -354,6 +354,7 @@ export interface ChannelTestResult {
   success: boolean;
   latency_ms: number;
   model: string;
+  endpoint_key: string;
   error: string | null;
   response_data: string | null;
 }
