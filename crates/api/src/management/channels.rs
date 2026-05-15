@@ -520,7 +520,7 @@ pub async fn test_channel(
         // Test all configured endpoints
         endpoints
             .as_object()
-            .map(|obj| obj.keys().filter_map(|k| k.as_str()).collect())
+            .map(|obj| obj.keys().map(|k| k.as_str()).collect())
             .unwrap_or_default()
     };
 
