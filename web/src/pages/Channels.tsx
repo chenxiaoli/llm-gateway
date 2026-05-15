@@ -9,6 +9,7 @@ import { createChannel } from '../api/providers';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
+import { Modal } from '../components/ui/Modal';
 import { Toggle } from '../components/ui/Toggle';
 import { Globe, Plus, Radio, Hash, ShieldCheck, Key, Wifi, Cpu, Search, X, Clock, Scale, Zap, Check, Loader2 } from 'lucide-react';
 import type { Channel, CreateChannelRequest, TimeSlot } from '../types';
@@ -372,13 +373,11 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
   const toggleMutation = useToggleChannel();
   const { t } = useTranslation();
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [testDetail, setTestDetail] = useState<{ latency_ms: number; model: string; error: string | null; response_data: string | null } | null>(null);
 
   useEffect(() => {
-    if (testStatus === 'success' || testStatus === 'error') {
-      const timer = setTimeout(() => setTestStatus('idle'), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [testStatus]);
+    // Keep detail visible until manually closed
+  }, []);
 
   const handleTest = () => {
     setTestStatus('loading');
@@ -391,6 +390,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
           setTestStatus('error');
           toast.error(i18n.t('channels.row.testFailed', { error: result.error ?? i18n.t('channels.row.unknownError') }));
         }
+        setTestDetail({ latency_ms: result.latency_ms, model: result.model, error: result.error, response_data: result.response_data });
       },
       onError: (err) => {
         setTestStatus('error');
@@ -402,6 +402,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
   const channelModels = channel.models ?? [];
 
   return (
+    <>
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -553,6 +554,54 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
         </div>
       </div>
     </motion.div>
+
+    {testDetail && (
+      <Modal
+        open={true}
+        onClose={() => setTestDetail(null)}
+        title={t('channels.row.testDetailTitle')}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-base-200/60 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testStatus')}</div>
+              <div className={`font-medium ${testStatus === 'success' ? 'text-success' : 'text-error'}`}>
+                {testStatus === 'success' ? t('channels.row.ok') : t('channels.row.fail')}
+              </div>
+            </div>
+            <div className="rounded-lg bg-base-200/60 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testLatency')}</div>
+              <div className="mono text-[13px]">{testDetail.latency_ms}ms</div>
+            </div>
+            <div className="rounded-lg bg-base-200/60 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testModel')}</div>
+              <div className="mono text-[13px]">{testDetail.model}</div>
+            </div>
+            {testDetail.error && (
+              <div className="rounded-lg bg-base-200/60 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testError')}</div>
+                <div className="mono text-[13px] text-error truncate">{testDetail.error}</div>
+              </div>
+            )}
+          </div>
+          {testDetail.response_data && (
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-2">{t('channels.row.testResponse')}</div>
+              <pre className="rounded-lg bg-base-200/60 p-4 text-xs mono overflow-auto max-h-64 whitespace-pre-wrap break-all">
+                {(() => {
+                  try {
+                    return JSON.stringify(JSON.parse(testDetail.response_data!), null, 2);
+                  } catch {
+                    return testDetail.response_data;
+                  }
+                })()}
+              </pre>
+            </div>
+          )}
+        </div>
+      </Modal>
+    )}
+    </>
   );
 }
 

@@ -574,21 +574,36 @@ pub async fn test_channel(
     match result {
         Ok(resp) => {
             let status = resp.status();
+            let status_code = status.as_u16();
+            let body_text = resp.text().await.unwrap_or_else(|_| String::new());
+
             if status.is_success() {
+                // Parse JSON and check for top-level error field
+                if let Ok(body_json) = serde_json::from_str::<serde_json::Value>(&body_text) {
+                    if body_json.get("error").is_some() {
+                        return Ok(Json(llm_gateway_storage::ChannelTestResult {
+                            success: false,
+                            latency_ms,
+                            model: model_name.clone(),
+                            error: Some(format!("{}: {}", status_code, body_text)),
+                            response_data: Some(body_text),
+                        }));
+                    }
+                }
                 Ok(Json(llm_gateway_storage::ChannelTestResult {
                     success: true,
                     latency_ms,
                     model: model_name,
                     error: None,
+                    response_data: Some(body_text),
                 }))
             } else {
-                let status_code = status.as_u16();
-                let error_body = resp.text().await.unwrap_or_else(|_| "Unknown error".to_string());
                 Ok(Json(llm_gateway_storage::ChannelTestResult {
                     success: false,
                     latency_ms,
                     model: model_name,
-                    error: Some(format!("{} {}", status_code, error_body)),
+                    error: Some(format!("{} {}", status_code, body_text)),
+                    response_data: Some(body_text),
                 }))
             }
         }
@@ -597,6 +612,7 @@ pub async fn test_channel(
             latency_ms,
             model: model_name,
             error: Some(e.to_string()),
+            response_data: None,
         })),
     }
 }

@@ -458,7 +458,14 @@
       "testFailed": "通道测试失败：{{error}}",
       "unknownError": "未知错误",
       "testFailedShort": "通道测试失败",
-      "configure": "配置"
+      "configure": "配置",
+      "viewDetail": "详情",
+      "testDetailTitle": "测试结果",
+      "testStatus": "状态",
+      "testLatency": "延迟",
+      "testModel": "模型",
+      "testError": "错误",
+      "testResponse": "响应"
     }
   },
   "channelDetail": {
@@ -607,6 +614,8 @@
     "to": "结束",
     "apiKey": "API 密钥",
     "allKeys": "所有密钥",
+    "channel": "通道",
+    "allChannels": "所有通道",
     "stream": "流式",
     "table": {
       "time": "时间",

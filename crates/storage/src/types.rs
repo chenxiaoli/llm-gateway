@@ -481,6 +481,7 @@ pub struct ChannelTestResult {
     pub latency_ms: u64,
     pub model: String,
     pub error: Option<String>,
+    pub response_data: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -641,6 +642,7 @@ pub struct AuditLogSummary {
 #[derive(Debug, Deserialize)]
 pub struct LogFilter {
     pub key_id: Option<String>,
+    pub channel_id: Option<String>,
     #[serde(skip)]
     pub user_id: Option<String>,
     pub model_name: Option<String>,

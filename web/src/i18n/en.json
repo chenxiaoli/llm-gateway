@@ -458,7 +458,14 @@
       "testFailed": "Channel test failed: {{error}}",
       "unknownError": "Unknown error",
       "testFailedShort": "Channel test failed",
-      "configure": "Configure"
+      "configure": "Configure",
+      "viewDetail": "Detail",
+      "testDetailTitle": "Test Result",
+      "testStatus": "Status",
+      "testLatency": "Latency",
+      "testModel": "Model",
+      "testError": "Error",
+      "testResponse": "Response"
     }
   },
   "channelDetail": {
@@ -607,6 +614,8 @@
     "to": "To",
     "apiKey": "API Key",
     "allKeys": "All Keys",
+    "channel": "Channel",
+    "allChannels": "All Channels",
     "stream": "stream",
     "table": {
       "time": "Time",

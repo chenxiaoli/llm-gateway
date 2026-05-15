@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useLogs, useLog } from '../hooks/useLogs';
 import { useKeys } from '../hooks/useKeys';
+import { useAllChannels } from '../hooks/useChannels';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -28,16 +29,18 @@ export default function Logs() {
   const [since, setSince] = useState('');
   const [until, setUntil] = useState('');
   const [keyFilter, setKeyFilter] = useState('');
+  const [channelFilter, setChannelFilter] = useState('');
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
 
   const { data, isLoading } = useLogs(
-    { since: since || undefined, until: until || undefined, key_id: keyFilter || undefined },
+    { since: since || undefined, until: until || undefined, key_id: keyFilter || undefined, channel_id: channelFilter || undefined },
     page,
     pageSize,
   );
   const { data: keys } = useKeys();
+  const { data: channels } = useAllChannels();
   const { data: selectedLog, isLoading: isLoadingDetail } = useLog(selectedLogId);
 
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
@@ -46,11 +49,12 @@ export default function Logs() {
     setSince('');
     setUntil('');
     setKeyFilter('');
+    setChannelFilter('');
     setPage(1);
   };
 
-  const hasFilters = since || until || keyFilter;
-  const filterCount = [since, until, keyFilter].filter(Boolean).length;
+  const hasFilters = since || until || keyFilter || channelFilter;
+  const filterCount = [since, until, keyFilter, channelFilter].filter(Boolean).length;
 
   const handleView = (log: AuditLogSummary) => {
     setSelectedLogId(log.id);
@@ -150,6 +154,21 @@ export default function Logs() {
                 <option value="">{t('logs.allKeys')}</option>
                 {keys?.items?.map((k) => (
                   <option key={k.id} value={k.id}>{k.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5">
+                {t('logs.channel')}
+              </label>
+              <select
+                value={channelFilter}
+                onChange={(e) => { setChannelFilter(e.target.value); setPage(1); }}
+                className="h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+              >
+                <option value="">{t('logs.allChannels')}</option>
+                {channels?.map((ch) => (
+                  <option key={ch.id} value={ch.id}>{ch.name}</option>
                 ))}
               </select>
             </div>

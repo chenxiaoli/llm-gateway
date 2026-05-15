@@ -174,6 +174,7 @@ export interface AuditLog extends AuditLogSummary {
 
 export interface LogFilter {
   key_id?: string;
+  channel_id?: string;
   model_name?: string;
   since?: string;
   until?: string;
@@ -354,6 +355,7 @@ export interface ChannelTestResult {
   latency_ms: number;
   model: string;
   error: string | null;
+  response_data: string | null;
 }
 
 // ── Model Fallback Types ──────────────────────────────────────────────────
