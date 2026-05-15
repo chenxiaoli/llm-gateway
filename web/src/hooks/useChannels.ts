@@ -137,6 +137,6 @@ export function useUpdateChannelApiKey(channelId: string) {
 
 export function useTestChannel() {
   return useMutation({
-    mutationFn: ({ id, endpointKey }: { id: string; endpointKey?: string }) => testChannel(id, endpointKey),
+    mutationFn: ({ id, endpointKey, stream }: { id: string; endpointKey?: string; stream?: boolean }) => testChannel(id, endpointKey, stream),
   });
 }
