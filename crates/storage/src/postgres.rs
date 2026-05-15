@@ -1529,6 +1529,10 @@ impl crate::Storage for PostgresStorage {
             conditions.push(format!("a.key_id = ${}", bind_vals.len() + 1));
             bind_vals.push(key_id.clone());
         }
+        if let Some(ref channel_id) = filter.channel_id {
+            conditions.push(format!("a.channel_id = ${}", bind_vals.len() + 1));
+            bind_vals.push(channel_id.clone());
+        }
         if let Some(ref model_name) = filter.model_name {
             conditions.push(format!("a.model_name = ${}", bind_vals.len() + 1));
             bind_vals.push(model_name.clone());

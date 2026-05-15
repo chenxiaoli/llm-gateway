@@ -174,6 +174,7 @@ export interface AuditLog extends AuditLogSummary {
 
 export interface LogFilter {
   key_id?: string;
+  channel_id?: string;
   model_name?: string;
   since?: string;
   until?: string;

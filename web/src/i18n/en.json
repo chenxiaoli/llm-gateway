@@ -607,6 +607,8 @@
     "to": "To",
     "apiKey": "API Key",
     "allKeys": "All Keys",
+    "channel": "Channel",
+    "allChannels": "All Channels",
     "stream": "stream",
     "table": {
       "time": "Time",

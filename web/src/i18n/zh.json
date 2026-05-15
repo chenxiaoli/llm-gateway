@@ -607,6 +607,8 @@
     "to": "结束",
     "apiKey": "API 密钥",
     "allKeys": "所有密钥",
+    "channel": "通道",
+    "allChannels": "所有通道",
     "stream": "流式",
     "table": {
       "time": "时间",
