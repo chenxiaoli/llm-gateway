@@ -9,6 +9,7 @@ import { createChannel } from '../api/providers';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
+import { Modal } from '../components/ui/Modal';
 import { Toggle } from '../components/ui/Toggle';
 import { Globe, Plus, Radio, Hash, ShieldCheck, Key, Wifi, Cpu, Search, X, Clock, Scale, Zap, Check, Loader2 } from 'lucide-react';
 import type { Channel, CreateChannelRequest, TimeSlot } from '../types';
@@ -375,17 +376,13 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
   const [testDetail, setTestDetail] = useState<{ latency_ms: number; model: string; error: string | null; response_data: string | null } | null>(null);
 
   useEffect(() => {
-    if (testStatus === 'success' || testStatus === 'error') {
-      const timer = setTimeout(() => setTestStatus('idle'), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [testStatus]);
+    // Keep detail visible until manually closed
+  }, []);
 
   const handleTest = () => {
     setTestStatus('loading');
     testMutation.mutate({ id: channel.id }, {
       onSuccess: (result) => {
-        setTestDetail({ latency_ms: result.latency_ms, model: result.model, error: result.error, response_data: result.response_data });
         if (result.success) {
           setTestStatus('success');
           toast.success(i18n.t('channels.row.testOk', { latency: result.latency_ms, model: result.model }));
@@ -393,6 +390,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
           setTestStatus('error');
           toast.error(i18n.t('channels.row.testFailed', { error: result.error ?? i18n.t('channels.row.unknownError') }));
         }
+        setTestDetail({ latency_ms: result.latency_ms, model: result.model, error: result.error, response_data: result.response_data });
       },
       onError: (err) => {
         setTestStatus('error');
@@ -404,6 +402,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
   const channelModels = channel.models ?? [];
 
   return (
+    <>
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -545,14 +544,6 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
             {testStatus === 'idle' && <Zap className="h-3 w-3" />}
             {testStatus === 'loading' ? t('channels.row.testing') : testStatus === 'success' ? t('channels.row.ok') : testStatus === 'error' ? t('channels.row.fail') : t('channels.row.test')}
           </button>
-          {testDetail && (testStatus === 'success' || testStatus === 'error') && (
-            <button
-              onClick={() => setTestDetail(null)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-md font-medium text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 hover:border-base-300/40 transition-all duration-100 border border-transparent"
-            >
-              {t('channels.row.viewDetail')}
-            </button>
-          )}
           <Link
             to={`/admin/channels/${channel.id}`}
             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-md font-medium text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 transition-all duration-100 border border-transparent hover:border-base-300/40"
@@ -561,55 +552,56 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
             {t('channels.row.configure')}
           </Link>
         </div>
-
-        {/* Test Result Detail Modal */}
-        {testDetail && (testStatus === 'success' || testStatus === 'error') && (
-          <div className="mt-3 p-3 rounded-xl border border-base-300/40 bg-base-100">
-            <div className="text-[10px] font-mono font-semibold uppercase tracking-[0.18em] text-base-content/25 mb-3">
-              {t('channels.row.testDetailTitle').toUpperCase()}
-            </div>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-base-200/60 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testStatus')}</div>
-                  <div className={`font-medium ${testStatus === 'success' ? 'text-success' : 'text-error'}`}>
-                    {testStatus === 'success' ? t('channels.row.ok') : t('channels.row.fail')}
-                  </div>
-                </div>
-                <div className="rounded-lg bg-base-200/60 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testLatency')}</div>
-                  <div className="mono text-[13px]">{testDetail.latency_ms}ms</div>
-                </div>
-                <div className="rounded-lg bg-base-200/60 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testModel')}</div>
-                  <div className="mono text-[13px]">{testDetail.model}</div>
-                </div>
-                {testDetail.error && (
-                  <div className="rounded-lg bg-base-200/60 p-3">
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testError')}</div>
-                    <div className="mono text-[13px] text-error truncate">{testDetail.error}</div>
-                  </div>
-                )}
-              </div>
-              {testDetail.response_data && (
-                <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-2">{t('channels.row.testResponse')}</div>
-                  <pre className="rounded-lg bg-base-200/60 p-4 text-xs mono overflow-auto max-h-48 whitespace-pre-wrap break-all">
-                    {(() => {
-                      try {
-                        return JSON.stringify(JSON.parse(testDetail.response_data!), null, 2);
-                      } catch {
-                        return testDetail.response_data;
-                      }
-                    })()}
-                  </pre>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </motion.div>
+
+    {testDetail && (
+      <Modal
+        open={true}
+        onClose={() => setTestDetail(null)}
+        title={t('channels.row.testDetailTitle')}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-base-200/60 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testStatus')}</div>
+              <div className={`font-medium ${testStatus === 'success' ? 'text-success' : 'text-error'}`}>
+                {testStatus === 'success' ? t('channels.row.ok') : t('channels.row.fail')}
+              </div>
+            </div>
+            <div className="rounded-lg bg-base-200/60 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testLatency')}</div>
+              <div className="mono text-[13px]">{testDetail.latency_ms}ms</div>
+            </div>
+            <div className="rounded-lg bg-base-200/60 p-3">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testModel')}</div>
+              <div className="mono text-[13px]">{testDetail.model}</div>
+            </div>
+            {testDetail.error && (
+              <div className="rounded-lg bg-base-200/60 p-3">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testError')}</div>
+                <div className="mono text-[13px] text-error truncate">{testDetail.error}</div>
+              </div>
+            )}
+          </div>
+          {testDetail.response_data && (
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-2">{t('channels.row.testResponse')}</div>
+              <pre className="rounded-lg bg-base-200/60 p-4 text-xs mono overflow-auto max-h-64 whitespace-pre-wrap break-all">
+                {(() => {
+                  try {
+                    return JSON.stringify(JSON.parse(testDetail.response_data!), null, 2);
+                  } catch {
+                    return testDetail.response_data;
+                  }
+                })()}
+              </pre>
+            </div>
+          )}
+        </div>
+      </Modal>
+    )}
+    </>
   );
 }
 
