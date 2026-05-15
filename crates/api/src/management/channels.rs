@@ -590,12 +590,27 @@ pub async fn test_channel(
 
             if status.is_success() {
                 if is_stream {
-                    // Parse SSE lines for error in data field
+                    // Parse SSE lines for error
                     let mut error_found: Option<String> = None;
                     let mut preview_lines = Vec::new();
+                    let mut next_is_error = false;
 
                     for line in body_text.lines() {
-                        if let Some(data) = line.strip_prefix("data:") {
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() {
+                            continue;
+                        }
+
+                        // Track event: error
+                        if let Some(event_name) = trimmed.strip_prefix("event:") {
+                            let event_name = event_name.trim();
+                            if event_name == "error" || event_name.ends_with("error") {
+                                next_is_error = true;
+                            }
+                            continue;
+                        }
+
+                        if let Some(data) = trimmed.strip_prefix("data:") {
                             let data = data.trim();
                             if data.is_empty() || data == "[DONE]" {
                                 continue;
@@ -603,6 +618,15 @@ pub async fn test_channel(
                             if preview_lines.len() < 5 {
                                 preview_lines.push(line.to_string());
                             }
+
+                            // If we just saw event: error, this is the error data
+                            if next_is_error {
+                                error_found = Some(data.to_string());
+                                next_is_error = false;
+                                break;
+                            }
+
+                            // Also check direct data: {"error":...}
                             if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
                                 if json.get("error").is_some() {
                                     error_found = Some(data.to_string());
