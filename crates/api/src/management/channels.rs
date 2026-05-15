@@ -590,17 +590,47 @@ pub async fn test_channel(
 
             if status.is_success() {
                 if is_stream {
-                    // SSE responses are not JSON, just check first few lines
-                    let preview = body_text.lines().take(5).collect::<Vec<_>>().join("\n");
+                    // Parse SSE lines for error in data field
+                    let mut error_found: Option<String> = None;
+                    let mut preview_lines = Vec::new();
+
+                    for line in body_text.lines() {
+                        if let Some(data) = line.strip_prefix("data:") {
+                            let data = data.trim();
+                            if data.is_empty() || data == "[DONE]" {
+                                continue;
+                            }
+                            if preview_lines.len() < 5 {
+                                preview_lines.push(line.to_string());
+                            }
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                                if json.get("error").is_some() {
+                                    error_found = Some(data.to_string());
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(error_data) = error_found {
+                        return Ok(Json(llm_gateway_storage::ChannelTestResult {
+                            success: false,
+                            latency_ms,
+                            model: model_name.clone(),
+                            error: Some(format!("SSE error: {}", error_data)),
+                            response_data: Some(body_text),
+                        }));
+                    }
+
                     Ok(Json(llm_gateway_storage::ChannelTestResult {
                         success: true,
                         latency_ms,
                         model: model_name.clone(),
                         error: None,
-                        response_data: Some(if preview.len() < body_text.len() {
-                            format!("{}...\n\n[{} total bytes]", preview, body_text.len())
+                        response_data: Some(if preview_lines.len() < body_text.lines().count() {
+                            format!("{}\n...\n\n[{} total bytes]", preview_lines.join("\n"), body_text.len())
                         } else {
-                            preview
+                            preview_lines.join("\n")
                         }),
                     }))
                 } else {
