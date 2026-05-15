@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.3.20] - 2026-05-15
+
+### Added
+- Channel test supports SSE mode (`stream` query parameter) with streaming request and SSE preview
+
 ## [1.3.19] - 2026-05-15
 
 ### Fixed
