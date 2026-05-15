@@ -59,9 +59,8 @@ pub struct ResolvedChannel {
 pub fn build_upstream_url(base_url: &str, request_path: &str, protocol: ProxyProtocol) -> String {
     let base = base_url.trim_end_matches('/');
     let suffix = match protocol {
-        // Only strip /v1 for /v1/chat/completions (backwards compat)
-        ProxyProtocol::OpenAI if request_path == "/v1/chat/completions" => "/chat/completions",
-        ProxyProtocol::OpenAI => request_path, // keep full path for other endpoints like /v1/responses
+        // Strip /v1 prefix for OpenAI protocol - endpoints already include /v1
+        ProxyProtocol::OpenAI => request_path.strip_prefix("/v1").unwrap_or(request_path),
         ProxyProtocol::Anthropic => request_path,
     };
     format!("{}{}", base, suffix)
