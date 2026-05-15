@@ -374,6 +374,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
   const { t } = useTranslation();
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [testDetail, setTestDetail] = useState<{ latency_ms: number; model: string; error: string | null; response_data: string | null } | null>(null);
+  const [testStream, setTestStream] = useState(false);
 
   useEffect(() => {
     // Keep detail visible until manually closed
@@ -381,7 +382,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
 
   const handleTest = () => {
     setTestStatus('loading');
-    testMutation.mutate({ id: channel.id }, {
+    testMutation.mutate({ id: channel.id, stream: testStream }, {
       onSuccess: (result) => {
         if (result.success) {
           setTestStatus('success');
@@ -527,6 +528,15 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
 
         {/* Quick actions */}
         <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          <label className="flex items-center gap-1 px-2 py-1 rounded text-xs text-base-content/40 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={testStream}
+              onChange={(e) => setTestStream(e.target.checked)}
+              className="checkbox checkbox-xs checkbox-primary"
+            />
+            SSE
+          </label>
           <button
             onClick={handleTest}
             disabled={testStatus === 'loading'}

@@ -461,6 +461,7 @@ pub async fn delete_channel(
 #[derive(serde::Deserialize)]
 pub struct TestChannelQuery {
     pub endpoint_key: Option<String>,
+    pub stream: Option<bool>,
 }
 
 pub async fn test_channel(
@@ -538,35 +539,45 @@ pub async fn test_channel(
     let start = std::time::Instant::now();
     let client = reqwest::Client::new();
 
+    let is_stream = query.stream.unwrap_or(false);
+
     let result = if is_anthropic {
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": model_name,
             "messages": [{"role": "user", "content": "Hi"}],
             "max_tokens": 5
         });
-        client
+        if is_stream {
+            body["stream"] = serde_json::json!(true);
+        }
+        let mut req = client
             .post(&upstream_url)
             .header("x-api-key", &api_key)
             .header("anthropic-version", "2023-06-01")
             .header("Content-Type", "application/json")
-            .timeout(std::time::Duration::from_secs(30))
-            .json(&body)
-            .send()
-            .await
+            .timeout(std::time::Duration::from_secs(30));
+        if is_stream {
+            req = req.header("Accept", "text/event-stream");
+        }
+        req.json(&body).send().await
     } else {
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": model_name,
             "messages": [{"role": "user", "content": "Hi"}],
             "max_tokens": 5
         });
-        client
+        if is_stream {
+            body["stream"] = serde_json::json!(true);
+        }
+        let mut req = client
             .post(&upstream_url)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
-            .timeout(std::time::Duration::from_secs(30))
-            .json(&body)
-            .send()
-            .await
+            .timeout(std::time::Duration::from_secs(30));
+        if is_stream {
+            req = req.header("Accept", "text/event-stream");
+        }
+        req.json(&body).send().await
     };
 
     let latency_ms = start.elapsed().as_millis() as u64;
@@ -578,25 +589,41 @@ pub async fn test_channel(
             let body_text = resp.text().await.unwrap_or_else(|_| String::new());
 
             if status.is_success() {
-                // Parse JSON and check for top-level error field
-                if let Ok(body_json) = serde_json::from_str::<serde_json::Value>(&body_text) {
-                    if body_json.get("error").is_some() {
-                        return Ok(Json(llm_gateway_storage::ChannelTestResult {
-                            success: false,
-                            latency_ms,
-                            model: model_name.clone(),
-                            error: Some(format!("{}: {}", status_code, body_text)),
-                            response_data: Some(body_text),
-                        }));
+                if is_stream {
+                    // SSE responses are not JSON, just check first few lines
+                    let preview = body_text.lines().take(5).collect::<Vec<_>>().join("\n");
+                    Ok(Json(llm_gateway_storage::ChannelTestResult {
+                        success: true,
+                        latency_ms,
+                        model: model_name.clone(),
+                        error: None,
+                        response_data: Some(if preview.len() < body_text.len() {
+                            format!("{}...\n\n[{} total bytes]", preview, body_text.len())
+                        } else {
+                            preview
+                        }),
+                    }))
+                } else {
+                    // Parse JSON and check for top-level error field
+                    if let Ok(body_json) = serde_json::from_str::<serde_json::Value>(&body_text) {
+                        if body_json.get("error").is_some() {
+                            return Ok(Json(llm_gateway_storage::ChannelTestResult {
+                                success: false,
+                                latency_ms,
+                                model: model_name.clone(),
+                                error: Some(format!("{}: {}", status_code, body_text)),
+                                response_data: Some(body_text),
+                            }));
+                        }
                     }
+                    Ok(Json(llm_gateway_storage::ChannelTestResult {
+                        success: true,
+                        latency_ms,
+                        model: model_name,
+                        error: None,
+                        response_data: Some(body_text),
+                    }))
                 }
-                Ok(Json(llm_gateway_storage::ChannelTestResult {
-                    success: true,
-                    latency_ms,
-                    model: model_name,
-                    error: None,
-                    response_data: Some(body_text),
-                }))
             } else {
                 Ok(Json(llm_gateway_storage::ChannelTestResult {
                     success: false,
