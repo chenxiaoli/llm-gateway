@@ -584,8 +584,9 @@ pub async fn test_channel(
                         return Ok(Json(llm_gateway_storage::ChannelTestResult {
                             success: false,
                             latency_ms,
-                            model: model_name,
+                            model: model_name.clone(),
                             error: Some(format!("{}: {}", status_code, body_text)),
+                            response_data: Some(body_text),
                         }));
                     }
                 }
@@ -594,6 +595,7 @@ pub async fn test_channel(
                     latency_ms,
                     model: model_name,
                     error: None,
+                    response_data: Some(body_text),
                 }))
             } else {
                 Ok(Json(llm_gateway_storage::ChannelTestResult {
@@ -601,6 +603,7 @@ pub async fn test_channel(
                     latency_ms,
                     model: model_name,
                     error: Some(format!("{} {}", status_code, body_text)),
+                    response_data: Some(body_text),
                 }))
             }
         }
@@ -609,6 +612,7 @@ pub async fn test_channel(
             latency_ms,
             model: model_name,
             error: Some(e.to_string()),
+            response_data: None,
         })),
     }
 }

@@ -481,6 +481,7 @@ pub struct ChannelTestResult {
     pub latency_ms: u64,
     pub model: String,
     pub error: Option<String>,
+    pub response_data: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
