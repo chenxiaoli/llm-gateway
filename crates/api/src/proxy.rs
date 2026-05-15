@@ -1315,6 +1315,15 @@ pub async fn messages(
     proxy_inner(state, headers, body, ProxyProtocol::Anthropic, "/v1/messages".to_string(), 0).await
 }
 
+/// Wrapper for /v1/responses - uses OpenAI protocol, passthrough all fields
+pub async fn responses(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: String,
+) -> Result<axum::response::Response, ApiError> {
+    proxy_inner(state, headers, body, ProxyProtocol::OpenAI, "/v1/responses".to_string(), 0).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
