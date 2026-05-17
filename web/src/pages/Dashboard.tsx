@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { MessageSquare, DollarSign, Zap, TrendingUp, Activity, Clock, ArrowRight, Wallet, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { useDailyUsage } from '../hooks/useUsage';
 import { useLogs } from '../hooks/useLogs';
 import { useUsageSummary } from '../hooks/useUsage';
@@ -88,9 +88,10 @@ export default function Dashboard() {
   const sinceDate = new Date();
   sinceDate.setDate(sinceDate.getDate() - chartRange);
   sinceDate.setHours(0, 0, 0, 0);
-  const { data: dailyData } = useDailyUsage({
+  const dailyQuery = useDailyUsage({
     since: sinceDate.toISOString(),
   });
+  const dailyData = dailyQuery.data;
 
   const todayRequests = todaySummary?.reduce((sum, r) => sum + r.request_count, 0) ?? 0;
   const todayCost = todaySummary?.reduce((sum, r) => sum + r.total_cost, 0) ?? 0;
@@ -197,44 +198,50 @@ export default function Dashboard() {
       </div>
 
       {/* Daily Usage Chart */}
-      <div className="rounded-xl border border-base-300/40 bg-base-200/30 p-5 mb-6">
+      <div className="rounded-xl border border-base-300/40 bg-base-100 p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-base-content/70">{t('dashboard.chartTitle')}</h3>
-          <div className="flex gap-1">
+          <h3 className="text-sm font-semibold text-base-content/70">{t('dashboard.chartTitle')}</h3>
+          <div className="flex bg-base-200/60 rounded-lg p-0.5">
             <button
               onClick={() => setChartRange(7)}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                chartRange === 7 ? 'bg-base-300/60 text-base-content' : 'text-base-content/40 hover:text-base-content/60'
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-all duration-150 ${
+                chartRange === 7 ? 'bg-base-100 text-base-content shadow-sm' : 'text-base-content/40 hover:text-base-content/60'
               }`}
             >
               {t('dashboard.last7Days')}
             </button>
             <button
               onClick={() => setChartRange(30)}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                chartRange === 30 ? 'bg-base-300/60 text-base-content' : 'text-base-content/40 hover:text-base-content/60'
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-all duration-150 ${
+                chartRange === 30 ? 'bg-base-100 text-base-content shadow-sm' : 'text-base-content/40 hover:text-base-content/60'
               }`}
             >
               {t('dashboard.last30Days')}
             </button>
           </div>
         </div>
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={dailyData || []}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+        <div style={{ width: '100%', height: 280 }}>
+          <LineChart width={800} height={280} data={dailyData || []} margin={{ top: 5, right: 20, bottom: 30, left: 10 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(128,128,128,0.15)" />
             <XAxis
               dataKey="date"
-              stroke="rgba(255,255,255,0.3)"
-              tick={{ fontSize: 11 }}
+              stroke="rgba(128,128,128,0.4)"
+              tick={{ fontSize: 11, fill: 'rgba(128,128,128,0.8)' }}
               tickFormatter={(v: string) => v.slice(5)}
             />
             <YAxis
-              stroke="rgba(255,255,255,0.3)"
-              tick={{ fontSize: 11 }}
+              stroke="rgba(128,128,128,0.4)"
+              tick={{ fontSize: 11, fill: 'rgba(128,128,128,0.8)' }}
               tickFormatter={(v: number) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)}
             />
             <Tooltip
-              contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
+              contentStyle={{
+                backgroundColor: 'rgba(30,30,50,0.95)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 8,
+                fontSize: 12,
+                color: '#fff',
+              }}
               formatter={(value: number, name: string) => {
                 const labels: Record<string, string> = {
                   total_weighted_tokens: t('dashboard.weightedTokens'),
@@ -253,10 +260,10 @@ export default function Dashboard() {
               stroke="#6366f1"
               strokeWidth={2}
               dot={false}
-              activeDot={{ r: 4 }}
+              activeDot={{ r: 4, strokeWidth: 0, fill: '#6366f1' }}
             />
           </LineChart>
-        </ResponsiveContainer>
+        </div>
       </div>
 
       {/* Status Pills */}
