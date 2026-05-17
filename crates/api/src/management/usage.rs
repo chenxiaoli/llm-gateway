@@ -25,6 +25,8 @@ pub struct UsageRecordResponse {
     pub cache_read_tokens: Option<i64>,
     pub cache_creation_tokens: Option<i64>,
     pub cost: f64,
+    pub pricing_policy: Option<serde_json::Value>,
+    pub weighted_tokens: i64,
     pub user_id: Option<String>,
     pub created_at: String,
 }
@@ -43,6 +45,8 @@ impl From<UsageRecord> for UsageRecordResponse {
             cache_read_tokens: r.cache_read_tokens,
             cache_creation_tokens: r.cache_creation_tokens,
             cost: units_to_usd(r.cost),
+            pricing_policy: r.pricing_policy,
+            weighted_tokens: r.weighted_tokens,
             user_id: r.user_id,
             created_at: r.created_at.to_rfc3339(),
         }
@@ -183,4 +187,49 @@ pub async fn get_channel_usage_summary(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(records.into_iter().map(ChannelUsageSummaryResponse::from).collect()))
+}
+
+// --- Daily Usage ---
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DailyUsageResponse {
+    pub date: String,
+    pub total_input_tokens: i64,
+    pub total_output_tokens: i64,
+    pub total_cache_read_tokens: i64,
+    pub total_cache_creation_tokens: i64,
+    pub total_weighted_tokens: i64,
+    pub total_cost: f64,
+    pub request_count: i64,
+}
+
+pub async fn get_daily_usage(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(query): Query<UsageSummaryQuery>,
+) -> Result<Json<Vec<DailyUsageResponse>>, ApiError> {
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+
+    let mut filter = query.filter;
+
+    if claims.role != "admin" {
+        filter.user_id = Some(claims.sub);
+    }
+
+    let records = state
+        .storage
+        .query_daily_usage(&filter)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(records.into_iter().map(|r| DailyUsageResponse {
+        date: r.date,
+        total_input_tokens: r.total_input_tokens,
+        total_output_tokens: r.total_output_tokens,
+        total_cache_read_tokens: r.total_cache_read_tokens,
+        total_cache_creation_tokens: r.total_cache_creation_tokens,
+        total_weighted_tokens: r.total_weighted_tokens,
+        total_cost: units_to_usd(r.total_cost),
+        request_count: r.request_count,
+    }).collect()))
 }

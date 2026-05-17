@@ -108,6 +108,7 @@ pub fn management_router() -> Router<Arc<AppState>> {
         .route("/api/v1/usage", get(usage::get_usage))
         .route("/api/v1/usage/summary", get(usage::get_usage_summary))
         .route("/api/v1/usage/channel-summary", get(usage::get_channel_usage_summary))
+        .route("/api/v1/usage/daily", get(usage::get_daily_usage))
         // Logs (admin)
         .route("/api/v1/admin/logs", get(logs::get_logs))
         .route("/api/v1/admin/logs/{id}", get(logs::get_log))
