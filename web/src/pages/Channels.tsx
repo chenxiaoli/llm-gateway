@@ -6,6 +6,7 @@ import { useAllChannels, useTestChannel, useToggleChannel } from '../hooks/useCh
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
 import { createChannel } from '../api/providers';
+import type { ChannelTestResult } from '../types';
 import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
@@ -373,7 +374,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
   const toggleMutation = useToggleChannel();
   const { t } = useTranslation();
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [testDetail, setTestDetail] = useState<Array<{ latency_ms: number; model: string; endpoint_key: string; error: string | null; response_data: string | null }> | null>(null);
+  const [testDetail, setTestDetail] = useState<ChannelTestResult[] | null>(null);
   const [testStream, setTestStream] = useState(false);
 
   useEffect(() => {
@@ -577,8 +578,8 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
             <div key={i} className="rounded-lg border border-base-300/40 p-4">
               <div className="flex items-center justify-between mb-3">
                 <div className="font-semibold text-sm">{result.endpoint_key}</div>
-                <div className={`text-xs font-medium px-2 py-0.5 rounded ${result.success ? 'bg-success/20 text-success' : 'bg-error/20 text-error'}`}>
-                  {result.success ? t('channels.row.ok') : t('channels.row.fail')}
+                <div className={`text-xs font-medium px-2 py-0.5 rounded ${!result.error ? 'bg-success/20 text-success' : 'bg-error/20 text-error'}`}>
+                  {!result.error ? t('channels.row.ok') : t('channels.row.fail')}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs mb-3">
