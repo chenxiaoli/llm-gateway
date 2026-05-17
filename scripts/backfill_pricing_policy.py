@@ -119,7 +119,12 @@ def main():
 
     # Preload all pricing policies
     cur.execute("SELECT id, name, billing_type, config, created_at, updated_at FROM pricing_policies")
-    policies = {row["id"]: dict(row) for row in cur.fetchall()}
+    policies = {}
+    for row in cur.fetchall():
+        p = dict(row)
+        if isinstance(p.get("config"), str):
+            p["config"] = json.loads(p["config"])
+        policies[row["id"]] = p
 
     # Build model_name -> pricing_policy mapping
     cur.execute("""

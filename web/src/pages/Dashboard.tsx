@@ -88,8 +88,10 @@ export default function Dashboard() {
   const sinceDate = new Date();
   sinceDate.setDate(sinceDate.getDate() - chartRange);
   sinceDate.setHours(0, 0, 0, 0);
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const dailyQuery = useDailyUsage({
     since: sinceDate.toISOString(),
+    tz,
   });
   const dailyData = dailyQuery.data;
 

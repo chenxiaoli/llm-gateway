@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.3] - 2026-05-17
+
+### Added
+- Daily usage chart respects browser timezone — frontend sends IANA timezone (e.g. `Asia/Shanghai`), SQL groups by local date via `AT TIME ZONE`
+
+### Fixed
+- Daily usage chart date grouping uses explicit `AT TIME ZONE` instead of relying on PostgreSQL session timezone
+- Backfill script parses JSONB config field from string to dict (psycopg2 returns JSONB as str)
+
 ## [1.4.2] - 2026-05-17
 
 ### Changed

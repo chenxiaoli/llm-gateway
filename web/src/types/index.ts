@@ -155,6 +155,7 @@ export interface UsageFilter {
   model_name?: string;
   since?: string;
   until?: string;
+  tz?: string;
 }
 
 export interface AuditLogSummary {
