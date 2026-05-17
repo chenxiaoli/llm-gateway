@@ -531,6 +531,8 @@ pub struct UsageRecord {
     pub cache_read_tokens: Option<i64>,
     pub cache_creation_tokens: Option<i64>,
     pub cost: i64,
+    pub pricing_policy: Option<serde_json::Value>,
+    pub weighted_tokens: i64,
     pub user_id: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -561,6 +563,18 @@ pub struct ChannelUsageSummaryRecord {
     pub total_cost: i64,
     pub total_input_tokens: i64,
     pub total_output_tokens: i64,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct DailyUsageRecord {
+    pub date: String,
+    pub total_input_tokens: i64,
+    pub total_output_tokens: i64,
+    pub total_cache_read_tokens: i64,
+    pub total_cache_creation_tokens: i64,
+    pub total_weighted_tokens: i64,
+    pub total_cost: i64,
+    pub request_count: i64,
 }
 
 fn deserialize_datetime_opt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<DateTime<Utc>>, D::Error> {
