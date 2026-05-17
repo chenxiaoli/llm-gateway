@@ -26,16 +26,16 @@ weighted = input × 1
          + cache_creation × (cache_creation_price / input_price)
 ```
 
-只计算 pricing policy 中有定义价格的字段，未定义价格的不计入。
+每个 pricing policy 类型包含的价格字段不同，按实际定义的价���计算。
 
-| Pricing 类型 | 基准价格来源 | 参与计算的 token 类型 |
+| Pricing 类型 | 基准价格来源 | 包含的价格字段 |
 |---|---|---|
-| per_token | `input_price_1m` | input, output, cache_read, cache_creation |
-| hybrid | `input_price_1m` | input, output, cache_read, cache_creation |
-| tiered_token | `tiers[0].input_price_1m` | input, output |
-| context_tiered_token | `tiers[0].input_price_1m` | input, output, cache_read, cache_creation |
-| per_request | 无定价 | `weighted = input + output` |
-| per_character | `input_price_1m` | input, output |
+| per_token | `input_price_1m` | input_price_1m, output_price_1m, cache_read_price_1m, cache_creation_price_1m |
+| hybrid | `input_price_1m` | input_price_1m, output_price_1m, cache_read_price_1m, cache_creation_price_1m |
+| tiered_token | `tiers[0].input_price_1m` | input_price_1m, output_price_1m |
+| context_tiered_token | `tiers[0].input_price_1m` | input_price_1m, output_price_1m, cache_read_price_1m, cache_creation_price_1m |
+| per_request | 无 token 定价 | `weighted = input + output` |
+| per_character | `input_price_1m` | input_price_1m, output_price_1m |
 | 无 pricing policy | 无 | `weighted = input + output + cache_read + cache_creation` |
 
 ### 示例
