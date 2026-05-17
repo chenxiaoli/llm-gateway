@@ -1464,8 +1464,9 @@ impl crate::Storage for PostgresStorage {
 
         let where_sql = if where_clauses.is_empty() { String::new() } else { format!("WHERE {}", where_clauses.join(" AND ")) };
 
+        let tz = filter.tz.as_deref().unwrap_or("Etc/UTC");
         let sql = format!(
-            "SELECT TO_CHAR((created_at AT TIME ZONE 'Etc/UTC')::date, 'YYYY-MM-DD') as date, \
+            "SELECT TO_CHAR((created_at AT TIME ZONE '{}')::date, 'YYYY-MM-DD') as date, \
              COALESCE(SUM(input_tokens), 0)::bigint as total_input_tokens, \
              COALESCE(SUM(output_tokens), 0)::bigint as total_output_tokens, \
              COALESCE(SUM(cache_read_tokens), 0)::bigint as total_cache_read_tokens, \
@@ -1474,9 +1475,9 @@ impl crate::Storage for PostgresStorage {
              COALESCE(SUM(cost), 0)::bigint as total_cost, \
              COUNT(*)::bigint as request_count \
              FROM usage_records {} \
-             GROUP BY (created_at AT TIME ZONE 'Etc/UTC')::date \
+             GROUP BY (created_at AT TIME ZONE '{}')::date \
              ORDER BY date",
-            where_sql
+            tz, where_sql, tz
         );
 
         let mut query = sqlx::query_as::<_, (String, i64, i64, i64, i64, i64, i64, i64)>(&sql);

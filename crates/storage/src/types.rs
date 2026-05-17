@@ -596,6 +596,8 @@ pub struct UsageFilter {
     pub since: Option<DateTime<Utc>>,
     #[serde(default, deserialize_with = "deserialize_datetime_opt")]
     pub until: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub tz: Option<String>,
 }
 
 // --- Audit Logs ---

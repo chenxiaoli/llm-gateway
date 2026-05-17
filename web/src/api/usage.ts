@@ -41,6 +41,7 @@ export async function queryDailyUsage(filter: UsageFilter): Promise<DailyUsageRe
   if (filter.model_name) params.set('model_name', filter.model_name);
   if (filter.since) params.set('since', filter.since);
   if (filter.until) params.set('until', filter.until);
+  if (filter.tz) params.set('tz', filter.tz);
   const query = params.toString() ? `?${params.toString()}` : '';
   const { data } = await apiClient.get<DailyUsageRecord[]>(`/usage/daily${query}`);
   return data;
