@@ -86,8 +86,8 @@ export default function Dashboard() {
 
   const [chartRange, setChartRange] = useState<7 | 30>(7);
   const sinceDate = new Date();
-  sinceDate.setDate(sinceDate.getDate() - chartRange);
-  sinceDate.setHours(0, 0, 0, 0);
+  sinceDate.setUTCDate(sinceDate.getUTCDate() - chartRange);
+  sinceDate.setUTCHours(0, 0, 0, 0);
   const dailyQuery = useDailyUsage({
     since: sinceDate.toISOString(),
   });
