@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.2] - 2026-05-17
+
+### Changed
+- `usage_records.pricing_policy` now stores the complete PricingPolicy object (id, name, billing_type, config) instead of only the config JSON — historical usage data is self-contained for cost analysis
+
+### Fixed
+- Channel test handlers updated for `ChannelTestResult[]` API return type (was accessing `.success` on array)
+
+### Added
+- Python backfill script (`scripts/backfill_pricing_policy.py`) to populate pricing_policy and weighted_tokens for existing rows
+
 ## [1.4.0] - 2026-05-17
 
 ### Added
