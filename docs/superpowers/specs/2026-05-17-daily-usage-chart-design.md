@@ -17,26 +17,40 @@
 
 ### 加权计算规则
 
-基准：input token 权重 = 1。
+基准：input token 权重 = 1。计算公式：
 
-| Pricing 类型 | 计算方式 |
-|---|---|
-| per_token | `input + output × (output_price_1m / input_price_1m) + cache_read × (cache_read_price_1m / input_price_1m)` |
-| hybrid | 同 per_token |
-| tiered_token | 使用 `tiers[0].input_price_1m` 作为基准 |
-| context_tiered_token | 使用 `tiers[0].input_price_1m` 作为基准 |
-| per_request | `weighted = input + output` |
-| per_character | `weighted = input + output` |
-| 无 pricing policy | `weighted = input + output + cache_read` |
+```
+weighted = input × 1
+         + output × (output_price / input_price)
+         + cache_read × (cache_read_price / input_price)
+         + cache_creation × (cache_creation_price / input_price)
+```
+
+只计算 pricing policy 中有定义价格的字段，未定义价格的不计入。
+
+| Pricing 类型 | 基准价格来源 | 参与计算的 token 类型 |
+|---|---|---|
+| per_token | `input_price_1m` | input, output, cache_read, cache_creation |
+| hybrid | `input_price_1m` | input, output, cache_read, cache_creation |
+| tiered_token | `tiers[0].input_price_1m` | input, output |
+| context_tiered_token | `tiers[0].input_price_1m` | input, output, cache_read, cache_creation |
+| per_request | 无定价 | `weighted = input + output` |
+| per_character | `input_price_1m` | input, output |
+| 无 pricing policy | 无 | `weighted = input + output + cache_read + cache_creation` |
 
 ### 示例
 
-per_token pricing: `input_price_1m=5, output_price_1m=15, cache_read_price_1m=0.5`
+per_token pricing: `input_price_1m=5, output_price_1m=15, cache_read_price_1m=0.5, cache_creation_price_1m=2.5`
 
 ```
-weighted = 1000 + 500 × (15/5) + 200 × (0.5/5)
-         = 1000 + 1500 + 20
-         = 2520
+input=1000, output=500, cache_read=200, cache_creation=100
+
+weighted = 1000 × 1
+         + 500 × (15/5)
+         + 200 × (0.5/5)
+         + 100 × (2.5/5)
+         = 1000 + 1500 + 20 + 50
+         = 2570
 ```
 
 ## 数据流
@@ -63,7 +77,8 @@ weighted = 1000 + 500 × (15/5) + 200 × (0.5/5)
     "total_input_tokens": 100000,
     "total_output_tokens": 50000,
     "total_cache_read_tokens": 20000,
-    "total_weighted_tokens": 252000,
+    "total_cache_creation_tokens": 5000,
+    "total_weighted_tokens": 257000,
     "total_cost": 1.25,
     "request_count": 150
   }
@@ -90,7 +105,7 @@ weighted = 1000 + 500 × (15/5) + 200 × (0.5/5)
 悬浮显示：
 - 日期
 - Weighted Tokens
-- Input / Output / Cache Read Tokens
+- Input / Output / Cache Read / Cache Creation Tokens
 - Cost
 
 ## 文件变更
