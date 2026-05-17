@@ -105,6 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/models", get(api::models::list_models))
         .route("/api/v1/user/models", get(api::user_models::list_user_models))
         .route("/v1/messages", post(api::proxy::messages))
+        .route("/v1/responses", post(api::proxy::responses))
         // Management API
         .merge(api::management::management_router())
         // Frontend static files (fallback for SPA)

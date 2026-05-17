@@ -114,6 +114,8 @@ export interface UsageRecord {
   cache_read_tokens: number | null;
   cache_creation_tokens: number | null;
   cost: number;
+  pricing_policy: Record<string, unknown> | null;
+  weighted_tokens: number;
   created_at: string;
 }
 
@@ -123,6 +125,17 @@ export interface UsageSummaryRecord {
   total_cache_read_tokens: number;
   total_cache_creation_tokens: number;
   total_output_tokens: number;
+  total_cost: number;
+  request_count: number;
+}
+
+export interface DailyUsageRecord {
+  date: string;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cache_read_tokens: number;
+  total_cache_creation_tokens: number;
+  total_weighted_tokens: number;
   total_cost: number;
   request_count: number;
 }
@@ -354,6 +367,7 @@ export interface ChannelTestResult {
   success: boolean;
   latency_ms: number;
   model: string;
+  endpoint_key: string;
   error: string | null;
   response_data: string | null;
 }

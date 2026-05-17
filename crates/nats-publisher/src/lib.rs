@@ -23,6 +23,8 @@ pub struct UsageEvent {
     pub cache_read_tokens: Option<i64>,
     pub cache_creation_tokens: Option<i64>,
     pub cost: i64,
+    pub pricing_policy: Option<serde_json::Value>,
+    pub weighted_tokens: i64,
     pub latency_ms: i64,
     pub created_at: String,
 }

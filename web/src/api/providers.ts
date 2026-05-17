@@ -64,12 +64,12 @@ export async function deleteChannel(id: string): Promise<void> {
   await adminApiClient.delete(`/channels/${id}`);
 }
 
-export async function testChannel(id: string, endpointKey?: string, stream?: boolean): Promise<ChannelTestResult> {
+export async function testChannel(id: string, endpointKey?: string, stream?: boolean): Promise<ChannelTestResult[]> {
   const params = new URLSearchParams();
   if (endpointKey) params.set('endpoint_key', endpointKey);
   if (stream !== undefined) params.set('stream', String(stream));
   const query = params.toString() ? `?${params.toString()}` : '';
-  const { data } = await adminApiClient.post<ChannelTestResult>(`/channels/${id}/test${query}`);
+  const { data } = await adminApiClient.post<ChannelTestResult[]>(`/channels/${id}/test${query}`);
   return data;
 }
 

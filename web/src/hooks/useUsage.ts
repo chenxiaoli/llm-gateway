@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { queryUsage, queryUsageSummary, queryChannelUsageSummary } from '../api/usage';
+import { queryUsage, queryUsageSummary, queryChannelUsageSummary, queryDailyUsage } from '../api/usage';
 import type { UsageFilter } from '../types';
 
 export function useUsage(filter: UsageFilter, page = 1, pageSize = 20) {
@@ -12,4 +12,11 @@ export function useUsageSummary(filter: UsageFilter) {
 
 export function useChannelUsageSummary(filter: UsageFilter) {
   return useQuery({ queryKey: ['channel-usage-summary', filter], queryFn: () => queryChannelUsageSummary(filter) });
+}
+
+export function useDailyUsage(filter: UsageFilter) {
+  return useQuery({
+    queryKey: ['daily-usage', filter],
+    queryFn: () => queryDailyUsage(filter),
+  });
 }

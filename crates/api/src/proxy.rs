@@ -59,6 +59,7 @@ pub struct ResolvedChannel {
 pub fn build_upstream_url(base_url: &str, request_path: &str, protocol: ProxyProtocol) -> String {
     let base = base_url.trim_end_matches('/');
     let suffix = match protocol {
+        // Strip /v1 prefix for OpenAI protocol - endpoints already include /v1
         ProxyProtocol::OpenAI => request_path.strip_prefix("/v1").unwrap_or(request_path),
         ProxyProtocol::Anthropic => request_path,
     };
@@ -381,6 +382,15 @@ async fn publish_audit_events(
         cache_read_tokens,
         cache_creation_tokens,
         cost,
+        pricing_policy: task.pricing_policy_config.clone(),
+        weighted_tokens: crate::workers::calculate_weighted_tokens(
+            &task.pricing_policy_config,
+            &task.pricing_policy_billing_type,
+            input_tokens,
+            output_tokens,
+            cache_read_tokens,
+            cache_creation_tokens,
+        ),
         latency_ms: task.latency_ms,
         created_at: now.to_rfc3339(),
     };
@@ -1313,6 +1323,15 @@ pub async fn messages(
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
     proxy_inner(state, headers, body, ProxyProtocol::Anthropic, "/v1/messages".to_string(), 0).await
+}
+
+/// Wrapper for /v1/responses - uses OpenAI protocol, passthrough all fields
+pub async fn responses(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: String,
+) -> Result<axum::response::Response, ApiError> {
+    proxy_inner(state, headers, body, ProxyProtocol::OpenAI, "/v1/responses".to_string(), 0).await
 }
 
 #[cfg(test)]

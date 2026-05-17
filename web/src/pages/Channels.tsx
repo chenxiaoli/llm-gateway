@@ -373,7 +373,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
   const toggleMutation = useToggleChannel();
   const { t } = useTranslation();
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [testDetail, setTestDetail] = useState<{ latency_ms: number; model: string; error: string | null; response_data: string | null } | null>(null);
+  const [testDetail, setTestDetail] = useState<Array<{ latency_ms: number; model: string; endpoint_key: string; error: string | null; response_data: string | null }> | null>(null);
   const [testStream, setTestStream] = useState(false);
 
   useEffect(() => {
@@ -383,15 +383,16 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
   const handleTest = () => {
     setTestStatus('loading');
     testMutation.mutate({ id: channel.id, stream: testStream }, {
-      onSuccess: (result) => {
-        if (result.success) {
+      onSuccess: (results) => {
+        setTestDetail(results);
+        const allSuccess = results.every(r => r.success);
+        if (allSuccess) {
           setTestStatus('success');
-          toast.success(i18n.t('channels.row.testOk', { latency: result.latency_ms, model: result.model }));
+          toast.success(i18n.t('channels.row.testOk', { latency: results[0].latency_ms, model: results[0].model }));
         } else {
           setTestStatus('error');
-          toast.error(i18n.t('channels.row.testFailed', { error: result.error ?? i18n.t('channels.row.unknownError') }));
+          toast.error(i18n.t('channels.row.testFailed', { error: i18n.t('channels.row.testFailedMultiple') }));
         }
-        setTestDetail({ latency_ms: result.latency_ms, model: result.model, error: result.error, response_data: result.response_data });
       },
       onError: (err) => {
         setTestStatus('error');
@@ -572,42 +573,37 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
         title={t('channels.row.testDetailTitle')}
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg bg-base-200/60 p-3">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testStatus')}</div>
-              <div className={`font-medium ${testStatus === 'success' ? 'text-success' : 'text-error'}`}>
-                {testStatus === 'success' ? t('channels.row.ok') : t('channels.row.fail')}
+          {testDetail.map((result, i) => (
+            <div key={i} className="rounded-lg border border-base-300/40 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="font-semibold text-sm">{result.endpoint_key}</div>
+                <div className={`text-xs font-medium px-2 py-0.5 rounded ${result.success ? 'bg-success/20 text-success' : 'bg-error/20 text-error'}`}>
+                  {result.success ? t('channels.row.ok') : t('channels.row.fail')}
+                </div>
               </div>
-            </div>
-            <div className="rounded-lg bg-base-200/60 p-3">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testLatency')}</div>
-              <div className="mono text-[13px]">{testDetail.latency_ms}ms</div>
-            </div>
-            <div className="rounded-lg bg-base-200/60 p-3">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testModel')}</div>
-              <div className="mono text-[13px]">{testDetail.model}</div>
-            </div>
-            {testDetail.error && (
-              <div className="rounded-lg bg-base-200/60 p-3">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testError')}</div>
-                <div className="mono text-[13px] text-error truncate">{testDetail.error}</div>
+              <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                <div className="text-base-content/50">Latency: <span className="mono text-base-content">{result.latency_ms}ms</span></div>
+                <div className="text-base-content/50">Model: <span className="mono text-base-content">{result.model}</span></div>
               </div>
-            )}
-          </div>
-          {testDetail.response_data && (
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-2">{t('channels.row.testResponse')}</div>
-              <pre className="rounded-lg bg-base-200/60 p-4 text-xs mono overflow-auto max-h-64 whitespace-pre-wrap break-all">
-                {(() => {
-                  try {
-                    return JSON.stringify(JSON.parse(testDetail.response_data!), null, 2);
-                  } catch {
-                    return testDetail.response_data;
-                  }
-                })()}
-              </pre>
+              {result.error && (
+                <div className="mb-3 p-2 rounded bg-error/10 text-error text-xs">{result.error}</div>
+              )}
+              {result.response_data && (
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/40 mb-1">{t('channels.row.testResponse')}</div>
+                  <pre className="rounded bg-base-200/60 p-2 text-xs mono overflow-auto max-h-32 whitespace-pre-wrap break-all">
+                    {(() => {
+                      try {
+                        return JSON.stringify(JSON.parse(result.response_data!), null, 2);
+                      } catch {
+                        return result.response_data;
+                      }
+                    })()}
+                  </pre>
+                </div>
+              )}
             </div>
-          )}
+          ))}
         </div>
       </Modal>
     )}

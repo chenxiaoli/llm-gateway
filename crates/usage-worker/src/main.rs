@@ -79,6 +79,8 @@ async fn run_usage_worker(storage: Arc<dyn Storage>, nats: Arc<llm_gateway_nats_
             cache_read_tokens: event.cache_read_tokens,
             cache_creation_tokens: event.cache_creation_tokens,
             cost: event.cost,
+            pricing_policy: event.pricing_policy,
+            weighted_tokens: event.weighted_tokens,
             created_at: chrono::DateTime::parse_from_rfc3339(&event.created_at)
                 .map(|dt| dt.to_utc())
                 .unwrap_or_else(|_| chrono::Utc::now()),

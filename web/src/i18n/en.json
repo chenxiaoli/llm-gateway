@@ -231,7 +231,16 @@
       "tokens": "Tokens",
       "latency": "Latency"
     },
-    "noRequests": "No requests yet"
+    "noRequests": "No requests yet",
+    "chartTitle": "Daily Token Usage",
+    "last7Days": "7D",
+    "last30Days": "30D",
+    "weightedTokens": "Weighted Tokens",
+    "inputTokens": "Input",
+    "outputTokens": "Output",
+    "cacheReadTokens": "Cache Read",
+    "cacheCreationTokens": "Cache Write",
+    "cost": "Cost"
   },
   "adminDashboard": {
     "title": "Admin Dashboard",
@@ -456,11 +465,12 @@
       "test": "Test",
       "testOk": "Channel OK — {{latency}}ms (model: {{model}})",
       "testFailed": "Channel test failed: {{error}}",
+      "testFailedMultiple": "Some endpoints failed",
       "unknownError": "Unknown error",
       "testFailedShort": "Channel test failed",
       "configure": "Configure",
       "viewDetail": "Detail",
-      "testDetailTitle": "Test Result",
+      "testDetailTitle": "Test Results",
       "testStatus": "Status",
       "testLatency": "Latency",
       "testModel": "Model",

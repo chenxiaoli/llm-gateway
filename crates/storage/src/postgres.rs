@@ -165,6 +165,8 @@ struct PgUsageRow {
     cache_read_tokens: Option<i64>,
     cache_creation_tokens: Option<i64>,
     cost: i64,
+    pricing_policy: Option<serde_json::Value>,
+    weighted_tokens: i64,
     user_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
 }
@@ -184,6 +186,8 @@ impl From<PgUsageRow> for UsageRecord {
             cache_read_tokens: r.cache_read_tokens,
             cache_creation_tokens: r.cache_creation_tokens,
             cost: r.cost,
+            pricing_policy: r.pricing_policy,
+            weighted_tokens: r.weighted_tokens,
             user_id: r.user_id,
             created_at: r.created_at,
         }
@@ -1194,8 +1198,8 @@ impl crate::Storage for PostgresStorage {
 
     async fn record_usage(&self, usage: &UsageRecord) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO usage_records (id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+            "INSERT INTO usage_records (id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
         )
         .bind(&usage.id)
         .bind(&usage.request_id)
@@ -1209,6 +1213,8 @@ impl crate::Storage for PostgresStorage {
         .bind(usage.cache_read_tokens)
         .bind(usage.cache_creation_tokens)
         .bind(usage.cost)
+        .bind(&usage.pricing_policy)
+        .bind(usage.weighted_tokens)
         .bind(usage.user_id.clone())
         .bind(usage.created_at)
         .execute(&self.pool)
@@ -1219,7 +1225,7 @@ impl crate::Storage for PostgresStorage {
     async fn query_usage(&self, filter: &UsageFilter) -> Result<Vec<UsageRecord>, DbErr> {
         // Build query dynamically based on filter - for now, just fetch all
         let rows: Vec<PgUsageRow> = sqlx::query_as(
-            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at
+            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at
              FROM usage_records ORDER BY created_at DESC",
         )
         .fetch_all(&self.pool)
@@ -1279,7 +1285,7 @@ impl crate::Storage for PostgresStorage {
 
         let offset = (page - 1) * page_size;
         let data_sql = format!(
-            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at \
+            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at \
              FROM usage_records{} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
             where_clause,
             param_idx,
@@ -1437,13 +1443,58 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_usage_by_request_id(&self, request_id: &str) -> Result<Option<UsageRecord>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgUsageRow> = sqlx::query_as(
-            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, user_id, created_at
+            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at
              FROM usage_records WHERE request_id = $1",
         )
         .bind(request_id)
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.map(UsageRecord::from))
+    }
+
+    async fn query_daily_usage(&self, filter: &UsageFilter) -> Result<Vec<crate::types::DailyUsageRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut where_clauses = Vec::new();
+        let mut param_idx = 1u32;
+
+        if filter.user_id.is_some() { where_clauses.push(format!("user_id = ${}", param_idx)); param_idx += 1; }
+        if filter.key_id.is_some() { where_clauses.push(format!("key_id = ${}", param_idx)); param_idx += 1; }
+        if filter.model_name.is_some() { where_clauses.push(format!("model_name = ${}", param_idx)); param_idx += 1; }
+        if filter.since.is_some() { where_clauses.push(format!("created_at >= ${}", param_idx)); param_idx += 1; }
+        if filter.until.is_some() { where_clauses.push(format!("created_at < ${}", param_idx)); param_idx += 1; }
+
+        let where_sql = if where_clauses.is_empty() { String::new() } else { format!("WHERE {}", where_clauses.join(" AND ")) };
+
+        let sql = format!(
+            "SELECT TO_CHAR(DATE(created_at), 'YYYY-MM-DD') as date, \
+             COALESCE(SUM(input_tokens), 0)::bigint as total_input_tokens, \
+             COALESCE(SUM(output_tokens), 0)::bigint as total_output_tokens, \
+             COALESCE(SUM(cache_read_tokens), 0)::bigint as total_cache_read_tokens, \
+             COALESCE(SUM(cache_creation_tokens), 0)::bigint as total_cache_creation_tokens, \
+             COALESCE(SUM(weighted_tokens), 0)::bigint as total_weighted_tokens, \
+             COALESCE(SUM(cost), 0)::bigint as total_cost, \
+             COUNT(*)::bigint as request_count \
+             FROM usage_records {} \
+             GROUP BY DATE(created_at) \
+             ORDER BY date",
+            where_sql
+        );
+
+        let mut query = sqlx::query_as::<_, (String, i64, i64, i64, i64, i64, i64, i64)>(&sql);
+
+        if let Some(ref v) = filter.user_id { query = query.bind(v); }
+        if let Some(ref v) = filter.key_id { query = query.bind(v); }
+        if let Some(ref v) = filter.model_name { query = query.bind(v); }
+        if let Some(v) = filter.since { query = query.bind(v); }
+        if let Some(v) = filter.until { query = query.bind(v); }
+
+        let rows = query.fetch_all(&self.pool).await?;
+        Ok(rows.into_iter().map(|(date, inp, out, cr, cc, wt, cost, cnt)| {
+            crate::types::DailyUsageRecord {
+                date, total_input_tokens: inp, total_output_tokens: out,
+                total_cache_read_tokens: cr, total_cache_creation_tokens: cc,
+                total_weighted_tokens: wt, total_cost: cost, request_count: cnt,
+            }
+        }).collect())
     }
 
     // ---- Audit ----

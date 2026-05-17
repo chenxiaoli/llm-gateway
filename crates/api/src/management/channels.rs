@@ -469,7 +469,7 @@ pub async fn test_channel(
     headers: HeaderMap,
     Path(id): Path<String>,
     Query(query): Query<TestChannelQuery>,
-) -> Result<Json<llm_gateway_storage::ChannelTestResult>, ApiError> {
+) -> Result<Json<Vec<llm_gateway_storage::ChannelTestResult>>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
 
     let channel = state
@@ -513,133 +513,221 @@ pub async fn test_channel(
         .and_then(|e| serde_json::from_str(&e).ok())
         .unwrap_or(serde_json::Value::Null);
 
-    let endpoint_key = query.endpoint_key.as_deref().unwrap_or("openai");
-    let base_url = endpoints
-        .get(endpoint_key)
-        .and_then(|v| v.as_str())
-        .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
-        .unwrap_or("")
-        .trim_end_matches('/');
-
-    let protocol = if endpoint_key == "anthropic" {
-        crate::proxy::ProxyProtocol::Anthropic
+    // Determine which endpoints to test
+    let endpoint_keys: Vec<&str> = if let Some(ref key) = query.endpoint_key {
+        vec![key.as_str()]
     } else {
-        crate::proxy::ProxyProtocol::OpenAI
+        // Test all configured endpoints
+        endpoints
+            .as_object()
+            .map(|obj| obj.keys().map(|k| k.as_str()).collect())
+            .unwrap_or_default()
     };
-    let request_path = match protocol {
-        crate::proxy::ProxyProtocol::OpenAI => "/v1/chat/completions",
-        crate::proxy::ProxyProtocol::Anthropic => "/v1/messages",
-    };
-    let upstream_url = crate::proxy::build_upstream_url(base_url, request_path, protocol);
-    let is_anthropic = matches!(protocol, crate::proxy::ProxyProtocol::Anthropic);
 
     let api_key = decrypt(&channel.api_key, &state.encryption_key)
         .unwrap_or_else(|_| channel.api_key.clone());
 
-    let start = std::time::Instant::now();
-    let client = reqwest::Client::new();
-
     let is_stream = query.stream.unwrap_or(false);
+    let client = reqwest::Client::new();
+    let mut results = Vec::new();
 
-    let result = if is_anthropic {
-        let mut body = serde_json::json!({
-            "model": model_name,
-            "messages": [{"role": "user", "content": "Hi"}],
-            "max_tokens": 5
-        });
-        if is_stream {
-            body["stream"] = serde_json::json!(true);
-        }
-        let mut req = client
-            .post(&upstream_url)
-            .header("x-api-key", &api_key)
-            .header("anthropic-version", "2023-06-01")
-            .header("Content-Type", "application/json")
-            .timeout(std::time::Duration::from_secs(30));
-        if is_stream {
-            req = req.header("Accept", "text/event-stream");
-        }
-        req.json(&body).send().await
-    } else {
-        let mut body = serde_json::json!({
-            "model": model_name,
-            "messages": [{"role": "user", "content": "Hi"}],
-            "max_tokens": 5
-        });
-        if is_stream {
-            body["stream"] = serde_json::json!(true);
-        }
-        let mut req = client
-            .post(&upstream_url)
-            .header("Authorization", format!("Bearer {}", api_key))
-            .header("Content-Type", "application/json")
-            .timeout(std::time::Duration::from_secs(30));
-        if is_stream {
-            req = req.header("Accept", "text/event-stream");
-        }
-        req.json(&body).send().await
-    };
+    for endpoint_key in endpoint_keys {
+        let base_url = endpoints
+            .get(endpoint_key)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim_end_matches('/');
 
-    let latency_ms = start.elapsed().as_millis() as u64;
+        // Skip endpoints without URL
+        if base_url.is_empty() {
+            continue;
+        }
 
-    match result {
-        Ok(resp) => {
-            let status = resp.status();
-            let status_code = status.as_u16();
-            let body_text = resp.text().await.unwrap_or_else(|_| String::new());
+        let protocol = if endpoint_key == "anthropic" {
+            crate::proxy::ProxyProtocol::Anthropic
+        } else {
+            crate::proxy::ProxyProtocol::OpenAI
+        };
+        let request_path = match protocol {
+            crate::proxy::ProxyProtocol::OpenAI => "/v1/chat/completions",
+            crate::proxy::ProxyProtocol::Anthropic => "/v1/messages",
+        };
+        let upstream_url = crate::proxy::build_upstream_url(base_url, request_path, protocol);
+        let is_anthropic = matches!(protocol, crate::proxy::ProxyProtocol::Anthropic);
 
-            if status.is_success() {
-                if is_stream {
-                    // SSE responses are not JSON, just check first few lines
-                    let preview = body_text.lines().take(5).collect::<Vec<_>>().join("\n");
-                    Ok(Json(llm_gateway_storage::ChannelTestResult {
-                        success: true,
-                        latency_ms,
-                        model: model_name.clone(),
-                        error: None,
-                        response_data: Some(if preview.len() < body_text.len() {
-                            format!("{}...\n\n[{} total bytes]", preview, body_text.len())
-                        } else {
-                            preview
-                        }),
-                    }))
-                } else {
-                    // Parse JSON and check for top-level error field
-                    if let Ok(body_json) = serde_json::from_str::<serde_json::Value>(&body_text) {
-                        if body_json.get("error").is_some() {
-                            return Ok(Json(llm_gateway_storage::ChannelTestResult {
+        let start = std::time::Instant::now();
+
+        let result = if is_anthropic {
+            let mut body = serde_json::json!({
+                "model": model_name,
+                "messages": [{"role": "user", "content": "Hi"}],
+                "max_tokens": 5
+            });
+            if is_stream {
+                body["stream"] = serde_json::json!(true);
+            }
+            let mut req = client
+                .post(&upstream_url)
+                .header("x-api-key", &api_key)
+                .header("anthropic-version", "2023-06-01")
+                .header("Content-Type", "application/json")
+                .timeout(std::time::Duration::from_secs(30));
+            if is_stream {
+                req = req.header("Accept", "text/event-stream");
+            }
+            req.json(&body).send().await
+        } else {
+            let mut body = serde_json::json!({
+                "model": model_name,
+                "messages": [{"role": "user", "content": "Hi"}],
+                "max_tokens": 5
+            });
+            if is_stream {
+                body["stream"] = serde_json::json!(true);
+            }
+            let mut req = client
+                .post(&upstream_url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .timeout(std::time::Duration::from_secs(30));
+            if is_stream {
+                req = req.header("Accept", "text/event-stream");
+            }
+            req.json(&body).send().await
+        };
+
+        let latency_ms = start.elapsed().as_millis() as u64;
+
+        let test_result = match result {
+            Ok(resp) => {
+                let status = resp.status();
+                let status_code = status.as_u16();
+                let body_text = resp.text().await.unwrap_or_else(|_| String::new());
+
+                if status.is_success() {
+                    if is_stream {
+                        // Parse SSE lines for error
+                        let mut error_found: Option<String> = None;
+                        let mut preview_lines = Vec::new();
+                        let mut next_is_error = false;
+
+                        for line in body_text.lines() {
+                            let trimmed = line.trim();
+                            if trimmed.is_empty() {
+                                continue;
+                            }
+
+                            if let Some(event_name) = trimmed.strip_prefix("event:") {
+                                let event_name = event_name.trim();
+                                if event_name == "error" || event_name.ends_with("error") {
+                                    next_is_error = true;
+                                }
+                                continue;
+                            }
+
+                            if let Some(data) = trimmed.strip_prefix("data:") {
+                                let data = data.trim();
+                                if data.is_empty() || data == "[DONE]" {
+                                    continue;
+                                }
+                                if preview_lines.len() < 5 {
+                                    preview_lines.push(line.to_string());
+                                }
+
+                                if next_is_error {
+                                    error_found = Some(data.to_string());
+                                    next_is_error = false;
+                                    break;
+                                }
+
+                                if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
+                                    if json.get("error").is_some() {
+                                        error_found = Some(data.to_string());
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if let Some(error_data) = error_found {
+                            llm_gateway_storage::ChannelTestResult {
                                 success: false,
                                 latency_ms,
                                 model: model_name.clone(),
-                                error: Some(format!("{}: {}", status_code, body_text)),
+                                endpoint_key: endpoint_key.to_string(),
+                                error: Some(format!("SSE error: {}", error_data)),
                                 response_data: Some(body_text),
-                            }));
+                            }
+                        } else {
+                            llm_gateway_storage::ChannelTestResult {
+                                success: true,
+                                latency_ms,
+                                model: model_name.clone(),
+                                endpoint_key: endpoint_key.to_string(),
+                                error: None,
+                                response_data: Some(if preview_lines.len() < body_text.lines().count() {
+                                    format!("{}\n...\n\n[{} total bytes]", preview_lines.join("\n"), body_text.len())
+                                } else {
+                                    preview_lines.join("\n")
+                                }),
+                            }
+                        }
+                    } else {
+                        // Parse JSON and check for top-level error field
+                        if let Ok(body_json) = serde_json::from_str::<serde_json::Value>(&body_text) {
+                            if body_json.get("error").is_some() {
+                                llm_gateway_storage::ChannelTestResult {
+                                    success: false,
+                                    latency_ms,
+                                    model: model_name.clone(),
+                                    endpoint_key: endpoint_key.to_string(),
+                                    error: Some(format!("{}: {}", status_code, body_text)),
+                                    response_data: Some(body_text),
+                                }
+                            } else {
+                                llm_gateway_storage::ChannelTestResult {
+                                    success: true,
+                                    latency_ms,
+                                    model: model_name.clone(),
+                                    endpoint_key: endpoint_key.to_string(),
+                                    error: None,
+                                    response_data: Some(body_text),
+                                }
+                            }
+                        } else {
+                            llm_gateway_storage::ChannelTestResult {
+                                success: true,
+                                latency_ms,
+                                model: model_name.clone(),
+                                endpoint_key: endpoint_key.to_string(),
+                                error: None,
+                                response_data: Some(body_text),
+                            }
                         }
                     }
-                    Ok(Json(llm_gateway_storage::ChannelTestResult {
-                        success: true,
+                } else {
+                    llm_gateway_storage::ChannelTestResult {
+                        success: false,
                         latency_ms,
-                        model: model_name,
-                        error: None,
+                        model: model_name.clone(),
+                        endpoint_key: endpoint_key.to_string(),
+                        error: Some(format!("{} {}", status_code, body_text)),
                         response_data: Some(body_text),
-                    }))
+                    }
                 }
-            } else {
-                Ok(Json(llm_gateway_storage::ChannelTestResult {
-                    success: false,
-                    latency_ms,
-                    model: model_name,
-                    error: Some(format!("{} {}", status_code, body_text)),
-                    response_data: Some(body_text),
-                }))
             }
-        }
-        Err(e) => Ok(Json(llm_gateway_storage::ChannelTestResult {
-            success: false,
-            latency_ms,
-            model: model_name,
-            error: Some(e.to_string()),
-            response_data: None,
-        })),
+            Err(e) => llm_gateway_storage::ChannelTestResult {
+                success: false,
+                latency_ms,
+                model: model_name.clone(),
+                endpoint_key: endpoint_key.to_string(),
+                error: Some(e.to_string()),
+                response_data: None,
+            },
+        };
+
+        results.push(test_result);
     }
+
+    Ok(Json(results))
 }
