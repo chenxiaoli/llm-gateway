@@ -86,13 +86,14 @@ export default function ChannelDetail() {
   const handleTest = () => {
     setTestStatus('loading');
     testMutation.mutate({ id: channel!.id }, {
-      onSuccess: (result) => {
-        if (result.success) {
+      onSuccess: (results) => {
+        const result = results[0];
+        if (result && !result.error) {
           setTestStatus('success');
           toast.success(i18n.t('channels.row.testOk', { latency: result.latency_ms, model: result.model }));
         } else {
           setTestStatus('error');
-          toast.error(i18n.t('channels.row.testFailed', { error: result.error ?? i18n.t('channels.row.unknownError') }));
+          toast.error(i18n.t('channels.row.testFailed', { error: result?.error ?? i18n.t('channels.row.unknownError') }));
         }
       },
       onError: (err) => {
@@ -105,13 +106,14 @@ export default function ChannelDetail() {
   const handleTestEndpoint = (endpointKey: string) => {
     setEndpointTestStatus((prev) => ({ ...prev, [endpointKey]: 'loading' }));
     testMutation.mutate({ id: channel!.id, endpointKey }, {
-      onSuccess: (result) => {
-        if (result.success) {
+      onSuccess: (results) => {
+        const result = results[0];
+        if (result && !result.error) {
           setEndpointTestStatus((prev) => ({ ...prev, [endpointKey]: 'success' }));
           toast.success(i18n.t('channels.row.testOk', { latency: result.latency_ms, model: result.model }));
         } else {
           setEndpointTestStatus((prev) => ({ ...prev, [endpointKey]: 'error' }));
-          toast.error(i18n.t('channels.row.testFailed', { error: result.error ?? i18n.t('channels.row.unknownError') }));
+          toast.error(i18n.t('channels.row.testFailed', { error: result?.error ?? i18n.t('channels.row.unknownError') }));
         }
       },
       onError: (err) => {
