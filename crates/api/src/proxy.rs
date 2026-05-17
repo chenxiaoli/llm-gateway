@@ -382,6 +382,15 @@ async fn publish_audit_events(
         cache_read_tokens,
         cache_creation_tokens,
         cost,
+        pricing_policy: task.pricing_policy_config.clone(),
+        weighted_tokens: crate::workers::calculate_weighted_tokens(
+            &task.pricing_policy_config,
+            &task.pricing_policy_billing_type,
+            input_tokens,
+            output_tokens,
+            cache_read_tokens,
+            cache_creation_tokens,
+        ),
         latency_ms: task.latency_ms,
         created_at: now.to_rfc3339(),
     };
