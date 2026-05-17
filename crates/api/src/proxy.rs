@@ -368,6 +368,13 @@ async fn publish_audit_events(
     };
     let now = chrono::Utc::now();
 
+    let pricing_policy_json = task.pricing_policy.as_ref()
+        .map(|p| serde_json::to_value(p).unwrap_or_default());
+    let (pp_config, pp_billing_type) = match &task.pricing_policy {
+        Some(p) => (Some(p.config.clone()), p.billing_type.as_str()),
+        None => (None, "per_token"),
+    };
+
     let usage_event = UsageEvent {
         id: uuid::Uuid::new_v4().to_string(),
         request_id: task.request_id.clone(),
@@ -382,10 +389,10 @@ async fn publish_audit_events(
         cache_read_tokens,
         cache_creation_tokens,
         cost,
-        pricing_policy: task.pricing_policy_config.clone(),
+        pricing_policy: pricing_policy_json,
         weighted_tokens: crate::workers::calculate_weighted_tokens(
-            &task.pricing_policy_config,
-            &task.pricing_policy_billing_type,
+            &pp_config,
+            pp_billing_type,
             input_tokens,
             output_tokens,
             cache_read_tokens,
@@ -435,9 +442,13 @@ async fn dispatch_audit_task(
     let stream = task.stream;
     let (input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens) =
         crate::workers::parse_usage(&task.response_bytes, stream, proto);
+    let (pp_config, pp_billing_type) = match &task.pricing_policy {
+        Some(p) => (Some(p.config.clone()), p.billing_type.clone()),
+        None => (None, "per_token".to_string()),
+    };
     let cost = crate::workers::calculate_cost(
-        &task.pricing_policy_config,
-        &task.pricing_policy_billing_type,
+        &pp_config,
+        &pp_billing_type,
         task.markup_ratio,
         input_tokens,
         output_tokens,
@@ -456,8 +467,7 @@ pub struct SseAuditParams {
     pub provider_id: String,
     pub protocol: llm_gateway_storage::Protocol,
     pub request_body: String,
-    pub pricing_policy_config: Option<serde_json::Value>,
-    pub pricing_policy_billing_type: String,
+    pub pricing_policy: Option<llm_gateway_storage::PricingPolicy>,
     pub markup_ratio: i64,
     pub channel_id: String,
     pub original_model: Option<String>,
@@ -566,8 +576,7 @@ async fn process_sse_stream(
         response_bytes: accumulated.into_bytes(),
         status_code: 200,
         latency_ms,
-        pricing_policy_config: audit_params.pricing_policy_config,
-        pricing_policy_billing_type: audit_params.pricing_policy_billing_type,
+        pricing_policy: audit_params.pricing_policy,
         markup_ratio: audit_params.markup_ratio,
         channel_id: Some(audit_params.channel_id),
         original_model: audit_params.original_model,
@@ -1066,19 +1075,15 @@ if status != 200 && status < 500 {
                 ProxyProtocol::Anthropic => Protocol::Anthropic,
             };
 
-            let (pricing_policy_config, pricing_policy_billing_type) = {
+            let pricing_policy = {
                 let policy_id = channel_model.pricing_policy_id.as_deref()
                     .or(model_entry.model.pricing_policy_id.as_deref());
                 match policy_id {
                     Some(id) => {
-                        let opt = state.storage.get_pricing_policy(id).await
-                            .map_err(|e| ApiError::Internal(e.to_string()))?;
-                        match opt {
-                            Some(p) => (Some(p.config), p.billing_type),
-                            None => (None, "per_token".to_string()),
-                        }
+                        state.storage.get_pricing_policy(id).await
+                            .map_err(|e| ApiError::Internal(e.to_string()))?
                     }
-                    None => (None, "per_token".to_string()),
+                    None => None,
                 }
             };
 
@@ -1097,8 +1102,7 @@ if status != 200 && status < 500 {
                 response_bytes: error_body.clone().into_bytes(),
                 status_code: status as i32,
                 latency_ms,
-                pricing_policy_config,
-                pricing_policy_billing_type,
+                pricing_policy,
                 markup_ratio: channel_model.markup_ratio,
                 channel_id: Some(channel.channel_id.to_string()),
                 original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
@@ -1152,19 +1156,15 @@ if status != 200 && status < 500 {
             };
 
             // Resolve pricing policy for cost calculation
-            let (pricing_policy_config, pricing_policy_billing_type) = {
+            let pricing_policy = {
                 let policy_id = channel_model.pricing_policy_id.as_deref()
                     .or(model_entry.model.pricing_policy_id.as_deref());
                 match policy_id {
                     Some(id) => {
-                        let opt = state.storage.get_pricing_policy(id).await
-                            .map_err(|e| ApiError::Internal(e.to_string()))?;
-                        match opt {
-                            Some(p) => (Some(p.config), p.billing_type),
-                            None => (None, "per_token".to_string()),
-                        }
+                        state.storage.get_pricing_policy(id).await
+                            .map_err(|e| ApiError::Internal(e.to_string()))?
                     }
-                    None => (None, "per_token".to_string()),
+                    None => None,
                 }
             };
 
@@ -1176,8 +1176,7 @@ if status != 200 && status < 500 {
                 provider_id: provider_id.clone(),
                 protocol: proto,
                 request_body: body.clone(),
-                pricing_policy_config,
-                pricing_policy_billing_type,
+                pricing_policy,
                 markup_ratio: channel_model.markup_ratio,
                 channel_id: channel.channel_id.to_string(),
                 original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
@@ -1237,19 +1236,15 @@ if status != 200 && status < 500 {
         let response_bytes = resp.bytes().await.unwrap_or_default().to_vec();
 
         // Resolve pricing policy for cost calculation
-        let (pricing_policy_config, pricing_policy_billing_type) = {
+        let pricing_policy = {
             let policy_id = channel_model.pricing_policy_id.as_deref()
                 .or(model_entry.model.pricing_policy_id.as_deref());
             match policy_id {
                 Some(id) => {
-                    let opt = state.storage.get_pricing_policy(id).await
-                        .map_err(|e| ApiError::Internal(e.to_string()))?;
-                    match opt {
-                        Some(p) => (Some(p.config), p.billing_type),
-                        None => (None, "per_token".to_string()),
-                    }
+                    state.storage.get_pricing_policy(id).await
+                        .map_err(|e| ApiError::Internal(e.to_string()))?
                 }
-                None => (None, "per_token".to_string()),
+                None => None,
             }
         };
 
@@ -1269,8 +1264,7 @@ if status != 200 && status < 500 {
             response_bytes: response_bytes.clone(),
             status_code: 200,
             latency_ms,
-            pricing_policy_config,
-            pricing_policy_billing_type,
+            pricing_policy,
             markup_ratio: channel_model.markup_ratio,
             channel_id: Some(channel.channel_id.to_string()),
             original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
