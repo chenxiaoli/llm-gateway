@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { MessageSquare, DollarSign, Zap, TrendingUp, Activity, Clock, ArrowRight, Wallet, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useDailyUsage } from '../hooks/useUsage';
 import { useLogs } from '../hooks/useLogs';
 import { useUsageSummary } from '../hooks/useUsage';
 import { useMyBalance } from '../hooks/useAccounts';
@@ -80,6 +83,14 @@ export default function Dashboard() {
   const { data: monthSummary } = useUsageSummary({ since: startOfMonth() });
   const { data: recentLogs, isLoading: logsLoading } = useLogs({}, 1, 10);
   const { data: myBalance } = useMyBalance(1, 1);
+
+  const [chartRange, setChartRange] = useState<7 | 30>(7);
+  const sinceDate = new Date();
+  sinceDate.setDate(sinceDate.getDate() - chartRange);
+  sinceDate.setHours(0, 0, 0, 0);
+  const { data: dailyData } = useDailyUsage({
+    since: sinceDate.toISOString(),
+  });
 
   const todayRequests = todaySummary?.reduce((sum, r) => sum + r.request_count, 0) ?? 0;
   const todayCost = todaySummary?.reduce((sum, r) => sum + r.total_cost, 0) ?? 0;
@@ -183,6 +194,69 @@ export default function Dashboard() {
           index={3}
           reducedMotion={reducedMotion}
         />
+      </div>
+
+      {/* Daily Usage Chart */}
+      <div className="rounded-xl border border-base-300/40 bg-base-200/30 p-5 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-medium text-base-content/70">{t('dashboard.chartTitle')}</h3>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setChartRange(7)}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                chartRange === 7 ? 'bg-base-300/60 text-base-content' : 'text-base-content/40 hover:text-base-content/60'
+              }`}
+            >
+              {t('dashboard.last7Days')}
+            </button>
+            <button
+              onClick={() => setChartRange(30)}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                chartRange === 30 ? 'bg-base-300/60 text-base-content' : 'text-base-content/40 hover:text-base-content/60'
+              }`}
+            >
+              {t('dashboard.last30Days')}
+            </button>
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={280}>
+          <LineChart data={dailyData || []}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+            <XAxis
+              dataKey="date"
+              stroke="rgba(255,255,255,0.3)"
+              tick={{ fontSize: 11 }}
+              tickFormatter={(v: string) => v.slice(5)}
+            />
+            <YAxis
+              stroke="rgba(255,255,255,0.3)"
+              tick={{ fontSize: 11 }}
+              tickFormatter={(v: number) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)}
+            />
+            <Tooltip
+              contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
+              formatter={(value: number, name: string) => {
+                const labels: Record<string, string> = {
+                  total_weighted_tokens: t('dashboard.weightedTokens'),
+                  total_input_tokens: t('dashboard.inputTokens'),
+                  total_output_tokens: t('dashboard.outputTokens'),
+                  total_cache_read_tokens: t('dashboard.cacheReadTokens'),
+                  total_cache_creation_tokens: t('dashboard.cacheCreationTokens'),
+                };
+                return [value.toLocaleString(), labels[name] || name];
+              }}
+              labelFormatter={(label: string) => label}
+            />
+            <Line
+              type="monotone"
+              dataKey="total_weighted_tokens"
+              stroke="#6366f1"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
 
       {/* Status Pills */}

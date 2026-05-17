@@ -231,7 +231,16 @@
       "tokens": "Tokens",
       "latency": "Latency"
     },
-    "noRequests": "No requests yet"
+    "noRequests": "No requests yet",
+    "chartTitle": "Daily Token Usage",
+    "last7Days": "7D",
+    "last30Days": "30D",
+    "weightedTokens": "Weighted Tokens",
+    "inputTokens": "Input",
+    "outputTokens": "Output",
+    "cacheReadTokens": "Cache Read",
+    "cacheCreationTokens": "Cache Write",
+    "cost": "Cost"
   },
   "adminDashboard": {
     "title": "Admin Dashboard",

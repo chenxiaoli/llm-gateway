@@ -231,7 +231,16 @@
       "tokens": "Token 数",
       "latency": "延迟"
     },
-    "noRequests": "暂无请求"
+    "noRequests": "暂无请求",
+    "chartTitle": "每日 Token 用量",
+    "last7Days": "7天",
+    "last30Days": "30天",
+    "weightedTokens": "加权 Token",
+    "inputTokens": "输入",
+    "outputTokens": "Output",
+    "cacheReadTokens": "缓存读取",
+    "cacheCreationTokens": "缓存写入",
+    "cost": "费用"
   },
   "adminDashboard": {
     "title": "管理仪表盘",
