@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.0] - 2026-05-17
+
+### Added
+- OpenAI `/v1/responses` transparent proxy endpoint (passes requests through to upstream provider)
+- Daily token usage line chart on dashboard with 7/30 day toggle (weighted tokens, theme-aware colors)
+- `pricing_policy` and `weighted_tokens` columns on usage records (migration, types, API, storage)
+- `calculate_weighted_tokens` function in billing crate for normalized token cost calculation
+- `GET /usage/daily` endpoint aggregating daily token counts with all token type breakdowns
+
+### Fixed
+- Channel test SSE mode detects `error` in SSE data lines (not just event type)
+- Channel test endpoint iteration compile error
+- Strip `/v1` prefix for all OpenAI protocol endpoints (prevents doubled paths)
+- Preserve `/v1` prefix for non-chat-completions OpenAI endpoints
+- Daily usage chart rendering — replaced ResponsiveContainer with explicit dimensions for reliable display
+
 ## [1.3.20] - 2026-05-15
 
 ### Added
