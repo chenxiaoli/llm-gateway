@@ -112,3 +112,105 @@ pub fn calculate_cost(
         0
     }
 }
+
+/// Calculate weighted tokens from pricing policy.
+/// Base: input token weight = 1. Other weights are relative to input_price.
+pub fn calculate_weighted_tokens(
+    pricing_policy_config: &Option<serde_json::Value>,
+    pricing_policy_billing_type: &str,
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+    cache_read_tokens: Option<i64>,
+    cache_creation_tokens: Option<i64>,
+) -> i64 {
+    let input = input_tokens.unwrap_or(0);
+    let output = output_tokens.unwrap_or(0);
+    let cache_read = cache_read_tokens.unwrap_or(0);
+    let cache_creation = cache_creation_tokens.unwrap_or(0);
+
+    let Some(config) = pricing_policy_config else {
+        return input + output + cache_read + cache_creation;
+    };
+
+    match pricing_policy_billing_type {
+        "per_token" | "hybrid" => {
+            weighted_from_config(config, input, output, cache_read, cache_creation)
+        }
+        "tiered_token" => {
+            weighted_from_tiered(config, input, output)
+        }
+        "context_tiered" => {
+            weighted_from_context_tiered(config, input, output, cache_read, cache_creation)
+        }
+        "per_character" => {
+            weighted_from_config(config, input, output, 0, 0)
+        }
+        _ => input + output, // per_request etc.
+    }
+}
+
+fn price_weight(config: &serde_json::Value, field: &str, base_price: f64) -> f64 {
+    let price = config.get(field).and_then(|v| v.as_f64()).unwrap_or(0.0);
+    if base_price > 0.0 { price / base_price } else { 0.0 }
+}
+
+fn weighted_from_config(
+    config: &serde_json::Value,
+    input: i64, output: i64, cache_read: i64, cache_creation: i64,
+) -> i64 {
+    let base = config.get("input_price_1m").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    if base <= 0.0 {
+        return input + output + cache_read + cache_creation;
+    }
+    let w_out = price_weight(config, "output_price_1m", base);
+    let w_cr = price_weight(config, "cache_read_price_1m", base);
+    let w_cc = price_weight(config, "cache_creation_price_1m", base);
+    (input as f64
+        + output as f64 * w_out
+        + cache_read as f64 * w_cr
+        + cache_creation as f64 * w_cc
+    ).round() as i64
+}
+
+fn weighted_from_tiered(config: &serde_json::Value, input: i64, output: i64) -> i64 {
+    let tiers = match config.get("tiers").and_then(|t| t.as_array()) {
+        Some(t) => t,
+        None => return input + output,
+    };
+    let first = match tiers.first() {
+        Some(t) => t,
+        None => return input + output,
+    };
+    let base = first.get("input_price_1m").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    if base <= 0.0 {
+        return input + output;
+    }
+    let w_out = price_weight(first, "output_price_1m", base);
+    (input as f64 + output as f64 * w_out).round() as i64
+}
+
+fn weighted_from_context_tiered(
+    config: &serde_json::Value,
+    input: i64, output: i64, cache_read: i64, cache_creation: i64,
+) -> i64 {
+    let tiers = match config.get("tiers").and_then(|t| t.as_array()) {
+        Some(t) => t,
+        None => return input + output + cache_read + cache_creation,
+    };
+    let first = match tiers.first() {
+        Some(t) => t,
+        None => return input + output + cache_read + cache_creation,
+    };
+    let base = first.get("input_price_1m").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    if base <= 0.0 {
+        return input + output + cache_read + cache_creation;
+    }
+    let w_out = price_weight(first, "output_price_1m", base);
+    let w_cr = price_weight(first, "cache_read_price_1m", base);
+    let w_cc = price_weight(first, "cache_creation_price_1m", base);
+    (input as f64
+        + output as f64 * w_out
+        + cache_read as f64 * w_cr
+        + cache_creation as f64 * w_cc
+    ).round() as i64
+}
