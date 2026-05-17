@@ -95,6 +95,8 @@ pub trait Storage: Send + Sync {
     async fn query_channel_usage_summary(&self, filter: &UsageFilter) -> Result<Vec<ChannelUsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_usage_by_request_id(&self, request_id: &str) -> Result<Option<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
 
+    async fn query_daily_usage(&self, filter: &UsageFilter) -> Result<Vec<crate::types::DailyUsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
+
     // Audit
     async fn insert_log(&self, log: &AuditLog) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn query_logs(&self, filter: &LogFilter) -> Result<Vec<AuditLog>, Box<dyn std::error::Error + Send + Sync>>;
