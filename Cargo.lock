@@ -1286,7 +1286,7 @@ checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
 name = "llm-gateway"
-version = "1.4.0"
+version = "1.4.3"
 dependencies = [
  "axum",
  "llm-gateway-api",
@@ -1307,7 +1307,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-api"
-version = "1.4.0"
+version = "1.4.3"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -1324,6 +1324,7 @@ dependencies = [
  "llm-gateway-ratelimit",
  "llm-gateway-storage",
  "rand 0.9.4",
+ "regex-lite",
  "reqwest",
  "serde",
  "serde_json",
@@ -1338,7 +1339,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-audit"
-version = "1.4.0"
+version = "1.4.3"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1348,7 +1349,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-audit-worker"
-version = "1.4.0"
+version = "1.4.3"
 dependencies = [
  "futures",
  "llm-gateway-audit",
@@ -1365,7 +1366,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-auth"
-version = "1.4.0"
+version = "1.4.3"
 dependencies = [
  "bcrypt",
  "chrono",
@@ -1378,7 +1379,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-billing"
-version = "1.4.0"
+version = "1.4.3"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1387,7 +1388,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-encryption"
-version = "1.4.0"
+version = "1.4.3"
 dependencies = [
  "aes-gcm",
  "base64",
@@ -1397,7 +1398,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-nats-publisher"
-version = "1.4.0"
+version = "1.4.3"
 dependencies = [
  "async-nats",
  "chrono",
@@ -1411,7 +1412,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-provider"
-version = "1.4.0"
+version = "1.4.3"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -1423,14 +1424,14 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-ratelimit"
-version = "1.4.0"
+version = "1.4.3"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
 name = "llm-gateway-storage"
-version = "1.4.0"
+version = "1.4.3"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1444,7 +1445,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-usage-worker"
-version = "1.4.0"
+version = "1.4.3"
 dependencies = [
  "chrono",
  "futures",
@@ -2007,6 +2008,12 @@ dependencies = [
  "memchr",
  "regex-syntax",
 ]
+
+[[package]]
+name = "regex-lite"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973"
 
 [[package]]
 name = "regex-syntax"

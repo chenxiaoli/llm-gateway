@@ -170,6 +170,7 @@ pub struct Channel {
     pub balance: Option<i64>,
     pub weight: Option<i32>,
     pub enabled: bool,
+    pub disabled_until: Option<DateTime<Utc>>,
     pub available_hours: Option<Vec<TimeSlot>>,
     pub created_by: Option<String>,
     pub group: Option<String>,

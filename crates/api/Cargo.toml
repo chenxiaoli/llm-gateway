@@ -1,6 +1,6 @@
 [package]
 name = "llm-gateway-api"
-version = "1.4.3"
+version = "1.4.4"
 edition = "2021"
 
 [dependencies]
@@ -28,6 +28,7 @@ tokio-stream = "0.1"
 bytes = "1"
 url = "2"
 rand = "0.9"
+regex-lite = "0.1"
 
 [dev-dependencies]
 llm-gateway-storage = { path = "../storage" }

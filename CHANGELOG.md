@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.4] - 2026-05-21
+
+### Added
+- SSE error auto-recovery: when upstream returns `event: error` in SSE stream, channel is automatically disabled until recovery time
+- `disabled_until` column on channels table with `disable_channel_until()` storage method
+- `parse_recovery_timestamp()` extracts reset time from error messages (supports Chinese pattern `将在 YYYY-MM-DD HH:MM:SS 重置` and ISO 8601)
+- ChannelRegistry skips channels where `disabled_until > now()` during reload
+
+### Changed
+- `SseAuditParams` now includes `disable_duration_secs` (default 5 minutes)
+- Added `regex-lite` dependency for timestamp parsing
+
+### Fixed
+- All channel SELECT queries now include `disabled_until` column
+- `Channel` struct initialization in management API includes new `disabled_until` field
+
 ## [1.4.3] - 2026-05-17
 
 ### Added
