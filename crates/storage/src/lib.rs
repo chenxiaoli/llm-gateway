@@ -55,6 +55,7 @@ pub trait Storage: Send + Sync {
     async fn list_enabled_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_channel(&self, channel: &Channel) -> Result<Channel, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_channel(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    async fn disable_channel_until(&self, id: &str, until: chrono::DateTime<chrono::Utc>) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     // Models
     async fn create_model(&self, model: &Model) -> Result<Model, Box<dyn std::error::Error + Send + Sync>>;

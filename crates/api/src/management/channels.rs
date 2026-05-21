@@ -183,6 +183,7 @@ pub async fn create_channel(
         available_hours: input.available_hours,
         created_by: Some(claims.sub),
         group: input.group,
+        disabled_until: None,
         created_at: now,
         updated_at: now,
     };

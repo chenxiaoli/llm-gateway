@@ -321,6 +321,7 @@ export interface Channel {
   available_hours?: TimeSlot[] | null;
   created_by?: string | null;
   group?: string | null;
+  disabled_until?: string | null;
   created_at: string;
   updated_at: string;
   models?: ChannelModelInfo[];

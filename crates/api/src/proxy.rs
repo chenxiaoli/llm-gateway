@@ -162,6 +162,14 @@ impl InMemoryChannelRegistry {
                 continue;
             }
 
+            // Skip channels that are temporarily disabled (e.g., due to SSE errors)
+            if let Some(disabled_until) = channel.disabled_until {
+                if disabled_until > Utc::now() {
+                    tracing::debug!("[PROXY] Channel '{}' is temporarily disabled until {}", channel.name, disabled_until);
+                    continue;
+                }
+            }
+
             let provider = match provider_map.get(channel.provider_id.as_str()) {
                 Some(p) => p,
                 None => continue,
@@ -477,6 +485,38 @@ pub struct SseAuditParams {
     pub upstream_url: String,
     pub request_headers: String,
     pub response_headers: String,
+    /// Duration to disable channel on SSE error (default 5 minutes)
+    pub disable_duration_secs: i64,
+}
+
+/// Parse recovery timestamp from SSE error message.
+/// Looks for patterns like "将在 2026-05-21 20:30:44 重置" (Chinese) or
+/// "reset at YYYY-MM-DD HH:MM:SS", "will reset at ..." and returns the parsed datetime.
+/// Returns None if no timestamp found (uses default disable duration instead).
+fn parse_recovery_timestamp(error_message: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    // Try to find Chinese pattern: "将在 YYYY-MM-DD HH:MM:SS 重置"
+    if let Some(caps) = regex_lite::Regex::new(r"将在\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})")
+        .ok()?
+        .captures(error_message)
+    {
+        let ts_str = caps.get(1)?.as_str();
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(ts_str, "%Y-%m-%d %H:%M:%S") {
+            return Some(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+        }
+    }
+
+    // Try ISO 8601 pattern
+    if let Some(caps) = regex_lite::Regex::new(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})")
+        .ok()?
+        .captures(error_message)
+    {
+        let ts_str = caps.get(1)?.as_str();
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(ts_str) {
+            return Some(dt.with_timezone(&chrono::Utc));
+        }
+    }
+
+    None
 }
 
 /// SSE passthrough with concurrent accumulation for DB logging.
@@ -493,6 +533,9 @@ async fn process_sse_stream(
     let mut accumulated = String::new();
 
     'outer: loop {
+        let mut saw_error = false;
+        let mut error_message = String::new();
+
         match futures::TryStreamExt::try_next(&mut byte_stream).await {
             Ok(Some(chunk)) => {
                 // Accumulate for audit
@@ -534,7 +577,12 @@ async fn process_sse_stream(
                             // Forward to client
                             let mut sse_event = Event::default().data(&data);
                             if let Some(et) = event_type {
-                                sse_event = sse_event.event(et);
+                                sse_event = sse_event.event(et.clone());
+                                // Detect SSE error events
+                                if et == "error" {
+                                    saw_error = true;
+                                    error_message = data.clone();
+                                }
                             }
                             if let Some(id) = event_id {
                                 sse_event = sse_event.id(id);
@@ -556,6 +604,32 @@ async fn process_sse_stream(
                 tracing::warn!("[PROXY] SSE upstream read error: {}", e);
                 break;
             }
+        }
+
+        // Handle SSE error event: disable channel and break
+        if saw_error {
+            tracing::warn!(
+                "[PROXY] SSE error event received on channel '{}': {} — disabling for {}s",
+                audit_params.channel_id,
+                error_message,
+                audit_params.disable_duration_secs
+            );
+
+            // Parse recovery time from error message if available
+            let disable_until = if let Some(recovery_ts) = parse_recovery_timestamp(&error_message) {
+                recovery_ts
+            } else {
+                Utc::now() + chrono::Duration::seconds(audit_params.disable_duration_secs)
+            };
+
+            // Disable channel in database
+            if let Err(e) = state.storage.disable_channel_until(&audit_params.channel_id, disable_until).await {
+                tracing::error!("[PROXY] Failed to disable channel '{}': {:?}", audit_params.channel_id, e);
+            } else {
+                tracing::info!("[PROXY] Channel '{}' disabled until {}", audit_params.channel_id, disable_until);
+            }
+
+            break 'outer;
         }
     }
 
@@ -1186,6 +1260,7 @@ if status != 200 && status < 500 {
                 upstream_url: upstream_url.clone(),
                 request_headers: request_headers_for_worker.clone(),
                 response_headers: response_headers_for_worker,
+                disable_duration_secs: 300, // 5 minutes default
             };
 
             let upstream_resp = resp;
