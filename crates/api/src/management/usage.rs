@@ -15,7 +15,7 @@ use crate::AppState;
 #[derive(Debug, Clone, Serialize)]
 pub struct UsageRecordResponse {
     pub id: String,
-    pub request_id: String,
+    pub request_id: Option<String>,
     pub key_id: String,
     pub model_name: String,
     pub provider_id: String,

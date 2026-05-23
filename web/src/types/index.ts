@@ -104,7 +104,7 @@ export interface UserModelView {
 
 export interface UsageRecord {
   id: string;
-  request_id: string;
+  request_id: string | null;
   key_id: string;
   model_name: string;
   provider_id: string;

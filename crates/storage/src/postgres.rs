@@ -154,7 +154,7 @@ impl From<PgModelWithProviderRow> for ModelWithProvider {
 #[derive(FromRow)]
 struct PgUsageRow {
     id: String,
-    request_id: String,
+    request_id: Option<String>,
     key_id: String,
     model_name: String,
     provider_id: String,
