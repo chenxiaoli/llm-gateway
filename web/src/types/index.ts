@@ -104,6 +104,7 @@ export interface UserModelView {
 
 export interface UsageRecord {
   id: string;
+  request_id: string;
   key_id: string;
   model_name: string;
   provider_id: string;
@@ -160,6 +161,7 @@ export interface UsageFilter {
 
 export interface AuditLogSummary {
   id: string;
+  request_id: string | null;
   key_id: string;
   model_name: string;
   provider_id: string;
@@ -187,6 +189,7 @@ export interface AuditLog extends AuditLogSummary {
 }
 
 export interface LogFilter {
+  request_id?: string;
   key_id?: string;
   channel_id?: string;
   model_name?: string;
