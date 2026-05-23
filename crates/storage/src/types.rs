@@ -521,7 +521,7 @@ pub struct KeyModelRateLimit {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageRecord {
     pub id: String,
-    pub request_id: String,
+    pub request_id: Option<String>,
     pub key_id: String,
     pub model_name: String,
     pub provider_id: String,
@@ -659,6 +659,7 @@ pub struct AuditLogSummary {
 
 #[derive(Debug, Deserialize)]
 pub struct LogFilter {
+    pub request_id: Option<String>,
     pub key_id: Option<String>,
     pub channel_id: Option<String>,
     #[serde(skip)]
