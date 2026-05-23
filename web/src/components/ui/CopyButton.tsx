@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
+import { cn } from '../lib/cn';
 
 interface CopyButtonProps {
   value: string;
@@ -24,7 +25,7 @@ export function CopyButton({ value, className }: CopyButtonProps) {
     <button
       type="button"
       onClick={handleCopy}
-      className={`btn btn-ghost btn-xs px-1 ${className ?? ''}`}
+      className={cn('btn btn-ghost btn-xs px-1', className)}
     >
       {copied
         ? <Check className="h-3.5 w-3.5 text-success" />
