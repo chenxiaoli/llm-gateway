@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.5] - 2026-05-23
+
+### Added
+- Request ID column on /console/usage table (first 8 chars) with copy-to-clipboard button
+- Request ID column on /admin/logs table (first 8 chars) with copy-to-clipboard button
+- Request ID exact-match filter on /admin/logs page
+- Shared `CopyButton` UI component with visual feedback (copy → check icon toggle)
+- i18n keys for request ID labels and copy toast (English + Chinese)
+
+### Changed
+- `request_id` included in usage API response (`UsageRecordResponse`)
+- `request_id` fields in `UsageRecord`, `PgUsageRow`, `UsageRecordResponse` changed to `Option<String>` for legacy data compatibility
+
+### Fixed
+- Backend logs query supports filtering by `request_id` (exact match via `WHERE request_id = $1`)
+- `CopyButton` uses project `cn()` utility for className composition
+
 ## [1.4.4] - 2026-05-21
 
 ### Added
