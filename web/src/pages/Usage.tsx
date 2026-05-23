@@ -10,6 +10,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { CopyButton } from '../components/ui/CopyButton';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -265,6 +266,7 @@ export default function Usage() {
               <table className="table table-sm">
                 <thead>
                   <tr className="border-b border-base-300/40">
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('usage.table.requestId')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('usage.table.time')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('usage.table.key')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('usage.table.model')}</th>
@@ -279,6 +281,12 @@ export default function Usage() {
                 <tbody>
                   {usageItems.map((item) => (
                     <tr key={item.id} className="border-b border-base-200/40 hover:bg-base-200/20 transition-colors">
+                      <td className="font-mono text-xs text-base-content/55">
+                        <div className="flex items-center gap-1">
+                          <span>{item.request_id?.substring(0, 8) ?? '-'}</span>
+                          {item.request_id && <CopyButton value={item.request_id} />}
+                        </div>
+                      </td>
                       <td className="font-mono text-[13px] text-base-content/55">
                         {new Date(item.created_at).toLocaleString()}
                       </td>
@@ -294,7 +302,7 @@ export default function Usage() {
                   ))}
                   {usageItems.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="text-center py-12 text-base-content/40 text-sm">
+                      <td colSpan={10} className="text-center py-12 text-base-content/40 text-sm">
                         {t('usage.noData')}
                       </td>
                     </tr>

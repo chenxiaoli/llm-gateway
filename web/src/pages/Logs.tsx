@@ -16,6 +16,7 @@ import { useAllChannels } from '../hooks/useChannels';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
+import { CopyButton } from '../components/ui/CopyButton';
 import { Drawer } from '../components/ui/Drawer';
 import JsonViewer from '../components/JsonViewer';
 import type { AuditLogSummary } from '../types';
@@ -30,12 +31,19 @@ export default function Logs() {
   const [until, setUntil] = useState('');
   const [keyFilter, setKeyFilter] = useState('');
   const [channelFilter, setChannelFilter] = useState('');
+  const [requestIdFilter, setRequestIdFilter] = useState('');
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
 
   const { data, isLoading } = useLogs(
-    { since: since || undefined, until: until || undefined, key_id: keyFilter || undefined, channel_id: channelFilter || undefined },
+    {
+      since: since || undefined,
+      until: until || undefined,
+      key_id: keyFilter || undefined,
+      channel_id: channelFilter || undefined,
+      request_id: requestIdFilter || undefined,
+    },
     page,
     pageSize,
   );
@@ -50,11 +58,12 @@ export default function Logs() {
     setUntil('');
     setKeyFilter('');
     setChannelFilter('');
+    setRequestIdFilter('');
     setPage(1);
   };
 
-  const hasFilters = since || until || keyFilter || channelFilter;
-  const filterCount = [since, until, keyFilter, channelFilter].filter(Boolean).length;
+  const hasFilters = since || until || keyFilter || channelFilter || requestIdFilter;
+  const filterCount = [since, until, keyFilter, channelFilter, requestIdFilter].filter(Boolean).length;
 
   const handleView = (log: AuditLogSummary) => {
     setSelectedLogId(log.id);
@@ -172,6 +181,18 @@ export default function Logs() {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5">
+                {t('logs.requestId')}
+              </label>
+              <input
+                type="text"
+                value={requestIdFilter}
+                onChange={(e) => { setRequestIdFilter(e.target.value); setPage(1); }}
+                placeholder={t('logs.requestIdPlaceholder')}
+                className="h-10 rounded-lg border border-base-300 bg-base-200/50 px-3 text-sm text-base-content placeholder:text-base-content/25 focus:outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/20 transition-colors"
+              />
+            </div>
           </div>
         </div>
       </motion.div>
@@ -188,6 +209,7 @@ export default function Logs() {
               <table className="table table-sm">
                 <thead>
                   <tr className="border-b border-base-300/40">
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.requestId')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.time')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.model')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.channel')}</th>
@@ -204,7 +226,7 @@ export default function Logs() {
                 <tbody>
                   {data?.items?.length === 0 && (
                     <tr>
-                      <td colSpan={11} className="text-center py-12 text-base-content/30">
+                      <td colSpan={12} className="text-center py-12 text-base-content/30">
                         <Search className="h-8 w-8 mx-auto mb-2 opacity-40" />
                         <div>{t('logs.empty.title')}</div>
                         {hasFilters && <div className="text-xs mt-1">{t('logs.empty.tryAdjusting')}</div>}
@@ -217,6 +239,16 @@ export default function Logs() {
                       className="border-b border-base-200/40 hover:bg-base-200/20 transition-colors cursor-pointer"
                       onClick={() => handleView(log)}
                     >
+                      <td className="mono text-xs text-base-content/55" onClick={(e) => e.stopPropagation()}>
+                        {log.request_id ? (
+                          <div className="flex items-center gap-1">
+                            <span>{log.request_id.substring(0, 8)}</span>
+                            <CopyButton value={log.request_id} />
+                          </div>
+                        ) : (
+                          <span>-</span>
+                        )}
+                      </td>
                       <td className="mono text-[13px] text-base-content/55">
                         {new Date(log.created_at).toLocaleString()}
                       </td>

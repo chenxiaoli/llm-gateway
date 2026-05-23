@@ -154,7 +154,7 @@ impl From<PgModelWithProviderRow> for ModelWithProvider {
 #[derive(FromRow)]
 struct PgUsageRow {
     id: String,
-    request_id: String,
+    request_id: Option<String>,
     key_id: String,
     model_name: String,
     provider_id: String,
@@ -1586,6 +1586,11 @@ impl crate::Storage for PostgresStorage {
     async fn query_logs_paginated(&self, filter: &LogFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<AuditLogSummary>, Box<dyn std::error::Error + Send + Sync>> {
         let mut conditions = Vec::new();
         let mut bind_vals: Vec<String> = Vec::new();
+
+        if let Some(ref request_id) = filter.request_id {
+            conditions.push(format!("a.request_id = ${}", bind_vals.len() + 1));
+            bind_vals.push(request_id.clone());
+        }
 
         if let Some(ref user_id) = filter.user_id {
             conditions.push(format!("a.user_id = ${}", bind_vals.len() + 1));

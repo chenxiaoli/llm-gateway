@@ -15,6 +15,7 @@ use crate::AppState;
 #[derive(Debug, Clone, Serialize)]
 pub struct UsageRecordResponse {
     pub id: String,
+    pub request_id: Option<String>,
     pub key_id: String,
     pub model_name: String,
     pub provider_id: String,
@@ -35,6 +36,7 @@ impl From<UsageRecord> for UsageRecordResponse {
     fn from(r: UsageRecord) -> Self {
         UsageRecordResponse {
             id: r.id,
+            request_id: r.request_id,
             key_id: r.key_id,
             model_name: r.model_name,
             provider_id: r.provider_id,

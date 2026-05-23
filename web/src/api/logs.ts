@@ -8,6 +8,7 @@ export async function queryLogs(filter: LogFilter = {}, page = 1, pageSize = 20)
   if (filter.model_name) params.model_name = filter.model_name;
   if (filter.since) params.since = filter.since;
   if (filter.until) params.until = filter.until;
+  if (filter.request_id) params.request_id = filter.request_id;
   const { data } = await adminApiClient.get<PaginatedResponse<AuditLogSummary>>('/logs', { params });
   return data;
 }
