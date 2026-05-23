@@ -659,6 +659,7 @@ pub struct AuditLogSummary {
 
 #[derive(Debug, Deserialize)]
 pub struct LogFilter {
+    pub request_id: Option<String>,
     pub key_id: Option<String>,
     pub channel_id: Option<String>,
     #[serde(skip)]

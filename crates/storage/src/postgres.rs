@@ -1587,6 +1587,11 @@ impl crate::Storage for PostgresStorage {
         let mut conditions = Vec::new();
         let mut bind_vals: Vec<String> = Vec::new();
 
+        if let Some(ref request_id) = filter.request_id {
+            conditions.push(format!("a.request_id = ${}", bind_vals.len() + 1));
+            bind_vals.push(request_id.clone());
+        }
+
         if let Some(ref user_id) = filter.user_id {
             conditions.push(format!("a.user_id = ${}", bind_vals.len() + 1));
             bind_vals.push(user_id.clone());
