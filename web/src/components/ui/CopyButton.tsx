@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { cn } from '../lib/cn';
+import { cn } from '../../lib/cn';
 
 interface CopyButtonProps {
   value: string;
