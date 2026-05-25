@@ -65,7 +65,7 @@ export default function ChannelDetail() {
       setChannelWeight(channel.weight != null ? String(channel.weight) : '');
       setChannelEnabled(channel.enabled);
       setChannelGroup(channel.group ?? '');
-      setHoursSlots(channel.available_hours ?? []);
+      setHoursSlots(channel.available_hours ? (localSlots(channel.available_hours) ?? []) : []);
     }
   }, [channel]);
 
@@ -921,7 +921,7 @@ export default function ChannelDetail() {
             </div>
           ))}
 
-          <Button variant="ghost" size="sm" type="button" onClick={() => setHoursSlots([...hoursSlots, { days: ['mon','tue','wed','thu','fri'], start: utcToLocalTime('09:00', browserTz), end: utcToLocalTime('17:00', browserTz) }])} className="w-full border border-dashed border-base-content/15">
+          <Button variant="ghost" size="sm" type="button" onClick={() => setHoursSlots([...hoursSlots, { days: ['mon','tue','wed','thu','fri'], start: '09:00', end: '17:00' }])} className="w-full border border-dashed border-base-content/15">
             {t('channelDetail.editHoursModal.addSlot')}
           </Button>
 
