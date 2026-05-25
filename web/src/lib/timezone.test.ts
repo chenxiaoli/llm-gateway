@@ -6,6 +6,7 @@ import {
   localDayToUtcDay,
   isAvailableNow,
   getTimezoneLabel,
+  getBrowserTimezone,
   DAY_ORDER,
 } from './timezone';
 
@@ -102,5 +103,14 @@ describe('getTimezoneLabel', () => {
   it('handles UTC', () => {
     const label = getTimezoneLabel('UTC');
     expect(label).toContain('UTC');
+  });
+});
+
+describe('getBrowserTimezone', () => {
+  it('returns a valid timezone string', () => {
+    const tz = getBrowserTimezone();
+    expect(typeof tz).toBe('string');
+    expect(tz.length).toBeGreaterThan(0);
+    expect(tz).toMatch(/^[A-Za-z]/);
   });
 });
