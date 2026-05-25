@@ -70,7 +70,7 @@ export function isAvailableNow(slots: TimeSlot[] | null | undefined, tz: string)
       hour12: false,
       timeZone: tz,
     }).formatToParts(now);
-    const h = parseInt(parts.find(p => p.type === 'hour')!.value, 10);
+    const h = parseInt(parts.find(p => p.type === 'hour')!.value, 10) % 24;
     const m = parseInt(parts.find(p => p.type === 'minute')!.value, 10);
     return h * 60 + m;
   })();
