@@ -14,6 +14,7 @@ import { Modal } from '../components/ui/Modal';
 import { Toggle } from '../components/ui/Toggle';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import type { UpdateChannelRequest, ChannelModel, TimeSlot } from '../types';
+import { utcToLocalTime, localToUtcTime, utcDayToLocalDay, localDayToUtcDay, getBrowserTimezone, getTimezoneLabel } from '../lib/timezone';
 
 export default function ChannelDetail() {
   const { id } = useParams<{ id: string }>();
@@ -122,6 +123,25 @@ export default function ChannelDetail() {
       },
     });
   };
+
+  const browserTz = getBrowserTimezone();
+  const tzLabel = getTimezoneLabel(browserTz);
+
+  const localSlots = (slots: TimeSlot[] | null | undefined): TimeSlot[] | null => {
+    if (!slots || slots.length === 0) return slots ?? null;
+    return slots.map(s => ({
+      days: s.days.map(d => utcDayToLocalDay(d, s.start, browserTz)),
+      start: utcToLocalTime(s.start, browserTz),
+      end: utcToLocalTime(s.end, browserTz),
+    }));
+  };
+
+  const toUtcSlots = (local: TimeSlot[]): TimeSlot[] =>
+    local.map(s => ({
+      days: s.days.map(d => localDayToUtcDay(d, s.start, browserTz)),
+      start: localToUtcTime(s.start, browserTz),
+      end: localToUtcTime(s.end, browserTz),
+    }));
 
   if (isLoading) {
     return (
@@ -384,14 +404,16 @@ export default function ChannelDetail() {
         {/* Available Hours Card */}
         <div className="bg-base-100 rounded-box p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-base-content/60">{t('channelDetail.availableHours')}</h2>
-            <Button variant="secondary" size="sm" icon={<Pencil className="h-4 w-4" />} onClick={() => { setHoursSlots(channel.available_hours ?? []); setEditingHours(true); }}>
+            <h2 className="text-sm font-semibold text-base-content/60">{t('channelDetail.availableHours')} <span className="text-xs font-normal text-base-content/30">{tzLabel}</span></h2>
+            <Button variant="secondary" size="sm" icon={<Pencil className="h-4 w-4" />} onClick={() => { const local = localSlots(channel.available_hours ?? []); setHoursSlots(local ?? []); setEditingHours(true); }}>
               {t('common.edit')}
             </Button>
           </div>
-          {channel.available_hours && channel.available_hours.length > 0 ? (
+          {(() => {
+            const displayed = localSlots(channel.available_hours);
+            return displayed && displayed.length > 0 ? (
             <div className="space-y-2">
-              {channel.available_hours.map((slot, i) => (
+              {displayed.map((slot, i) => (
                 <div key={i} className="flex items-center gap-3 p-3 bg-base-200/50 rounded-lg">
                   <Clock className="h-4 w-4 text-primary shrink-0" />
                   <div className="flex-1">
@@ -407,7 +429,8 @@ export default function ChannelDetail() {
             </div>
           ) : (
             <div className="text-sm text-base-content/30 italic">{t('channelDetail.alwaysAvailable')}</div>
-          )}
+          );
+          })()}
         </div>
 
         {/* Metadata Card */}
@@ -850,7 +873,7 @@ export default function ChannelDetail() {
           e.preventDefault();
           await updateMutation.mutateAsync({
             id: channel.id,
-            input: { available_hours: hoursSlots },
+            input: { available_hours: toUtcSlots(hoursSlots) },
           });
           setEditingHours(false);
         }} className="space-y-4">
@@ -898,7 +921,7 @@ export default function ChannelDetail() {
             </div>
           ))}
 
-          <Button variant="ghost" size="sm" type="button" onClick={() => setHoursSlots([...hoursSlots, { days: ['mon','tue','wed','thu','fri'], start: '09:00', end: '17:00' }])} className="w-full border border-dashed border-base-content/15">
+          <Button variant="ghost" size="sm" type="button" onClick={() => setHoursSlots([...hoursSlots, { days: ['mon','tue','wed','thu','fri'], start: utcToLocalTime('09:00', browserTz), end: utcToLocalTime('17:00', browserTz) }])} className="w-full border border-dashed border-base-content/15">
             {t('channelDetail.editHoursModal.addSlot')}
           </Button>
 
