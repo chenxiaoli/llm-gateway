@@ -559,7 +559,7 @@
     },
     "editHoursModal": {
       "title": "编辑可用时段",
-      "description": "将此通道限制在特定的日期和时间段。留空表示始终可用。所有时间均为 UTC。",
+      "description": "将此通道限制在特定的日期和时间段。留空表示始终可用。时间以您的浏览器时区显示。",
       "slot": "时段 {{number}}",
       "remove": "移除",
       "start": "开始",

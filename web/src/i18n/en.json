@@ -559,7 +559,7 @@
     },
     "editHoursModal": {
       "title": "Edit Available Hours",
-      "description": "Restrict this channel to specific days and times. Leave empty to make it always available. All times are in UTC.",
+      "description": "Restrict this channel to specific days and times. Leave empty to make it always available. Times are shown in your browser timezone.",
       "slot": "Slot {{number}}",
       "remove": "Remove",
       "start": "Start",
