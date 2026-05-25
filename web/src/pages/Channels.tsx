@@ -13,26 +13,11 @@ import { Drawer } from '../components/ui/Drawer';
 import { Modal } from '../components/ui/Modal';
 import { Toggle } from '../components/ui/Toggle';
 import { Globe, Plus, Radio, Hash, ShieldCheck, Key, Wifi, Cpu, Search, X, Clock, Scale, Zap, Check, Loader2 } from 'lucide-react';
-import type { Channel, CreateChannelRequest, TimeSlot } from '../types';
+import type { Channel, CreateChannelRequest } from '../types';
+import { isAvailableNow, utcToLocalTime, utcDayToLocalDay, getBrowserTimezone } from '../lib/timezone';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
-
-// ── Availability check (mirrors backend is_available_now) ─────────────────────
-function isAvailableNow(slots: TimeSlot[] | null | undefined): boolean {
-  if (!slots || slots.length === 0) return true;
-  const now = new Date();
-  const day = now.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }).toLowerCase();
-  const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  return slots.some((slot) => {
-    if (!slot.days.includes(day)) return false;
-    const [sh, sm] = slot.start.split(':').map(Number);
-    const [eh, em] = slot.end.split(':').map(Number);
-    const start = (sh || 0) * 60 + (sm || 0);
-    const end = (eh || 0) * 60 + (em || 0);
-    return nowMinutes >= start && nowMinutes < end;
-  });
-}
 
 // ── Searchable Model Multi-Select ─────────────────────────────────────────────
 function ModelMultiSelect({
@@ -373,6 +358,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
   const testMutation = useTestChannel();
   const toggleMutation = useToggleChannel();
   const { t } = useTranslation();
+  const browserTz = getBrowserTimezone();
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [testDetail, setTestDetail] = useState<ChannelTestResult[] | null>(null);
   const [testStream, setTestStream] = useState(false);
@@ -493,7 +479,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
 
         {/* Available Hours */}
         {channel.available_hours && channel.available_hours.length > 0 ? (() => {
-          const available = isAvailableNow(channel.available_hours);
+          const available = isAvailableNow(channel.available_hours, browserTz);
           return (
             <div className={`shrink-0 flex flex-col gap-0.5 px-2 py-1 rounded ${available ? 'bg-success/5 border border-success/15' : 'bg-base-200/50 border border-base-300/30'}`}>
               <div className="flex items-center gap-1.5">
@@ -502,17 +488,22 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
                   {available ? t('channels.row.available') : t('channels.row.outsideHours')}
                 </span>
               </div>
-              {channel.available_hours.map((slot, i) => (
+              {channel.available_hours.map((slot, i) => {
+                const localStart = utcToLocalTime(slot.start, browserTz);
+                const localEnd = utcToLocalTime(slot.end, browserTz);
+                const localDays = slot.days.map(d => utcDayToLocalDay(d, slot.start, browserTz));
+                return (
                 <div key={i} className="flex items-center gap-1.5">
                   <Clock className="h-3 w-3 text-base-content/35 shrink-0" />
-                  <span className="text-md font-mono text-base-content/50 whitespace-nowrap">{slot.start}–{slot.end}</span>
+                  <span className="text-md font-mono text-base-content/50 whitespace-nowrap">{localStart}–{localEnd}</span>
                   <div className="flex gap-0.5">
-                    {slot.days.map(d => (
+                    {localDays.map(d => (
                       <span key={d} className="text-sm font-medium text-primary/70 bg-primary/8 px-1 rounded">{d.slice(0, 3)}</span>
                     ))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           );
         })() : (
