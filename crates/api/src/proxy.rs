@@ -1131,6 +1131,74 @@ async fn proxy_inner(
         if status == 429 {
             tracing::warn!("[PROXY] Rate limited (429) on channel '{}', trying next", channel.name);
             last_error = format!("Rate limited (429) on channel '{}'", channel.name);
+
+            // Audit log for 429 rate limit events
+            let response_headers_for_worker: String = {
+                let mut map = serde_json::Map::new();
+                for (name, value) in resp.headers().iter() {
+                    if let Ok(v) = value.to_str() {
+                        map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
+                    }
+                }
+                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
+            };
+            let request_headers_for_worker: String = {
+                let mut map = serde_json::Map::new();
+                for (name, value) in headers.iter() {
+                    match name.as_str() {
+                        "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
+                        _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
+                        _ => {
+                            if let Ok(v) = value.to_str() {
+                                map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
+                            }
+                        }
+                    }
+                }
+                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
+            };
+            let error_body = resp.bytes().await.unwrap_or_default();
+            let error_body_str = String::from_utf8_lossy(&error_body).into_owned();
+            let proto = match protocol {
+                ProxyProtocol::OpenAI => Protocol::Openai,
+                ProxyProtocol::Anthropic => Protocol::Anthropic,
+            };
+            let pricing_policy = {
+                let policy_id = channel_model.pricing_policy_id.as_deref()
+                    .or(model_entry.model.pricing_policy_id.as_deref());
+                match policy_id {
+                    Some(id) => {
+                        state.storage.get_pricing_policy(id).await
+                            .map_err(|e| ApiError::Internal(e.to_string()))?
+                    }
+                    None => None,
+                }
+            };
+            let task = AuditTask {
+                request_id: request_id.clone(),
+                key_id: api_key.id.clone(),
+                user_id: api_key.created_by.clone(),
+                model_name: upstream_name.to_string(),
+                provider_id: provider_id.clone(),
+                protocol: proto,
+                stream: is_stream,
+                request_body: body.clone(),
+                response_bytes: error_body_str.into_bytes(),
+                status_code: 429,
+                latency_ms,
+                pricing_policy,
+                markup_ratio: channel_model.markup_ratio,
+                channel_id: Some(channel.channel_id.to_string()),
+                original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
+                upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
+                model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
+                request_path: Some(request_path.clone()),
+                upstream_url: Some(upstream_url.clone()),
+                request_headers: Some(request_headers_for_worker),
+                response_headers: Some(response_headers_for_worker),
+            };
+            dispatch_audit_task(&state, task).await;
+
             continue;
         }
 
