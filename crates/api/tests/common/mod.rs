@@ -17,6 +17,8 @@ impl ChannelRegistry for MockChannelRegistry {
         Vec::new()
     }
     async fn reload(&self) {}
+    fn disable_channel_model(&self, _channel_id: &str, _model_name: &str, _until: std::time::Instant) {}
+    fn is_circuit_broken(&self, _channel_id: &str, _model_name: &str) -> bool { false }
 }
 
 pub const TEST_JWT_SECRET: &str = "test-jwt-secret";
