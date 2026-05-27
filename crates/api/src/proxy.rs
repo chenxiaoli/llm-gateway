@@ -1159,6 +1159,19 @@ async fn proxy_inner(
             };
             let error_body = resp.bytes().await.unwrap_or_default();
             let error_body_str = String::from_utf8_lossy(&error_body).into_owned();
+
+            // Auto-disable channel on 429 — parse recovery time or use 30s default
+            let disable_until = if let Some(recovery_ts) = parse_recovery_timestamp(&error_body_str) {
+                recovery_ts
+            } else {
+                Utc::now() + chrono::Duration::seconds(30)
+            };
+            if let Err(e) = state.storage.disable_channel_until(&channel.channel_id.to_string(), disable_until).await {
+                tracing::error!("[PROXY] Failed to disable channel '{}' on 429: {:?}", channel.name, e);
+            } else {
+                tracing::info!("[PROXY] Channel '{}' disabled until {} (429 rate limit)", channel.name, disable_until);
+            }
+
             let proto = match protocol {
                 ProxyProtocol::OpenAI => Protocol::Openai,
                 ProxyProtocol::Anthropic => Protocol::Anthropic,
