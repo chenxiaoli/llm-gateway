@@ -1,6 +1,6 @@
 [package]
 name = "llm-gateway-api"
-version = "1.4.6"
+version = "1.4.7"
 edition = "2021"
 
 [dependencies]
@@ -26,8 +26,10 @@ async-trait = "0.1"
 futures = "0.3"
 tokio-stream = "0.1"
 bytes = "1"
+flate2 = "1"
 url = "2"
 rand = "0.9"
+dashmap = "6"
 regex-lite = "0.1"
 
 [dev-dependencies]

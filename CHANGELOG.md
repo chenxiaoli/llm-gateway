@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.7] - 2026-05-27
+
+### Added
+- Channel-model level circuit breaker: 429/SSE error disables specific (channel, model) combination in memory, not entire channel. Immediate effect, auto-recovery via `Instant` expiry
+- Optional token authentication for NATS connections (`[nats] token = "..."` in config.toml)
+- Audit logging for upstream 429 rate limit responses
+- Timezone-aware available hours: display and edit in browser timezone with utility functions and tests
+
+### Changed
+- Usage worker skips recording when cost is 0 (reduces noise for free requests)
+
+### Fixed
+- Filter forwarded headers (`x-forwarded-*`, `content-type`, `sec-*`, etc.) to prevent duplicate headers causing upstream 400 errors
+- Handle `hour12: false` returning 24 at midnight in available hours check
+- Use plain local time for new available hours slot defaults, convert in useEffect
+
 ## [1.4.6] - 2026-05-23
 
 ### Fixed

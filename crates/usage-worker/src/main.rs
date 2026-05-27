@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Connect to NATS
     let nats_cfg = config.nats.as_ref().ok_or("[nats] section is required")?;
-    let nats = Arc::new(llm_gateway_nats_publisher::NatsPublisher::new(&nats_cfg.url).await?);
+    let nats = Arc::new(llm_gateway_nats_publisher::NatsPublisher::new(&nats_cfg.url, nats_cfg.token.clone()).await?);
     tracing::info!("Connected to NATS: {}", nats_cfg.url);
 
     // Run with supervisor
@@ -53,8 +53,12 @@ async fn run_usage_worker(storage: Arc<dyn Storage>, nats: Arc<llm_gateway_nats_
     };
 
     while let Some(Ok(msg)) = messages.next().await {
-        let event: llm_gateway_nats_publisher::UsageEvent = match serde_json::from_slice(&msg.payload) {
-            Ok(e) => e,
+        let parse_result: Result<llm_gateway_nats_publisher::UsageEvent, _> = serde_json::from_slice(&msg.payload);
+        let event = match parse_result {
+            Ok(e) => {
+                tracing::info!("[USAGE-WORKER] received usage event request_id={} cost={}", e.request_id, e.cost);
+                e
+            }
             Err(e) => {
                 tracing::warn!("[USAGE-WORKER] Failed to deserialize: {}", e);
                 let _ = msg.ack().await;
@@ -86,11 +90,20 @@ async fn run_usage_worker(storage: Arc<dyn Storage>, nats: Arc<llm_gateway_nats_
                 .unwrap_or_else(|_| chrono::Utc::now()),
         };
 
+        // Skip recording usage when cost is 0
+        if record.cost == 0 {
+            tracing::debug!("[USAGE-WORKER] skipping cost=0 request_id={:?}", record.request_id);
+            let _ = msg.ack().await;
+            continue;
+        }
+
         if let Err(e) = storage.record_usage(&record).await {
             tracing::warn!("[USAGE-WORKER] Failed to record usage: {}", e);
             let _ = msg.ack_with(AckKind::Nak(None)).await;
             continue;
         }
+
+        tracing::info!("[USAGE-WORKER] successfully recorded usage request_id={:?}", record.request_id);
 
         // Per-request deduction
         if let Some(ref user_id) = record.user_id {

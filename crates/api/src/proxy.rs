@@ -84,6 +84,8 @@ pub trait ChannelRegistry: Send + Sync {
     async fn resolve_by_model(&self, model: &str) -> Vec<ResolvedChannel>;
     async fn resolve(&self, channel_id: &str) -> Option<ResolvedChannel>;
     async fn reload(&self);
+    fn disable_channel_model(&self, channel_id: &str, model_name: &str, until: Instant);
+    fn is_circuit_broken(&self, channel_id: &str, model_name: &str) -> bool;
 }
 
 /// Protocol for determining which adapter to use
@@ -96,6 +98,7 @@ pub enum ProxyProtocol {
 // ─── InMemoryChannelRegistry ─────────────────────────────────────────────────
 
 use arc_swap::ArcSwap;
+use dashmap::DashMap;
 
 pub struct InMemoryChannelRegistry {
     cache: Arc<ArcSwap<HashMap<String, ResolvedChannel>>>,
@@ -103,6 +106,7 @@ pub struct InMemoryChannelRegistry {
     storage: Arc<dyn llm_gateway_storage::Storage>,
     encryption_key: [u8; 32],
     refresh_interval: Duration,
+    circuit_breaker: Arc<DashMap<(String, String), Instant>>,
 }
 
 impl InMemoryChannelRegistry {
@@ -117,6 +121,7 @@ impl InMemoryChannelRegistry {
             storage,
             encryption_key,
             refresh_interval,
+            circuit_breaker: Arc::new(DashMap::new()),
         }
     }
 
@@ -331,6 +336,11 @@ fn apply_weighted_routing(candidates: &mut Vec<(ResolvedChannel, llm_gateway_sto
 impl ChannelRegistry for InMemoryChannelRegistry {
     async fn resolve_by_model(&self, model: &str) -> Vec<ResolvedChannel> {
         let model_key = model.to_lowercase();
+        let now = Instant::now();
+
+        // Lazy cleanup of expired circuit breaker entries
+        self.circuit_breaker.retain(|_, until| *until > now);
+
         let channel_ids = self.model_index.load().get(&model_key).cloned();
         match channel_ids {
             Some(ids) => {
@@ -338,6 +348,13 @@ impl ChannelRegistry for InMemoryChannelRegistry {
                 ids.iter()
                     .filter_map(|id| cache.get(id).cloned())
                     .filter(|ch| is_available_now(&ch.available_hours))
+                    .filter(|ch| {
+                        let key = (ch.channel_id.to_string(), model_key.clone());
+                        match self.circuit_breaker.get(&key) {
+                            Some(until) => now >= *until,
+                            None => true,
+                        }
+                    })
                     .collect()
             }
             None => Vec::new(),
@@ -350,6 +367,26 @@ impl ChannelRegistry for InMemoryChannelRegistry {
 
     async fn reload(&self) {
         Self::reload(self).await;
+    }
+
+    fn disable_channel_model(&self, channel_id: &str, model_name: &str, until: Instant) {
+        let model_lower = model_name.to_lowercase();
+        tracing::info!(
+            "[CIRCUIT-BREAKER] Disabling channel_id={}, model={} until {:?}",
+            channel_id, model_lower, until
+        );
+        self.circuit_breaker.insert(
+            (channel_id.to_string(), model_lower),
+            until,
+        );
+    }
+
+    fn is_circuit_broken(&self, channel_id: &str, model_name: &str) -> bool {
+        let model_lower = model_name.to_lowercase();
+        match self.circuit_breaker.get(&(channel_id.to_string(), model_lower.clone())) {
+            Some(until) => Instant::now() < *until,
+            None => false,
+        }
     }
 }
 
@@ -428,7 +465,10 @@ async fn publish_audit_events(
         request_path: task.request_path.clone(),
         upstream_url: task.upstream_url.clone(),
         request_body: task.request_body.clone(),
-        response_body: String::from_utf8_lossy(&task.response_bytes).into_owned(),
+        response_body: String::from_utf8_lossy(&task.response_bytes)
+            .chars()
+            .map(|c| if c == '\0' || c == '\u{FFFD}' { ' ' } else { c })
+            .collect::<String>(),
         request_headers: task.request_headers.clone(),
         response_headers: task.response_headers.clone(),
         created_at: now.to_rfc3339(),
@@ -437,6 +477,8 @@ async fn publish_audit_events(
     if let Err(e) = nats.publish_usage(&usage_event).await {
         tracing::warn!("[NATS] Failed to publish usage event: {}", e);
     }
+    tracing::info!("[NATS] publishing audit event request_id={} status={} cost={}",
+        audit_event.request_id, audit_event.status_code, cost);
     if let Err(e) = nats.publish_audit(&audit_event).await {
         tracing::warn!("[NATS] Failed to publish audit event: {}", e);
     }
@@ -485,8 +527,6 @@ pub struct SseAuditParams {
     pub upstream_url: String,
     pub request_headers: String,
     pub response_headers: String,
-    /// Duration to disable channel on SSE error (default 5 minutes)
-    pub disable_duration_secs: i64,
 }
 
 /// Parse recovery timestamp from SSE error message.
@@ -539,7 +579,7 @@ async fn process_sse_stream(
         match futures::TryStreamExt::try_next(&mut byte_stream).await {
             Ok(Some(chunk)) => {
                 // Accumulate for audit
-                line_buf.push_str(&String::from_utf8_lossy(&chunk));
+                line_buf.push_str(&String::from_utf8_lossy(&chunk).replace('\0', " "));
 
                 // SSE events delimited by double newline
                 loop {
@@ -609,25 +649,25 @@ async fn process_sse_stream(
         // Handle SSE error event: disable channel and break
         if saw_error {
             tracing::warn!(
-                "[PROXY] SSE error event received on channel '{}': {} — disabling for {}s",
+                "[PROXY] SSE error event received on channel '{}' model '{}': {}",
                 audit_params.channel_id,
+                audit_params.model_name,
                 error_message,
-                audit_params.disable_duration_secs
             );
 
-            // Parse recovery time from error message if available
-            let disable_until = if let Some(recovery_ts) = parse_recovery_timestamp(&error_message) {
-                recovery_ts
-            } else {
-                Utc::now() + chrono::Duration::seconds(audit_params.disable_duration_secs)
+            // Circuit-break the (channel, model) combination
+            let recovery_instant = match parse_recovery_timestamp(&error_message) {
+                Some(ts) => {
+                    let dur = (ts - Utc::now()).max(chrono::Duration::seconds(5));
+                    Instant::now() + dur.to_std().unwrap_or(Duration::from_secs(300))
+                }
+                None => Instant::now() + Duration::from_secs(300),
             };
-
-            // Disable channel in database
-            if let Err(e) = state.storage.disable_channel_until(&audit_params.channel_id, disable_until).await {
-                tracing::error!("[PROXY] Failed to disable channel '{}': {:?}", audit_params.channel_id, e);
-            } else {
-                tracing::info!("[PROXY] Channel '{}' disabled until {}", audit_params.channel_id, disable_until);
-            }
+            state.registry.disable_channel_model(
+                &audit_params.channel_id,
+                &audit_params.model_name,
+                recovery_instant,
+            );
 
             break 'outer;
         }
@@ -988,6 +1028,11 @@ async fn proxy_inner(
             candidates.push((resolved, (*cm).clone()));
         }
         candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
+        // Filter out circuit-broken (channel, model) combinations
+        let model_lower = model_name.to_lowercase();
+        candidates.retain(|(ch, _)| {
+            !state.registry.is_circuit_broken(&ch.channel_id.to_string(), &model_lower)
+        });
         if candidates.is_empty() {
             if fallback_depth == 0 {
                 if let Some(resp) = try_model_fallback(
@@ -1080,10 +1125,23 @@ async fn proxy_inner(
 
         req = req.header("Authorization", format!("Bearer {}", api_key_value));
 
-        // Forward non-auth client headers to upstream (exclude host, authorization, content-length, api keys)
+        // Forward client headers to upstream with a blacklist — skip hop-by-hop,
+        // auth, content-length, and browser-specific headers that can confuse upstream APIs.
         for (name, value) in headers.iter() {
-            match name.as_str() {
+            let lower = name.as_str().to_lowercase();
+            match lower.as_str() {
+                // Auth / identity
                 "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
+                // Content negotiation already set by proxy
+                "content-type" | "accept" | "accept-encoding" | "accept-language" => continue,
+                // Connection / transport
+                "connection" | "upgrade" | "keep-alive" | "transfer-encoding" | "te" | "trailer"
+                | "proxy-connection" => continue,
+                // x-forwarded-*
+                _ if lower.starts_with("x-forwarded-") => continue,
+                // Browser / CORS / Sec-*
+                _ if lower.starts_with("sec-") || lower == "origin" || lower == "referer"
+                    || lower == "priority" => continue,
                 _ => {
                     req = req.header(name.clone(), value);
                 }
@@ -1113,6 +1171,89 @@ async fn proxy_inner(
         if status == 429 {
             tracing::warn!("[PROXY] Rate limited (429) on channel '{}', trying next", channel.name);
             last_error = format!("Rate limited (429) on channel '{}'", channel.name);
+
+            // Audit log for 429 rate limit events
+            let response_headers_for_worker: String = {
+                let mut map = serde_json::Map::new();
+                for (name, value) in resp.headers().iter() {
+                    if let Ok(v) = value.to_str() {
+                        map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
+                    }
+                }
+                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
+            };
+            let request_headers_for_worker: String = {
+                let mut map = serde_json::Map::new();
+                for (name, value) in headers.iter() {
+                    match name.as_str() {
+                        "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
+                        _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
+                        _ => {
+                            if let Ok(v) = value.to_str() {
+                                map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
+                            }
+                        }
+                    }
+                }
+                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
+            };
+            let error_body = resp.bytes().await.unwrap_or_default();
+            let error_body_str = String::from_utf8_lossy(&error_body).into_owned();
+
+            // Circuit-break the (channel, model) combination on 429
+            let recovery_instant = match parse_recovery_timestamp(&error_body_str) {
+                Some(ts) => {
+                    let dur = (ts - Utc::now()).max(chrono::Duration::seconds(5));
+                    Instant::now() + dur.to_std().unwrap_or(Duration::from_secs(30))
+                }
+                None => Instant::now() + Duration::from_secs(30),
+            };
+            state.registry.disable_channel_model(
+                &channel.channel_id.to_string(),
+                &model_name,
+                recovery_instant,
+            );
+
+            let proto = match protocol {
+                ProxyProtocol::OpenAI => Protocol::Openai,
+                ProxyProtocol::Anthropic => Protocol::Anthropic,
+            };
+            let pricing_policy = {
+                let policy_id = channel_model.pricing_policy_id.as_deref()
+                    .or(model_entry.model.pricing_policy_id.as_deref());
+                match policy_id {
+                    Some(id) => {
+                        state.storage.get_pricing_policy(id).await
+                            .map_err(|e| ApiError::Internal(e.to_string()))?
+                    }
+                    None => None,
+                }
+            };
+            let task = AuditTask {
+                request_id: request_id.clone(),
+                key_id: api_key.id.clone(),
+                user_id: api_key.created_by.clone(),
+                model_name: upstream_name.to_string(),
+                provider_id: provider_id.clone(),
+                protocol: proto,
+                stream: is_stream,
+                request_body: body.clone(),
+                response_bytes: error_body_str.into_bytes(),
+                status_code: 429,
+                latency_ms,
+                pricing_policy,
+                markup_ratio: channel_model.markup_ratio,
+                channel_id: Some(channel.channel_id.to_string()),
+                original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
+                upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
+                model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
+                request_path: Some(request_path.clone()),
+                upstream_url: Some(upstream_url.clone()),
+                request_headers: Some(request_headers_for_worker),
+                response_headers: Some(response_headers_for_worker),
+            };
+            dispatch_audit_task(&state, task).await;
+
             continue;
         }
 
@@ -1128,12 +1269,13 @@ if status != 200 && status < 500 {
                 serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
             };
 
-            // Build request headers JSON (for audit log — only forwarded headers, exclude sensitive ones)
+            // Build request headers JSON (for audit log — only forwarded headers, exclude sensitive ones and x-forwarded-*)
             let request_headers_for_worker: String = {
                 let mut map = serde_json::Map::new();
                 for (name, value) in headers.iter() {
                     match name.as_str() {
                         "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
+                        _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
                         _ => {
                             if let Ok(v) = value.to_str() {
                                 map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
@@ -1161,8 +1303,23 @@ if status != 200 && status < 500 {
                 }
             };
 
-            let error_body = resp.text().await.unwrap_or_default();
-            tracing::debug!("[PROXY] Upstream error response: status={}, body_len={}", status, error_body.len());
+            // Get raw bytes and try to decompress gzip if needed
+            let error_body = resp.bytes().await.unwrap_or_default();
+            let error_body_str = if error_body.len() >= 2 && error_body[0] == 0x1F && error_body[1] == 0x8B {
+                // Gzip magic bytes - decompress
+                use std::io::Read;
+                let mut decoder = flate2::read::GzDecoder::new(&error_body[..]);
+                let mut decompressed = String::new();
+                match decoder.read_to_string(&mut decompressed) {
+                    Ok(_) => decompressed,
+                    Err(_) => String::from_utf8_lossy(&error_body).into_owned(),
+                }
+            } else {
+                String::from_utf8_lossy(&error_body).into_owned()
+            };
+            // Clean null bytes and replacement characters
+            let error_body_str = error_body_str.chars().map(|c| if c == '\0' || c == '\u{FFFD}' { ' ' } else { c }).collect::<String>();
+            tracing::debug!("[PROXY] Upstream error response: status={}, body_len={}", status, error_body_str.len());
 
             let task = AuditTask {
                 request_id: request_id.clone(),
@@ -1173,7 +1330,7 @@ if status != 200 && status < 500 {
                 protocol: proto,
                 stream: is_stream,
                 request_body: body.clone(),
-                response_bytes: error_body.clone().into_bytes(),
+                response_bytes: error_body_str.into_bytes(),
                 status_code: status as i32,
                 latency_ms,
                 pricing_policy,
@@ -1194,12 +1351,13 @@ if status != 200 && status < 500 {
 
         tracing::debug!("[PROXY] Upstream success response: status={}, is_stream={}", status, is_stream);
 
-        // Build request headers JSON (for audit log — only forwarded headers, exclude sensitive ones)
+        // Build request headers JSON (for audit log — only forwarded headers, exclude sensitive ones and x-forwarded-*)
         let request_headers_for_worker: String = {
             let mut map = serde_json::Map::new();
             for (name, value) in headers.iter() {
                 match name.as_str() {
                     "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
+                    _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
                     _ => {
                         if let Ok(v) = value.to_str() {
                             map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
@@ -1260,7 +1418,6 @@ if status != 200 && status < 500 {
                 upstream_url: upstream_url.clone(),
                 request_headers: request_headers_for_worker.clone(),
                 response_headers: response_headers_for_worker,
-                disable_duration_secs: 300, // 5 minutes default
             };
 
             let upstream_resp = resp;
@@ -1419,6 +1576,10 @@ mod tests {
             self.0.clone()
         }
         async fn reload(&self) {}
+        fn disable_channel_model(&self, _channel_id: &str, _model_name: &str, _until: Instant) {}
+        fn is_circuit_broken(&self, _channel_id: &str, _model_name: &str) -> bool {
+            false
+        }
     }
 
     #[test]

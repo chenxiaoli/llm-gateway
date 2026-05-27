@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "adler2"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
+
+[[package]]
 name = "aead"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -376,6 +382,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "217698eaf96b4a3f0bc4f3662aaa55bdf913cd54d7204591faa790070c6d0853"
 
 [[package]]
+name = "crc32fast"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "crossbeam-queue"
 version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -608,6 +623,16 @@ name = "find-msvc-tools"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
+
+[[package]]
+name = "flate2"
+version = "1.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
+dependencies = [
+ "crc32fast",
+ "miniz_oxide",
+]
 
 [[package]]
 name = "flume"
@@ -1286,7 +1311,7 @@ checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
 name = "llm-gateway"
-version = "1.4.4"
+version = "1.4.6"
 dependencies = [
  "axum",
  "llm-gateway-api",
@@ -1307,13 +1332,14 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-api"
-version = "1.4.4"
+version = "1.4.6"
 dependencies = [
  "arc-swap",
  "async-trait",
  "axum",
  "bytes",
  "chrono",
+ "flate2",
  "futures",
  "hyper",
  "llm-gateway-auth",
@@ -1339,7 +1365,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-audit"
-version = "1.4.4"
+version = "1.4.6"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1349,7 +1375,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-audit-worker"
-version = "1.4.4"
+version = "1.4.6"
 dependencies = [
  "futures",
  "llm-gateway-audit",
@@ -1366,7 +1392,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-auth"
-version = "1.4.4"
+version = "1.4.6"
 dependencies = [
  "bcrypt",
  "chrono",
@@ -1379,7 +1405,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-billing"
-version = "1.4.4"
+version = "1.4.6"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1388,7 +1414,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-encryption"
-version = "1.4.4"
+version = "1.4.6"
 dependencies = [
  "aes-gcm",
  "base64",
@@ -1398,7 +1424,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-nats-publisher"
-version = "1.4.4"
+version = "1.4.6"
 dependencies = [
  "async-nats",
  "chrono",
@@ -1412,7 +1438,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-provider"
-version = "1.4.4"
+version = "1.4.6"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -1424,14 +1450,14 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-ratelimit"
-version = "1.4.4"
+version = "1.4.6"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
 name = "llm-gateway-storage"
-version = "1.4.4"
+version = "1.4.6"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1445,7 +1471,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-usage-worker"
-version = "1.4.4"
+version = "1.4.6"
 dependencies = [
  "chrono",
  "futures",
@@ -1511,6 +1537,16 @@ checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
 dependencies = [
  "mime",
  "unicase",
+]
+
+[[package]]
+name = "miniz_oxide"
+version = "0.8.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316"
+dependencies = [
+ "adler2",
+ "simd-adler32",
 ]
 
 [[package]]
@@ -2471,6 +2507,12 @@ dependencies = [
  "digest",
  "rand_core 0.6.4",
 ]
+
+[[package]]
+name = "simd-adler32"
+version = "0.3.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "703d5c7ef118737c72f1af64ad2f6f8c5e1921f818cdcb97b8fe6fc69bf66214"
 
 [[package]]
 name = "simple_asn1"
