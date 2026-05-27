@@ -982,4 +982,6 @@ pub struct AuditConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct NatsConfig {
     pub url: String,
+    #[serde(default)]
+    pub token: Option<String>,
 }

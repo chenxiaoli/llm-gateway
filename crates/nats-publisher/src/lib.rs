@@ -86,8 +86,15 @@ pub struct NatsPublisher {
 impl NatsPublisher {
     /// Connect to the NATS server at `url` and create the required JetStream
     /// streams idempotently.
-    pub async fn new(url: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let client = async_nats::connect(url).await?;
+    pub async fn new(url: &str, token: Option<String>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let client = if let Some(token) = token {
+            async_nats::connect_with_options(
+                url,
+                async_nats::ConnectOptions::new().token(token),
+            ).await?
+        } else {
+            async_nats::connect(url).await?
+        };
         let js = jetstream::new(client);
 
         // Create LLM_GATEWAY_USAGE stream (1 M messages, 7-day retention).
