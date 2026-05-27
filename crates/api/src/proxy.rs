@@ -428,7 +428,10 @@ async fn publish_audit_events(
         request_path: task.request_path.clone(),
         upstream_url: task.upstream_url.clone(),
         request_body: task.request_body.clone(),
-        response_body: String::from_utf8_lossy(&task.response_bytes).into_owned(),
+        response_body: String::from_utf8_lossy(&task.response_bytes)
+            .chars()
+            .map(|c| if c == '\0' || c == '\u{FFFD}' { ' ' } else { c })
+            .collect::<String>(),
         request_headers: task.request_headers.clone(),
         response_headers: task.response_headers.clone(),
         created_at: now.to_rfc3339(),
@@ -437,6 +440,8 @@ async fn publish_audit_events(
     if let Err(e) = nats.publish_usage(&usage_event).await {
         tracing::warn!("[NATS] Failed to publish usage event: {}", e);
     }
+    tracing::info!("[NATS] publishing audit event request_id={} status={} cost={}",
+        audit_event.request_id, audit_event.status_code, cost);
     if let Err(e) = nats.publish_audit(&audit_event).await {
         tracing::warn!("[NATS] Failed to publish audit event: {}", e);
     }
@@ -539,7 +544,7 @@ async fn process_sse_stream(
         match futures::TryStreamExt::try_next(&mut byte_stream).await {
             Ok(Some(chunk)) => {
                 // Accumulate for audit
-                line_buf.push_str(&String::from_utf8_lossy(&chunk));
+                line_buf.push_str(&String::from_utf8_lossy(&chunk).replace('\0', " "));
 
                 // SSE events delimited by double newline
                 loop {
@@ -1080,10 +1085,23 @@ async fn proxy_inner(
 
         req = req.header("Authorization", format!("Bearer {}", api_key_value));
 
-        // Forward non-auth client headers to upstream (exclude host, authorization, content-length, api keys)
+        // Forward client headers to upstream with a blacklist — skip hop-by-hop,
+        // auth, content-length, and browser-specific headers that can confuse upstream APIs.
         for (name, value) in headers.iter() {
-            match name.as_str() {
+            let lower = name.as_str().to_lowercase();
+            match lower.as_str() {
+                // Auth / identity
                 "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
+                // Content negotiation already set by proxy
+                "content-type" | "accept" | "accept-encoding" | "accept-language" => continue,
+                // Connection / transport
+                "connection" | "upgrade" | "keep-alive" | "transfer-encoding" | "te" | "trailer"
+                | "proxy-connection" => continue,
+                // x-forwarded-*
+                _ if lower.starts_with("x-forwarded-") => continue,
+                // Browser / CORS / Sec-*
+                _ if lower.starts_with("sec-") || lower == "origin" || lower == "referer"
+                    || lower == "priority" => continue,
                 _ => {
                     req = req.header(name.clone(), value);
                 }
@@ -1128,12 +1146,13 @@ if status != 200 && status < 500 {
                 serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
             };
 
-            // Build request headers JSON (for audit log — only forwarded headers, exclude sensitive ones)
+            // Build request headers JSON (for audit log — only forwarded headers, exclude sensitive ones and x-forwarded-*)
             let request_headers_for_worker: String = {
                 let mut map = serde_json::Map::new();
                 for (name, value) in headers.iter() {
                     match name.as_str() {
                         "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
+                        _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
                         _ => {
                             if let Ok(v) = value.to_str() {
                                 map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
@@ -1161,8 +1180,23 @@ if status != 200 && status < 500 {
                 }
             };
 
-            let error_body = resp.text().await.unwrap_or_default();
-            tracing::debug!("[PROXY] Upstream error response: status={}, body_len={}", status, error_body.len());
+            // Get raw bytes and try to decompress gzip if needed
+            let error_body = resp.bytes().await.unwrap_or_default();
+            let error_body_str = if error_body.len() >= 2 && error_body[0] == 0x1F && error_body[1] == 0x8B {
+                // Gzip magic bytes - decompress
+                use std::io::Read;
+                let mut decoder = flate2::read::GzDecoder::new(&error_body[..]);
+                let mut decompressed = String::new();
+                match decoder.read_to_string(&mut decompressed) {
+                    Ok(_) => decompressed,
+                    Err(_) => String::from_utf8_lossy(&error_body).into_owned(),
+                }
+            } else {
+                String::from_utf8_lossy(&error_body).into_owned()
+            };
+            // Clean null bytes and replacement characters
+            let error_body_str = error_body_str.chars().map(|c| if c == '\0' || c == '\u{FFFD}' { ' ' } else { c }).collect::<String>();
+            tracing::debug!("[PROXY] Upstream error response: status={}, body_len={}", status, error_body_str.len());
 
             let task = AuditTask {
                 request_id: request_id.clone(),
@@ -1173,7 +1207,7 @@ if status != 200 && status < 500 {
                 protocol: proto,
                 stream: is_stream,
                 request_body: body.clone(),
-                response_bytes: error_body.clone().into_bytes(),
+                response_bytes: error_body_str.into_bytes(),
                 status_code: status as i32,
                 latency_ms,
                 pricing_policy,
@@ -1194,12 +1228,13 @@ if status != 200 && status < 500 {
 
         tracing::debug!("[PROXY] Upstream success response: status={}, is_stream={}", status, is_stream);
 
-        // Build request headers JSON (for audit log — only forwarded headers, exclude sensitive ones)
+        // Build request headers JSON (for audit log — only forwarded headers, exclude sensitive ones and x-forwarded-*)
         let request_headers_for_worker: String = {
             let mut map = serde_json::Map::new();
             for (name, value) in headers.iter() {
                 match name.as_str() {
                     "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
+                    _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
                     _ => {
                         if let Ok(v) = value.to_str() {
                             map.insert(name.to_string(), serde_json::Value::String(v.to_string()));

@@ -53,8 +53,12 @@ async fn run_usage_worker(storage: Arc<dyn Storage>, nats: Arc<llm_gateway_nats_
     };
 
     while let Some(Ok(msg)) = messages.next().await {
-        let event: llm_gateway_nats_publisher::UsageEvent = match serde_json::from_slice(&msg.payload) {
-            Ok(e) => e,
+        let parse_result: Result<llm_gateway_nats_publisher::UsageEvent, _> = serde_json::from_slice(&msg.payload);
+        let event = match parse_result {
+            Ok(e) => {
+                tracing::info!("[USAGE-WORKER] received usage event request_id={} cost={}", e.request_id, e.cost);
+                e
+            }
             Err(e) => {
                 tracing::warn!("[USAGE-WORKER] Failed to deserialize: {}", e);
                 let _ = msg.ack().await;
@@ -91,6 +95,8 @@ async fn run_usage_worker(storage: Arc<dyn Storage>, nats: Arc<llm_gateway_nats_
             let _ = msg.ack_with(AckKind::Nak(None)).await;
             continue;
         }
+
+        tracing::info!("[USAGE-WORKER] successfully recorded usage request_id={:?}", record.request_id);
 
         // Per-request deduction
         if let Some(ref user_id) = record.user_id {

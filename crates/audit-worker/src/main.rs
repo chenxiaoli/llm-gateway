@@ -58,8 +58,12 @@ async fn run_audit_worker(
     };
 
     while let Some(Ok(msg)) = messages.next().await {
-        let event: llm_gateway_nats_publisher::AuditEvent = match serde_json::from_slice(&msg.payload) {
-            Ok(e) => e,
+        let parse_result: Result<llm_gateway_nats_publisher::AuditEvent, _> = serde_json::from_slice(&msg.payload);
+        let event = match parse_result {
+            Ok(e) => {
+                tracing::info!("[AUDIT-WORKER] received audit event request_id={} status={}", e.request_id, e.status_code);
+                e
+            }
             Err(e) => {
                 tracing::warn!("[AUDIT-WORKER] Failed to deserialize: {}", e);
                 let _ = msg.ack().await;
@@ -99,6 +103,8 @@ async fn run_audit_worker(
             let _ = msg.ack_with(AckKind::Nak(None)).await;
             continue;
         }
+
+        tracing::info!("[AUDIT-WORKER] successfully logged audit request_id={}", event.request_id);
 
         let _ = msg.ack().await;
     }
