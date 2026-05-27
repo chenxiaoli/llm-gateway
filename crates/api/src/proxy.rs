@@ -84,6 +84,8 @@ pub trait ChannelRegistry: Send + Sync {
     async fn resolve_by_model(&self, model: &str) -> Vec<ResolvedChannel>;
     async fn resolve(&self, channel_id: &str) -> Option<ResolvedChannel>;
     async fn reload(&self);
+    fn disable_channel_model(&self, channel_id: &str, model_name: &str, until: Instant);
+    fn is_circuit_broken(&self, channel_id: &str, model_name: &str) -> bool;
 }
 
 /// Protocol for determining which adapter to use
@@ -96,6 +98,7 @@ pub enum ProxyProtocol {
 // ─── InMemoryChannelRegistry ─────────────────────────────────────────────────
 
 use arc_swap::ArcSwap;
+use dashmap::DashMap;
 
 pub struct InMemoryChannelRegistry {
     cache: Arc<ArcSwap<HashMap<String, ResolvedChannel>>>,
@@ -103,6 +106,7 @@ pub struct InMemoryChannelRegistry {
     storage: Arc<dyn llm_gateway_storage::Storage>,
     encryption_key: [u8; 32],
     refresh_interval: Duration,
+    circuit_breaker: Arc<DashMap<(String, String), Instant>>,
 }
 
 impl InMemoryChannelRegistry {
@@ -117,6 +121,7 @@ impl InMemoryChannelRegistry {
             storage,
             encryption_key,
             refresh_interval,
+            circuit_breaker: Arc::new(DashMap::new()),
         }
     }
 
@@ -331,6 +336,11 @@ fn apply_weighted_routing(candidates: &mut Vec<(ResolvedChannel, llm_gateway_sto
 impl ChannelRegistry for InMemoryChannelRegistry {
     async fn resolve_by_model(&self, model: &str) -> Vec<ResolvedChannel> {
         let model_key = model.to_lowercase();
+        let now = Instant::now();
+
+        // Lazy cleanup of expired circuit breaker entries
+        self.circuit_breaker.retain(|_, until| *until > now);
+
         let channel_ids = self.model_index.load().get(&model_key).cloned();
         match channel_ids {
             Some(ids) => {
@@ -338,6 +348,13 @@ impl ChannelRegistry for InMemoryChannelRegistry {
                 ids.iter()
                     .filter_map(|id| cache.get(id).cloned())
                     .filter(|ch| is_available_now(&ch.available_hours))
+                    .filter(|ch| {
+                        let key = (ch.channel_id.to_string(), model_key.clone());
+                        match self.circuit_breaker.get(&key) {
+                            Some(until) => now >= *until,
+                            None => true,
+                        }
+                    })
                     .collect()
             }
             None => Vec::new(),
@@ -350,6 +367,26 @@ impl ChannelRegistry for InMemoryChannelRegistry {
 
     async fn reload(&self) {
         Self::reload(self).await;
+    }
+
+    fn disable_channel_model(&self, channel_id: &str, model_name: &str, until: Instant) {
+        let model_lower = model_name.to_lowercase();
+        tracing::info!(
+            "[CIRCUIT-BREAKER] Disabling channel_id={}, model={} until {:?}",
+            channel_id, model_lower, until
+        );
+        self.circuit_breaker.insert(
+            (channel_id.to_string(), model_lower),
+            until,
+        );
+    }
+
+    fn is_circuit_broken(&self, channel_id: &str, model_name: &str) -> bool {
+        let model_lower = model_name.to_lowercase();
+        match self.circuit_breaker.get(&(channel_id.to_string(), model_lower.clone())) {
+            Some(until) => Instant::now() < *until,
+            None => false,
+        }
     }
 }
 
@@ -490,8 +527,6 @@ pub struct SseAuditParams {
     pub upstream_url: String,
     pub request_headers: String,
     pub response_headers: String,
-    /// Duration to disable channel on SSE error (default 5 minutes)
-    pub disable_duration_secs: i64,
 }
 
 /// Parse recovery timestamp from SSE error message.
@@ -614,25 +649,25 @@ async fn process_sse_stream(
         // Handle SSE error event: disable channel and break
         if saw_error {
             tracing::warn!(
-                "[PROXY] SSE error event received on channel '{}': {} — disabling for {}s",
+                "[PROXY] SSE error event received on channel '{}' model '{}': {}",
                 audit_params.channel_id,
+                audit_params.model_name,
                 error_message,
-                audit_params.disable_duration_secs
             );
 
-            // Parse recovery time from error message if available
-            let disable_until = if let Some(recovery_ts) = parse_recovery_timestamp(&error_message) {
-                recovery_ts
-            } else {
-                Utc::now() + chrono::Duration::seconds(audit_params.disable_duration_secs)
+            // Circuit-break the (channel, model) combination
+            let recovery_instant = match parse_recovery_timestamp(&error_message) {
+                Some(ts) => {
+                    let dur = (ts - Utc::now()).max(chrono::Duration::seconds(5));
+                    Instant::now() + dur.to_std().unwrap_or(Duration::from_secs(300))
+                }
+                None => Instant::now() + Duration::from_secs(300),
             };
-
-            // Disable channel in database
-            if let Err(e) = state.storage.disable_channel_until(&audit_params.channel_id, disable_until).await {
-                tracing::error!("[PROXY] Failed to disable channel '{}': {:?}", audit_params.channel_id, e);
-            } else {
-                tracing::info!("[PROXY] Channel '{}' disabled until {}", audit_params.channel_id, disable_until);
-            }
+            state.registry.disable_channel_model(
+                &audit_params.channel_id,
+                &audit_params.model_name,
+                recovery_instant,
+            );
 
             break 'outer;
         }
@@ -993,6 +1028,11 @@ async fn proxy_inner(
             candidates.push((resolved, (*cm).clone()));
         }
         candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
+        // Filter out circuit-broken (channel, model) combinations
+        let model_lower = model_name.to_lowercase();
+        candidates.retain(|(ch, _)| {
+            !state.registry.is_circuit_broken(&ch.channel_id.to_string(), &model_lower)
+        });
         if candidates.is_empty() {
             if fallback_depth == 0 {
                 if let Some(resp) = try_model_fallback(
@@ -1160,17 +1200,19 @@ async fn proxy_inner(
             let error_body = resp.bytes().await.unwrap_or_default();
             let error_body_str = String::from_utf8_lossy(&error_body).into_owned();
 
-            // Auto-disable channel on 429 — parse recovery time or use 30s default
-            let disable_until = if let Some(recovery_ts) = parse_recovery_timestamp(&error_body_str) {
-                recovery_ts
-            } else {
-                Utc::now() + chrono::Duration::seconds(30)
+            // Circuit-break the (channel, model) combination on 429
+            let recovery_instant = match parse_recovery_timestamp(&error_body_str) {
+                Some(ts) => {
+                    let dur = (ts - Utc::now()).max(chrono::Duration::seconds(5));
+                    Instant::now() + dur.to_std().unwrap_or(Duration::from_secs(30))
+                }
+                None => Instant::now() + Duration::from_secs(30),
             };
-            if let Err(e) = state.storage.disable_channel_until(&channel.channel_id.to_string(), disable_until).await {
-                tracing::error!("[PROXY] Failed to disable channel '{}' on 429: {:?}", channel.name, e);
-            } else {
-                tracing::info!("[PROXY] Channel '{}' disabled until {} (429 rate limit)", channel.name, disable_until);
-            }
+            state.registry.disable_channel_model(
+                &channel.channel_id.to_string(),
+                &model_name,
+                recovery_instant,
+            );
 
             let proto = match protocol {
                 ProxyProtocol::OpenAI => Protocol::Openai,
@@ -1376,7 +1418,6 @@ if status != 200 && status < 500 {
                 upstream_url: upstream_url.clone(),
                 request_headers: request_headers_for_worker.clone(),
                 response_headers: response_headers_for_worker,
-                disable_duration_secs: 300, // 5 minutes default
             };
 
             let upstream_resp = resp;
@@ -1535,6 +1576,10 @@ mod tests {
             self.0.clone()
         }
         async fn reload(&self) {}
+        fn disable_channel_model(&self, _channel_id: &str, _model_name: &str, _until: Instant) {}
+        fn is_circuit_broken(&self, _channel_id: &str, _model_name: &str) -> bool {
+            false
+        }
     }
 
     #[test]

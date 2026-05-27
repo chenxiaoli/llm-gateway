@@ -29,6 +29,7 @@ bytes = "1"
 flate2 = "1"
 url = "2"
 rand = "0.9"
+dashmap = "6"
 regex-lite = "0.1"
 
 [dev-dependencies]
