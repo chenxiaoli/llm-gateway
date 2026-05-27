@@ -90,6 +90,13 @@ async fn run_usage_worker(storage: Arc<dyn Storage>, nats: Arc<llm_gateway_nats_
                 .unwrap_or_else(|_| chrono::Utc::now()),
         };
 
+        // Skip recording usage when cost is 0
+        if record.cost == 0 {
+            tracing::debug!("[USAGE-WORKER] skipping cost=0 request_id={:?}", record.request_id);
+            let _ = msg.ack().await;
+            continue;
+        }
+
         if let Err(e) = storage.record_usage(&record).await {
             tracing::warn!("[USAGE-WORKER] Failed to record usage: {}", e);
             let _ = msg.ack_with(AckKind::Nak(None)).await;
