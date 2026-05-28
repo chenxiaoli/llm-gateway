@@ -19,7 +19,7 @@ cargo run                      # Run dev server on :8080
 ### Frontend (web/)
 
 ```bash
-cd web
+source ~/.nvm/nvm.sh && cd web
 npm run dev                    # Dev server on :5173 with API proxy to :8080
 npm run build                  # TypeScript check + Vite build → dist/
 npm test                       # Vitest unit tests
@@ -27,6 +27,8 @@ npm test -- src/api/keys.test.ts  # Run single test file
 npm run test:e2e               # Playwright e2e tests
 npm run test:e2e:ui            # Playwright e2e with UI
 ```
+
+**IMPORTANT:** Always `source ~/.nvm/nvm.sh` before any `npm` or `node` command. System Node is v12 which breaks lock files.
 
 ## Architecture
 
