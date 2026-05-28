@@ -49,12 +49,18 @@ const message = await client.messages.create({
 };
 
 export default function Home() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [version, setVersion] = useState('');
   const [activeProtocol, setActiveProtocol] = useState<Protocol>('openai');
   const { theme, toggleTheme } = useTheme();
   const { data: settings } = useSettings();
+
+  const toggleLanguage = () => {
+    const next = i18n.language === 'zh' ? 'en' : 'zh';
+    i18n.changeLanguage(next);
+    localStorage.setItem('i18n-language', next);
+  };
 
   const serverHost = settings?.server_host || 'http://localhost:8080';
 
@@ -90,6 +96,14 @@ export default function Home() {
             <span className="font-semibold text-lg">{t('home.brand')}</span>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              className="btn btn-ghost btn-sm btn-circle"
+              onClick={toggleLanguage}
+              aria-label="Toggle language"
+              title={i18n.language === 'zh' ? 'Switch to English' : '切换到中文'}
+            >
+              {i18n.language === 'zh' ? 'EN' : '中'}
+            </button>
             <button
               className="btn btn-ghost btn-sm btn-circle"
               onClick={toggleTheme}
