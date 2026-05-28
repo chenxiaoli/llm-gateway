@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.5.0] - 2026-05-28
+
+### Added
+- Documentation site (`/docs`) with bilingual (Chinese/English) support, route-based language switching, and MDX content rendering
+- Language toggle on landing page header
+- Midnight-crossing time range support for channel available hours (e.g. 00:00–09:00 UTC+8)
+
+### Fixed
+- Handle midnight-crossing available hours in both backend routing and frontend status indicator — ranges where start > end now use OR logic instead of AND
+- Add missing circuit breaker trait methods to MockChannelRegistry for test compilation
+
 ## [1.4.7] - 2026-05-27
 
 ### Added
