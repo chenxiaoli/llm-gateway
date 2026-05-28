@@ -288,7 +288,11 @@ fn is_available_now(slots: &Option<Vec<TimeSlot>>) -> bool {
         };
         let start = parse_time(&slot.start);
         let end = parse_time(&slot.end);
-        now_minutes >= start && now_minutes < end
+        if start <= end {
+            now_minutes >= start && now_minutes < end
+        } else {
+            now_minutes >= start || now_minutes < end
+        }
     })
 }
 

@@ -59,27 +59,20 @@ export function localDayToUtcDay(localDay: string, localHHMM: string, tz: string
   return DAYS[(idx + shift + 7) % 7];
 }
 
-export function isAvailableNow(slots: TimeSlot[] | null | undefined, tz: string): boolean {
+export function isAvailableNow(slots: TimeSlot[] | null | undefined, _tz: string): boolean {
   if (!slots || slots.length === 0) return true;
   const now = new Date();
-  const day = now.toLocaleDateString('en-US', { weekday: 'short', timeZone: tz }).toLowerCase();
-  const nowLocalMinutes = (() => {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      hour: 'numeric',
-      minute: 'numeric',
-      hour12: false,
-      timeZone: tz,
-    }).formatToParts(now);
-    const h = parseInt(parts.find(p => p.type === 'hour')!.value, 10) % 24;
-    const m = parseInt(parts.find(p => p.type === 'minute')!.value, 10);
-    return h * 60 + m;
-  })();
+  const utcDay = now.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }).toLowerCase();
+  const nowUtcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
 
   return slots.some(slot => {
-    if (!slot.days.includes(day)) return false;
+    if (!slot.days.includes(utcDay)) return false;
     const start = hhmmToMinutes(slot.start);
     const end = hhmmToMinutes(slot.end);
-    return nowLocalMinutes >= start && nowLocalMinutes < end;
+    if (start <= end) {
+      return nowUtcMinutes >= start && nowUtcMinutes < end;
+    }
+    return nowUtcMinutes >= start || nowUtcMinutes < end;
   });
 }
 

@@ -86,6 +86,35 @@ describe('isAvailableNow', () => {
 
     vi.useRealTimers();
   });
+
+  it('handles midnight-crossing slots (start > end)', () => {
+    vi.useFakeTimers();
+
+    // Slot 16:00-01:00 UTC (crosses midnight)
+    const slots = [{ days: ['mon'], start: '16:00', end: '01:00' }];
+
+    // Monday 18:00 UTC — within 16:00-01:00 → available
+    vi.setSystemTime(new Date('2026-01-05T18:00:00Z'));
+    expect(isAvailableNow(slots, 'UTC')).toBe(true);
+
+    // Monday 23:30 UTC — within 16:00-01:00 → available
+    vi.setSystemTime(new Date('2026-01-05T23:30:00Z'));
+    expect(isAvailableNow(slots, 'UTC')).toBe(true);
+
+    // Monday 00:30 UTC — within 16:00-01:00 → available
+    vi.setSystemTime(new Date('2026-01-05T00:30:00Z'));
+    expect(isAvailableNow(slots, 'UTC')).toBe(true);
+
+    // Monday 02:00 UTC — outside 16:00-01:00 → not available
+    vi.setSystemTime(new Date('2026-01-05T02:00:00Z'));
+    expect(isAvailableNow(slots, 'UTC')).toBe(false);
+
+    // Monday 15:00 UTC — outside 16:00-01:00 → not available
+    vi.setSystemTime(new Date('2026-01-05T15:00:00Z'));
+    expect(isAvailableNow(slots, 'UTC')).toBe(false);
+
+    vi.useRealTimers();
+  });
 });
 
 describe('getTimezoneLabel', () => {
