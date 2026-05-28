@@ -1088,6 +1088,19 @@
     "expand": "展开",
     "collapse": "收起"
   },
+  "docs": {
+    "nav.gettingStarted": "快速开始",
+    "nav.apiKeys": "API 密钥管理",
+    "nav.balance": "余额充值",
+    "nav.usage": "用量统计",
+    "nav.channels": "渠道配置",
+    "nav.providers": "供应商管理",
+    "nav.models": "模型管理",
+    "nav.pricingPolicies": "定价策略",
+    "nav.rateLimits": "费率限制",
+    "notFound": "文档未找到",
+    "goHome": "返回首页"
+  },
   "home": {
     "brand": "LLM Gateway",
     "dashboard": "控制台",

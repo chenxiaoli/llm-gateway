@@ -57,9 +57,11 @@ function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/docs" element={<DocsLayout />}>
-          <Route index element={<Navigate to="user/getting-started" replace />} />
-          <Route path="user/:slug" element={<DocsPage />} />
-          <Route path="admin/:slug" element={<DocsPage />} />
+          <Route
+            index
+            element={<Navigate to={`${localStorage.getItem('i18n-language') === 'en' ? 'en' : 'zh'}/user/getting-started`} replace />}
+          />
+          <Route path=":lang/:section/:slug" element={<DocsPage />} />
         </Route>
         <Route path="/console/login" element={<Login />} />
         <Route path="/console/register" element={<Register />} />

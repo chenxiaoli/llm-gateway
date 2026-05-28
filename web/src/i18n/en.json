@@ -1088,6 +1088,19 @@
     "expand": "Expand",
     "collapse": "Collapse"
   },
+  "docs": {
+    "nav.gettingStarted": "Getting Started",
+    "nav.apiKeys": "API Keys",
+    "nav.balance": "Balance & Top-up",
+    "nav.usage": "Usage Statistics",
+    "nav.channels": "Channel Configuration",
+    "nav.providers": "Provider Management",
+    "nav.models": "Model Management",
+    "nav.pricingPolicies": "Pricing Policies",
+    "nav.rateLimits": "Rate Limits",
+    "notFound": "Document not found",
+    "goHome": "Go to Home"
+  },
   "home": {
     "brand": "LLM Gateway",
     "dashboard": "Dashboard",
@@ -1098,7 +1111,8 @@
       "title2": "every LLM provider",
       "description": "A unified gateway that manages keys, enforces rate limits, tracks costs, and proxies requests to OpenAI, Anthropic, and more through a single endpoint.",
       "getStarted": "Get Started",
-      "seeHowItWorks": "See how it works"
+      "seeHowItWorks": "See how it works",
+      "title1": "One API endpoint"
     },
     "howItWorks": {
       "title": "How it works",
