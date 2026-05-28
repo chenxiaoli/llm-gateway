@@ -25,6 +25,8 @@ import Settings from './pages/Settings';
 import Usage from './pages/Usage';
 import Logs from './pages/Logs';
 import AdminDashboard from './pages/AdminDashboard';
+import DocsLayout from './pages/DocsLayout';
+import DocsPage from './pages/DocsPage';
 
 function RequireAuth() {
   const user = useAuthStore((s) => s.user);
@@ -54,6 +56,11 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/docs" element={<DocsLayout />}>
+          <Route index element={<Navigate to="user/getting-started" replace />} />
+          <Route path="user/:slug" element={<DocsPage />} />
+          <Route path="admin/:slug" element={<DocsPage />} />
+        </Route>
         <Route path="/console/login" element={<Login />} />
         <Route path="/console/register" element={<Register />} />
         <Route path="/console" element={<Layout />}>

@@ -1091,6 +1091,9 @@
   "home": {
     "brand": "LLM Gateway",
     "dashboard": "控制台",
+    "docs": "文档",
+    "docs.userGuide": "用户指南",
+    "docs.adminGuide": "管理指南",
     "hero": {
       "title1": "一个 API 端点",
       "title2": "连接所有 LLM 提供商",
