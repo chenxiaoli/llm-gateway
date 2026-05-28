@@ -97,6 +97,20 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => navigate('/docs')}
+            >
+              {t('home.docs')}
+            </button>
+            <button
+              className="btn btn-ghost btn-sm btn-circle"
+              onClick={toggleLanguage}
+              aria-label="Toggle language"
+              title={i18n.language === 'zh' ? 'Switch to English' : '切换到中文'}
+            >
+              {i18n.language === 'zh' ? 'EN' : '中'}
+            </button>
+            <button
               className="btn btn-ghost btn-sm btn-circle"
               onClick={toggleLanguage}
               aria-label="Toggle language"

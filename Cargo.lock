@@ -452,6 +452,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashmap"
+version = "6.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6361d5c062261c78a176addb82d4c821ae42bed6089de0e12603cd25de2059c"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+ "hashbrown 0.14.5",
+ "lock_api",
+ "once_cell",
+ "parking_lot_core",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -856,6 +870,12 @@ dependencies = [
  "tokio-util",
  "tracing",
 ]
+
+[[package]]
+name = "hashbrown"
+version = "0.14.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 
 [[package]]
 name = "hashbrown"
@@ -1311,7 +1331,7 @@ checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
 name = "llm-gateway"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "axum",
  "llm-gateway-api",
@@ -1332,13 +1352,14 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-api"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "arc-swap",
  "async-trait",
  "axum",
  "bytes",
  "chrono",
+ "dashmap",
  "flate2",
  "futures",
  "hyper",
@@ -1365,7 +1386,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-audit"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1375,7 +1396,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-audit-worker"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "futures",
  "llm-gateway-audit",
@@ -1392,7 +1413,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-auth"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "bcrypt",
  "chrono",
@@ -1405,7 +1426,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-billing"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1414,7 +1435,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-encryption"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "aes-gcm",
  "base64",
@@ -1424,7 +1445,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-nats-publisher"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "async-nats",
  "chrono",
@@ -1438,7 +1459,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-provider"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -1450,14 +1471,14 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-ratelimit"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
 name = "llm-gateway-storage"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1471,7 +1492,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-usage-worker"
-version = "1.4.6"
+version = "1.4.7"
 dependencies = [
  "chrono",
  "futures",
