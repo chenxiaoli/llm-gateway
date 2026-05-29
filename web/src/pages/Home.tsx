@@ -112,14 +112,6 @@ export default function Home() {
             </button>
             <button
               className="btn btn-ghost btn-sm btn-circle"
-              onClick={toggleLanguage}
-              aria-label="Toggle language"
-              title={i18n.language === 'zh' ? 'Switch to English' : '切换到中文'}
-            >
-              {i18n.language === 'zh' ? 'EN' : '中'}
-            </button>
-            <button
-              className="btn btn-ghost btn-sm btn-circle"
               onClick={toggleTheme}
               aria-label="Toggle theme"
             >
