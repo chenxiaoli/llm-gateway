@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.5.2] - 2026-06-04
+
+### Changed
+- Docker Compose: use `:${IMAGE_TAG:-latest}` image tag (was hardcoded `:develop`) and relative `./config.toml` volume path (was absolute `/opt/dev/...`)
+
 ## [1.5.1] - 2026-05-29
 
 ### Fixed
