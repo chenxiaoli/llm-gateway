@@ -173,7 +173,7 @@ pub struct Channel {
     pub disabled_until: Option<DateTime<Utc>>,
     pub available_hours: Option<Vec<TimeSlot>>,
     pub created_by: Option<String>,
-    pub group: Option<String>,
+    pub group_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -193,7 +193,7 @@ pub struct CreateChannel {
     pub enabled: Option<bool>,
     pub available_hours: Option<Vec<TimeSlot>>,
     pub models: Option<Vec<CreateChannelModel>>,
-    pub group: Option<String>,
+    pub group_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -210,7 +210,7 @@ pub struct UpdateChannel {
     pub balance: Option<Option<i64>>,
     pub weight: Option<Option<i32>>,
     pub available_hours: Option<Vec<TimeSlot>>,
-    pub group: Option<Option<String>>,
+    pub group_id: Option<Option<String>>,
 }
 
 /// Dedicated payload for updating a channel's API key.
@@ -685,6 +685,7 @@ pub struct User {
     pub role: String,
     pub enabled: bool,
     pub refresh_token: Option<String>,
+    pub group_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -695,6 +696,8 @@ pub struct UserWithBalance {
     pub username: String,
     pub role: String,
     pub enabled: bool,
+    pub group_id: Option<String>,
+    pub group_name: Option<String>,
     pub balance: i64,
     pub threshold: i64,
     pub created_at: DateTime<Utc>,
@@ -711,6 +714,36 @@ pub struct CreateUser {
 pub struct UpdateUser {
     pub role: Option<String>,
     pub enabled: Option<bool>,
+    pub group_id: Option<Option<String>>,
+}
+
+// --- Groups ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Group {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateGroup {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateGroup {
+    pub name: Option<String>,
+    pub description: Option<Option<String>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DeleteGroupResult {
+    pub cleared_users: i64,
+    pub cleared_channels: i64,
 }
 
 // --- Accounts ---
