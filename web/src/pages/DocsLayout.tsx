@@ -61,7 +61,7 @@ export default function DocsLayout() {
         <div className="max-w-6xl mx-auto h-14 flex items-center justify-between px-6">
           <div className="flex items-center gap-2.5">
             <button onClick={() => navigate('/')} className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-content font-bold text-sm">GW</div>
+              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-content font-bold text-sm">TV</div>
               <span className="font-semibold text-lg">{t('home.brand')}</span>
             </button>
           </div>

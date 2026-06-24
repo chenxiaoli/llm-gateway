@@ -1099,7 +1099,7 @@
     "goHome": "Go to Home"
   },
   "home": {
-    "brand": "LLM Gateway",
+    "brand": "TokenVis",
     "dashboard": "Dashboard",
     "docs": "Docs",
     "docs.userGuide": "User Guide",
@@ -1134,7 +1134,7 @@
       "goToDashboard": "Go to Dashboard"
     },
     "footer": {
-      "brand": "LLM Gateway"
+      "brand": "TokenVis"
     }
   }
 }

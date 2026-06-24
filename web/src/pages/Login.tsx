@@ -42,9 +42,9 @@ export default function Login() {
         <div className="card-body">
           <div className="flex items-center justify-center gap-3 mb-2">
             <div className="h-11 w-11 rounded-xl bg-primary flex items-center justify-center font-bold text-lg text-primary-content tracking-tight">
-              GW
+              TV
             </div>
-            <span className="font-bold text-xl">LLM Gateway</span>
+            <span className="font-bold text-xl">TokenVis</span>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">

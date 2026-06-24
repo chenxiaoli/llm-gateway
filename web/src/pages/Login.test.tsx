@@ -27,7 +27,7 @@ beforeEach(() => {
 describe('Login page', () => {
   it('renders login form', () => {
     renderWithProviders(<Login />);
-    expect(screen.getByText('LLM Gateway')).toBeInTheDocument();
+    expect(screen.getByText('TokenVis')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument();

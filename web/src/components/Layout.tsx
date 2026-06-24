@@ -145,10 +145,10 @@ export default function AppLayout() {
         onClick={() => navigate('/')}
       >
         <div className="h-8 w-8 shrink-0 rounded-lg bg-primary flex items-center justify-center font-semibold text-md text-primary-content tracking-tight">
-          GW
+          TV
         </div>
         <span className={`font-semibold text-lg transition-opacity duration-200 ${collapsed ? 'opacity-0' : 'opacity-100'}`}>
-          LLM Gateway
+          TokenVis
         </span>
       </div>
 
@@ -214,9 +214,9 @@ export default function AppLayout() {
             <div className="flex h-14 items-center justify-between border-b border-base-300/60 px-4">
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
                 <div className="h-8 w-8 shrink-0 rounded-lg bg-primary flex items-center justify-center font-semibold text-md text-primary-content tracking-tight">
-                  GW
+                  TV
                 </div>
-                <span className="font-semibold text-lg">LLM Gateway</span>
+                <span className="font-semibold text-lg">TokenVis</span>
               </div>
               <button className="btn btn-ghost btn-sm btn-circle" onClick={() => setMobileOpen(false)} aria-label="Close sidebar">
                 <X className="h-5 w-5" />
@@ -401,7 +401,7 @@ export default function AppLayout() {
               ) : (
                 <>
                   <span className="text-[11px] text-base-content/60 font-mono">
-                    LLM Gateway{version ? ` ${version}` : ''}
+                    TokenVis{version ? ` ${version}` : ''}
                   </span>
                   <span className="text-[11px] text-base-content/40 font-mono">•</span>
                   <span className="text-[11px] text-base-content/40 font-mono">{import.meta.env.VITE_COMMIT_SHA?.slice(0, 7) || ''}</span>

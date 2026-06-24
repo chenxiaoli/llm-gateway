@@ -1099,7 +1099,7 @@
     "goHome": "返回首页"
   },
   "home": {
-    "brand": "LLM Gateway",
+    "brand": "TokenVis",
     "dashboard": "控制台",
     "docs": "文档",
     "docs.userGuide": "用户指南",
@@ -1134,7 +1134,7 @@
       "goToDashboard": "进入控制台"
     },
     "footer": {
-      "brand": "LLM Gateway"
+      "brand": "TokenVis"
     }
   }
 }

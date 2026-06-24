@@ -1,17 +1,17 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('homepage', () => {
-  test('shows LLM Gateway title and features', async ({ page }) => {
+  test('shows TokenVis title and features', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('h1')).toHaveText('LLM Gateway');
+    await expect(page.locator('h1')).toHaveText('TokenVis');
     await expect(page.getByText('Dual Protocol')).toBeVisible();
     await expect(page.getByText('Multi-Provider')).toBeVisible();
   });
 
   test('shows version in footer', async ({ page }) => {
     await page.goto('/');
-    await page.getByText(/LLM Gateway v\d/).scrollIntoViewIfNeeded();
-    await expect(page.getByText(/LLM Gateway v\d/)).toBeVisible();
+    await page.getByText(/TokenVis v\d/).scrollIntoViewIfNeeded();
+    await expect(page.getByText(/TokenVis v\d/)).toBeVisible();
   });
 
   test('navigates to login page', async ({ page }) => {
@@ -63,7 +63,7 @@ test.describe('dashboard', () => {
   });
 
   test('shows version in console footer', async ({ page }) => {
-    await expect(page.getByText(/LLM Gateway v\d/)).toBeVisible();
+    await expect(page.getByText(/TokenVis v\d/)).toBeVisible();
   });
 
   test('navigate to providers page', async ({ page }) => {
