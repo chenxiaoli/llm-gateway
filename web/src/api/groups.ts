@@ -1,8 +1,10 @@
 import { adminApiClient } from './client';
-import type { Group, CreateGroupRequest, UpdateGroupRequest, DeleteGroupResult } from '../types';
+import type { Group, CreateGroupRequest, UpdateGroupRequest, DeleteGroupResult, PaginatedResponse } from '../types';
 
-export async function listGroups(): Promise<Group[]> {
-  const { data } = await adminApiClient.get<Group[]>('/groups');
+export async function listGroups(page = 1, pageSize = 20): Promise<PaginatedResponse<Group>> {
+  const { data } = await adminApiClient.get<PaginatedResponse<Group>>('/groups', {
+    params: { page, page_size: pageSize },
+  });
   return data;
 }
 

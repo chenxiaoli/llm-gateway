@@ -144,6 +144,7 @@ pub trait Storage: Send + Sync {
 
     // Groups
     async fn list_groups(&self) -> Result<Vec<Group>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_groups_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<Group>, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_group(&self, id: &str) -> Result<Option<Group>, Box<dyn std::error::Error + Send + Sync>>;
     async fn create_group(&self, input: &CreateGroup) -> Result<Group, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_group(&self, id: &str, input: &UpdateGroup) -> Result<Group, Box<dyn std::error::Error + Send + Sync>>;
