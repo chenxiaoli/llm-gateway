@@ -1204,7 +1204,65 @@ async fn proxy_inner(
         let resp = match req.send().await {
             Ok(r) => r,
             Err(e) => {
+                let latency_ms = start.elapsed().as_millis() as i64;
                 last_error = format!("Connection error on channel '{}': {}", channel.name, e);
+
+                // Audit the failed upstream attempt — no HTTP response received
+                let request_headers_for_worker: String = {
+                    let mut map = serde_json::Map::new();
+                    for (name, value) in headers.iter() {
+                        match name.as_str() {
+                            "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
+                            _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
+                            _ => {
+                                if let Ok(v) = value.to_str() {
+                                    map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
+                                }
+                            }
+                        }
+                    }
+                    serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
+                };
+                let proto = match protocol {
+                    ProxyProtocol::OpenAI => Protocol::Openai,
+                    ProxyProtocol::Anthropic => Protocol::Anthropic,
+                };
+                let pricing_policy = {
+                    let policy_id = channel_model.pricing_policy_id.as_deref()
+                        .or(model_entry.model.pricing_policy_id.as_deref());
+                    match policy_id {
+                        Some(id) => {
+                            state.storage.get_pricing_policy(id).await
+                                .map_err(|e| ApiError::Internal(e.to_string()))?
+                        }
+                        None => None,
+                    }
+                };
+                let task = AuditTask {
+                    request_id: request_id.clone(),
+                    key_id: api_key.id.clone(),
+                    user_id: api_key.created_by.clone(),
+                    model_name: upstream_name.to_string(),
+                    provider_id: provider_id.clone(),
+                    protocol: proto,
+                    stream: is_stream,
+                    request_body: body.clone(),
+                    response_bytes: last_error.clone().into_bytes(),
+                    status_code: 0,
+                    latency_ms,
+                    pricing_policy,
+                    markup_ratio: channel_model.markup_ratio,
+                    channel_id: Some(channel.channel_id.to_string()),
+                    original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
+                    upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
+                    model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
+                    request_path: Some(request_path.clone()),
+                    upstream_url: Some(upstream_url.clone()),
+                    request_headers: Some(request_headers_for_worker),
+                    response_headers: None,
+                };
+                dispatch_audit_task(&state, task).await;
+
                 continue;
             }
         };
@@ -1215,6 +1273,87 @@ async fn proxy_inner(
 
         if status >= 500 {
             last_error = format!("Server error {} on channel '{}'", status, channel.name);
+
+            // Audit the failed upstream attempt (mirrors the 4xx path)
+            let response_headers_for_worker: String = {
+                let mut map = serde_json::Map::new();
+                for (name, value) in resp.headers().iter() {
+                    if let Ok(v) = value.to_str() {
+                        map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
+                    }
+                }
+                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
+            };
+            let request_headers_for_worker: String = {
+                let mut map = serde_json::Map::new();
+                for (name, value) in headers.iter() {
+                    match name.as_str() {
+                        "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
+                        _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
+                        _ => {
+                            if let Ok(v) = value.to_str() {
+                                map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
+                            }
+                        }
+                    }
+                }
+                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
+            };
+            let error_body = resp.bytes().await.unwrap_or_default();
+            let error_body_str = if error_body.len() >= 2 && error_body[0] == 0x1F && error_body[1] == 0x8B {
+                use std::io::Read;
+                let mut decoder = flate2::read::GzDecoder::new(&error_body[..]);
+                let mut decompressed = String::new();
+                match decoder.read_to_string(&mut decompressed) {
+                    Ok(_) => decompressed,
+                    Err(_) => String::from_utf8_lossy(&error_body).into_owned(),
+                }
+            } else {
+                String::from_utf8_lossy(&error_body).into_owned()
+            };
+            let error_body_str = error_body_str.chars().map(|c| if c == '\0' || c == '\u{FFFD}' { ' ' } else { c }).collect::<String>();
+
+            let proto = match protocol {
+                ProxyProtocol::OpenAI => Protocol::Openai,
+                ProxyProtocol::Anthropic => Protocol::Anthropic,
+            };
+            let pricing_policy = {
+                let policy_id = channel_model.pricing_policy_id.as_deref()
+                    .or(model_entry.model.pricing_policy_id.as_deref());
+                match policy_id {
+                    Some(id) => {
+                        state.storage.get_pricing_policy(id).await
+                            .map_err(|e| ApiError::Internal(e.to_string()))?
+                    }
+                    None => None,
+                }
+            };
+
+            let task = AuditTask {
+                request_id: request_id.clone(),
+                key_id: api_key.id.clone(),
+                user_id: api_key.created_by.clone(),
+                model_name: upstream_name.to_string(),
+                provider_id: provider_id.clone(),
+                protocol: proto,
+                stream: is_stream,
+                request_body: body.clone(),
+                response_bytes: error_body_str.into_bytes(),
+                status_code: status as i32,
+                latency_ms,
+                pricing_policy,
+                markup_ratio: channel_model.markup_ratio,
+                channel_id: Some(channel.channel_id.to_string()),
+                original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
+                upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
+                model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
+                request_path: Some(request_path.clone()),
+                upstream_url: Some(upstream_url.clone()),
+                request_headers: Some(request_headers_for_worker),
+                response_headers: Some(response_headers_for_worker),
+            };
+            dispatch_audit_task(&state, task).await;
+
             continue;
         }
 

@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.7.2] - 2026-06-24
+
+### Fixed
+- Audit log now records every upstream attempt, including 5xx server errors and connection failures. Previously only successful and 4xx responses were audited, so a single client request that fanned out across multiple upstream channels via failover would leave failures invisible. One client request may now produce multiple audit rows sharing the same `request_id`, one per upstream attempt.
+- `AuditLogger::log_request` now sanitizes U+0000 and U+FFFD characters from the response body before writing to Postgres. The audit-worker was Nak-retrying legacy events containing null bytes indefinitely because Postgres TEXT columns reject U+0000.
+
+### Added
+- Users admin page now shows a `Group` column. Backend already returned `user.group_name` since 1.7.0; this exposes it in the table (was previously drawer-only).
+
 ## [1.7.1] - 2026-06-24
 
 ### Fixed
