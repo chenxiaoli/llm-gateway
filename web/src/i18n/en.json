@@ -839,6 +839,37 @@
       }
     }
   },
+  "groups": {
+    "title": "Groups",
+    "description": "Manage user and channel groups for access control",
+    "addGroup": "Add Group",
+    "table": {
+      "name": "Name",
+      "description": "Description",
+      "users": "Users",
+      "channels": "Channels",
+      "actions": "Actions"
+    },
+    "createModal": {
+      "title": "Create Group",
+      "name": "Name",
+      "namePlaceholder": "e.g. engineering",
+      "description": "Description (optional)",
+      "descriptionPlaceholder": "Brief description of this group's purpose",
+      "createGroup": "Create Group"
+    },
+    "editModal": {
+      "title": "Edit Group",
+      "usedBy": "Used by {{users}} users and {{channels}} channels",
+      "saveChanges": "Save Changes"
+    },
+    "deleteConfirm": {
+      "title": "Delete group",
+      "message": "This will remove the group from {{users}} users and {{channels}} channels. Continue?",
+      "confirm": "Delete"
+    },
+    "noGroups": "No groups yet. Create your first group."
+  },
   "settings": {
     "title": "Settings",
     "description": "Gateway configuration",

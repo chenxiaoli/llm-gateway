@@ -839,6 +839,37 @@
       }
     }
   },
+  "groups": {
+    "title": "分组",
+    "description": "管理用户和渠道分组以控制访问权限",
+    "addGroup": "添加分组",
+    "table": {
+      "name": "名称",
+      "description": "描述",
+      "users": "用户",
+      "channels": "渠道",
+      "actions": "操作"
+    },
+    "createModal": {
+      "title": "创建分组",
+      "name": "名称",
+      "namePlaceholder": "例如 engineering",
+      "description": "描述(可选)",
+      "descriptionPlaceholder": "简述此分组的用途",
+      "createGroup": "创建分组"
+    },
+    "editModal": {
+      "title": "编辑分组",
+      "usedBy": "被 {{users}} 个用户和 {{channels}} 个渠道使用",
+      "saveChanges": "保存修改"
+    },
+    "deleteConfirm": {
+      "title": "删除分组",
+      "message": "此操作将从此分组移除 {{users}} 个用户和 {{channels}} 个渠道。继续吗?",
+      "confirm": "删除"
+    },
+    "noGroups": "暂无分组。创建第一个分组吧。"
+  },
   "settings": {
     "title": "设置",
     "description": "网关配置",
