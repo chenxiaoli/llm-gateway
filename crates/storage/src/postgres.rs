@@ -469,6 +469,27 @@ impl From<PgUserWithBalanceRow> for UserWithBalance {
 }
 
 #[derive(FromRow)]
+struct PgGroupRow {
+    id: String,
+    name: String,
+    description: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<PgGroupRow> for Group {
+    fn from(r: PgGroupRow) -> Self {
+        Group {
+            id: r.id,
+            name: r.name,
+            description: r.description,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }
+    }
+}
+
+#[derive(FromRow)]
 struct PgChannelModelRow {
     id: String,
     channel_id: String,
@@ -2241,6 +2262,100 @@ impl crate::Storage for PostgresStorage {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    // ---- Groups ----
+
+    async fn list_groups(&self) -> Result<Vec<Group>, DbErr> {
+        let rows: Vec<PgGroupRow> = sqlx::query_as(
+            "SELECT id, name, description, created_at, updated_at FROM groups ORDER BY name",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(Group::from).collect())
+    }
+
+    async fn get_group(&self, id: &str) -> Result<Option<Group>, DbErr> {
+        let row: Option<PgGroupRow> = sqlx::query_as(
+            "SELECT id, name, description, created_at, updated_at FROM groups WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(Group::from))
+    }
+
+    async fn create_group(&self, input: &CreateGroup) -> Result<Group, DbErr> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let row: PgGroupRow = sqlx::query_as(
+            "INSERT INTO groups (id, name, description)
+             VALUES ($1, $2, $3)
+             RETURNING id, name, description, created_at, updated_at",
+        )
+        .bind(&id)
+        .bind(&input.name)
+        .bind(&input.description)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(Group::from(row))
+    }
+
+    // Tri-state description: None=keep, Some(None)=clear, Some(Some(v))=set
+    // Uses a flag param to distinguish "don't touch" vs "set to NULL" (cleared).
+    async fn update_group(&self, id: &str, input: &UpdateGroup) -> Result<Group, DbErr> {
+        let should_update_description = input.description.is_some();
+        let new_description: Option<String> = match &input.description {
+            Some(Some(v)) => Some(v.clone()),
+            _ => None,
+        };
+        let row: Option<PgGroupRow> = sqlx::query_as(
+            "UPDATE groups
+             SET name = COALESCE($2, name),
+                 description = CASE WHEN $3::boolean THEN $4 ELSE description END,
+                 updated_at = NOW()
+             WHERE id = $1
+             RETURNING id, name, description, created_at, updated_at",
+        )
+        .bind(id)
+        .bind(&input.name)
+        .bind(should_update_description)
+        .bind(&new_description)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(Group::from).ok_or_else(|| -> DbErr {
+            Box::new(sqlx::Error::RowNotFound)
+        })
+    }
+
+    async fn delete_group(&self, id: &str) -> Result<DeleteGroupResult, DbErr> {
+        let cleared_users = sqlx::query("UPDATE users SET group_id = NULL WHERE group_id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?
+            .rows_affected() as i64;
+
+        let cleared_channels = sqlx::query("UPDATE channels SET group_id = NULL WHERE group_id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?
+            .rows_affected() as i64;
+
+        sqlx::query("DELETE FROM groups WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(DeleteGroupResult { cleared_users, cleared_channels })
+    }
+
+    async fn get_user_group_id(&self, user_id: &str) -> Result<Option<String>, DbErr> {
+        let row: Option<(Option<String>,)> = sqlx::query_as(
+            "SELECT group_id FROM users WHERE id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.and_then(|(g,)| g))
     }
 
     // ---- Seed Data ----
