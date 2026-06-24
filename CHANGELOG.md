@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.6.2] - 2026-06-24
+
+### Fixed
+- Registration and login failures now surface the actual backend error message (e.g. "Username already exists", "Account locked") instead of always showing the generic i18n fallback. Two-layer fix: `authStore` re-throws the original Axios error instead of wrapping it in a generic `Error`, and `getErrorMessage` now reads the correct path (`data.error.message`) matching the backend's `{ error: { message, type } }` shape. As a side effect, all other error toasts that use the shared helper (model fallbacks, accounts, pricing, models, channel models, change password) also show real reasons instead of generic fallbacks.
+
 ## [1.6.1] - 2026-06-24
 
 ### Fixed

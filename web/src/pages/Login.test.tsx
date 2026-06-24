@@ -79,4 +79,25 @@ describe('Login page', () => {
 
     expect(mockNavigate).not.toHaveBeenCalled();
   });
+
+  it('shows backend error message when login fails with body', async () => {
+    server.use(
+      http.post('*/api/v1/auth/login', () =>
+        HttpResponse.json(
+          { error: { message: 'Account locked', type: 403 } },
+          { status: 403 },
+        ),
+      ),
+    );
+
+    renderWithProviders(<Login />);
+
+    await userEvent.type(screen.getByPlaceholderText('Username'), 'locked');
+    await userEvent.type(screen.getByPlaceholderText('Password'), 'password');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith('Account locked');
+    });
+  });
 });
