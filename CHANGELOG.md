@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.7.1] - 2026-06-24
+
+### Fixed
+- `GET /api/v1/admin/groups` now returns a paginated response (`{ items, total, page, page_size }`) matching the spec and the `list_users` pattern. The previous raw-array response caused the Groups admin page to crash with `groups.map is not a function` when the response object was treated as an array.
+
 ## [1.7.0] - 2026-06-24
 
 ### Added
