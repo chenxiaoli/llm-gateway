@@ -145,10 +145,10 @@ export default function AppLayout() {
         onClick={() => navigate('/')}
       >
         <div className="h-8 w-8 shrink-0 rounded-lg bg-primary flex items-center justify-center font-semibold text-md text-primary-content tracking-tight">
-          GW
+          TV
         </div>
         <span className={`font-semibold text-lg transition-opacity duration-200 ${collapsed ? 'opacity-0' : 'opacity-100'}`}>
-          LLM Gateway
+          TokenVis
         </span>
       </div>
 
@@ -177,17 +177,8 @@ export default function AppLayout() {
       <div className="border-t border-base-300/60 shrink-0">
         <div className="p-2 flex flex-col gap-1">
           {!collapsed && version && (
-            <div className="flex items-center justify-between px-3 py-1.5">
+            <div className="flex items-center justify-start px-3 py-1.5">
               <span className="mono text-xs text-base-content/20 truncate">{version}</span>
-              <a
-                href="https://github.com/chenxiaoli/llm-gateway"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-base-content/15 hover:text-base-content/40 transition-colors"
-                aria-label="GitHub"
-              >
-                <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-              </a>
             </div>
           )}
           <button
@@ -223,9 +214,9 @@ export default function AppLayout() {
             <div className="flex h-14 items-center justify-between border-b border-base-300/60 px-4">
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
                 <div className="h-8 w-8 shrink-0 rounded-lg bg-primary flex items-center justify-center font-semibold text-md text-primary-content tracking-tight">
-                  GW
+                  TV
                 </div>
-                <span className="font-semibold text-lg">LLM Gateway</span>
+                <span className="font-semibold text-lg">TokenVis</span>
               </div>
               <button className="btn btn-ghost btn-sm btn-circle" onClick={() => setMobileOpen(false)} aria-label="Close sidebar">
                 <X className="h-5 w-5" />
@@ -410,7 +401,7 @@ export default function AppLayout() {
               ) : (
                 <>
                   <span className="text-[11px] text-base-content/60 font-mono">
-                    LLM Gateway{version ? ` ${version}` : ''}
+                    TokenVis{version ? ` ${version}` : ''}
                   </span>
                   <span className="text-[11px] text-base-content/40 font-mono">•</span>
                   <span className="text-[11px] text-base-content/40 font-mono">{import.meta.env.VITE_COMMIT_SHA?.slice(0, 7) || ''}</span>

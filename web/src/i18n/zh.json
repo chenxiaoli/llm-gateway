@@ -882,10 +882,7 @@
     "about": {
       "sectionTitle": "网关信息",
       "version": "版本",
-      "database": "数据库",
-      "linksTitle": "链接",
-      "githubRepo": "GitHub 仓库",
-      "githubDesc": "源代码、问题、文档"
+      "database": "数据库"
     }
   },
   "account": {
@@ -1102,7 +1099,7 @@
     "goHome": "返回首页"
   },
   "home": {
-    "brand": "LLM Gateway",
+    "brand": "TokenVis",
     "dashboard": "控制台",
     "docs": "文档",
     "docs.userGuide": "用户指南",
@@ -1134,12 +1131,10 @@
     "cta": {
       "title": "准备好开始了吗？",
       "description": "几分钟内即可设置网关。配置提供商、创建 API 密钥，开始路由请求。",
-      "goToDashboard": "进入控制台",
-      "starOnGithub": "在 GitHub 上加星"
+      "goToDashboard": "进入控制台"
     },
     "footer": {
-      "brand": "LLM Gateway",
-      "openSource": "开源项目"
+      "brand": "TokenVis"
     }
   }
 }
