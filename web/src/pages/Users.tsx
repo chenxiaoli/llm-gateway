@@ -94,7 +94,8 @@ function UserDrawer({ user, onClose }: { user: UserResponse | null; onClose: () 
   const rechargeMutation = useRechargeUser();
   const adjustMutation = useAdjustUser();
   const updateMutation = useUpdateUser();
-  const { data: groups } = useGroups();
+  const { data: groupsData } = useGroups();
+  const groups = groupsData?.items ?? [];
 
   const [rechargeOpen, setRechargeOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);

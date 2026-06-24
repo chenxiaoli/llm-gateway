@@ -5,8 +5,11 @@ import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
 import i18n from '../i18n';
 
-export function useGroups() {
-  return useQuery({ queryKey: ['groups'], queryFn: listGroups });
+export function useGroups(page = 1, pageSize = 20) {
+  return useQuery({
+    queryKey: ['groups', page, pageSize],
+    queryFn: () => listGroups(page, pageSize),
+  });
 }
 
 export function useCreateGroup() {

@@ -39,7 +39,7 @@ describe('Groups page', () => {
   it('renders empty state when no groups', async () => {
     server.use(
       http.get('*/api/v1/admin/groups', () => {
-        return HttpResponse.json([]);
+        return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
       }),
     );
 
@@ -56,7 +56,9 @@ describe('Groups page', () => {
 
   it('renders groups in the table when groups exist', async () => {
     server.use(
-      http.get('*/api/v1/admin/groups', () => HttpResponse.json(mockGroups)),
+      http.get('*/api/v1/admin/groups', () =>
+        HttpResponse.json({ items: mockGroups, total: mockGroups.length, page: 1, page_size: 20 }),
+      ),
     );
 
     renderGroups();
@@ -76,7 +78,7 @@ describe('Groups page', () => {
     let capturedBody: unknown = null;
 
     server.use(
-      http.get('*/api/v1/admin/groups', () => HttpResponse.json([])),
+      http.get('*/api/v1/admin/groups', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
       http.post('*/api/v1/admin/groups', async ({ request }) => {
         capturedBody = await request.json();
         return HttpResponse.json({
@@ -119,7 +121,7 @@ describe('Groups page', () => {
 
   it('shows backend error on duplicate name', async () => {
     server.use(
-      http.get('*/api/v1/admin/groups', () => HttpResponse.json([])),
+      http.get('*/api/v1/admin/groups', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
       http.post('*/api/v1/admin/groups', () =>
         HttpResponse.json(
           { error: 'group already exists', code: 'GROUP_EXISTS' },

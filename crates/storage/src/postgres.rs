@@ -2275,6 +2275,26 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(Group::from).collect())
     }
 
+    async fn list_groups_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<Group>, Box<dyn std::error::Error + Send + Sync>> {
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM groups")
+            .fetch_one(&self.pool)
+            .await?;
+        let offset = (page - 1) * page_size;
+        let rows: Vec<PgGroupRow> = sqlx::query_as(
+            "SELECT id, name, description, created_at, updated_at FROM groups ORDER BY name LIMIT $1 OFFSET $2",
+        )
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(PaginatedResponse {
+            items: rows.into_iter().map(Group::from).collect(),
+            total: total.0,
+            page,
+            page_size,
+        })
+    }
+
     async fn get_group(&self, id: &str) -> Result<Option<Group>, DbErr> {
         let row: Option<PgGroupRow> = sqlx::query_as(
             "SELECT id, name, description, created_at, updated_at FROM groups WHERE id = $1",

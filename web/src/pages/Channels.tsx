@@ -139,7 +139,8 @@ function AddChannelDrawer({
 }) {
   const queryClient = useQueryClient();
   const { data: allModels } = useAllModels();
-  const { data: groups } = useGroups();
+  const { data: groupsData } = useGroups();
+  const groups = groupsData?.items ?? [];
   const { t } = useTranslation();
   const [isPending, setIsPending] = useState(false);
   const [providerId, setProviderId] = useState('');
