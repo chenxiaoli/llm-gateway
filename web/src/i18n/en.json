@@ -458,7 +458,9 @@
       "enabled": "Enabled",
       "enabledHint": "Channels must be enabled to receive traffic",
       "createChannel": "Create Channel",
-      "selectProviderError": "Select a provider"
+      "selectProviderError": "Select a provider",
+      "group": "Group",
+      "noGroup": "None"
     },
     "row": {
       "noModels": "no models",

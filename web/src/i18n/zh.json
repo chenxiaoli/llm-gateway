@@ -458,7 +458,9 @@
       "enabled": "启用",
       "enabledHint": "通道必须启用才能接收流量",
       "createChannel": "创建通道",
-      "selectProviderError": "请选择提供商"
+      "selectProviderError": "请选择提供商",
+      "group": "分组",
+      "noGroup": "无"
     },
     "row": {
       "noModels": "暂无模型",
