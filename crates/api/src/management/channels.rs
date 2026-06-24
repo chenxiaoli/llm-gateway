@@ -44,10 +44,10 @@ pub struct ChannelWithModels {
     pub weight: Option<i32>,
     pub enabled: bool,
     pub available_hours: Option<Vec<TimeSlot>>,
-    pub group: Option<String>,
+    pub models: Vec<ChannelModelInfo>,
+    pub group_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
-    pub models: Vec<ChannelModelInfo>,
 }
 
 /// Channel response for JSON output (f64 for monetary/markup fields).
@@ -67,7 +67,7 @@ pub struct ChannelResponse {
     pub enabled: bool,
     pub available_hours: Option<Vec<TimeSlot>>,
     pub created_by: Option<String>,
-    pub group: Option<String>,
+    pub group_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -89,7 +89,7 @@ impl From<Channel> for ChannelResponse {
             enabled: c.enabled,
             available_hours: c.available_hours,
             created_by: c.created_by,
-            group: c.group,
+            group_id: c.group_id,
             created_at: c.created_at.to_rfc3339(),
             updated_at: c.updated_at.to_rfc3339(),
         }
@@ -123,7 +123,7 @@ pub struct CreateChannelRequest {
     pub enabled: Option<bool>,
     pub available_hours: Option<Vec<TimeSlot>>,
     pub models: Option<Vec<CreateChannelModelInput>>,
-    pub group: Option<String>,
+    pub group_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -138,7 +138,7 @@ pub struct UpdateChannelRequest {
     pub balance: Option<Option<f64>>,
     pub weight: Option<Option<i32>>,
     pub available_hours: Option<Option<Vec<TimeSlot>>>,
-    pub group: Option<Option<String>>,
+    pub group_id: Option<Option<String>>,
 }
 
 pub async fn create_channel(
@@ -182,7 +182,7 @@ pub async fn create_channel(
         enabled: input.enabled.unwrap_or(true),
         available_hours: input.available_hours,
         created_by: Some(claims.sub),
-        group: input.group,
+        group_id: input.group_id,
         disabled_until: None,
         created_at: now,
         updated_at: now,
@@ -314,7 +314,7 @@ pub async fn list_all_channels(
                 weight: c.weight,
                 enabled: c.enabled,
                 available_hours: c.available_hours,
-                group: c.group,
+                group_id: c.group_id,
                 created_at: c.created_at.to_rfc3339(),
                 updated_at: c.updated_at.to_rfc3339(),
                 models,
@@ -395,8 +395,8 @@ pub async fn update_channel(
     if let Some(available_hours) = input.available_hours {
         channel.available_hours = available_hours;
     }
-    if let Some(group) = input.group {
-        channel.group = group;
+    if let Some(group_id) = input.group_id {
+        channel.group_id = group_id;
     }
     channel.updated_at = chrono::Utc::now();
 

@@ -177,6 +177,7 @@ pub async fn register(
         role: role.to_string(),
         enabled: true,
         refresh_token: None,
+        group_id: None,
         created_at: now,
         updated_at: now,
     };

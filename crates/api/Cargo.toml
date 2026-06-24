@@ -31,6 +31,7 @@ url = "2"
 rand = "0.9"
 dashmap = "6"
 regex-lite = "0.1"
+sqlx = { workspace = true }
 
 [dev-dependencies]
 llm-gateway-storage = { path = "../storage" }
