@@ -207,6 +207,31 @@ export interface User {
   threshold?: number;
 }
 
+// --- Groups ---
+
+export interface Group {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateGroupRequest {
+  name: string;
+  description?: string;
+}
+
+export interface UpdateGroupRequest {
+  name?: string;
+  description?: string | null;
+}
+
+export interface DeleteGroupResult {
+  cleared_users: number;
+  cleared_channels: number;
+}
+
 export interface LoginRequest {
   username: string;
   password: string;
@@ -250,6 +275,8 @@ export interface UserResponse {
   username: string;
   role: 'admin' | 'user';
   enabled: boolean;
+  group_id: string | null;
+  group_name: string | null;
   balance: number;
   threshold: number;
   created_at: string;
@@ -259,6 +286,7 @@ export interface UserResponse {
 export interface UpdateUserRequest {
   role?: 'admin' | 'user';
   enabled?: boolean;
+  group_id?: string | null;
 }
 
 export interface SettingsResponse {
@@ -323,7 +351,8 @@ export interface Channel {
   enabled: boolean;
   available_hours?: TimeSlot[] | null;
   created_by?: string | null;
-  group?: string | null;
+  group_id?: string | null;
+  group_name?: string | null;
   disabled_until?: string | null;
   created_at: string;
   updated_at: string;
@@ -350,7 +379,7 @@ export interface CreateChannelRequest {
   enabled?: boolean;
   available_hours?: TimeSlot[];
   models?: CreateChannelModelRequest[];
-  group?: string;
+  group_id?: string | null;
 }
 
 export interface UpdateChannelRequest {
@@ -361,7 +390,7 @@ export interface UpdateChannelRequest {
   weight?: number | null;
   enabled?: boolean;
   available_hours?: TimeSlot[];
-  group?: string | null;
+  group_id?: string | null;
 }
 
 export interface UpdateChannelApiKeyRequest {
