@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { Toaster } from 'sonner';
 import { renderWithProviders } from '../test/render';
+import { server } from '../test/server';
+import { http, HttpResponse } from 'msw';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import Users from './Users';
 
 describe('Users page', () => {
@@ -30,5 +34,75 @@ describe('Users page', () => {
       expect(screen.getByText('Created')).toBeInTheDocument();
       expect(screen.getByText('Actions')).toBeInTheDocument();
     }, { timeout: 5000 });
+  });
+
+  it('shows group selector in user drawer and updates on change', async () => {
+    let patchBody: unknown = null;
+    server.use(
+      http.get('*/api/v1/admin/groups', () =>
+        HttpResponse.json([
+          { id: 'g1', name: 'engineering', description: null, created_at: '', updated_at: '' },
+          { id: 'g2', name: 'marketing', description: null, created_at: '', updated_at: '' },
+        ]),
+      ),
+      http.get('*/api/v1/admin/users', () =>
+        HttpResponse.json({
+          items: [
+            {
+              id: 'u1',
+              username: 'alice',
+              role: 'user',
+              enabled: true,
+              group_id: null,
+              group_name: null,
+              balance: 100,
+              threshold: 10,
+              created_at: '2026-06-01T00:00:00Z',
+              updated_at: '2026-06-01T00:00:00Z',
+            },
+          ],
+          total: 1,
+          page: 1,
+          page_size: 20,
+        }),
+      ),
+      http.get('*/api/v1/admin/users/u1/balance', () =>
+        HttpResponse.json({
+          account: { id: 'a1', user_id: 'u1', balance: 100, threshold: 10, created_at: '', updated_at: '' },
+          transactions: { items: [], total: 0, page: 1, page_size: 10 },
+        }),
+      ),
+      http.patch('*/api/v1/admin/users/u1', async ({ request }) => {
+        patchBody = await request.json();
+        return HttpResponse.json({
+          id: 'u1', username: 'alice', role: 'user', enabled: true,
+          group_id: 'g1', group_name: 'engineering',
+          balance: 100, threshold: 10, created_at: '', updated_at: '',
+        });
+      }),
+    );
+
+    renderWithProviders(
+      <>
+        <Users />
+        <Toaster />
+      </>,
+      { route: '/admin/users' },
+    );
+
+    await userEvent.click(await screen.findByText('alice'));
+    await waitFor(() => {
+      expect(screen.getByText('Group')).toBeInTheDocument();
+    });
+
+    const selects = screen.getAllByRole('combobox');
+    const groupSelect = selects.find((s) =>
+      Array.from(s.querySelectorAll('option')).some((o) => o.value === 'g1'),
+    )!;
+    await userEvent.selectOptions(groupSelect, 'g1');
+
+    await waitFor(() => {
+      expect(patchBody).toEqual({ group_id: 'g1' });
+    });
   });
 });

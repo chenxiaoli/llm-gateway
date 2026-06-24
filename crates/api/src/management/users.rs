@@ -16,6 +16,8 @@ pub struct UserResponse {
     pub username: String,
     pub role: String,
     pub enabled: bool,
+    pub group_id: Option<String>,
+    pub group_name: Option<String>,
     pub balance: f64,
     pub threshold: f64,
     pub created_at: String,
@@ -29,6 +31,8 @@ impl From<UserWithBalance> for UserResponse {
             username: u.username,
             role: u.role,
             enabled: u.enabled,
+            group_id: u.group_id,
+            group_name: u.group_name,
             balance: units_to_usd(u.balance),
             threshold: units_to_usd(u.threshold),
             created_at: u.created_at.to_rfc3339(),
@@ -44,6 +48,8 @@ impl From<&User> for UserResponse {
             username: u.username.clone(),
             role: u.role.clone(),
             enabled: u.enabled,
+            group_id: u.group_id.clone(),
+            group_name: None,
             balance: 0.0,
             threshold: 1.0,
             created_at: u.created_at.to_rfc3339(),
@@ -99,10 +105,30 @@ pub async fn update_user(
     }
 
     if let Some(enabled) = input.enabled { user.enabled = enabled; }
+
+    if let Some(ref group_id) = input.group_id {
+        if let Some(gid) = group_id {
+            // Validate the group exists
+            let exists = state.storage.get_group(gid).await
+                .map_err(|e| ApiError::Internal(e.to_string()))?;
+            if exists.is_none() {
+                return Err(ApiError::BadRequest(format!("Group '{}' not found", gid)));
+            }
+        }
+        user.group_id = group_id.clone();
+    }
+
     user.updated_at = chrono::Utc::now();
 
     let updated = state.storage.update_user(&user).await.map_err(|e| ApiError::Internal(e.to_string()))?;
-    Ok(Json(UserResponse::from(&updated)))
+    let mut resp = UserResponse::from(&updated);
+    if let Some(ref gid) = resp.group_id {
+        if let Some(g) = state.storage.get_group(gid).await
+            .map_err(|e| ApiError::Internal(e.to_string()))? {
+            resp.group_name = Some(g.name);
+        }
+    }
+    Ok(Json(resp))
 }
 
 pub async fn delete_user(

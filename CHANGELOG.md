@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.7.0] - 2026-06-24
+
+### Added
+- User and channel groups for access control. Admins can create groups and assign users and channels. A user in group X can only access channels in group X (or channels with no group). Users with no group remain unrestricted.
+- New `Groups` admin page and `/api/v1/admin/groups` CRUD endpoints.
+
+### Changed
+- `channels.group` column refactored from free-form TEXT to `channels.group_id` foreign key to a new `groups` table. Existing channel-group values are migrated automatically.
+- `Channel` API responses use `group_id` and `group_name` (replaces `group`).
+- `User` API responses include `group_id` and `group_name`.
+- Routing now filters candidate channels by the requesting user's group (admin role bypasses).
+
 ## [1.6.2] - 2026-06-24
 
 ### Fixed

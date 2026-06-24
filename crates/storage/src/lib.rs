@@ -142,6 +142,14 @@ pub trait Storage: Send + Sync {
     async fn deduct_balance(&self, req: &DeductBalance) -> Result<DeductBalanceResult, Box<dyn std::error::Error + Send + Sync>>;
     async fn add_balance(&self, req: &AddBalance) -> Result<AddBalanceResult, Box<dyn std::error::Error + Send + Sync>>;
 
+    // Groups
+    async fn list_groups(&self) -> Result<Vec<Group>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_group(&self, id: &str) -> Result<Option<Group>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn create_group(&self, input: &CreateGroup) -> Result<Group, Box<dyn std::error::Error + Send + Sync>>;
+    async fn update_group(&self, id: &str, input: &UpdateGroup) -> Result<Group, Box<dyn std::error::Error + Send + Sync>>;
+    async fn delete_group(&self, id: &str) -> Result<DeleteGroupResult, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_user_group_id(&self, user_id: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
+
     // Model Fallbacks
     async fn create_model_fallback(&self, config: &ModelFallbackConfig) -> Result<ModelFallbackConfig, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_model_fallback(&self, id: &str) -> Result<Option<ModelFallbackConfig>, Box<dyn std::error::Error + Send + Sync>>;

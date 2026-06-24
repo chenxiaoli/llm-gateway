@@ -44,10 +44,11 @@ pub struct ChannelWithModels {
     pub weight: Option<i32>,
     pub enabled: bool,
     pub available_hours: Option<Vec<TimeSlot>>,
-    pub group: Option<String>,
+    pub models: Vec<ChannelModelInfo>,
+    pub group_id: Option<String>,
+    pub group_name: Option<String>,
     pub created_at: String,
     pub updated_at: String,
-    pub models: Vec<ChannelModelInfo>,
 }
 
 /// Channel response for JSON output (f64 for monetary/markup fields).
@@ -67,7 +68,8 @@ pub struct ChannelResponse {
     pub enabled: bool,
     pub available_hours: Option<Vec<TimeSlot>>,
     pub created_by: Option<String>,
-    pub group: Option<String>,
+    pub group_id: Option<String>,
+    pub group_name: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -89,7 +91,8 @@ impl From<Channel> for ChannelResponse {
             enabled: c.enabled,
             available_hours: c.available_hours,
             created_by: c.created_by,
-            group: c.group,
+            group_id: c.group_id,
+            group_name: None,
             created_at: c.created_at.to_rfc3339(),
             updated_at: c.updated_at.to_rfc3339(),
         }
@@ -123,7 +126,7 @@ pub struct CreateChannelRequest {
     pub enabled: Option<bool>,
     pub available_hours: Option<Vec<TimeSlot>>,
     pub models: Option<Vec<CreateChannelModelInput>>,
-    pub group: Option<String>,
+    pub group_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -138,7 +141,7 @@ pub struct UpdateChannelRequest {
     pub balance: Option<Option<f64>>,
     pub weight: Option<Option<i32>>,
     pub available_hours: Option<Option<Vec<TimeSlot>>>,
-    pub group: Option<Option<String>>,
+    pub group_id: Option<Option<String>>,
 }
 
 pub async fn create_channel(
@@ -164,6 +167,14 @@ pub async fn create_channel(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
 
+    if let Some(ref gid) = input.group_id {
+        let exists = state.storage.get_group(gid).await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+        if exists.is_none() {
+            return Err(ApiError::BadRequest(format!("Group '{}' not found", gid)));
+        }
+    }
+
     let now = chrono::Utc::now();
     let encrypted_key = encrypt(&input.api_key, &state.encryption_key)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
@@ -182,7 +193,7 @@ pub async fn create_channel(
         enabled: input.enabled.unwrap_or(true),
         available_hours: input.available_hours,
         created_by: Some(claims.sub),
-        group: input.group,
+        group_id: input.group_id,
         disabled_until: None,
         created_at: now,
         updated_at: now,
@@ -225,7 +236,15 @@ pub async fn create_channel(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(Json(ChannelResponse::from(created)))
+    // Enrich with group_name (single channel lookup, no N+1)
+    let mut resp = ChannelResponse::from(created);
+    if let Some(ref gid) = resp.group_id {
+        if let Some(g) = state.storage.get_group(gid).await
+            .map_err(|e| ApiError::Internal(e.to_string()))? {
+            resp.group_name = Some(g.name);
+        }
+    }
+    Ok(Json(resp))
 }
 
 pub async fn list_channels(
@@ -241,7 +260,27 @@ pub async fn list_channels(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(Json(channels.into_iter().map(ChannelResponse::from).collect()))
+    // Single batched group lookup, then join client-side to avoid N+1.
+    let groups = state
+        .storage
+        .list_groups()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let group_name_map: HashMap<String, String> = groups
+        .into_iter()
+        .map(|g| (g.id, g.name))
+        .collect();
+
+    let responses: Vec<ChannelResponse> = channels
+        .into_iter()
+        .map(|c| {
+            let mut resp = ChannelResponse::from(c);
+            resp.group_name = resp.group_id.as_ref().and_then(|gid| group_name_map.get(gid).cloned());
+            resp
+        })
+        .collect();
+
+    Ok(Json(responses))
 }
 
 pub async fn list_all_channels(
@@ -267,11 +306,22 @@ pub async fn list_all_channels(
         .list_models()
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let groups = state
+        .storage
+        .list_groups()
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // Build model_id -> model_name lookup map
     let model_name_map: HashMap<String, String> = all_models
         .into_iter()
         .map(|m| (m.model.id.clone(), m.model.name.clone()))
+        .collect();
+
+    // Build group_id -> group_name lookup map
+    let group_name_map: HashMap<String, String> = groups
+        .into_iter()
+        .map(|g| (g.id, g.name))
         .collect();
 
     // Group channel models by channel_id
@@ -300,6 +350,8 @@ pub async fn list_all_channels(
                     enabled: cm.enabled,
                 })
                 .collect();
+            let group_id = c.group_id.clone();
+            let group_name = group_id.as_ref().and_then(|gid| group_name_map.get(gid).cloned());
             ChannelWithModels {
                 id: c.id,
                 provider_id: c.provider_id,
@@ -314,7 +366,8 @@ pub async fn list_all_channels(
                 weight: c.weight,
                 enabled: c.enabled,
                 available_hours: c.available_hours,
-                group: c.group,
+                group_id,
+                group_name,
                 created_at: c.created_at.to_rfc3339(),
                 updated_at: c.updated_at.to_rfc3339(),
                 models,
@@ -343,7 +396,15 @@ pub async fn get_channel(
     channel.api_key = decrypt(&channel.api_key, &state.encryption_key)
         .unwrap_or_else(|_| channel.api_key);
 
-    Ok(Json(ChannelResponse::from(channel)))
+    // Enrich with group_name
+    let mut resp = ChannelResponse::from(channel);
+    if let Some(ref gid) = resp.group_id {
+        if let Some(g) = state.storage.get_group(gid).await
+            .map_err(|e| ApiError::Internal(e.to_string()))? {
+            resp.group_name = Some(g.name);
+        }
+    }
+    Ok(Json(resp))
 }
 
 pub async fn update_channel(
@@ -395,8 +456,15 @@ pub async fn update_channel(
     if let Some(available_hours) = input.available_hours {
         channel.available_hours = available_hours;
     }
-    if let Some(group) = input.group {
-        channel.group = group;
+    if let Some(ref group_id) = input.group_id {
+        if let Some(gid) = group_id {
+            let exists = state.storage.get_group(gid).await
+                .map_err(|e| ApiError::Internal(e.to_string()))?;
+            if exists.is_none() {
+                return Err(ApiError::BadRequest(format!("Group '{}' not found", gid)));
+            }
+        }
+        channel.group_id = group_id.clone();
     }
     channel.updated_at = chrono::Utc::now();
 
@@ -406,7 +474,15 @@ pub async fn update_channel(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(Json(ChannelResponse::from(updated)))
+    // Enrich with group_name
+    let mut resp = ChannelResponse::from(updated);
+    if let Some(ref gid) = resp.group_id {
+        if let Some(g) = state.storage.get_group(gid).await
+            .map_err(|e| ApiError::Internal(e.to_string()))? {
+            resp.group_name = Some(g.name);
+        }
+    }
+    Ok(Json(resp))
 }
 
 /// Dedicated endpoint for updating a channel's API key.

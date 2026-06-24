@@ -9,6 +9,7 @@ import {
   Server,
   Cpu,
   Users,
+  UsersRound,
   Settings,
   FileText,
   DollarSign,
@@ -65,6 +66,7 @@ export default function AppLayout() {
     { key: '/admin/models', icon: Cpu, label: t('sidebar.models') },
     { key: '/admin/pricing-policies', icon: DollarSign, label: t('sidebar.pricingPolicies') },
     { key: '/admin/users', icon: Users, label: t('sidebar.users') },
+    { key: '/admin/groups', icon: UsersRound, label: t('groups.title') },
     { key: '/admin/settings', icon: Settings, label: t('sidebar.settings') },
     { key: '/admin/logs', icon: FileText, label: t('sidebar.logs') },
   ];
