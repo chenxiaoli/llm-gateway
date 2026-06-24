@@ -5,11 +5,13 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useUsers, useUpdateUser, useDeleteUser } from '../hooks/useUsers';
+import { useGroups } from '../hooks/useGroups';
 import { useUserBalance, useRechargeUser, useAdjustUser } from '../hooks/useAccounts';
 import { useUsage, useUsageSummary } from '../hooks/useUsage';
 import { useCurrencyStore, formatCurrency } from '../stores/currency';
 import { useQueryClient } from '@tanstack/react-query';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import type { UserResponse } from '../types';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Select } from '../components/ui/Select';
@@ -83,13 +85,16 @@ function DrawerShell({ title, isOpen, onClose, width = 560, children }: {
 
 // ── User Detail Drawer ────────────────────────────────────────────────────────
 
-function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () => void }) {
+function UserDrawer({ user, onClose }: { user: UserResponse | null; onClose: () => void }) {
   const { t } = useTranslation();
   const symbol = useCurrencyStore((s) => s.symbol);
   const queryClient = useQueryClient();
+  const userId = user?.id ?? null;
   const { data, isLoading } = useUserBalance(userId ?? '', 1, 10);
   const rechargeMutation = useRechargeUser();
   const adjustMutation = useAdjustUser();
+  const updateMutation = useUpdateUser();
+  const { data: groups } = useGroups();
 
   const [rechargeOpen, setRechargeOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -167,6 +172,23 @@ function UserDrawer({ userId, onClose }: { userId: string | null; onClose: () =>
                 <span className="text-xs text-base-content/40">{t('users.drawer.threshold')}: {formatCurrency(account.threshold, symbol, 2)}</span>
                 {account.balance <= account.threshold && <Badge variant="amber">{t('users.drawer.lowBalance')}</Badge>}
               </div>
+            </div>
+          )}
+
+          {user && (
+            <div className="rounded-2xl border border-base-300/40 bg-base-100 p-5">
+              <div className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-3">
+                {t('users.drawer.group')}
+              </div>
+              <Select
+                value={user.group_id ?? ''}
+                onChange={(value) => updateMutation.mutate({ id: user.id, input: { group_id: value || null } })}
+                options={[
+                  { value: '', label: t('users.drawer.noGroup') },
+                  ...(groups ?? []).map((g) => ({ value: g.id, label: g.name })),
+                ]}
+                size="sm"
+              />
             </div>
           )}
 
@@ -458,7 +480,7 @@ export default function Users() {
   const updateMutation = useUpdateUser();
   const deleteMutation = useDeleteUser();
 
-  const [drawerUserId, setDrawerUserId] = useState<string | null>(null);
+  const [drawerUser, setDrawerUser] = useState<UserResponse | null>(null);
   const [usageUserId, setUsageUserId] = useState<string | null>(null);
 
   const totalPages = Math.ceil((data?.total ?? 0) / pageSize);
@@ -509,7 +531,7 @@ export default function Users() {
                     <td>
                       <button
                         className="font-medium text-left cursor-pointer hover:text-accent transition-colors"
-                        onClick={() => setDrawerUserId(user.id)}
+                        onClick={() => setDrawerUser(user)}
                       >
                         {user.username}
                       </button>
@@ -533,7 +555,7 @@ export default function Users() {
                     <td className="text-right">
                       <button
                         className="cursor-pointer font-mono text-sm"
-                        onClick={() => setDrawerUserId(user.id)}
+                        onClick={() => setDrawerUser(user)}
                       >
                         <span className={user.balance <= user.threshold ? 'text-amber-500' : 'text-base-content/70'}>
                           {formatCurrency(user.balance, symbol, 2)}
@@ -546,7 +568,7 @@ export default function Users() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setDrawerUserId(user.id)}
+                          onClick={() => setDrawerUser(user)}
                         >
                           {t('users.detail')}
                         </Button>
@@ -595,8 +617,8 @@ export default function Users() {
       )}
 
       <UserDrawer
-        userId={drawerUserId}
-        onClose={() => setDrawerUserId(null)}
+        user={drawerUser}
+        onClose={() => setDrawerUser(null)}
       />
       <UsageDrawer
         userId={usageUserId}

@@ -20,6 +20,7 @@ import PricingPolicies from './pages/PricingPolicies';
 import Providers from './pages/Providers';
 import ProviderDetail from './pages/ProviderDetail';
 import Users from './pages/Users';
+import Groups from './pages/Groups';
 import AccountBalance from './pages/AccountBalance';
 import Settings from './pages/Settings';
 import Usage from './pages/Usage';
@@ -89,6 +90,7 @@ function App() {
             <Route path="models" element={<Models />} />
             <Route path="pricing-policies" element={<PricingPolicies />} />
             <Route path="users" element={<Users />} />
+            <Route path="groups" element={<Groups />} />
             <Route path="users/:userId/balance" element={<AccountBalance />} />
             <Route path="settings" element={<Settings />} />
             <Route path="logs" element={<Logs />} />

@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import i18n from '../i18n';
 import { useAllChannels, useTestChannel, useToggleChannel } from '../hooks/useChannels';
+import { useGroups } from '../hooks/useGroups';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
 import { createChannel } from '../api/providers';
@@ -12,6 +13,7 @@ import { Button } from '../components/ui/Button';
 import { Drawer } from '../components/ui/Drawer';
 import { Modal } from '../components/ui/Modal';
 import { Toggle } from '../components/ui/Toggle';
+import { Select } from '../components/ui/Select';
 import { Globe, Plus, Radio, Hash, ShieldCheck, Key, Wifi, Cpu, Search, X, Clock, Scale, Zap, Check, Loader2 } from 'lucide-react';
 import type { Channel, CreateChannelRequest } from '../types';
 import { isAvailableNow, utcToLocalTime, utcDayToLocalDay, getBrowserTimezone } from '../lib/timezone';
@@ -137,6 +139,7 @@ function AddChannelDrawer({
 }) {
   const queryClient = useQueryClient();
   const { data: allModels } = useAllModels();
+  const { data: groups } = useGroups();
   const { t } = useTranslation();
   const [isPending, setIsPending] = useState(false);
   const [providerId, setProviderId] = useState('');
@@ -145,7 +148,7 @@ function AddChannelDrawer({
   const [priority, setPriority] = useState('1');
   const [weight, setWeight] = useState('');
   const [enabled, setEnabled] = useState(false);
-  const [group, setGroup] = useState('');
+  const [groupId, setGroupId] = useState('');
   const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
 
   const reset = () => {
@@ -155,7 +158,7 @@ function AddChannelDrawer({
     setPriority('1');
     setWeight('');
     setEnabled(false);
-    setGroup('');
+    setGroupId('');
     setSelectedModelIds(new Set());
   };
 
@@ -179,7 +182,7 @@ function AddChannelDrawer({
         weight: weight ? parseInt(weight) : null,
         enabled,
         models,
-        group: group || undefined,
+        group_id: groupId || undefined,
       };
       await createChannel(input);
       queryClient.invalidateQueries({ queryKey: ['channels'] });
@@ -318,13 +321,14 @@ function AddChannelDrawer({
         </div>
 
         <div>
-          <label className="label"><span className="label-text font-medium">{t('channelDetail.editModal.group')}</span></label>
-          <input
-            type="text"
-            value={group}
-            onChange={(e) => setGroup(e.target.value)}
-            placeholder={t('channelDetail.editModal.groupPlaceholder')}
-            className="input input-bordered w-full"
+          <label className="label"><span className="label-text font-medium">{t('channels.addDrawer.group')}</span></label>
+          <Select
+            value={groupId}
+            onChange={setGroupId}
+            options={[
+              { value: '', label: t('channels.addDrawer.noGroup') },
+              ...(groups ?? []).map((g) => ({ value: g.id, label: g.name })),
+            ]}
           />
         </div>
 
@@ -445,10 +449,10 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
           </div>
         </div>
 
-        {channel.group && (
+        {channel.group_id && (
           <div className="shrink-0">
             <span className="inline-flex items-center px-2 py-1 rounded bg-info/10 text-info text-xs font-medium">
-              {channel.group}
+              {channel.group_name ?? channel.group_id}
             </span>
           </div>
         )}

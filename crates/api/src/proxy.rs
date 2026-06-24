@@ -51,6 +51,7 @@ pub struct ResolvedChannel {
     /// Per-model overrides: keyed by lowercase model name.
     pub model_overrides: HashMap<String, ChannelModelEnriched>,
     pub proxy_url: Option<String>,
+    pub group_id: Option<String>,
     pub available_hours: Option<Vec<TimeSlot>>,
 }
 
@@ -237,6 +238,7 @@ impl InMemoryChannelRegistry {
                 weight: channel.weight,
                 model_overrides,
                 proxy_url,
+                group_id: channel.group_id.clone(),
                 available_hours: channel.available_hours.clone(),
             };
 
@@ -852,6 +854,21 @@ async fn proxy_inner(
         }
     }
 
+    // === Step 2.5: Determine request user_id and is_admin for routing filter ===
+    let request_user_id = api_key.created_by.clone();
+    let request_is_admin = if let Some(ref uid) = request_user_id {
+        match state.storage.get_user(uid).await {
+            Ok(Some(u)) => u.role == "admin",
+            Ok(None) => false,
+            Err(e) => {
+                tracing::warn!("[PROXY] Failed to look up user role for {}: {}", uid, e);
+                false  // Fail-safe: treat as non-admin if lookup fails
+            }
+        }
+    } else {
+        false  // No user_id (legacy admin-created keys) — no filter applied
+    };
+
     // === Step 3: Parse model ===
     let req_json: serde_json::Value = serde_json::from_str(&body)
         .map_err(|e| ApiError::BadRequest(format!("Invalid JSON: {}", e)))?;
@@ -936,6 +953,23 @@ async fn proxy_inner(
             }
             return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
         }
+        // Apply user-group routing filter
+        if let Some(ref user_id) = request_user_id {
+            if !request_is_admin {
+                match state.storage.get_user_group_id(user_id).await {
+                    Ok(Some(allowed_group_id)) => {
+                        candidates.retain(|(rc, _)| {
+                            rc.group_id.is_none() || rc.group_id.as_deref() == Some(&allowed_group_id)
+                        });
+                    }
+                    Ok(None) => { /* User has no group — unrestricted */ }
+                    Err(e) => {
+                        tracing::warn!("[PROXY] Failed to look up group for user {}: {}", user_id, e);
+                        /* Fail-open: don't filter */
+                    }
+                }
+            }
+        }
         // Already sorted by priority in do_reload()
         candidates
     } else {
@@ -958,7 +992,7 @@ async fn proxy_inner(
             .collect();
 
         // Collect enabled + available channels first
-        let available_channels: Vec<(&llm_gateway_storage::ChannelModel, &llm_gateway_storage::Channel)> =
+        let mut available_channels: Vec<(&llm_gateway_storage::ChannelModel, &llm_gateway_storage::Channel)> =
             channel_models.iter()
                 .filter(|cm| cm.enabled)
                 .filter_map(|cm| {
@@ -971,6 +1005,17 @@ async fn proxy_inner(
                     })
                 })
                 .collect();
+
+        // Apply user-group routing filter
+        if let Some(ref user_id) = request_user_id {
+            if !request_is_admin {
+                if let Ok(Some(allowed_group_id)) = state.storage.get_user_group_id(user_id).await {
+                    available_channels.retain(|(_, ch)| {
+                        ch.group_id.is_none() || ch.group_id.as_deref() == Some(&allowed_group_id)
+                    });
+                }
+            }
+        }
 
         if available_channels.is_empty() {
             if fallback_depth == 0 {
@@ -1027,6 +1072,7 @@ async fn proxy_inner(
                 weight: channel.weight,
                 model_overrides: HashMap::new(), // not used in cache-miss path
                 proxy_url,
+                group_id: channel.group_id.clone(),
                 available_hours: channel.available_hours.clone(),
             };
             candidates.push((resolved, (*cm).clone()));
@@ -1609,6 +1655,7 @@ mod tests {
                 },
             )]),
             proxy_url: None,
+            group_id: None,
             available_hours: None,
         };
         let enriched = rc.model_overrides.get(&model_key).expect("should have model override");
@@ -1635,6 +1682,7 @@ mod tests {
             weight: None,
             model_overrides: HashMap::new(),
             proxy_url: None,
+            group_id: None,
             available_hours: None,
         };
         let registry = StubRegistry(vec![rc.clone()]);
@@ -1666,6 +1714,7 @@ mod tests {
                 },
             )]),
             proxy_url: None,
+            group_id: None,
             available_hours: None,
         };
         let registry = StubRegistry(vec![rc.clone()]);

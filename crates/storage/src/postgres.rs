@@ -374,7 +374,7 @@ struct PgChannelRow {
     weight: Option<i32>,
     available_hours: Option<String>,
     created_by: Option<String>,
-    group: Option<String>,
+    group_id: Option<String>,
     disabled_until: Option<chrono::DateTime<chrono::Utc>>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
@@ -400,7 +400,7 @@ impl From<PgChannelRow> for Channel {
                 _ => None,
             },
             created_by: r.created_by,
-            group: r.group,
+            group_id: r.group_id,
             disabled_until: r.disabled_until,
             created_at: r.created_at,
             updated_at: r.updated_at,
@@ -416,6 +416,7 @@ struct PgUserRow {
     role: String,
     enabled: bool,
     refresh_token: Option<String>,
+    group_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -429,6 +430,7 @@ impl From<PgUserRow> for User {
             role: r.role,
             enabled: r.enabled,
             refresh_token: r.refresh_token,
+            group_id: r.group_id,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -441,6 +443,8 @@ struct PgUserWithBalanceRow {
     username: String,
     role: String,
     enabled: bool,
+    group_id: Option<String>,
+    group_name: Option<String>,
     balance: Option<i64>,
     threshold: Option<i64>,
     created_at: chrono::DateTime<chrono::Utc>,
@@ -454,8 +458,31 @@ impl From<PgUserWithBalanceRow> for UserWithBalance {
             username: r.username,
             role: r.role,
             enabled: r.enabled,
+            group_id: r.group_id,
+            group_name: r.group_name,
             balance: r.balance.unwrap_or(0),
             threshold: r.threshold.unwrap_or(100_000_000),
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }
+    }
+}
+
+#[derive(FromRow)]
+struct PgGroupRow {
+    id: String,
+    name: String,
+    description: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<PgGroupRow> for Group {
+    fn from(r: PgGroupRow) -> Self {
+        Group {
+            id: r.id,
+            name: r.name,
+            description: r.description,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -842,7 +869,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_channel(&self, channel: &Channel) -> Result<Channel, DbErr> {
         sqlx::query(
-            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, available_hours, created_by, \"group\", created_at, updated_at)
+            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, available_hours, created_by, group_id, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
         )
         .bind(&channel.id)
@@ -860,7 +887,7 @@ impl crate::Storage for PostgresStorage {
         .bind(channel.weight.unwrap_or(100))
         .bind(channel.available_hours.as_ref().map(|s| serde_json::to_string(s).unwrap()))
         .bind(&channel.created_by)
-        .bind(&channel.group)
+        .bind(&channel.group_id)
         .bind(channel.disabled_until)
         .bind(channel.created_at)
         .bind(channel.updated_at)
@@ -875,7 +902,7 @@ impl crate::Storage for PostgresStorage {
         let channel_id = channel.id.clone();
 
         sqlx::query(
-            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, available_hours, created_by, \"group\", disabled_until, created_at, updated_at)
+            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, available_hours, created_by, group_id, disabled_until, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
         )
         .bind(&channel.id)
@@ -893,7 +920,7 @@ impl crate::Storage for PostgresStorage {
         .bind(channel.weight.unwrap_or(100))
         .bind(channel.available_hours.as_ref().map(|s| serde_json::to_string(s).unwrap()))
         .bind(&channel.created_by)
-        .bind(&channel.group)
+        .bind(&channel.group_id)
         .bind(channel.disabled_until)
         .bind(channel.created_at)
         .bind(channel.updated_at)
@@ -925,7 +952,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_channel(&self, id: &str) -> Result<Option<Channel>, DbErr> {
         let row: Option<PgChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, \"group\", disabled_until, created_at, updated_at, available_hours
+            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, group_id, disabled_until, created_at, updated_at, available_hours
              FROM channels WHERE id = $1",
         )
         .bind(id)
@@ -937,7 +964,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_channels(&self) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<PgChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, \"group\", disabled_until, created_at, updated_at, available_hours
+            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, group_id, disabled_until, created_at, updated_at, available_hours
              FROM channels ORDER BY priority ASC",
         )
         .fetch_all(&self.pool)
@@ -948,7 +975,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<PgChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, \"group\", disabled_until, created_at, updated_at, available_hours
+            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, group_id, disabled_until, created_at, updated_at, available_hours
              FROM channels WHERE provider_id = $1 ORDER BY priority ASC",
         )
         .bind(provider_id)
@@ -960,7 +987,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_enabled_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<PgChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, \"group\", disabled_until, created_at, updated_at, available_hours
+            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, group_id, disabled_until, created_at, updated_at, available_hours
              FROM channels WHERE provider_id = $1 AND enabled = true ORDER BY priority ASC",
         )
         .bind(provider_id)
@@ -973,7 +1000,7 @@ impl crate::Storage for PostgresStorage {
     async fn update_channel(&self, channel: &Channel) -> Result<Channel, DbErr> {
         sqlx::query(
             "UPDATE channels SET name = $1, api_key = $2, base_url = $3, priority = $4, pricing_policy_id = $5, markup_ratio = $6,
-             enabled = $7, rpm_limit = $8, tpm_limit = $9, balance = $10, weight = $11, available_hours = $12, \"group\" = $13, disabled_until = $14, updated_at = $15 WHERE id = $16",
+             enabled = $7, rpm_limit = $8, tpm_limit = $9, balance = $10, weight = $11, available_hours = $12, group_id = $13, disabled_until = $14, updated_at = $15 WHERE id = $16",
         )
         .bind(&channel.name)
         .bind(&channel.api_key)
@@ -987,7 +1014,7 @@ impl crate::Storage for PostgresStorage {
         .bind(channel.balance)
         .bind(channel.weight)
         .bind(channel.available_hours.as_ref().map(|s| serde_json::to_string(s).unwrap()))
-        .bind(&channel.group)
+        .bind(&channel.group_id)
         .bind(channel.disabled_until)
         .bind(channel.updated_at)
         .bind(&channel.id)
@@ -1731,8 +1758,8 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "INSERT INTO users (id, username, password, role, enabled, refresh_token, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            "INSERT INTO users (id, username, password, role, enabled, refresh_token, group_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
         )
         .bind(&user.id)
         .bind(&user.username)
@@ -1740,6 +1767,7 @@ impl crate::Storage for PostgresStorage {
         .bind(&user.role)
         .bind(user.enabled)
         .bind(&user.refresh_token)
+        .bind(&user.group_id)
         .bind(user.created_at)
         .bind(user.updated_at)
         .execute(&self.pool)
@@ -1749,7 +1777,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_user(&self, id: &str) -> Result<Option<User>, DbErr> {
         let row: Option<PgUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, refresh_token, created_at, updated_at FROM users WHERE id = $1",
+            "SELECT id, username, password, role, enabled, refresh_token, group_id, created_at, updated_at FROM users WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -1759,7 +1787,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_user_by_username(&self, username: &str) -> Result<Option<User>, DbErr> {
         let row: Option<PgUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, refresh_token, created_at, updated_at FROM users WHERE username = $1",
+            "SELECT id, username, password, role, enabled, refresh_token, group_id, created_at, updated_at FROM users WHERE username = $1",
         )
         .bind(username)
         .fetch_optional(&self.pool)
@@ -1769,7 +1797,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_users(&self) -> Result<Vec<User>, DbErr> {
         let rows: Vec<PgUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, refresh_token, created_at, updated_at FROM users",
+            "SELECT id, username, password, role, enabled, refresh_token, group_id, created_at, updated_at FROM users",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -1782,10 +1810,11 @@ impl crate::Storage for PostgresStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgUserWithBalanceRow> = sqlx::query_as(
-            "SELECT u.id, u.username, u.role, u.enabled, \
-                    a.balance, a.threshold, u.created_at, u.updated_at \
+            "SELECT u.id, u.username, u.role, u.enabled, u.group_id, g.name AS group_name, \
+                    COALESCE(a.balance, 0) AS balance, COALESCE(a.threshold, 0) AS threshold, u.created_at, u.updated_at \
              FROM users u \
              LEFT JOIN accounts a ON a.user_id = u.id \
+             LEFT JOIN groups g ON g.id = u.group_id \
              ORDER BY u.created_at DESC LIMIT $1 OFFSET $2",
         )
         .bind(page_size)
@@ -1802,13 +1831,14 @@ impl crate::Storage for PostgresStorage {
 
     async fn update_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "UPDATE users SET username = $1, password = $2, role = $3, enabled = $4, refresh_token = $5, updated_at = $6 WHERE id = $7",
+            "UPDATE users SET username = $1, password = $2, role = $3, enabled = $4, refresh_token = $5, group_id = $6, updated_at = $7 WHERE id = $8",
         )
         .bind(&user.username)
         .bind(&user.password)
         .bind(&user.role)
         .bind(user.enabled)
         .bind(&user.refresh_token)
+        .bind(&user.group_id)
         .bind(user.updated_at)
         .bind(&user.id)
         .execute(&self.pool)
@@ -2232,6 +2262,100 @@ impl crate::Storage for PostgresStorage {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    // ---- Groups ----
+
+    async fn list_groups(&self) -> Result<Vec<Group>, DbErr> {
+        let rows: Vec<PgGroupRow> = sqlx::query_as(
+            "SELECT id, name, description, created_at, updated_at FROM groups ORDER BY name",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(Group::from).collect())
+    }
+
+    async fn get_group(&self, id: &str) -> Result<Option<Group>, DbErr> {
+        let row: Option<PgGroupRow> = sqlx::query_as(
+            "SELECT id, name, description, created_at, updated_at FROM groups WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(Group::from))
+    }
+
+    async fn create_group(&self, input: &CreateGroup) -> Result<Group, DbErr> {
+        let id = uuid::Uuid::new_v4().to_string();
+        let row: PgGroupRow = sqlx::query_as(
+            "INSERT INTO groups (id, name, description)
+             VALUES ($1, $2, $3)
+             RETURNING id, name, description, created_at, updated_at",
+        )
+        .bind(&id)
+        .bind(&input.name)
+        .bind(&input.description)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(Group::from(row))
+    }
+
+    // Tri-state description: None=keep, Some(None)=clear, Some(Some(v))=set
+    // Uses a flag param to distinguish "don't touch" vs "set to NULL" (cleared).
+    async fn update_group(&self, id: &str, input: &UpdateGroup) -> Result<Group, DbErr> {
+        let should_update_description = input.description.is_some();
+        let new_description: Option<String> = match &input.description {
+            Some(Some(v)) => Some(v.clone()),
+            _ => None,
+        };
+        let row: Option<PgGroupRow> = sqlx::query_as(
+            "UPDATE groups
+             SET name = COALESCE($2, name),
+                 description = CASE WHEN $3::boolean THEN $4 ELSE description END,
+                 updated_at = NOW()
+             WHERE id = $1
+             RETURNING id, name, description, created_at, updated_at",
+        )
+        .bind(id)
+        .bind(&input.name)
+        .bind(should_update_description)
+        .bind(&new_description)
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(Group::from).ok_or_else(|| -> DbErr {
+            Box::new(sqlx::Error::RowNotFound)
+        })
+    }
+
+    async fn delete_group(&self, id: &str) -> Result<DeleteGroupResult, DbErr> {
+        let cleared_users = sqlx::query("UPDATE users SET group_id = NULL WHERE group_id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?
+            .rows_affected() as i64;
+
+        let cleared_channels = sqlx::query("UPDATE channels SET group_id = NULL WHERE group_id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?
+            .rows_affected() as i64;
+
+        sqlx::query("DELETE FROM groups WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(DeleteGroupResult { cleared_users, cleared_channels })
+    }
+
+    async fn get_user_group_id(&self, user_id: &str) -> Result<Option<String>, DbErr> {
+        let row: Option<(Option<String>,)> = sqlx::query_as(
+            "SELECT group_id FROM users WHERE id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.and_then(|(g,)| g))
     }
 
     // ---- Seed Data ----

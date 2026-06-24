@@ -1,6 +1,7 @@
 pub mod accounts;
 pub mod auth;
 pub mod channels;
+pub mod groups;
 pub mod keys;
 pub mod model_fallbacks;
 pub mod providers;
@@ -78,6 +79,15 @@ pub fn management_router() -> Router<Arc<AppState>> {
         .route(
             "/api/v1/admin/channels/{id}/test",
             post(channels::test_channel),
+        )
+        // Groups (admin)
+        .route(
+            "/api/v1/admin/groups",
+            post(groups::create_group).get(groups::list_groups),
+        )
+        .route(
+            "/api/v1/admin/groups/{id}",
+            get(groups::get_group).patch(groups::update_group).delete(groups::delete_group),
         )
         .route(
             "/api/v1/admin/models",

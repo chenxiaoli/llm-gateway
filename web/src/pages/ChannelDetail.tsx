@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import i18n from 'i18next';
 import { ArrowLeft, Pencil, Trash2, KeyRound, Hash, Plus, Building2, LinkIcon, Power, Eye, EyeOff, Clock, Scale, Zap } from 'lucide-react';
 import { useChannel, useUpdateChannel, useDeleteChannel, useChannelModels, useCreateChannelModel, useDeleteChannelModel, useUpdateChannelModel, useUpdateChannelApiKey, useProviderModels, useTestChannel } from '../hooks/useChannels';
+import { useGroups } from '../hooks/useGroups';
 import { useProviders } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
 import { getErrorMessage } from '../api/client';
@@ -13,6 +14,7 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Toggle } from '../components/ui/Toggle';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { Select } from '../components/ui/Select';
 import type { UpdateChannelRequest, ChannelModel, TimeSlot } from '../types';
 import { utcToLocalTime, localToUtcTime, utcDayToLocalDay, localDayToUtcDay, getBrowserTimezone, getTimezoneLabel } from '../lib/timezone';
 
@@ -26,6 +28,7 @@ export default function ChannelDetail() {
   const { data: allModels } = useAllModels();
   const { data: providerModels } = useProviderModels(channel?.provider_id ?? '');
   const { data: policies } = usePricingPolicies();
+  const { data: groups } = useGroups();
   const updateMutation = useUpdateChannel(id!);
   const deleteMutation = useDeleteChannel(id!);
   const createModelMutation = useCreateChannelModel(channel?.id || '');
@@ -64,7 +67,7 @@ export default function ChannelDetail() {
       setChannelPriority(String(channel.priority));
       setChannelWeight(channel.weight != null ? String(channel.weight) : '');
       setChannelEnabled(channel.enabled);
-      setChannelGroup(channel.group ?? '');
+      setChannelGroup(channel.group_id ?? '');
       setHoursSlots(channel.available_hours ? (localSlots(channel.available_hours) ?? []) : []);
     }
   }, [channel]);
@@ -171,7 +174,7 @@ export default function ChannelDetail() {
       priority: Number(channelPriority),
       weight: channelWeight ? Number(channelWeight) : null,
       enabled: channelEnabled,
-      group: channelGroup || null,
+      group_id: channelGroup || null,
     };
     await updateMutation.mutateAsync({ id: channel.id, input });
     setIsEditing(false);
@@ -187,7 +190,7 @@ export default function ChannelDetail() {
     setChannelPriority(String(channel.priority));
     setChannelWeight(channel.weight != null ? String(channel.weight) : '');
     setChannelEnabled(channel.enabled);
-    setChannelGroup(channel.group ?? '');
+    setChannelGroup(channel.group_id ?? '');
     setIsEditing(false);
   };
 
@@ -317,14 +320,14 @@ export default function ChannelDetail() {
               </div>
             </div>
 
-            {channel.group && (
+            {channel.group_id && (
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg bg-info/10 flex items-center justify-center shrink-0">
                   <Hash className="h-4 w-4 text-info" />
                 </div>
                 <div className="flex-1">
                   <div className="text-xs text-base-content/40 uppercase tracking-wider">{t('channelDetail.group')}</div>
-                  <div className="text-sm font-mono text-base-content/80">{channel.group}</div>
+                  <div className="text-sm font-mono text-base-content/80">{channel.group_name ?? channel.group_id}</div>
                 </div>
               </div>
             )}
@@ -593,12 +596,13 @@ export default function ChannelDetail() {
 
           <div>
             <label className="label"><span className="label-text font-medium">{t('channelDetail.editModal.group')}</span></label>
-            <input
-              type="text"
+            <Select
               value={channelGroup}
-              onChange={(e) => setChannelGroup(e.target.value)}
-              placeholder={t('channelDetail.editModal.groupPlaceholder')}
-              className="input input-bordered w-full"
+              onChange={setChannelGroup}
+              options={[
+                { value: '', label: t('channels.addDrawer.noGroup') },
+                ...(groups ?? []).map((g) => ({ value: g.id, label: g.name })),
+              ]}
             />
           </div>
 
