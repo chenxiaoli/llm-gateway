@@ -882,10 +882,7 @@
     "about": {
       "sectionTitle": "GATEWAY INFORMATION",
       "version": "Version",
-      "database": "Database",
-      "linksTitle": "LINKS",
-      "githubRepo": "GitHub Repository",
-      "githubDesc": "Source code, issues, documentation"
+      "database": "Database"
     }
   },
   "account": {
@@ -1134,12 +1131,10 @@
     "cta": {
       "title": "Ready to get started?",
       "description": "Set up your gateway in minutes. Configure providers, create API keys, and start routing requests.",
-      "goToDashboard": "Go to Dashboard",
-      "starOnGithub": "Star on GitHub"
+      "goToDashboard": "Go to Dashboard"
     },
     "footer": {
-      "brand": "LLM Gateway",
-      "openSource": "Open Source"
+      "brand": "LLM Gateway"
     }
   }
 }
