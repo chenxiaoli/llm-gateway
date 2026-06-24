@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.6.0] - 2026-06-24
+
+### Changed
+- Rebrand frontend UI from "LLM Gateway" to "TokenVis" across home/docs/login/register headers, console sidebar and footer, browser tab title, and the brand logo mark
+- Remove open-source references from UI: GitHub links in home, settings, and sidebar; "Open Source" footer text; "Star on GitHub" CTA
+
 ## [1.5.2] - 2026-06-04
 
 ### Changed
