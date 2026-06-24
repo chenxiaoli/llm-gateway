@@ -768,6 +768,7 @@
     "table": {
       "username": "用户名",
       "role": "角色",
+      "group": "分组",
       "status": "状态",
       "balance": "余额",
       "created": "创建时间",

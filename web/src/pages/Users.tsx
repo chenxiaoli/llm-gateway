@@ -520,6 +520,7 @@ export default function Users() {
                 <tr className="border-b border-base-300/40">
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('users.table.username')}</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('users.table.role')}</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('users.table.group')}</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('users.table.status')}</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45 text-right">{t('users.table.balance')}</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('users.table.created')}</th>
@@ -544,6 +545,18 @@ export default function Users() {
                         onChange={(value) => updateMutation.mutate({ id: user.id, input: { role: value as 'admin' | 'user' } })}
                         options={[{ value: 'admin', label: t('users.roleAdmin') }, { value: 'user', label: t('users.roleUser') }]}
                       />
+                    </td>
+                    <td>
+                      <button
+                        className="text-sm text-left cursor-pointer hover:text-accent transition-colors"
+                        onClick={() => setDrawerUser(user)}
+                      >
+                        {user.group_name ? (
+                          <span className="text-base-content/80">{user.group_name}</span>
+                        ) : (
+                          <span className="text-base-content/35">-</span>
+                        )}
+                      </button>
                     </td>
                     <td>
                       <button
@@ -589,7 +602,7 @@ export default function Users() {
                 ))}
                 {data?.items?.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center py-12 text-base-content/40 text-sm">
+                    <td colSpan={7} className="text-center py-12 text-base-content/40 text-sm">
                       {t('users.noUsers')}
                     </td>
                   </tr>
