@@ -87,7 +87,7 @@ describe('Settings page', () => {
     fireEvent.click(screen.getByText('About'));
 
     await waitFor(() => {
-      expect(screen.getByText(/GitHub/i)).toBeInTheDocument();
+      expect(screen.getByText('GATEWAY INFORMATION')).toBeInTheDocument();
       expect(screen.getByText(/v\d+\.\d+\.\d+/)).toBeInTheDocument();
     }, { timeout: 5000 });
   });

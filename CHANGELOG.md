@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.6.1] - 2026-06-24
+
+### Fixed
+- Settings page About tab test: replace stale `/GitHub/i` assertion (GitHub link card was removed in v1.6.0) with section-title check on "GATEWAY INFORMATION"
+
 ## [1.6.0] - 2026-06-24
 
 ### Changed
