@@ -786,6 +786,8 @@
       "accountBalance": "Account Balance",
       "threshold": "Threshold",
       "lowBalance": "Low Balance",
+      "group": "Group",
+      "noGroup": "None",
       "recharge": "Recharge",
       "adjust": "Adjust",
       "recentTransactions": "Recent Transactions",

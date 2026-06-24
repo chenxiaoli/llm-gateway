@@ -786,6 +786,8 @@
       "accountBalance": "账户余额",
       "threshold": "阈值",
       "lowBalance": "余额不足",
+      "group": "分组",
+      "noGroup": "无",
       "recharge": "充值",
       "adjust": "调整",
       "recentTransactions": "最近交易",
