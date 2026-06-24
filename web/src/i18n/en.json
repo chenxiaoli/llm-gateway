@@ -768,6 +768,7 @@
     "table": {
       "username": "Username",
       "role": "Role",
+      "group": "Group",
       "status": "Status",
       "balance": "Balance",
       "created": "Created",

@@ -24,12 +24,13 @@ describe('Users page', () => {
     }, { timeout: 5000 });
   });
 
-  it('has columns: Username, Role, Status, Created, Actions', async () => {
+  it('has columns: Username, Role, Group, Status, Created, Actions', async () => {
     renderWithProviders(<Users />, { route: '/admin/users' });
 
     await waitFor(() => {
       expect(screen.getByText('Username')).toBeInTheDocument();
       expect(screen.getByText('Role')).toBeInTheDocument();
+      expect(screen.getByText('Group')).toBeInTheDocument();
       expect(screen.getByText('Status')).toBeInTheDocument();
       expect(screen.getByText('Created')).toBeInTheDocument();
       expect(screen.getByText('Actions')).toBeInTheDocument();
@@ -96,14 +97,13 @@ describe('Users page', () => {
     );
 
     await userEvent.click(await screen.findByText('alice'));
-    await waitFor(() => {
-      expect(screen.getByText('Group')).toBeInTheDocument();
-    });
-
+    // Drawer is open — find the group Select by its 'g1' option (the table also has a
+    // "Group" column header, so don't use getByText('Group') to detect the drawer).
     const selects = screen.getAllByRole('combobox');
     const groupSelect = selects.find((s) =>
       Array.from(s.querySelectorAll('option')).some((o) => o.value === 'g1'),
     )!;
+    expect(groupSelect).toBeDefined();
     await userEvent.selectOptions(groupSelect, 'g1');
 
     await waitFor(() => {
