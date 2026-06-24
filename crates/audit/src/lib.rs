@@ -66,6 +66,14 @@ impl AuditLogger {
         } else {
             "{}"
         };
+        // Defense-in-depth: Postgres TEXT columns reject U+0000. The proxy already
+        // cleans these at the NATS boundary, but legacy events (or any future caller)
+        // may still contain them. Replace both U+0000 and the U+FFFD replacement char
+        // (from lossy UTF-8 decoding) with a space.
+        let response_body: String = response_body
+            .chars()
+            .map(|c| if c == '\0' || c == '\u{FFFD}' { ' ' } else { c })
+            .collect();
         let log = AuditLog {
             id: uuid::Uuid::new_v4().to_string(),
             request_id: request_id.map(String::from),
