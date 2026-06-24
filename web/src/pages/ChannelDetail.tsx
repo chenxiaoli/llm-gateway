@@ -28,7 +28,8 @@ export default function ChannelDetail() {
   const { data: allModels } = useAllModels();
   const { data: providerModels } = useProviderModels(channel?.provider_id ?? '');
   const { data: policies } = usePricingPolicies();
-  const { data: groups } = useGroups();
+  const { data: groupsData } = useGroups();
+  const groups = groupsData?.items ?? [];
   const updateMutation = useUpdateChannel(id!);
   const deleteMutation = useDeleteChannel(id!);
   const createModelMutation = useCreateChannelModel(channel?.id || '');

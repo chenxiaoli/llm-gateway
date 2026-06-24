@@ -138,7 +138,7 @@ async fn test_list_groups_returns_all(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/admin/groups")
+                .uri("/api/v1/admin/groups?page=1&page_size=20")
                 .header("authorization", bearer_token(admin_token))
                 .body(Body::empty())
                 .unwrap(),
@@ -150,7 +150,9 @@ async fn test_list_groups_returns_all(pool: PgPool) {
         &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
-    assert_eq!(body.as_array().unwrap().len(), 3);
+    assert_eq!(body["total"], 3);
+    assert_eq!(body["items"].as_array().unwrap().len(), 3);
+    assert_eq!(body["items"][0]["name"], "engineering");
 }
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]

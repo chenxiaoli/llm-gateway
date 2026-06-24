@@ -1,7 +1,7 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
-use llm_gateway_storage::{CreateGroup, DeleteGroupResult, Group, UpdateGroup};
+use llm_gateway_storage::{CreateGroup, DeleteGroupResult, Group, PaginatedResponse, PaginationParams, UpdateGroup};
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -33,14 +33,21 @@ impl From<Group> for GroupResponse {
 pub async fn list_groups(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-) -> Result<Json<Vec<GroupResponse>>, ApiError> {
+    Query(pagination): Query<PaginationParams>,
+) -> Result<Json<PaginatedResponse<GroupResponse>>, ApiError> {
     require_admin(&headers, &state.jwt_secret)?;
-    let groups = state
+    let (page, page_size) = pagination.normalized();
+    let result = state
         .storage
-        .list_groups()
+        .list_groups_paginated(page, page_size)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
-    Ok(Json(groups.into_iter().map(GroupResponse::from).collect()))
+    Ok(Json(PaginatedResponse {
+        items: result.items.into_iter().map(GroupResponse::from).collect(),
+        total: result.total,
+        page: result.page,
+        page_size: result.page_size,
+    }))
 }
 
 pub async fn get_group(

@@ -22,7 +22,7 @@ export default function Groups() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
 
-  const groups = data ?? [];
+  const groups = data?.items ?? [];
 
   const openCreate = () => {
     setEditingId(null);

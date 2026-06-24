@@ -40,10 +40,15 @@ describe('Users page', () => {
     let patchBody: unknown = null;
     server.use(
       http.get('*/api/v1/admin/groups', () =>
-        HttpResponse.json([
-          { id: 'g1', name: 'engineering', description: null, created_at: '', updated_at: '' },
-          { id: 'g2', name: 'marketing', description: null, created_at: '', updated_at: '' },
-        ]),
+        HttpResponse.json({
+          items: [
+            { id: 'g1', name: 'engineering', description: null, created_at: '', updated_at: '' },
+            { id: 'g2', name: 'marketing', description: null, created_at: '', updated_at: '' },
+          ],
+          total: 2,
+          page: 1,
+          page_size: 20,
+        }),
       ),
       http.get('*/api/v1/admin/users', () =>
         HttpResponse.json({
