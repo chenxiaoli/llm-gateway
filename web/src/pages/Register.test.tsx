@@ -74,4 +74,26 @@ describe('Register page', () => {
 
     expect(screen.getByText(/Already have an account/)).toBeInTheDocument();
   });
+
+  it('shows backend error message when registration fails', async () => {
+    server.use(
+      http.post('*/api/v1/auth/register', () =>
+        HttpResponse.json(
+          { error: { message: 'Username already exists', type: 400 } },
+          { status: 400 },
+        ),
+      ),
+    );
+
+    renderWithProviders(<Register />, { route: '/console/register' });
+
+    await userEvent.type(screen.getByPlaceholderText('Username'), 'taken');
+    await userEvent.type(screen.getByPlaceholderText('Password'), 'password123');
+    await userEvent.type(screen.getByPlaceholderText('Confirm Password'), 'password123');
+    await userEvent.click(screen.getByRole('button', { name: 'Register' }));
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith('Username already exists');
+    });
+  });
 });

@@ -28,9 +28,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       const me = await getMe();
       set({ user: { id: me.id, username: me.username, role: me.role }, isLoading: false });
       return resp;
-    } catch {
+    } catch (err) {
       set({ isLoading: false });
-      throw new Error('Login failed');
+      throw err;
     }
   },
 
@@ -43,9 +43,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       const me = await getMe();
       set({ user: { id: me.id, username: me.username, role: me.role }, isLoading: false });
       return resp;
-    } catch {
+    } catch (err) {
       set({ isLoading: false });
-      throw new Error('Registration failed');
+      throw err;
     }
   },
 

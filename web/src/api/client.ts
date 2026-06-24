@@ -143,7 +143,10 @@ export function clearRefreshToken() {
 }
 
 export function getErrorMessage(err: unknown, fallback: string): string {
-  const error = err as { response?: { data?: { message?: string }; status?: number } };
+  const error = err as { response?: { data?: { message?: string; error?: { message?: string } } } };
+  if (error.response?.data?.error?.message) {
+    return error.response.data.error.message;
+  }
   if (error.response?.data?.message) {
     return error.response.data.message;
   }
