@@ -159,6 +159,16 @@ export interface UsageFilter {
   tz?: string;
 }
 
+export interface RouteAttempt {
+  model: string;
+  channel_id: string;
+  channel_name: string | null;
+  status_code: number;
+  error_message: string | null;
+  latency_ms: number;
+  started_at: string;
+}
+
 export interface AuditLogSummary {
   id: string;
   request_id: string | null;
@@ -181,6 +191,7 @@ export interface AuditLogSummary {
   upstream_url?: string;
   request_headers?: string;
   response_headers?: string;
+  routes?: RouteAttempt[] | null;
 }
 
 export interface AuditLog extends AuditLogSummary {
