@@ -649,7 +649,8 @@
       "status": "Status",
       "latency": "Latency",
       "startedAt": "Started at",
-      "errorMessage": "Error"
+      "errorMessage": "Error",
+      "close": "Close"
     },
     "table": {
       "requestId": "Req ID",

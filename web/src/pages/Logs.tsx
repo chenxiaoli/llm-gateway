@@ -544,6 +544,7 @@ export default function Logs() {
                     <th>{t('logs.routesModal.channel')}</th>
                     <th>{t('logs.routesModal.status')}</th>
                     <th>{t('logs.routesModal.latency')}</th>
+                    <th>{t('logs.routesModal.startedAt')}</th>
                     <th>{t('logs.routesModal.errorMessage')}</th>
                   </tr>
                 </thead>
@@ -555,16 +556,21 @@ export default function Logs() {
                       <td>{r.channel_name ?? r.channel_id.slice(0, 8)}</td>
                       <td>
                         <span className={
-                          r.status_code === 0 || r.status_code >= 400
+                          r.status_code === 0
                             ? 'text-error'
-                            : r.status_code === 200
-                            ? 'text-success'
-                            : ''
+                            : r.status_code < 400
+                              ? 'text-success'
+                              : r.status_code < 500
+                                ? 'text-warning'
+                                : 'text-error'
                         }>
                           {r.status_code === 0 ? 'CONN' : r.status_code}
                         </span>
                       </td>
                       <td>{r.latency_ms}ms</td>
+                      <td className="font-mono text-xs text-base-content/55">
+                        {r.started_at}
+                      </td>
                       <td className="text-xs text-base-content/60 max-w-md truncate" title={r.error_message ?? ''}>
                         {r.error_message ?? '—'}
                       </td>
@@ -575,7 +581,7 @@ export default function Logs() {
             </div>
             <div className="modal-action">
               <button className="btn btn-sm" onClick={() => setRoutesModalLog(null)}>
-                Close
+                {t('logs.routesModal.close')}
               </button>
             </div>
           </div>
