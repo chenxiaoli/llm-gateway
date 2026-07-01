@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.0] - 2026-07-01
+
+### Changed (BREAKING for custom SQL on audit_logs)
+- One audit row per **client request** instead of per upstream attempt. A request that fans out across N channels via failover produces one row whose new `routes` JSONB array contains all N attempts. The previous per-attempt row design (added in 1.7.2) is gone.
+- Top-level `audit_logs.model_name`, `channel_id`, `channel_name`, `status_code`, `request_body`, `response_body`, `input_tokens`, `output_tokens`, `latency_ms` now reflect the **final** attempt (success, or last failure if all routes failed). Use the `routes` array to inspect the full attempt history.
+- Previously, the all-failed case (every channel returned an error) produced no audit row at all. It now produces exactly one row with `routes` containing every attempt.
+
+### Added
+- `audit_logs.routes` JSONB column. Each entry has: `model`, `channel_id`, `channel_name`, `status_code` (0 = connection error), `error_message`, `latency_ms`, `started_at`.
+- New `/admin/logs` "Routes" column with click-to-expand modal showing each attempt's model, channel, status, latency, started-at, and error message. Status is color-coded (green/amber/red) and `CONN` indicates a connection error.
+- `AuditEvent.routes` field on the NATS audit event (with `#[serde(default)]` for forward/backward compatibility with the 1.7.x worker during rolling deploys).
+- Null-byte (U+0000 / U+FFFD) sanitization in `routes[*].error_message` (parity with the 1.7.2 `response_body` fix).
+
 ## [1.7.2] - 2026-06-24
 
 ### Fixed

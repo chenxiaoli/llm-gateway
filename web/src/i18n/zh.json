@@ -639,6 +639,19 @@
     "requestId": "请求 ID",
     "requestIdPlaceholder": "粘贴请求 ID",
     "stream": "流式",
+    "routes": "路由",
+    "routesCount_one": "{{count}} 条路由",
+    "routesCount_other": "{{count}} 条路由",
+    "routesModal": {
+      "title": "路由尝试",
+      "model": "模型",
+      "channel": "通道",
+      "status": "状态",
+      "latency": "延迟",
+      "startedAt": "开始时间",
+      "errorMessage": "错误信息",
+      "close": "关闭"
+    },
     "table": {
       "requestId": "请求 ID",
       "time": "时间",
@@ -1147,9 +1160,9 @@
     "docs.userGuide": "用户指南",
     "docs.adminGuide": "管理指南",
     "hero": {
-      "title1": "一个 API 端点",
-      "title2": "连接所有 LLM 提供商",
-      "description": "统一网关，管理密钥、执行速率限制、追踪成本，并通过单一端点将请求代理到 OpenAI、Anthropic 等提供商。",
+      "title1": "即插即用",
+      "title2": "兼容 OpenAI 和 Anthropic SDK",
+      "description": "只需切换现有客户端的 baseURL 即可使用。网关统一管理密钥、限速、成本追踪和多提供商故障转移 —— 无需修改应用代码。",
       "getStarted": "开始使用",
       "seeHowItWorks": "了解工作原理"
     },

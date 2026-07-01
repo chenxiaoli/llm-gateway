@@ -639,6 +639,19 @@
     "requestId": "Request ID",
     "requestIdPlaceholder": "Paste request ID",
     "stream": "stream",
+    "routes": "Routes",
+    "routesCount_one": "{{count}} route",
+    "routesCount_other": "{{count}} routes",
+    "routesModal": {
+      "title": "Route attempts",
+      "model": "Model",
+      "channel": "Channel",
+      "status": "Status",
+      "latency": "Latency",
+      "startedAt": "Started at",
+      "errorMessage": "Error",
+      "close": "Close"
+    },
     "table": {
       "requestId": "Req ID",
       "time": "Time",
@@ -1147,11 +1160,11 @@
     "docs.userGuide": "User Guide",
     "docs.adminGuide": "Admin Guide",
     "hero": {
-      "title2": "every LLM provider",
-      "description": "A unified gateway that manages keys, enforces rate limits, tracks costs, and proxies requests to OpenAI, Anthropic, and more through a single endpoint.",
+      "title2": "OpenAI and Anthropic SDKs",
+      "description": "Switch the baseURL on your existing client. The gateway handles keys, rate limits, cost tracking, and multi-provider failover — no application changes required.",
       "getStarted": "Get Started",
       "seeHowItWorks": "See how it works",
-      "title1": "One API endpoint"
+      "title1": "Drop-in compatible"
     },
     "howItWorks": {
       "title": "How it works",

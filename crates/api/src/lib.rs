@@ -55,4 +55,8 @@ pub struct AuditTask {
     pub upstream_url: Option<String>,
     pub request_headers: Option<String>,
     pub response_headers: Option<String>,
+    /// Per-upstream-attempt history collected during the failover loop.
+    /// Always populated by the proxy (Vec is non-null, may be empty in
+    /// pathological cases). The audit worker forwards it to the DB.
+    pub routes: Vec<llm_gateway_storage::RouteAttempt>,
 }

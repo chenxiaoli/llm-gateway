@@ -1,6 +1,6 @@
 [package]
 name = "llm-gateway-audit"
-version = "1.7.2"
+version = "1.8.0"
 edition = "2021"
 
 [dependencies]
@@ -8,3 +8,7 @@ llm-gateway-storage = { path = "../storage" }
 uuid = { workspace = true }
 chrono = { workspace = true }
 tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+sqlx = { workspace = true }

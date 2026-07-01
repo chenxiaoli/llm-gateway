@@ -1,6 +1,6 @@
 [package]
 name = "llm-gateway-nats-publisher"
-version = "1.7.2"
+version = "1.8.0"
 edition = "2021"
 
 [dependencies]
@@ -12,3 +12,4 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+llm-gateway-storage = { path = "../storage" }
