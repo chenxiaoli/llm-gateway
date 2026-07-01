@@ -1168,6 +1168,7 @@ async fn proxy_inner(
         let upstream_url = channel.upstream_url(&request_path, protocol);
 
         tracing::debug!("[PROXY] Upstream URL: {} -> {}", request_path, upstream_url);
+        let proxy_build_start = Instant::now();
         let client: reqwest::Client = match &channel.proxy_url {
             Some(proxy_url) => {
                 match reqwest::Proxy::all(proxy_url) {
@@ -1175,15 +1176,41 @@ async fn proxy_inner(
                         match reqwest::Client::builder().proxy(proxy).build() {
                             Ok(c) => c,
                             Err(e) => {
+                                let proxy_build_latency_ms = proxy_build_start.elapsed().as_millis() as i64;
                                 tracing::warn!("[PROXY] Failed to build proxied client for channel '{}': {}", channel.name, e);
-                                last_error = format!("Proxy client error on channel '{}': {}", channel.name, e);
+                                let error_msg = format!("Proxy client error on channel '{}': {}", channel.name, e);
+                                last_error = error_msg.clone();
+                                // Record this failed attempt in the routes array so the audit
+                                // row reflects the proxy-build failure (not silently dropped).
+                                routes.push(llm_gateway_storage::RouteAttempt {
+                                    model: upstream_name.to_string(),
+                                    channel_id: channel.channel_id.to_string(),
+                                    channel_name: Some(channel.name.clone()),
+                                    status_code: 0,
+                                    error_message: Some(error_msg),
+                                    latency_ms: proxy_build_latency_ms,
+                                    started_at: chrono::Utc::now(),
+                                });
                                 continue;
                             }
                         }
                     }
                     Err(e) => {
+                        let proxy_build_latency_ms = proxy_build_start.elapsed().as_millis() as i64;
                         tracing::warn!("[PROXY] Invalid proxy URL '{}' for channel '{}': {}", proxy_url, channel.name, e);
-                        last_error = format!("Invalid proxy URL on channel '{}': {}", channel.name, e);
+                        let error_msg = format!("Invalid proxy URL on channel '{}': {}", channel.name, e);
+                        last_error = error_msg.clone();
+                        // Record this failed attempt in the routes array so the audit
+                        // row reflects the proxy-build failure (not silently dropped).
+                        routes.push(llm_gateway_storage::RouteAttempt {
+                            model: upstream_name.to_string(),
+                            channel_id: channel.channel_id.to_string(),
+                            channel_name: Some(channel.name.clone()),
+                            status_code: 0,
+                            error_message: Some(error_msg),
+                            latency_ms: proxy_build_latency_ms,
+                            started_at: chrono::Utc::now(),
+                        });
                         continue;
                     }
                 }
@@ -1427,7 +1454,7 @@ if status != 200 && status < 500 {
                 upstream_url: Some(upstream_url.clone()),
                 request_headers: Some(request_headers_for_worker),
                 response_headers: Some(response_headers_for_worker),
-                routes: routes.clone(),
+                routes,
             };
             dispatch_audit_task(&state, task).await;
 
@@ -1576,8 +1603,7 @@ if status != 200 && status < 500 {
 
         // Build the success RouteAttempt and append it to the routes array.
         // This produces the full failover history for the single AuditTask.
-        let mut success_routes = routes.clone();
-        success_routes.push(llm_gateway_storage::RouteAttempt {
+        routes.push(llm_gateway_storage::RouteAttempt {
             model: upstream_name.to_string(),
             channel_id: channel.channel_id.to_string(),
             channel_name: Some(channel.name.clone()),
@@ -1609,7 +1635,7 @@ if status != 200 && status < 500 {
             upstream_url: Some(upstream_url.clone()),
             request_headers: Some(request_headers_for_worker.clone()),
             response_headers: Some(response_headers_for_worker),
-            routes: success_routes,
+            routes,
         };
         dispatch_audit_task(&state, task).await;
 
@@ -1668,7 +1694,7 @@ if status != 200 && status < 500 {
             upstream_url: None,
             request_headers: None,
             response_headers: None,
-            routes: routes.clone(),
+            routes,
         };
         dispatch_audit_task(&state, task).await;
     }
