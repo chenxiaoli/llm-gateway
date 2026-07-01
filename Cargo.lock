@@ -1390,6 +1390,7 @@ version = "1.7.2"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
+ "sqlx",
  "tokio",
  "uuid",
 ]
@@ -1450,6 +1451,7 @@ dependencies = [
  "async-nats",
  "chrono",
  "futures",
+ "llm-gateway-storage",
  "serde",
  "serde_json",
  "tokio",

@@ -33,6 +33,7 @@ export default function Logs() {
   const [channelFilter, setChannelFilter] = useState('');
   const [requestIdFilter, setRequestIdFilter] = useState('');
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
+  const [routesModalLog, setRoutesModalLog] = useState<AuditLogSummary | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
 
@@ -217,6 +218,7 @@ export default function Logs() {
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.protocol')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.stream')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.status')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.routes')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.latency')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.input')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.output')}</th>
@@ -226,7 +228,7 @@ export default function Logs() {
                 <tbody>
                   {data?.items?.length === 0 && (
                     <tr>
-                      <td colSpan={12} className="text-center py-12 text-base-content/30">
+                      <td colSpan={13} className="text-center py-12 text-base-content/30">
                         <Search className="h-8 w-8 mx-auto mb-2 opacity-40" />
                         <div>{t('logs.empty.title')}</div>
                         {hasFilters && <div className="text-xs mt-1">{t('logs.empty.tryAdjusting')}</div>}
@@ -281,6 +283,18 @@ export default function Logs() {
                         >
                           {log.status_code}
                         </Badge>
+                      </td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        {log.routes && log.routes.length > 1 ? (
+                          <button
+                            className="badge badge-ghost cursor-pointer hover:badge-primary"
+                            onClick={() => setRoutesModalLog(log)}
+                          >
+                            {t('logs.routesCount', { count: log.routes.length })}
+                          </button>
+                        ) : (
+                          <span className="text-base-content/40">—</span>
+                        )}
                       </td>
                       <td className="mono text-base-content/55">{log.latency_ms}ms</td>
                       <td className="mono text-base-content/55">{log.input_tokens ?? '-'}</td>
@@ -513,6 +527,66 @@ export default function Logs() {
           </div>
         )}
       </Drawer>
+
+      {/* Routes modal */}
+      {routesModalLog && (
+        <div className="modal modal-open">
+          <div className="modal-box max-w-3xl">
+            <h3 className="font-bold text-lg mb-4">
+              {t('logs.routesModal.title')} — {routesModalLog.request_id?.slice(0, 8) ?? '?'}
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="table table-sm">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>{t('logs.routesModal.model')}</th>
+                    <th>{t('logs.routesModal.channel')}</th>
+                    <th>{t('logs.routesModal.status')}</th>
+                    <th>{t('logs.routesModal.latency')}</th>
+                    <th>{t('logs.routesModal.startedAt')}</th>
+                    <th>{t('logs.routesModal.errorMessage')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {routesModalLog.routes?.map((r, i) => (
+                    <tr key={i}>
+                      <td className="text-base-content/40">{i + 1}</td>
+                      <td className="font-mono text-xs">{r.model}</td>
+                      <td>{r.channel_name ?? r.channel_id.slice(0, 8)}</td>
+                      <td>
+                        <span className={
+                          r.status_code === 0
+                            ? 'text-error'
+                            : r.status_code < 400
+                              ? 'text-success'
+                              : r.status_code < 500
+                                ? 'text-warning'
+                                : 'text-error'
+                        }>
+                          {r.status_code === 0 ? 'CONN' : r.status_code}
+                        </span>
+                      </td>
+                      <td>{r.latency_ms}ms</td>
+                      <td className="font-mono text-xs text-base-content/55">
+                        {r.started_at}
+                      </td>
+                      <td className="text-xs text-base-content/60 max-w-md truncate" title={r.error_message ?? ''}>
+                        {r.error_message ?? '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="modal-action">
+              <button className="btn btn-sm" onClick={() => setRoutesModalLog(null)}>
+                {t('logs.routesModal.close')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
