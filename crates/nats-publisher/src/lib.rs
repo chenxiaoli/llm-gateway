@@ -297,7 +297,19 @@ mod tests {
         };
         let s = serde_json::to_string(&event).expect("serialize");
         let back: AuditEvent = serde_json::from_str(&s).expect("deserialize");
-        assert_eq!(back.routes.as_ref().map(|r| r.len()), Some(1));
-        assert_eq!(back.routes.unwrap()[0].channel_id, "c");
+        match back.routes.as_deref() {
+            Some([route]) => {
+                assert_eq!(route.model, "m", "model should round-trip");
+                assert_eq!(route.channel_id, "c", "channel_id should round-trip");
+                assert_eq!(route.status_code, 200, "status_code should round-trip");
+                assert_eq!(route.latency_ms, 100, "latency_ms should round-trip");
+                assert!(
+                    route.error_message.is_none(),
+                    "error_message should remain None"
+                );
+            }
+            Some(routes) => panic!("expected exactly one route, got {}", routes.len()),
+            None => panic!("routes should be Some after round-trip"),
+        }
     }
 }
