@@ -293,6 +293,7 @@ impl From<PgAuditSummaryRow> for AuditLogSummary {
             request_headers: r.request_headers,
             response_headers: r.response_headers,
             user_id: r.user_id,
+            routes: None,
         }
     }
 }
@@ -352,6 +353,7 @@ impl From<PgAuditRow> for AuditLog {
             request_headers: r.request_headers,
             response_headers: r.response_headers,
             user_id: r.user_id,
+            routes: None,
         }
     }
 }

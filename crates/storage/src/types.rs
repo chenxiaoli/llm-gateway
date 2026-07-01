@@ -601,6 +601,26 @@ pub struct UsageFilter {
     pub tz: Option<String>,
 }
 
+/// One upstream routing attempt captured during proxy failover.
+/// Each entry is one try of the client request against a specific
+/// (channel, channel_model) combination. Failed attempts record the
+/// status and error; successful attempts record None for error_message.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteAttempt {
+    /// The channel model that was actually used for this attempt
+    /// (may differ from the client's original model due to channel mapping).
+    pub model: String,
+    pub channel_id: String,
+    pub channel_name: Option<String>,
+    /// 0 = connection error (no HTTP response received).
+    /// Otherwise the upstream HTTP status code.
+    pub status_code: i32,
+    /// None when the attempt succeeded.
+    pub error_message: Option<String>,
+    pub latency_ms: i64,
+    pub started_at: DateTime<Utc>,
+}
+
 // --- Audit Logs ---
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -629,6 +649,9 @@ pub struct AuditLog {
     pub request_headers: Option<String>,
     pub response_headers: Option<String>,
     pub user_id: Option<String>,
+    /// Per-upstream-attempt history. None for legacy rows (data created
+    /// before the v1.8.0 migration). New rows always populate this.
+    pub routes: Option<Vec<RouteAttempt>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -655,6 +678,8 @@ pub struct AuditLogSummary {
     pub request_headers: Option<String>,
     pub response_headers: Option<String>,
     pub user_id: Option<String>,
+    /// See AuditLog::routes. None for legacy rows.
+    pub routes: Option<Vec<RouteAttempt>>,
 }
 
 #[derive(Debug, Deserialize)]
