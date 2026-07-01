@@ -1450,6 +1450,7 @@ dependencies = [
  "async-nats",
  "chrono",
  "futures",
+ "llm-gateway-storage",
  "serde",
  "serde_json",
  "tokio",

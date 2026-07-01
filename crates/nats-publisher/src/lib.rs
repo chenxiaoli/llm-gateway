@@ -52,6 +52,12 @@ pub struct AuditEvent {
     pub request_headers: Option<String>,
     pub response_headers: Option<String>,
     pub created_at: String,
+    /// Per-upstream-attempt history. None for legacy events or for
+    /// code paths that don't collect route attempts. The `#[serde(default)]`
+    /// attribute is critical: it lets the new gateway emit new events
+    /// while an old worker is still running, and vice versa.
+    #[serde(default)]
+    pub routes: Option<Vec<llm_gateway_storage::RouteAttempt>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -233,5 +239,65 @@ impl NatsPublisher {
             max_age_secs,
             pending_messages,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn audit_event_routes_serde_default_is_none() {
+        // Old events without the `routes` field should deserialize with
+        // routes = None (this is the whole point of #[serde(default)]).
+        let old_event_json = r#"{
+            "id": "x", "request_id": "r", "key_id": "k", "model_name": "m",
+            "provider_id": "p", "protocol": "openai", "stream": false,
+            "status_code": 200, "latency_ms": 100, "request_body": "{}",
+            "response_body": "{}", "created_at": "2026-07-01T00:00:00Z"
+        }"#;
+        let event: AuditEvent = serde_json::from_str(old_event_json)
+            .expect("old event should still deserialize");
+        assert!(event.routes.is_none());
+    }
+
+    #[test]
+    fn audit_event_routes_serde_round_trip() {
+        let event = AuditEvent {
+            id: "x".into(),
+            request_id: "r".into(),
+            key_id: "k".into(),
+            user_id: None,
+            model_name: "m".into(),
+            provider_id: "p".into(),
+            channel_id: None,
+            protocol: "openai".into(),
+            stream: false,
+            status_code: 200,
+            latency_ms: 100,
+            original_model: None,
+            upstream_model: None,
+            model_override_reason: None,
+            request_path: None,
+            upstream_url: None,
+            request_body: "{}".into(),
+            response_body: "{}".into(),
+            request_headers: None,
+            response_headers: None,
+            created_at: "2026-07-01T00:00:00Z".into(),
+            routes: Some(vec![llm_gateway_storage::RouteAttempt {
+                model: "m".into(),
+                channel_id: "c".into(),
+                channel_name: None,
+                status_code: 200,
+                error_message: None,
+                latency_ms: 100,
+                started_at: chrono::Utc::now(),
+            }]),
+        };
+        let s = serde_json::to_string(&event).expect("serialize");
+        let back: AuditEvent = serde_json::from_str(&s).expect("deserialize");
+        assert_eq!(back.routes.as_ref().map(|r| r.len()), Some(1));
+        assert_eq!(back.routes.unwrap()[0].channel_id, "c");
     }
 }
