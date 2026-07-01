@@ -86,7 +86,7 @@ pub struct RouteAttempt {
 - `model_name` — the **final** attempt's channel model (e.g. `minimax-3` on success, last-failed model otherwise)
 - `provider_id`, `channel_id`, `channel_name` — the final attempt's channel/provider
 - `status_code` — the final attempt's status (success code, or last error code including 0 for connection error)
-- `latency_ms` — total wall-clock from request start to final response (sum of all attempt latencies plus the failover gap)
+- `latency_ms` — measured wall-clock from request start to final response (captured by the `start_total` `Instant` in `proxy_inner`). Approximately equal to the sum of `routes[*].latency_ms` plus the failover gap, but the measured value is authoritative.
 - `request_body` — the **client's** original request body (unchanged from current behavior)
 - `response_body` — the successful attempt's response, or the last error message on all-failed
 - `request_path`, `upstream_url` — final attempt's path/URL
@@ -138,7 +138,6 @@ proxy_inner(...):
         // 4xx is final — log and return
         let route = RouteAttempt { ... status_code: resp.status().as_u16() as i32, error_message: Some(body), ... };
         routes.push(route);
-        routes.push(route);  // 4xx attempt is also recorded
         // ...build AuditTask, dispatch, return 4xx to client
       }
       Ok(resp) => {
