@@ -324,6 +324,7 @@ struct PgAuditRow {
     request_headers: Option<String>,
     response_headers: Option<String>,
     user_id: Option<String>,
+    routes: Option<serde_json::Value>,
 }
 
 impl From<PgAuditRow> for AuditLog {
@@ -353,7 +354,7 @@ impl From<PgAuditRow> for AuditLog {
             request_headers: r.request_headers,
             response_headers: r.response_headers,
             user_id: r.user_id,
-            routes: None,
+            routes: r.routes.and_then(|v| serde_json::from_value(v).ok()),
         }
     }
 }
@@ -1544,11 +1545,15 @@ impl crate::Storage for PostgresStorage {
     // ---- Audit ----
 
     async fn insert_log(&self, log: &AuditLog) -> Result<(), DbErr> {
+        let routes_json = match log.routes.as_ref() {
+            Some(r) => serde_json::to_value(r).unwrap_or(serde_json::Value::Null),
+            None => serde_json::Value::Null,
+        };
         sqlx::query(
             "INSERT INTO audit_logs (id, request_id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
-             request_path, upstream_url, request_headers, response_headers, user_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)",
+             request_path, upstream_url, request_headers, response_headers, user_id, routes)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)",
         )
         .bind(&log.id)
         .bind(&log.request_id)
@@ -1573,6 +1578,7 @@ impl crate::Storage for PostgresStorage {
         .bind(&log.request_headers)
         .bind(&log.response_headers)
         .bind(log.user_id.clone())
+        .bind(routes_json)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -1701,7 +1707,7 @@ impl crate::Storage for PostgresStorage {
         let row: Option<PgAuditRow> = sqlx::query_as(
             "SELECT a.id, a.request_id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream, a.request_body, a.response_body,
              a.status_code, a.latency_ms, a.input_tokens, a.output_tokens, a.created_at, a.original_model, a.upstream_model, a.model_override_reason,
-             a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id
+             a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id, a.routes
              FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id WHERE a.request_id = $1",
         )
         .bind(request_id)
@@ -2661,5 +2667,116 @@ impl crate::Storage for PostgresStorage {
             page,
             page_size,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Storage;
+
+    #[tokio::test]
+    async fn test_insert_log_round_trip_with_routes() {
+        use crate::types::{AuditLog, Protocol, RouteAttempt};
+        let url = match std::env::var("DATABASE_URL") {
+            Ok(u) => u,
+            Err(_) => {
+                eprintln!("DATABASE_URL not set; skipping test");
+                return;
+            }
+        };
+        let storage = PostgresStorage::new(&url).await.expect("connect");
+        storage.run_migrations().await.expect("migrate");
+
+        let now = chrono::Utc::now();
+
+        // Use a synthetic API key. Insert it if missing.
+        let key_id = "test-routes-key";
+        let _ = sqlx::query("INSERT INTO api_keys (id, name, key_hash, enabled, created_at, updated_at) VALUES ($1, $2, $3, true, $4, $5) ON CONFLICT (id) DO NOTHING")
+            .bind(key_id)
+            .bind("test-routes")
+            .bind("0000000000000000000000000000000000000000000000000000000000000000")
+            .bind(now)
+            .bind(now)
+            .execute(&storage.pool)
+            .await
+            .expect("seed key");
+
+        let routes = vec![
+            RouteAttempt {
+                model: "glm-5.2".to_string(),
+                channel_id: "ch-a".to_string(),
+                channel_name: Some("Channel A".to_string()),
+                status_code: 0,
+                error_message: Some("Connection refused".to_string()),
+                latency_ms: 5,
+                started_at: now,
+            },
+            RouteAttempt {
+                model: "glm-5.2".to_string(),
+                channel_id: "ch-b".to_string(),
+                channel_name: Some("Channel B".to_string()),
+                status_code: 500,
+                error_message: Some("Internal Server Error".to_string()),
+                latency_ms: 150,
+                started_at: now,
+            },
+            RouteAttempt {
+                model: "minimax-3".to_string(),
+                channel_id: "ch-c".to_string(),
+                channel_name: Some("Channel C".to_string()),
+                status_code: 200,
+                error_message: None,
+                latency_ms: 320,
+                started_at: now,
+            },
+        ];
+
+        let log = AuditLog {
+            id: format!("test-routes-{}", uuid::Uuid::new_v4()),
+            request_id: Some(format!("test-req-{}", uuid::Uuid::new_v4())),
+            key_id: key_id.to_string(),
+            user_id: None,
+            model_name: "minimax-3".to_string(),
+            provider_id: "test-prov".to_string(),
+            channel_id: Some("ch-c".to_string()),
+            channel_name: Some("Channel C".to_string()),
+            protocol: Protocol::Openai,
+            stream: false,
+            request_body: r#"{"model":"glm-5.2"}"#.to_string(),
+            response_body: r#"{"ok":true}"#.to_string(),
+            status_code: 200,
+            latency_ms: 500,
+            input_tokens: Some(10),
+            output_tokens: Some(20),
+            created_at: now,
+            original_model: Some("glm-5.2".to_string()),
+            upstream_model: Some("minimax-3".to_string()),
+            model_override_reason: Some("channel_mapping".to_string()),
+            request_path: Some("/v1/chat/completions".to_string()),
+            upstream_url: Some("https://example.com/v1/chat/completions".to_string()),
+            request_headers: None,
+            response_headers: None,
+            routes: Some(routes.clone()),
+        };
+
+        storage.insert_log(&log).await.expect("insert");
+
+        let fetched = storage
+            .get_audit_by_request_id(log.request_id.as_deref().unwrap())
+            .await
+            .expect("fetch")
+            .expect("found");
+
+        let fetched_routes = fetched.routes.expect("routes present");
+        assert_eq!(fetched_routes.len(), 3);
+        assert_eq!(fetched_routes[0].channel_id, "ch-a");
+        assert_eq!(fetched_routes[0].status_code, 0);
+        assert_eq!(fetched_routes[0].error_message.as_deref(), Some("Connection refused"));
+        assert_eq!(fetched_routes[1].channel_id, "ch-b");
+        assert_eq!(fetched_routes[1].status_code, 500);
+        assert_eq!(fetched_routes[2].channel_id, "ch-c");
+        assert_eq!(fetched_routes[2].status_code, 200);
+        assert!(fetched_routes[2].error_message.is_none());
     }
 }
