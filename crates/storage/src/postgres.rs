@@ -266,6 +266,7 @@ struct PgAuditSummaryRow {
     request_headers: Option<String>,
     response_headers: Option<String>,
     user_id: Option<String>,
+    routes: Option<serde_json::Value>,
 }
 
 impl From<PgAuditSummaryRow> for AuditLogSummary {
@@ -293,7 +294,7 @@ impl From<PgAuditSummaryRow> for AuditLogSummary {
             request_headers: r.request_headers,
             response_headers: r.response_headers,
             user_id: r.user_id,
-            routes: None,
+            routes: r.routes.and_then(|v| serde_json::from_value(v).ok()),
         }
     }
 }
@@ -1588,7 +1589,7 @@ impl crate::Storage for PostgresStorage {
         let mut sql = String::from(
             "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
-             request_path, upstream_url, request_headers, response_headers
+             request_path, upstream_url, request_headers, response_headers, routes
              FROM audit_logs WHERE 1=1",
         );
 
@@ -1669,7 +1670,7 @@ impl crate::Storage for PostgresStorage {
         let data_sql = format!(
             "SELECT a.id, a.request_id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream,
              a.status_code, a.latency_ms, a.input_tokens, a.output_tokens, a.created_at, a.original_model, a.upstream_model, a.model_override_reason,
-             a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id
+             a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id, a.routes
              FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id{} ORDER BY a.created_at DESC LIMIT ${} OFFSET ${}",
             where_clause,
             bind_vals.len() + 1,
