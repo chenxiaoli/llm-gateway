@@ -639,6 +639,18 @@
     "requestId": "Request ID",
     "requestIdPlaceholder": "Paste request ID",
     "stream": "stream",
+    "routes": "Routes",
+    "routesCount_one": "{{count}} route",
+    "routesCount_other": "{{count}} routes",
+    "routesModal": {
+      "title": "Route attempts",
+      "model": "Model",
+      "channel": "Channel",
+      "status": "Status",
+      "latency": "Latency",
+      "startedAt": "Started at",
+      "errorMessage": "Error"
+    },
     "table": {
       "requestId": "Req ID",
       "time": "Time",

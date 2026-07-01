@@ -639,6 +639,18 @@
     "requestId": "请求 ID",
     "requestIdPlaceholder": "粘贴请求 ID",
     "stream": "流式",
+    "routes": "路由",
+    "routesCount_one": "{{count}} 条路由",
+    "routesCount_other": "{{count}} 条路由",
+    "routesModal": {
+      "title": "路由尝试",
+      "model": "模型",
+      "channel": "通道",
+      "status": "状态",
+      "latency": "延迟",
+      "startedAt": "开始时间",
+      "errorMessage": "错误信息"
+    },
     "table": {
       "requestId": "请求 ID",
       "time": "时间",
