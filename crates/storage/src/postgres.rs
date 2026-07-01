@@ -2778,5 +2778,18 @@ mod tests {
         assert_eq!(fetched_routes[2].channel_id, "ch-c");
         assert_eq!(fetched_routes[2].status_code, 200);
         assert!(fetched_routes[2].error_message.is_none());
+
+        // Cleanup: remove the rows we inserted so the test is idempotent
+        // and doesn't leave garbage in the shared test DB.
+        sqlx::query("DELETE FROM audit_logs WHERE id = $1")
+            .bind(&log.id)
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup audit_logs");
+        sqlx::query("DELETE FROM api_keys WHERE id = $1")
+            .bind(key_id)
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup api_keys");
     }
 }
