@@ -8,3 +8,7 @@ llm-gateway-storage = { path = "../storage" }
 uuid = { workspace = true }
 chrono = { workspace = true }
 tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+sqlx = { workspace = true }
