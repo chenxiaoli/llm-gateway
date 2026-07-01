@@ -478,6 +478,7 @@ async fn publish_audit_events(
         request_headers: task.request_headers.clone(),
         response_headers: task.response_headers.clone(),
         created_at: now.to_rfc3339(),
+        routes: Some(task.routes.clone()),
     };
 
     if let Err(e) = nats.publish_usage(&usage_event).await {
@@ -533,6 +534,18 @@ pub struct SseAuditParams {
     pub upstream_url: String,
     pub request_headers: String,
     pub response_headers: String,
+    /// Per-upstream-attempt history collected before this streaming attempt
+    /// (failed attempts that came before this success). The success entry
+    /// itself is appended at stream end.
+    pub routes: Vec<llm_gateway_storage::RouteAttempt>,
+    /// Channel name captured for the success RouteAttempt at stream end.
+    pub channel_name: Option<String>,
+    /// Wall-clock start of the first attempt (for total latency).
+    pub start_total: Instant,
+    /// The per-attempt `Instant` when this streaming attempt started.
+    pub attempt_start: Instant,
+    /// Body sent to upstream (the client-original body, possibly model-rewritten).
+    pub modified_body: String,
 }
 
 /// Parse recovery timestamp from SSE error message.
@@ -571,7 +584,6 @@ async fn process_sse_stream(
     tx: mpsc::Sender<Result<Event, std::convert::Infallible>>,
     state: Arc<crate::AppState>,
     audit_params: SseAuditParams,
-    start: Instant,
 ) {
     let byte_stream = upstream_resp.bytes_stream();
     tokio::pin!(byte_stream);
@@ -680,9 +692,24 @@ async fn process_sse_stream(
     }
 
     drop(tx);
-    let latency_ms = start.elapsed().as_millis() as i64;
+    let latency_ms = audit_params.start_total.elapsed().as_millis() as i64;
+    let attempt_latency_ms = audit_params.attempt_start.elapsed().as_millis() as i64;
 
     tracing::info!("[PROXY] SSE stream complete, latency={}ms", latency_ms);
+
+    // Build the success RouteAttempt and append it to the history collected
+    // before this successful attempt. This produces the full routes array
+    // for the single AuditTask dispatched at stream end.
+    let mut routes = audit_params.routes.clone();
+    routes.push(llm_gateway_storage::RouteAttempt {
+        model: audit_params.model_name.clone(),
+        channel_id: audit_params.channel_id.clone(),
+        channel_name: audit_params.channel_name.clone(),
+        status_code: 200,
+        error_message: None,
+        latency_ms: attempt_latency_ms,
+        started_at: chrono::Utc::now(),
+    });
 
     let task = AuditTask {
         request_id: audit_params.request_id,
@@ -692,7 +719,7 @@ async fn process_sse_stream(
         provider_id: audit_params.provider_id,
         protocol: audit_params.protocol,
         stream: true,
-        request_body: audit_params.request_body,
+        request_body: audit_params.modified_body,
         response_bytes: accumulated.into_bytes(),
         status_code: 200,
         latency_ms,
@@ -706,6 +733,7 @@ async fn process_sse_stream(
         upstream_url: Some(audit_params.upstream_url),
         request_headers: Some(audit_params.request_headers),
         response_headers: Some(audit_params.response_headers),
+        routes,
     };
     dispatch_audit_task(&state, task).await;
 }
@@ -1107,6 +1135,12 @@ async fn proxy_inner(
     let mut last_error = String::new();
 
     // === Route with failover ===
+    // Collect per-attempt history for the audit row. One AuditTask is dispatched
+    // at loop exit (per-branch) carrying the full routes array; today's per-attempt
+    // dispatches are removed.
+    let mut routes: Vec<llm_gateway_storage::RouteAttempt> = Vec::new();
+    let start_total = Instant::now();
+
     for (channel, channel_model) in &routing_candidates {
         // Use upstream_model_name if provided, otherwise use the model name from request
         let upstream_name = channel_model.upstream_model_name.as_deref().unwrap_or(&model_name);
@@ -1205,63 +1239,20 @@ async fn proxy_inner(
             Ok(r) => r,
             Err(e) => {
                 let latency_ms = start.elapsed().as_millis() as i64;
-                last_error = format!("Connection error on channel '{}': {}", channel.name, e);
+                let error_msg = format!("Connection error on channel '{}': {}", channel.name, e);
+                last_error = error_msg.clone();
 
-                // Audit the failed upstream attempt — no HTTP response received
-                let request_headers_for_worker: String = {
-                    let mut map = serde_json::Map::new();
-                    for (name, value) in headers.iter() {
-                        match name.as_str() {
-                            "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
-                            _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
-                            _ => {
-                                if let Ok(v) = value.to_str() {
-                                    map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
-                                }
-                            }
-                        }
-                    }
-                    serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
-                };
-                let proto = match protocol {
-                    ProxyProtocol::OpenAI => Protocol::Openai,
-                    ProxyProtocol::Anthropic => Protocol::Anthropic,
-                };
-                let pricing_policy = {
-                    let policy_id = channel_model.pricing_policy_id.as_deref()
-                        .or(model_entry.model.pricing_policy_id.as_deref());
-                    match policy_id {
-                        Some(id) => {
-                            state.storage.get_pricing_policy(id).await
-                                .map_err(|e| ApiError::Internal(e.to_string()))?
-                        }
-                        None => None,
-                    }
-                };
-                let task = AuditTask {
-                    request_id: request_id.clone(),
-                    key_id: api_key.id.clone(),
-                    user_id: api_key.created_by.clone(),
-                    model_name: upstream_name.to_string(),
-                    provider_id: provider_id.clone(),
-                    protocol: proto,
-                    stream: is_stream,
-                    request_body: body.clone(),
-                    response_bytes: last_error.clone().into_bytes(),
+                // Record this failed attempt for the audit row. The single AuditTask
+                // is dispatched at loop exit (or earlier on 4xx).
+                routes.push(llm_gateway_storage::RouteAttempt {
+                    model: upstream_name.to_string(),
+                    channel_id: channel.channel_id.to_string(),
+                    channel_name: Some(channel.name.clone()),
                     status_code: 0,
+                    error_message: Some(error_msg),
                     latency_ms,
-                    pricing_policy,
-                    markup_ratio: channel_model.markup_ratio,
-                    channel_id: Some(channel.channel_id.to_string()),
-                    original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
-                    upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
-                    model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
-                    request_path: Some(request_path.clone()),
-                    upstream_url: Some(upstream_url.clone()),
-                    request_headers: Some(request_headers_for_worker),
-                    response_headers: None,
-                };
-                dispatch_audit_task(&state, task).await;
+                    started_at: chrono::Utc::now(),
+                });
 
                 continue;
             }
@@ -1274,31 +1265,6 @@ async fn proxy_inner(
         if status >= 500 {
             last_error = format!("Server error {} on channel '{}'", status, channel.name);
 
-            // Audit the failed upstream attempt (mirrors the 4xx path)
-            let response_headers_for_worker: String = {
-                let mut map = serde_json::Map::new();
-                for (name, value) in resp.headers().iter() {
-                    if let Ok(v) = value.to_str() {
-                        map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
-                    }
-                }
-                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
-            };
-            let request_headers_for_worker: String = {
-                let mut map = serde_json::Map::new();
-                for (name, value) in headers.iter() {
-                    match name.as_str() {
-                        "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
-                        _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
-                        _ => {
-                            if let Ok(v) = value.to_str() {
-                                map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
-                            }
-                        }
-                    }
-                }
-                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
-            };
             let error_body = resp.bytes().await.unwrap_or_default();
             let error_body_str = if error_body.len() >= 2 && error_body[0] == 0x1F && error_body[1] == 0x8B {
                 use std::io::Read;
@@ -1313,46 +1279,16 @@ async fn proxy_inner(
             };
             let error_body_str = error_body_str.chars().map(|c| if c == '\0' || c == '\u{FFFD}' { ' ' } else { c }).collect::<String>();
 
-            let proto = match protocol {
-                ProxyProtocol::OpenAI => Protocol::Openai,
-                ProxyProtocol::Anthropic => Protocol::Anthropic,
-            };
-            let pricing_policy = {
-                let policy_id = channel_model.pricing_policy_id.as_deref()
-                    .or(model_entry.model.pricing_policy_id.as_deref());
-                match policy_id {
-                    Some(id) => {
-                        state.storage.get_pricing_policy(id).await
-                            .map_err(|e| ApiError::Internal(e.to_string()))?
-                    }
-                    None => None,
-                }
-            };
-
-            let task = AuditTask {
-                request_id: request_id.clone(),
-                key_id: api_key.id.clone(),
-                user_id: api_key.created_by.clone(),
-                model_name: upstream_name.to_string(),
-                provider_id: provider_id.clone(),
-                protocol: proto,
-                stream: is_stream,
-                request_body: body.clone(),
-                response_bytes: error_body_str.into_bytes(),
+            // Record this failed attempt for the audit row.
+            routes.push(llm_gateway_storage::RouteAttempt {
+                model: upstream_name.to_string(),
+                channel_id: channel.channel_id.to_string(),
+                channel_name: Some(channel.name.clone()),
                 status_code: status as i32,
+                error_message: Some(error_body_str),
                 latency_ms,
-                pricing_policy,
-                markup_ratio: channel_model.markup_ratio,
-                channel_id: Some(channel.channel_id.to_string()),
-                original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
-                upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
-                model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
-                request_path: Some(request_path.clone()),
-                upstream_url: Some(upstream_url.clone()),
-                request_headers: Some(request_headers_for_worker),
-                response_headers: Some(response_headers_for_worker),
-            };
-            dispatch_audit_task(&state, task).await;
+                started_at: chrono::Utc::now(),
+            });
 
             continue;
         }
@@ -1361,31 +1297,6 @@ async fn proxy_inner(
             tracing::warn!("[PROXY] Rate limited (429) on channel '{}', trying next", channel.name);
             last_error = format!("Rate limited (429) on channel '{}'", channel.name);
 
-            // Audit log for 429 rate limit events
-            let response_headers_for_worker: String = {
-                let mut map = serde_json::Map::new();
-                for (name, value) in resp.headers().iter() {
-                    if let Ok(v) = value.to_str() {
-                        map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
-                    }
-                }
-                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
-            };
-            let request_headers_for_worker: String = {
-                let mut map = serde_json::Map::new();
-                for (name, value) in headers.iter() {
-                    match name.as_str() {
-                        "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
-                        _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
-                        _ => {
-                            if let Ok(v) = value.to_str() {
-                                map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
-                            }
-                        }
-                    }
-                }
-                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
-            };
             let error_body = resp.bytes().await.unwrap_or_default();
             let error_body_str = String::from_utf8_lossy(&error_body).into_owned();
 
@@ -1403,45 +1314,16 @@ async fn proxy_inner(
                 recovery_instant,
             );
 
-            let proto = match protocol {
-                ProxyProtocol::OpenAI => Protocol::Openai,
-                ProxyProtocol::Anthropic => Protocol::Anthropic,
-            };
-            let pricing_policy = {
-                let policy_id = channel_model.pricing_policy_id.as_deref()
-                    .or(model_entry.model.pricing_policy_id.as_deref());
-                match policy_id {
-                    Some(id) => {
-                        state.storage.get_pricing_policy(id).await
-                            .map_err(|e| ApiError::Internal(e.to_string()))?
-                    }
-                    None => None,
-                }
-            };
-            let task = AuditTask {
-                request_id: request_id.clone(),
-                key_id: api_key.id.clone(),
-                user_id: api_key.created_by.clone(),
-                model_name: upstream_name.to_string(),
-                provider_id: provider_id.clone(),
-                protocol: proto,
-                stream: is_stream,
-                request_body: body.clone(),
-                response_bytes: error_body_str.into_bytes(),
+            // Record this failed attempt for the audit row.
+            routes.push(llm_gateway_storage::RouteAttempt {
+                model: upstream_name.to_string(),
+                channel_id: channel.channel_id.to_string(),
+                channel_name: Some(channel.name.clone()),
                 status_code: 429,
+                error_message: Some(error_body_str),
                 latency_ms,
-                pricing_policy,
-                markup_ratio: channel_model.markup_ratio,
-                channel_id: Some(channel.channel_id.to_string()),
-                original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
-                upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
-                model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
-                request_path: Some(request_path.clone()),
-                upstream_url: Some(upstream_url.clone()),
-                request_headers: Some(request_headers_for_worker),
-                response_headers: Some(response_headers_for_worker),
-            };
-            dispatch_audit_task(&state, task).await;
+                started_at: chrono::Utc::now(),
+            });
 
             continue;
         }
@@ -1510,6 +1392,19 @@ if status != 200 && status < 500 {
             let error_body_str = error_body_str.chars().map(|c| if c == '\0' || c == '\u{FFFD}' { ' ' } else { c }).collect::<String>();
             tracing::debug!("[PROXY] Upstream error response: status={}, body_len={}", status, error_body_str.len());
 
+            // Record this 4xx attempt in the routes array.
+            routes.push(llm_gateway_storage::RouteAttempt {
+                model: upstream_name.to_string(),
+                channel_id: channel.channel_id.to_string(),
+                channel_name: Some(channel.name.clone()),
+                status_code: status as i32,
+                error_message: Some(error_body_str.clone()),
+                latency_ms,
+                started_at: chrono::Utc::now(),
+            });
+
+            // Dispatch a single AuditTask carrying the full failover history.
+            // 4xx is terminal — return immediately, no further candidates attempted.
             let task = AuditTask {
                 request_id: request_id.clone(),
                 key_id: api_key.id.clone(),
@@ -1521,7 +1416,7 @@ if status != 200 && status < 500 {
                 request_body: body.clone(),
                 response_bytes: error_body_str.into_bytes(),
                 status_code: status as i32,
-                latency_ms,
+                latency_ms: start_total.elapsed().as_millis() as i64,
                 pricing_policy,
                 markup_ratio: channel_model.markup_ratio,
                 channel_id: Some(channel.channel_id.to_string()),
@@ -1532,6 +1427,7 @@ if status != 200 && status < 500 {
                 upstream_url: Some(upstream_url.clone()),
                 request_headers: Some(request_headers_for_worker),
                 response_headers: Some(response_headers_for_worker),
+                routes: routes.clone(),
             };
             dispatch_audit_task(&state, task).await;
 
@@ -1607,6 +1503,11 @@ if status != 200 && status < 500 {
                 upstream_url: upstream_url.clone(),
                 request_headers: request_headers_for_worker.clone(),
                 response_headers: response_headers_for_worker,
+                routes: routes.clone(),
+                channel_name: Some(channel.name.clone()),
+                start_total,
+                attempt_start: start,
+                modified_body: body.clone(),
             };
 
             let upstream_resp = resp;
@@ -1619,7 +1520,6 @@ if status != 200 && status < 500 {
                 tx,
                 state.clone(),
                 audit_params,
-                start,
             ));
 
             let event_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
@@ -1673,6 +1573,20 @@ if status != 200 && status < 500 {
             ProxyProtocol::OpenAI => Protocol::Openai,
             ProxyProtocol::Anthropic => Protocol::Anthropic,
         };
+
+        // Build the success RouteAttempt and append it to the routes array.
+        // This produces the full failover history for the single AuditTask.
+        let mut success_routes = routes.clone();
+        success_routes.push(llm_gateway_storage::RouteAttempt {
+            model: upstream_name.to_string(),
+            channel_id: channel.channel_id.to_string(),
+            channel_name: Some(channel.name.clone()),
+            status_code: 200,
+            error_message: None,
+            latency_ms,
+            started_at: chrono::Utc::now(),
+        });
+
         let task = AuditTask {
             request_id: request_id.clone(),
             key_id: api_key.id.clone(),
@@ -1684,7 +1598,7 @@ if status != 200 && status < 500 {
             request_body: body.clone(),
             response_bytes: response_bytes.clone(),
             status_code: 200,
-            latency_ms,
+            latency_ms: start_total.elapsed().as_millis() as i64,
             pricing_policy,
             markup_ratio: channel_model.markup_ratio,
             channel_id: Some(channel.channel_id.to_string()),
@@ -1695,6 +1609,7 @@ if status != 200 && status < 500 {
             upstream_url: Some(upstream_url.clone()),
             request_headers: Some(request_headers_for_worker.clone()),
             response_headers: Some(response_headers_for_worker),
+            routes: success_routes,
         };
         dispatch_audit_task(&state, task).await;
 
@@ -1709,6 +1624,55 @@ if status != 200 && status < 500 {
             return Ok(resp);
         }
     }
+
+    // All channels failed — dispatch a single audit row carrying the full
+    // failover history (the `routes` Vec accumulated above). The top-level
+    // fields reflect the last attempted channel.
+    if let Some(last) = routes.last() {
+        let proto = match protocol {
+            ProxyProtocol::OpenAI => Protocol::Openai,
+            ProxyProtocol::Anthropic => Protocol::Anthropic,
+        };
+        let last_channel_id = last.channel_id.clone();
+        let last_model_name = last.model.clone();
+        let last_error_msg = last.error_message.clone().unwrap_or_default();
+        let last_status = last.status_code;
+
+        // Resolve pricing policy from the last-attempted channel (best effort;
+        // we don't have channel_model here, fall back to the model's policy).
+        let pricing_policy = match model_entry.model.pricing_policy_id.as_deref() {
+            Some(id) => state.storage.get_pricing_policy(id).await
+                .map_err(|e| ApiError::Internal(e.to_string()))?,
+            None => None,
+        };
+
+        let task = AuditTask {
+            request_id: request_id.clone(),
+            key_id: api_key.id.clone(),
+            user_id: api_key.created_by.clone(),
+            model_name: last_model_name,
+            provider_id: provider_id.clone(),
+            protocol: proto,
+            stream: is_stream,
+            request_body: body.clone(),
+            response_bytes: last_error_msg.into_bytes(),
+            status_code: last_status,
+            latency_ms: start_total.elapsed().as_millis() as i64,
+            pricing_policy,
+            markup_ratio: 0,
+            channel_id: Some(last_channel_id),
+            original_model: None,
+            upstream_model: None,
+            model_override_reason: None,
+            request_path: Some(request_path.clone()),
+            upstream_url: None,
+            request_headers: None,
+            response_headers: None,
+            routes: routes.clone(),
+        };
+        dispatch_audit_task(&state, task).await;
+    }
+
     Err(ApiError::UpstreamError(502, format!("All channels failed. Last error: {}", last_error)))
 }
 /// Axum handler for proxy requests.
