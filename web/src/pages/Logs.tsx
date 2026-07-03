@@ -220,15 +220,14 @@ export default function Logs() {
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.status')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.routes')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.latency')}</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.input')}</th>
-                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.output')}</th>
+                    <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.originalModel')}</th>
                     <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('logs.table.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data?.items?.length === 0 && (
                     <tr>
-                      <td colSpan={13} className="text-center py-12 text-base-content/30">
+                      <td colSpan={12} className="text-center py-12 text-base-content/30">
                         <Search className="h-8 w-8 mx-auto mb-2 opacity-40" />
                         <div>{t('logs.empty.title')}</div>
                         {hasFilters && <div className="text-xs mt-1">{t('logs.empty.tryAdjusting')}</div>}
@@ -297,8 +296,18 @@ export default function Logs() {
                         )}
                       </td>
                       <td className="mono text-base-content/55">{log.latency_ms}ms</td>
-                      <td className="mono text-base-content/55">{log.input_tokens ?? '-'}</td>
-                      <td className="mono text-base-content/55">{log.output_tokens ?? '-'}</td>
+                      <td className="mono text-[13px] text-base-content/55" title={log.original_model ?? ''}>
+                        {log.original_model ? (
+                          <div className="flex items-center gap-1">
+                            <span>{log.original_model}</span>
+                            {log.original_model !== log.model_name && (
+                              <span className="text-base-content/30">→</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-base-content/30">-</span>
+                        )}
+                      </td>
                       <td>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleView(log); }}
