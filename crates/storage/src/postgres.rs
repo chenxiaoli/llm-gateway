@@ -1695,7 +1695,7 @@ impl crate::Storage for PostgresStorage {
         let row: Option<PgAuditRow> = sqlx::query_as(
             "SELECT a.id, a.request_id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream, a.request_body, a.response_body,
              a.status_code, a.latency_ms, a.input_tokens, a.output_tokens, a.created_at, a.original_model, a.upstream_model, a.model_override_reason,
-             a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id
+             a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id, a.routes
              FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id WHERE a.id = $1",
         )
         .bind(id)
@@ -2779,6 +2779,18 @@ mod tests {
         assert_eq!(fetched_routes[2].channel_id, "ch-c");
         assert_eq!(fetched_routes[2].status_code, 200);
         assert!(fetched_routes[2].error_message.is_none());
+
+        // Regression: get_log (by id) must also round-trip routes.
+        // Previously its SELECT missed the routes column, producing
+        // sqlx ColumnNotFound("routes") at this call site.
+        let by_id = storage
+            .get_log(&log.id)
+            .await
+            .expect("get_log fetch")
+            .expect("get_log found");
+        let by_id_routes = by_id.routes.expect("routes present via get_log");
+        assert_eq!(by_id_routes.len(), 3);
+        assert_eq!(by_id_routes[0].channel_id, "ch-a");
 
         // Cleanup: remove the rows we inserted so the test is idempotent
         // and doesn't leave garbage in the shared test DB.
