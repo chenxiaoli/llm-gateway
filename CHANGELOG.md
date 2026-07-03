@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.1] - 2026-07-03
+
+### Fixed
+- `GET /api/v1/admin/logs/{id}` returned 500 with `"no column found for name: routes"` because the `get_log` SELECT in `crates/storage/src/postgres.rs` was not updated alongside `get_audit_by_request_id` in v1.8.0. The `routes` column is now read on both code paths.
+
 ## [1.8.0] - 2026-07-01
 
 ### Changed (BREAKING for custom SQL on audit_logs)
