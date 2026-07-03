@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.2] - 2026-07-03
+
+### Fixed
+- `audit_log.original_model` was effectively `NULL` for every real request despite being declared in 1.8.0. The proxy captured the client's request model in an unused underscore-prefixed variable and then reassigned `model_name` to the channel's canonical name on the next line; the audit task picked up `model_name` (now the channel's name) under the label `original_model` only when an upstream mapping existed. The field is now always populated with the client's original request.
+
+### Changed
+- `/admin/logs` table replaces the `Input` and `Output` token columns with an `Original Model` column showing the client-requested model directly. When the client-requested model differs from the routed channel model, the cell renders `original → channel` (with the channel model in primary color) so the override is visible at a glance. Token counts are still available in the log-detail drawer.
+
 ## [1.8.1] - 2026-07-03
 
 ### Fixed
