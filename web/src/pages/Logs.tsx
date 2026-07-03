@@ -296,14 +296,17 @@ export default function Logs() {
                         )}
                       </td>
                       <td className="mono text-base-content/55">{log.latency_ms}ms</td>
-                      <td className="mono text-[13px] text-base-content/55" title={log.original_model ?? ''}>
+                      <td className="mono text-[13px] text-base-content/55" title={`Client requested ${log.original_model ?? ''}`}>
                         {log.original_model ? (
-                          <div className="flex items-center gap-1">
+                          log.original_model !== log.model_name ? (
+                            <div className="flex items-center gap-1.5">
+                              <span>{log.original_model}</span>
+                              <span className="text-base-content/30 text-[11px]">→</span>
+                              <span className="text-primary font-medium">{log.model_name}</span>
+                            </div>
+                          ) : (
                             <span>{log.original_model}</span>
-                            {log.original_model !== log.model_name && (
-                              <span className="text-base-content/30">→</span>
-                            )}
-                          </div>
+                          )
                         ) : (
                           <span className="text-base-content/30">-</span>
                         )}
