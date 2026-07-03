@@ -909,7 +909,10 @@ async fn proxy_inner(
 
     tracing::debug!("[PROXY] Incoming request, model: {}, protocol: {:?}", model_name, protocol);
 
-    let _original_model = model_name.clone();
+    // Capture the client's request BEFORE model_name is reassigned to the channel
+    // canonical form below. audit_log.original_model must reflect what the client
+    // asked for, not what the gateway mapped it to.
+    let client_requested_model = model_name.clone();
 
     // === Step 3: Find model → provider → channels ===
     let models = state
@@ -1447,7 +1450,7 @@ if status != 200 && status < 500 {
                 pricing_policy,
                 markup_ratio: channel_model.markup_ratio,
                 channel_id: Some(channel.channel_id.to_string()),
-                original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
+                original_model: Some(client_requested_model.clone()),
                 upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
                 model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
                 request_path: Some(request_path.clone()),
@@ -1523,7 +1526,7 @@ if status != 200 && status < 500 {
                 pricing_policy,
                 markup_ratio: channel_model.markup_ratio,
                 channel_id: channel.channel_id.to_string(),
-                original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
+                original_model: Some(client_requested_model.clone()),
                 upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
                 model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
                 request_path: request_path.clone(),
@@ -1628,7 +1631,7 @@ if status != 200 && status < 500 {
             pricing_policy,
             markup_ratio: channel_model.markup_ratio,
             channel_id: Some(channel.channel_id.to_string()),
-            original_model: if upstream_name != &model_name { Some(model_name.clone()) } else { None },
+            original_model: Some(client_requested_model.clone()),
             upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
             model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
             request_path: Some(request_path.clone()),
@@ -1687,7 +1690,7 @@ if status != 200 && status < 500 {
             pricing_policy,
             markup_ratio: 0,
             channel_id: Some(last_channel_id),
-            original_model: None,
+            original_model: Some(client_requested_model.clone()),
             upstream_model: None,
             model_override_reason: None,
             request_path: Some(request_path.clone()),
