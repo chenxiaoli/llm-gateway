@@ -662,8 +662,7 @@
       "stream": "Stream",
       "status": "Status",
       "latency": "Latency",
-      "input": "Input",
-      "output": "Output",
+      "originalModel": "Original Model",
       "actions": "Actions",
       "view": "View"
     },

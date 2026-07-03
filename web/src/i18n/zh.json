@@ -662,8 +662,7 @@
       "stream": "流式",
       "status": "状态",
       "latency": "延迟",
-      "input": "输入",
-      "output": "输出",
+      "originalModel": "原始模型",
       "actions": "操作",
       "view": "查看"
     },
