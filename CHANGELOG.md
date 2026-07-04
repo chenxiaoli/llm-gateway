@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.3] - 2026-07-04
+
+### Fixed
+- `audit_log.original_model` was still wrong when a request hit the model-fallback path. The 1.8.2 fix captured `model_name` after `try_model_fallback` had rewritten the body's `model` field, so fallback-resolved requests recorded the substituted model under `original_model`. The proxy now threads an explicit `client_model: Option<String>` parameter through `proxy_inner`: HTTP handlers pass `None` (the body is unmodified and `model_name` is the client's verbatim request), and `try_model_fallback` passes `Some(original_model)` into the recursive call so fallback substitution doesn't poison the audit record. Verified live: a client request for an unmapped model that fell back to `glm-5.1` now correctly records `original_model=<client's model>`, `model_name=glm-5.1`.
+
 ## [1.8.2] - 2026-07-03
 
 ### Fixed
