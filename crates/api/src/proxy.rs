@@ -818,6 +818,7 @@ fn try_model_fallback<'a>(
                 protocol,
                 request_path.to_string(),
                 1, // fallback depth — prevents re-triggering fallback in recursive call
+                Some(original_model.to_string()), // preserve the client's original request across recursion
             )).await;
 
             match result {
@@ -845,6 +846,11 @@ async fn proxy_inner(
     protocol: ProxyProtocol,
     request_path: String,
     fallback_depth: u32,
+    // Original model the client requested, threaded through recursive
+    // `try_model_fallback` calls. When set, overrides extraction from the
+    // (possibly substituted) request body. `None` for the initial call from
+    // the HTTP handler.
+    client_model: Option<String>,
 ) -> Result<axum::response::Response, ApiError> {
     let request_id = uuid::Uuid::new_v4().to_string();
 
@@ -909,10 +915,13 @@ async fn proxy_inner(
 
     tracing::debug!("[PROXY] Incoming request, model: {}, protocol: {:?}", model_name, protocol);
 
-    // Capture the client's request BEFORE model_name is reassigned to the channel
-    // canonical form below. audit_log.original_model must reflect what the client
-    // asked for, not what the gateway mapped it to.
-    let client_requested_model = model_name.clone();
+    // Capture the client's original request. In the fallback-recursion path
+    // `try_model_fallback` rewrites the body's `model` field before recursing,
+    // so `model_name` here may already be the substituted fallback — the
+    // threaded `client_model` (when set) is authoritative. In the direct path
+    // from the HTTP handler, the body is unmodified and `model_name` is the
+    // client's request verbatim.
+    let client_requested_model = client_model.unwrap_or_else(|| model_name.clone());
 
     // === Step 3: Find model → provider → channels ===
     let models = state
@@ -1712,7 +1721,7 @@ pub async fn proxy(
     protocol: ProxyProtocol,
     request_path: String,
 ) -> Result<axum::response::Response, ApiError> {
-    proxy_inner(state, headers, body, protocol, request_path, 0).await
+    proxy_inner(state, headers, body, protocol, request_path, 0, None).await
 }
 
 /// Wrapper for /v1/chat/completions - uses OpenAI protocol
@@ -1721,7 +1730,7 @@ pub async fn proxy_with_protocol(
     headers: HeaderMap,
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
-    proxy_inner(state, headers, body, ProxyProtocol::OpenAI, "/v1/chat/completions".to_string(), 0).await
+    proxy_inner(state, headers, body, ProxyProtocol::OpenAI, "/v1/chat/completions".to_string(), 0, None).await
 }
 
 /// Wrapper for /v1/messages - uses Anthropic protocol
@@ -1730,7 +1739,7 @@ pub async fn messages(
     headers: HeaderMap,
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
-    proxy_inner(state, headers, body, ProxyProtocol::Anthropic, "/v1/messages".to_string(), 0).await
+    proxy_inner(state, headers, body, ProxyProtocol::Anthropic, "/v1/messages".to_string(), 0, None).await
 }
 
 /// Wrapper for /v1/responses - uses OpenAI protocol, passthrough all fields
@@ -1739,7 +1748,7 @@ pub async fn responses(
     headers: HeaderMap,
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
-    proxy_inner(state, headers, body, ProxyProtocol::OpenAI, "/v1/responses".to_string(), 0).await
+    proxy_inner(state, headers, body, ProxyProtocol::OpenAI, "/v1/responses".to_string(), 0, None).await
 }
 
 #[cfg(test)]
