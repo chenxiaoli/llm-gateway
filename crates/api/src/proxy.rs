@@ -740,12 +740,17 @@ async fn process_sse_stream(
 
 /// Try fallback models when the initial model fails to route.
 /// Returns Some(response) if a fallback succeeded, None if no fallback available.
+/// Recurses into `proxy_route_and_forward` (not `proxy_inner`) so auth/balance/role
+/// are not re-run on each attempt.
 fn try_model_fallback<'a>(
     state: &'a Arc<AppState>,
     headers: &'a HeaderMap,
     body: &'a str,
-    original_model: &'a str,
+    client_requested_model: &'a str,
     api_key: &'a llm_gateway_storage::ApiKey,
+    request_user_id: &'a Option<String>,
+    request_is_admin: bool,
+    request_id: &'a str,
     protocol: ProxyProtocol,
     request_path: &'a str,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<axum::response::Response>> + Send + 'a>> {
@@ -768,7 +773,7 @@ fn try_model_fallback<'a>(
                 return None;
             }
         };
-        let model_lower = original_model.to_lowercase();
+        let model_lower = client_requested_model.to_lowercase();
 
         let group = match fallback_config.config.iter().find(|g| {
             g.models.iter().any(|m| m.to_lowercase() == model_lower)
@@ -777,7 +782,7 @@ fn try_model_fallback<'a>(
             None => {
                 tracing::debug!(
                     "[PROXY] No fallback group contains model '{}' (config '{}' has {} groups) — fallback skipped",
-                    original_model, fallback_config.name, fallback_config.config.len()
+                    client_requested_model, fallback_config.name, fallback_config.config.len()
                 );
                 return None;
             }
@@ -793,9 +798,12 @@ fn try_model_fallback<'a>(
         fallbacks.sort_by_key(|(_, p)| *p);
 
         for (fallback_model, _) in fallbacks {
-            tracing::info!("[PROXY] Trying fallback model '{}' for failed '{}'", fallback_model, original_model);
+            tracing::info!("[PROXY] Trying fallback model '{}' for failed '{}'", fallback_model, client_requested_model);
 
-            let fallback_body = {
+            // Parse body, rewrite the model field, and keep both the serialized
+            // fallback_body (for upstream forwarding) and the modified req_json
+            // (to pass into the recursive call without re-parsing).
+            let (fallback_body, fallback_req_json) = {
                 let req_json: serde_json::Value = match serde_json::from_str(body) {
                     Ok(v) => v,
                     Err(e) => {
@@ -807,18 +815,26 @@ fn try_model_fallback<'a>(
                 if let Some(model_obj) = modified.get_mut("model") {
                     *model_obj = serde_json::Value::String(fallback_model.to_string());
                 }
-                serde_json::to_string(&modified).unwrap_or_else(|_| body.to_string())
+                let serialized = serde_json::to_string(&modified).unwrap_or_else(|_| body.to_string());
+                (serialized, modified)
             };
 
-            // Box the recursive proxy call to satisfy the compiler's sizing requirement
-            let result = Box::pin(proxy_inner(
+            // Box the recursive proxy call to satisfy the compiler's sizing requirement.
+            // Recurse into proxy_route_and_forward (not proxy_inner) so auth/balance/role
+            // are not re-run on each fallback attempt.
+            let result = Box::pin(proxy_route_and_forward(
                 state.clone(),
                 headers.clone(),
                 fallback_body,
+                fallback_req_json,
+                request_id.to_string(),
+                client_requested_model.to_string(),
                 protocol,
                 request_path.to_string(),
+                api_key.clone(),
+                request_user_id.clone(),
+                request_is_admin,
                 1, // fallback depth — prevents re-triggering fallback in recursive call
-                Some(original_model.to_string()), // preserve the client's original request across recursion
             )).await;
 
             match result {
@@ -837,23 +853,17 @@ fn try_model_fallback<'a>(
     })
 }
 
-/// Unified proxy: receives request → forwards to upstream → returns response
-/// Usage/Cost/Audit are handled in spawned async tasks
+/// HTTP handler entry point. Runs once-per-request work (auth, balance check,
+/// user role lookup, body parse, request_id) and delegates the rest to
+/// `proxy_route_and_forward`. Not recursive — `try_model_fallback` recurses
+/// into `proxy_route_and_forward` instead.
 async fn proxy_inner(
     state: Arc<AppState>,
     headers: HeaderMap,
     body: String,
     protocol: ProxyProtocol,
     request_path: String,
-    fallback_depth: u32,
-    // Original model the client requested, threaded through recursive
-    // `try_model_fallback` calls. When set, overrides extraction from the
-    // (possibly substituted) request body. `None` for the initial call from
-    // the HTTP handler.
-    client_model: Option<String>,
 ) -> Result<axum::response::Response, ApiError> {
-    let request_id = uuid::Uuid::new_v4().to_string();
-
     // === Step 1: Auth ===
     let raw_token = extract_bearer_token(&headers)?;
     let token_hash = hash_api_key(&raw_token);
@@ -903,25 +913,63 @@ async fn proxy_inner(
         false  // No user_id (legacy admin-created keys) — no filter applied
     };
 
-    // === Step 3: Parse model ===
+    // === Step 3: Parse body and capture client_requested_model ===
     let req_json: serde_json::Value = serde_json::from_str(&body)
         .map_err(|e| ApiError::BadRequest(format!("Invalid JSON: {}", e)))?;
 
+    let client_requested_model = req_json
+        .get("model")
+        .and_then(|m| m.as_str())
+        .ok_or(ApiError::BadRequest("Missing 'model' field".to_string()))?
+        .to_string();
+
+    let request_id = uuid::Uuid::new_v4().to_string();
+
+    proxy_route_and_forward(
+        state,
+        headers,
+        body,
+        req_json,
+        request_id,
+        client_requested_model,
+        protocol,
+        request_path,
+        api_key,
+        request_user_id,
+        request_is_admin,
+        0,  // fallback_depth — entry call; allows try_model_fallback to fire
+    )
+    .await
+}
+
+/// Routing core: model lookup → channel resolution → failover → audit.
+/// Safe to recurse into — no auth, balance, or role lookups run here.
+/// Entry point is `proxy_inner`; recursion comes from `try_model_fallback`.
+async fn proxy_route_and_forward(
+    state: Arc<AppState>,
+    headers: HeaderMap,
+    body: String,
+    req_json: serde_json::Value,
+    request_id: String,
+    client_requested_model: String,
+    protocol: ProxyProtocol,
+    request_path: String,
+    api_key: llm_gateway_storage::ApiKey,
+    request_user_id: Option<String>,
+    request_is_admin: bool,
+    fallback_depth: u32,
+) -> Result<axum::response::Response, ApiError> {
+    // === Parse model (req_json is parsed by the caller and moved in) ===
     let model_name = req_json
         .get("model")
         .and_then(|m| m.as_str())
         .ok_or(ApiError::BadRequest("Missing 'model' field".to_string()))?
         .to_string();
 
-    tracing::debug!("[PROXY] Incoming request, model: {}, protocol: {:?}", model_name, protocol);
-
-    // Capture the client's original request. In the fallback-recursion path
-    // `try_model_fallback` rewrites the body's `model` field before recursing,
-    // so `model_name` here may already be the substituted fallback — the
-    // threaded `client_model` (when set) is authoritative. In the direct path
-    // from the HTTP handler, the body is unmodified and `model_name` is the
-    // client's request verbatim.
-    let client_requested_model = client_model.unwrap_or_else(|| model_name.clone());
+    tracing::debug!(
+        "[PROXY] Incoming request, model: {}, protocol: {:?}, fallback_depth: {}",
+        model_name, protocol, fallback_depth
+    );
 
     // === Step 3: Find model → provider → channels ===
     let models = state
@@ -945,7 +993,9 @@ async fn proxy_inner(
         None => {
             if fallback_depth == 0 {
                 if let Some(resp) = try_model_fallback(
-                    &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+                    &state, &headers, &body, &client_requested_model, &api_key,
+                    &request_user_id, request_is_admin, &request_id,
+                    protocol, &request_path,
                 ).await {
                     return Ok(resp);
                 }
@@ -986,7 +1036,9 @@ async fn proxy_inner(
         if candidates.is_empty() {
             if fallback_depth == 0 {
                 if let Some(resp) = try_model_fallback(
-                    &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+                    &state, &headers, &body, &client_requested_model, &api_key,
+                    &request_user_id, request_is_admin, &request_id,
+                    protocol, &request_path,
                 ).await {
                     return Ok(resp);
                 }
@@ -1060,7 +1112,9 @@ async fn proxy_inner(
         if available_channels.is_empty() {
             if fallback_depth == 0 {
                 if let Some(resp) = try_model_fallback(
-                    &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+                    &state, &headers, &body, &client_requested_model, &api_key,
+                    &request_user_id, request_is_admin, &request_id,
+                    protocol, &request_path,
                 ).await {
                     return Ok(resp);
                 }
@@ -1126,7 +1180,9 @@ async fn proxy_inner(
         if candidates.is_empty() {
             if fallback_depth == 0 {
                 if let Some(resp) = try_model_fallback(
-                    &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+                    &state, &headers, &body, &client_requested_model, &api_key,
+                    &request_user_id, request_is_admin, &request_id,
+                    protocol, &request_path,
                 ).await {
                     return Ok(resp);
                 }
@@ -1657,7 +1713,9 @@ if status != 200 && status < 500 {
     // All channels failed — try model fallback
     if fallback_depth == 0 {
         if let Some(resp) = try_model_fallback(
-            &state, &headers, &body, &model_name, &api_key, protocol, &request_path,
+            &state, &headers, &body, &client_requested_model, &api_key,
+            &request_user_id, request_is_admin, &request_id,
+            protocol, &request_path,
         ).await {
             return Ok(resp);
         }
@@ -1721,7 +1779,7 @@ pub async fn proxy(
     protocol: ProxyProtocol,
     request_path: String,
 ) -> Result<axum::response::Response, ApiError> {
-    proxy_inner(state, headers, body, protocol, request_path, 0, None).await
+    proxy_inner(state, headers, body, protocol, request_path).await
 }
 
 /// Wrapper for /v1/chat/completions - uses OpenAI protocol
@@ -1730,7 +1788,7 @@ pub async fn proxy_with_protocol(
     headers: HeaderMap,
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
-    proxy_inner(state, headers, body, ProxyProtocol::OpenAI, "/v1/chat/completions".to_string(), 0, None).await
+    proxy_inner(state, headers, body, ProxyProtocol::OpenAI, "/v1/chat/completions".to_string()).await
 }
 
 /// Wrapper for /v1/messages - uses Anthropic protocol
@@ -1739,7 +1797,7 @@ pub async fn messages(
     headers: HeaderMap,
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
-    proxy_inner(state, headers, body, ProxyProtocol::Anthropic, "/v1/messages".to_string(), 0, None).await
+    proxy_inner(state, headers, body, ProxyProtocol::Anthropic, "/v1/messages".to_string()).await
 }
 
 /// Wrapper for /v1/responses - uses OpenAI protocol, passthrough all fields
@@ -1748,7 +1806,7 @@ pub async fn responses(
     headers: HeaderMap,
     body: String,
 ) -> Result<axum::response::Response, ApiError> {
-    proxy_inner(state, headers, body, ProxyProtocol::OpenAI, "/v1/responses".to_string(), 0, None).await
+    proxy_inner(state, headers, body, ProxyProtocol::OpenAI, "/v1/responses".to_string()).await
 }
 
 #[cfg(test)]
