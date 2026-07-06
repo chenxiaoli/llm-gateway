@@ -705,6 +705,7 @@ async fn process_sse_stream(
         model: audit_params.model_name.clone(),
         channel_id: audit_params.channel_id.clone(),
         channel_name: audit_params.channel_name.clone(),
+        provider_id: audit_params.provider_id.clone(),
         status_code: 200,
         error_message: None,
         latency_ms: attempt_latency_ms,
@@ -753,6 +754,7 @@ fn try_model_fallback<'a>(
     request_id: &'a str,
     protocol: ProxyProtocol,
     request_path: &'a str,
+    routes: &'a mut Vec<llm_gateway_storage::RouteAttempt>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<axum::response::Response>> + Send + 'a>> {
     Box::pin(async move {
         let fallback_id = match api_key.model_fallback_id.as_ref() {
@@ -821,7 +823,8 @@ fn try_model_fallback<'a>(
 
             // Box the recursive proxy call to satisfy the compiler's sizing requirement.
             // Recurse into proxy_route_and_forward (not proxy_inner) so auth/balance/role
-            // are not re-run on each fallback attempt.
+            // are not re-run on each fallback attempt. Pass the shared `routes` Vec by
+            // re-borrow so every fallback attempt accumulates into the same chain.
             let result = Box::pin(proxy_route_and_forward(
                 state.clone(),
                 headers.clone(),
@@ -834,6 +837,7 @@ fn try_model_fallback<'a>(
                 api_key.clone(),
                 request_user_id.clone(),
                 request_is_admin,
+                routes,
                 1, // fallback depth — prevents re-triggering fallback in recursive call
             )).await;
 
@@ -925,6 +929,12 @@ async fn proxy_inner(
 
     let request_id = uuid::Uuid::new_v4().to_string();
 
+    // Single routes accumulator for the whole HTTP request. Threaded through
+    // proxy_route_and_forward and try_model_fallback so every channel attempt
+    // across every fallback model lands in the same Vec, and the single audit
+    // row dispatched at the top of the chain sees the full history.
+    let mut routes: Vec<llm_gateway_storage::RouteAttempt> = Vec::new();
+
     proxy_route_and_forward(
         state,
         headers,
@@ -937,6 +947,7 @@ async fn proxy_inner(
         api_key,
         request_user_id,
         request_is_admin,
+        &mut routes,
         0,  // fallback_depth — entry call; allows try_model_fallback to fire
     )
     .await
@@ -957,6 +968,7 @@ async fn proxy_route_and_forward(
     api_key: llm_gateway_storage::ApiKey,
     request_user_id: Option<String>,
     request_is_admin: bool,
+    routes: &mut Vec<llm_gateway_storage::RouteAttempt>,
     fallback_depth: u32,
 ) -> Result<axum::response::Response, ApiError> {
     // === Parse model (req_json is parsed by the caller and moved in) ===
@@ -991,11 +1003,23 @@ async fn proxy_route_and_forward(
     {
         Some(m) => m,
         None => {
+            // Record the routing miss so the chain shows why we fell back.
+            routes.push(llm_gateway_storage::RouteAttempt {
+                model: model_name.clone(),
+                channel_id: String::new(),
+                channel_name: None,
+                provider_id: String::new(),
+                status_code: 0,
+                error_message: Some(format!("Model '{}' not in registry", model_name)),
+                latency_ms: 0,
+                started_at: chrono::Utc::now(),
+            });
             if fallback_depth == 0 {
                 if let Some(resp) = try_model_fallback(
                     &state, &headers, &body, &client_requested_model, &api_key,
                     &request_user_id, request_is_admin, &request_id,
                     protocol, &request_path,
+                    routes,
                 ).await {
                     return Ok(resp);
                 }
@@ -1034,11 +1058,22 @@ async fn proxy_route_and_forward(
             }
         }
         if candidates.is_empty() {
+            routes.push(llm_gateway_storage::RouteAttempt {
+                model: model_name.clone(),
+                channel_id: String::new(),
+                channel_name: None,
+                provider_id: String::new(),
+                status_code: 0,
+                error_message: Some(format!("No enabled channels for model '{}' (cache empty)", model_name)),
+                latency_ms: 0,
+                started_at: chrono::Utc::now(),
+            });
             if fallback_depth == 0 {
                 if let Some(resp) = try_model_fallback(
                     &state, &headers, &body, &client_requested_model, &api_key,
                     &request_user_id, request_is_admin, &request_id,
                     protocol, &request_path,
+                    routes,
                 ).await {
                     return Ok(resp);
                 }
@@ -1110,11 +1145,22 @@ async fn proxy_route_and_forward(
         }
 
         if available_channels.is_empty() {
+            routes.push(llm_gateway_storage::RouteAttempt {
+                model: model_name.clone(),
+                channel_id: String::new(),
+                channel_name: None,
+                provider_id: String::new(),
+                status_code: 0,
+                error_message: Some(format!("No enabled channels for model '{}' (DB routing empty)", model_name)),
+                latency_ms: 0,
+                started_at: chrono::Utc::now(),
+            });
             if fallback_depth == 0 {
                 if let Some(resp) = try_model_fallback(
                     &state, &headers, &body, &client_requested_model, &api_key,
                     &request_user_id, request_is_admin, &request_id,
                     protocol, &request_path,
+                    routes,
                 ).await {
                     return Ok(resp);
                 }
@@ -1178,11 +1224,22 @@ async fn proxy_route_and_forward(
             !state.registry.is_circuit_broken(&ch.channel_id.to_string(), &model_lower)
         });
         if candidates.is_empty() {
+            routes.push(llm_gateway_storage::RouteAttempt {
+                model: model_name.clone(),
+                channel_id: String::new(),
+                channel_name: None,
+                provider_id: String::new(),
+                status_code: 0,
+                error_message: Some(format!("No enabled channels for model '{}' (all circuit-broken)", model_name)),
+                latency_ms: 0,
+                started_at: chrono::Utc::now(),
+            });
             if fallback_depth == 0 {
                 if let Some(resp) = try_model_fallback(
                     &state, &headers, &body, &client_requested_model, &api_key,
                     &request_user_id, request_is_admin, &request_id,
                     protocol, &request_path,
+                    routes,
                 ).await {
                     return Ok(resp);
                 }
@@ -1203,10 +1260,10 @@ async fn proxy_route_and_forward(
     let mut last_error = String::new();
 
     // === Route with failover ===
-    // Collect per-attempt history for the audit row. One AuditTask is dispatched
-    // at loop exit (per-branch) carrying the full routes array; today's per-attempt
-    // dispatches are removed.
-    let mut routes: Vec<llm_gateway_storage::RouteAttempt> = Vec::new();
+    // `routes` is threaded in by the caller (proxy_inner allocates one Vec per
+    // HTTP request; try_model_fallback passes the same Vec down through each
+    // recursive fallback attempt) so that the single AuditTask dispatched at
+    // the top of the chain sees every attempt — including fallbacks — in order.
     let start_total = Instant::now();
 
     for (channel, channel_model) in &routing_candidates {
@@ -1254,6 +1311,7 @@ async fn proxy_route_and_forward(
                                     model: upstream_name.to_string(),
                                     channel_id: channel.channel_id.to_string(),
                                     channel_name: Some(channel.name.clone()),
+                                    provider_id: channel.provider_id.clone(),
                                     status_code: 0,
                                     error_message: Some(error_msg),
                                     latency_ms: proxy_build_latency_ms,
@@ -1274,6 +1332,7 @@ async fn proxy_route_and_forward(
                             model: upstream_name.to_string(),
                             channel_id: channel.channel_id.to_string(),
                             channel_name: Some(channel.name.clone()),
+                            provider_id: channel.provider_id.clone(),
                             status_code: 0,
                             error_message: Some(error_msg),
                             latency_ms: proxy_build_latency_ms,
@@ -1343,6 +1402,7 @@ async fn proxy_route_and_forward(
                     model: upstream_name.to_string(),
                     channel_id: channel.channel_id.to_string(),
                     channel_name: Some(channel.name.clone()),
+                    provider_id: channel.provider_id.clone(),
                     status_code: 0,
                     error_message: Some(error_msg),
                     latency_ms,
@@ -1379,6 +1439,7 @@ async fn proxy_route_and_forward(
                 model: upstream_name.to_string(),
                 channel_id: channel.channel_id.to_string(),
                 channel_name: Some(channel.name.clone()),
+                provider_id: channel.provider_id.clone(),
                 status_code: status as i32,
                 error_message: Some(error_body_str),
                 latency_ms,
@@ -1414,6 +1475,7 @@ async fn proxy_route_and_forward(
                 model: upstream_name.to_string(),
                 channel_id: channel.channel_id.to_string(),
                 channel_name: Some(channel.name.clone()),
+                provider_id: channel.provider_id.clone(),
                 status_code: 429,
                 error_message: Some(error_body_str),
                 latency_ms,
@@ -1492,6 +1554,7 @@ if status != 200 && status < 500 {
                 model: upstream_name.to_string(),
                 channel_id: channel.channel_id.to_string(),
                 channel_name: Some(channel.name.clone()),
+                provider_id: channel.provider_id.clone(),
                 status_code: status as i32,
                 error_message: Some(error_body_str.clone()),
                 latency_ms,
@@ -1522,7 +1585,7 @@ if status != 200 && status < 500 {
                 upstream_url: Some(upstream_url.clone()),
                 request_headers: Some(request_headers_for_worker),
                 response_headers: Some(response_headers_for_worker),
-                routes,
+                routes: routes.clone(),
             };
             dispatch_audit_task(&state, task).await;
 
@@ -1675,6 +1738,7 @@ if status != 200 && status < 500 {
             model: upstream_name.to_string(),
             channel_id: channel.channel_id.to_string(),
             channel_name: Some(channel.name.clone()),
+            provider_id: channel.provider_id.clone(),
             status_code: 200,
             error_message: None,
             latency_ms,
@@ -1703,7 +1767,7 @@ if status != 200 && status < 500 {
             upstream_url: Some(upstream_url.clone()),
             request_headers: Some(request_headers_for_worker.clone()),
             response_headers: Some(response_headers_for_worker),
-            routes,
+            routes: routes.clone(),
         };
         dispatch_audit_task(&state, task).await;
 
@@ -1716,57 +1780,62 @@ if status != 200 && status < 500 {
             &state, &headers, &body, &client_requested_model, &api_key,
             &request_user_id, request_is_admin, &request_id,
             protocol, &request_path,
+            routes,
         ).await {
             return Ok(resp);
         }
     }
 
-    // All channels failed — dispatch a single audit row carrying the full
-    // failover history (the `routes` Vec accumulated above). The top-level
-    // fields reflect the last attempted channel.
-    if let Some(last) = routes.last() {
-        let proto = match protocol {
-            ProxyProtocol::OpenAI => Protocol::Openai,
-            ProxyProtocol::Anthropic => Protocol::Anthropic,
-        };
-        let last_channel_id = last.channel_id.clone();
-        let last_model_name = last.model.clone();
-        let last_error_msg = last.error_message.clone().unwrap_or_default();
-        let last_status = last.status_code;
+    // All channels failed. At depth=0 (top of the chain) dispatch a single
+    // audit row carrying the full failover history — including every fallback
+    // attempt threaded through `routes`. At depth>0 the recursive call must
+    // stay silent so it doesn't produce a duplicate row; the depth=0 caller
+    // will dispatch once after `try_model_fallback` returns None.
+    if fallback_depth == 0 {
+        if let Some(last) = routes.last() {
+            let proto = match protocol {
+                ProxyProtocol::OpenAI => Protocol::Openai,
+                ProxyProtocol::Anthropic => Protocol::Anthropic,
+            };
+            let last_channel_id = last.channel_id.clone();
+            let last_model_name = last.model.clone();
+            let last_error_msg = last.error_message.clone().unwrap_or_default();
+            let last_status = last.status_code;
 
-        // Resolve pricing policy from the last-attempted channel (best effort;
-        // we don't have channel_model here, fall back to the model's policy).
-        let pricing_policy = match model_entry.model.pricing_policy_id.as_deref() {
-            Some(id) => state.storage.get_pricing_policy(id).await
-                .map_err(|e| ApiError::Internal(e.to_string()))?,
-            None => None,
-        };
+            // Resolve pricing policy from the last-attempted channel (best effort;
+            // we don't have channel_model here, fall back to the model's policy).
+            let pricing_policy = match model_entry.model.pricing_policy_id.as_deref() {
+                Some(id) => state.storage.get_pricing_policy(id).await
+                    .map_err(|e| ApiError::Internal(e.to_string()))?,
+                None => None,
+            };
 
-        let task = AuditTask {
-            request_id: request_id.clone(),
-            key_id: api_key.id.clone(),
-            user_id: api_key.created_by.clone(),
-            model_name: last_model_name,
-            provider_id: provider_id.clone(),
-            protocol: proto,
-            stream: is_stream,
-            request_body: body.clone(),
-            response_bytes: last_error_msg.into_bytes(),
-            status_code: last_status,
-            latency_ms: start_total.elapsed().as_millis() as i64,
-            pricing_policy,
-            markup_ratio: 0,
-            channel_id: Some(last_channel_id),
-            original_model: Some(client_requested_model.clone()),
-            upstream_model: None,
-            model_override_reason: None,
-            request_path: Some(request_path.clone()),
-            upstream_url: None,
-            request_headers: None,
-            response_headers: None,
-            routes,
-        };
-        dispatch_audit_task(&state, task).await;
+            let task = AuditTask {
+                request_id: request_id.clone(),
+                key_id: api_key.id.clone(),
+                user_id: api_key.created_by.clone(),
+                model_name: last_model_name,
+                provider_id: provider_id.clone(),
+                protocol: proto,
+                stream: is_stream,
+                request_body: body.clone(),
+                response_bytes: last_error_msg.into_bytes(),
+                status_code: last_status,
+                latency_ms: start_total.elapsed().as_millis() as i64,
+                pricing_policy,
+                markup_ratio: 0,
+                channel_id: Some(last_channel_id),
+                original_model: Some(client_requested_model.clone()),
+                upstream_model: None,
+                model_override_reason: None,
+                request_path: Some(request_path.clone()),
+                upstream_url: None,
+                request_headers: None,
+                response_headers: None,
+                routes: routes.clone(),
+            };
+            dispatch_audit_task(&state, task).await;
+        }
     }
 
     Err(ApiError::UpstreamError(502, format!("All channels failed. Last error: {}", last_error)))

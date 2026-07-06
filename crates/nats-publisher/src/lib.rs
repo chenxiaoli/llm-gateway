@@ -289,6 +289,7 @@ mod tests {
                 model: "m".into(),
                 channel_id: "c".into(),
                 channel_name: None,
+                provider_id: "p".into(),
                 status_code: 200,
                 error_message: None,
                 latency_ms: 100,
