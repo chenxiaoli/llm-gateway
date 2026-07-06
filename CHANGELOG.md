@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.4] - 2026-07-04
+
+### Changed
+- `proxy_inner` split: once-only work (auth via `get_key_by_hash`, balance check via `get_account_by_user_id`, user role via `get_user`, body parse, `request_id` generation) now runs in `proxy_inner` proper, which is not recursive. Routing, failover, fallback, and audit dispatch live in a new `proxy_route_and_forward` which is safe to recurse into. `try_model_fallback` now recurses into `proxy_route_and_forward` instead of `proxy_inner`.
+
+### Fixed
+- Each fallback attempt no longer re-runs `get_key_by_hash`, `get_account_by_user_id`, and `get_user`. A request that fans out across N fallback models used to make (N+1)× auth/balance/role DB calls; now it is 1× each per HTTP request.
+- `audit_log.routes` now records the full fallback chain in a single row. Previously each `proxy_route_and_forward` call had its own local `routes` Vec, and silent early-returns (model not in registry, no enabled channels) recorded nothing — a request that fell back across N models produced either one row whose `routes` contained only the last fallback's channel attempts, or N partial rows. The `routes` Vec is now threaded through the recursion via `&mut`, silent exits push pseudo `RouteAttempt` entries (so e.g. "no enabled channels" is visible), and the all-channels-failed dispatch is gated by `fallback_depth == 0` so deeper fallback attempts don't produce duplicate rows.
+- `RouteAttempt` now carries a `provider_id` field (populated for every real upstream attempt, empty string for pseudo entries that mark silent routing exits).
+
+### Removed
+- The `client_model: Option<String>` parameter on `proxy_inner` (added in 1.8.3 as a band-aid) is gone. `client_requested_model` is now a `String` threaded from `proxy_inner`.
+
 ## [1.8.3] - 2026-07-04
 
 ### Fixed
