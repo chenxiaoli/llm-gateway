@@ -89,6 +89,7 @@ impl AuditLogger {
                     model: r.model.clone(),
                     channel_id: r.channel_id.clone(),
                     channel_name: r.channel_name.clone(),
+                    provider_id: r.provider_id.clone(),
                     status_code: r.status_code,
                     error_message: sanitized_msg,
                     latency_ms: r.latency_ms,
@@ -169,6 +170,7 @@ mod tests {
 
         let route = RouteAttempt {
             model: "m".into(), channel_id: "c".into(), channel_name: None,
+            provider_id: "p".into(),
             status_code: 500,
             error_message: Some("error with \0 null and � replacement".into()),
             latency_ms: 100, started_at: chrono::Utc::now(),

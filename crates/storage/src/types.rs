@@ -612,6 +612,9 @@ pub struct RouteAttempt {
     pub model: String,
     pub channel_id: String,
     pub channel_name: Option<String>,
+    /// Provider of the channel for this attempt. Empty for pseudo entries
+    /// (routing miss, no channels available) where no channel was reached.
+    pub provider_id: String,
     /// 0 = connection error (no HTTP response received).
     /// Otherwise the upstream HTTP status code.
     pub status_code: i32,
