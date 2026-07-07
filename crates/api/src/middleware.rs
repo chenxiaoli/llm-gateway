@@ -19,7 +19,9 @@ use std::collections::HashMap;
 use crate::error::ApiError;
 use crate::extractors::require_auth;
 use crate::AppState;
-use llm_gateway_org::ResolvedOrg;
+use llm_gateway_auth::JwtClaims;
+use llm_gateway_org::{OrgContext, ResolvedOrg};
+use llm_gateway_storage::PlatformRole;
 
 /// Verify the bearer JWT and inject `JwtClaims` into request extensions.
 ///
@@ -65,5 +67,57 @@ pub async fn org_resolve_layer(
         slug: org.slug,
         name: org.name,
     });
+    Ok(next.run(req).await)
+}
+
+/// Verify the authenticated user is a member of the resolved org and inject
+/// an `OrgContext` into request extensions for downstream handlers.
+///
+/// Pulls `JwtClaims` and `ResolvedOrg` (set by the two upstream layers) from
+/// extensions, looks up the membership row, and returns 403 Forbidden if no
+/// such row exists. Storage failures surface as 500 Internal — distinct from
+/// the clean 403 for a non-member, so a DB outage does not look like an
+/// authz rejection.
+///
+/// `platform_role` is parsed via `PlatformRole::parse` rather than the
+/// `map(|_| ...)` shortcut suggested in the plan — that shortcut silently
+/// maps any non-None string to `PlatformAdmin`, which would mask a stale or
+/// unexpected JWT claim. `parse` returns `None` for unrecognized values,
+/// matching the behavior of `resolve_org_context` in `crates/org`.
+pub async fn membership_layer(
+    State(state): State<Arc<AppState>>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response, ApiError> {
+    let claims = req
+        .extensions()
+        .get::<JwtClaims>()
+        .cloned()
+        .ok_or_else(|| ApiError::Internal("auth_layer did not run".into()))?;
+
+    let org = req
+        .extensions()
+        .get::<ResolvedOrg>()
+        .cloned()
+        .ok_or_else(|| ApiError::Internal("org_resolve_layer did not run".into()))?;
+
+    let member = state
+        .storage
+        .get_member(&claims.sub, &org.id)
+        .await
+        .map_err(|e| ApiError::Internal(format!("member lookup failed: {e}")))?
+        .ok_or(ApiError::Forbidden)?;
+
+    let ctx = OrgContext {
+        org_id: org.id.clone(),
+        member_role: member.role,
+        platform_role: claims
+            .platform_role
+            .as_deref()
+            .and_then(PlatformRole::parse),
+        group_id: member.group_id,
+    };
+    req.extensions_mut().insert(ctx);
+
     Ok(next.run(req).await)
 }

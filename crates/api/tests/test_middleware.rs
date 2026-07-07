@@ -5,8 +5,8 @@ use axum::http::{Request, StatusCode};
 use axum::middleware::from_fn_with_state;
 use axum::routing::get;
 use axum::Router;
-use llm_gateway_api::middleware::{auth_layer, org_resolve_layer};
-use llm_gateway_org::ResolvedOrg;
+use llm_gateway_api::middleware::{auth_layer, membership_layer, org_resolve_layer};
+use llm_gateway_org::{OrgContext, ResolvedOrg};
 use sqlx::PgPool;
 use tower::ServiceExt;
 
@@ -100,4 +100,74 @@ async fn org_resolve_layer_injects_resolved_org_extension(pool: PgPool) {
     assert_eq!(resp.status(), StatusCode::OK);
     let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
     assert_eq!(&body[..], b"org_default/default");
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn membership_layer_injects_org_context_for_member(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    let state = common::make_state(pool);
+    // Stack auth_layer → org_resolve_layer → membership_layer so the request
+    // mirrors real flow: JWT → ResolvedOrg → OrgContext.
+    let app = Router::new()
+        .route(
+            "/{org_slug}/probe",
+            get(|req: axum::extract::Request| async move {
+                let ctx = req.extensions().get::<OrgContext>().cloned().unwrap();
+                format!("{}:{:?}", ctx.org_id, ctx.member_role)
+            }),
+        )
+        .layer(from_fn_with_state(state.clone(), membership_layer))
+        .layer(from_fn_with_state(state.clone(), org_resolve_layer))
+        .layer(from_fn_with_state(state, auth_layer));
+
+    let token = common::make_admin_token().token;
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/default/probe")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    assert_eq!(&body[..], b"org_default:Owner");
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn membership_layer_403s_non_member(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    // Insert a user with NO member row in org_default.
+    sqlx::query(
+        r#"INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, created_at, updated_at)
+           VALUES ('outsider-1', 'outsider', 'x', NULL, $1, true, NOW(), NOW())"#,
+    )
+    .bind(common::TEST_ORG)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let state = common::make_state(pool);
+    let app = Router::new()
+        .route("/{org_slug}/probe", get(|| async { "ok" }))
+        .layer(from_fn_with_state(state.clone(), membership_layer))
+        .layer(from_fn_with_state(state.clone(), org_resolve_layer))
+        .layer(from_fn_with_state(state, auth_layer));
+
+    let token =
+        llm_gateway_auth::create_jwt("outsider-1", common::TEST_ORG, None, common::TEST_JWT_SECRET)
+            .unwrap();
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/default/probe")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 }
