@@ -27,6 +27,7 @@ import {
   SquareStack,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
+import { isAdminOrAbove } from '../lib/auth';
 import { useTheme } from '../hooks/useTheme';
 import { apiClient } from '../api/client';
 import { useTranslation } from 'react-i18next';
@@ -43,10 +44,7 @@ export default function AppLayout() {
   const user = useAuthStore((s) => s.user);
   const currentOrg = useAuthStore((s) => s.currentOrg);
   const logout = useAuthStore((s) => s.logout);
-  // Phase 1: admin sidebar is shown to org admins/owners (org-scoped permission)
-  // OR platform admins (rare, platform-wide). Backend grants permissions via
-  // membership, so this is an org-role check first, platform_role second.
-  const isAdmin = currentOrg?.role === 'owner' || currentOrg?.role === 'admin' || user?.platform_role === 'platform_admin';
+  const isAdmin = isAdminOrAbove(user, currentOrg);
   const { theme, toggleTheme } = useTheme();
   const { t, i18n } = useTranslation();
   const toggleLanguage = () => {

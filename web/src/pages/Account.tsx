@@ -3,6 +3,7 @@ import { DollarSign } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
+import { isAdminOrAbove } from '../lib/auth';
 import { useCurrencyStore, formatCurrency } from '../stores/currency';
 import { useMyBalance } from '../hooks/useAccounts';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -25,9 +26,7 @@ export default function Account() {
   const totalPages = Math.ceil((transactions?.total ?? 0) / pageSize);
 
   // Phase 1: role badge reflects platform_admin (rare) or current org role.
-  const isPlatformAdmin = user?.platform_role === 'platform_admin';
-  const isOrgAdmin = currentOrg?.role === 'owner' || currentOrg?.role === 'admin';
-  const isAdmin = isPlatformAdmin || isOrgAdmin;
+  const isAdmin = isAdminOrAbove(user, currentOrg);
 
   const TX_TYPE_LABELS: Record<string, { label: string; color: 'green' | 'red' | 'blue' | 'purple' }> = {
     credit: { label: t('account.credit'), color: 'green' },

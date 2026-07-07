@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore, useAuthBootstrap } from './stores/authStore';
 import { getToken } from './api/client';
+import { isAdminOrAbove } from './lib/auth';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import Layout from './components/Layout';
 import Home from './pages/Home';
@@ -49,11 +50,7 @@ function RequireAdmin() {
     if (getToken()) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
     return <Navigate to="/console/login" replace />;
   }
-  // Phase 1: admin routes are gated by org role (owner/admin) OR platform_admin.
-  // Backend grants actual permissions via membership, not platform_role.
-  const isOrgAdmin = currentOrg?.role === 'owner' || currentOrg?.role === 'admin';
-  const isPlatformAdmin = user.platform_role === 'platform_admin';
-  if (!isOrgAdmin && !isPlatformAdmin) return <Navigate to="/console/dashboard" replace />;
+  if (!isAdminOrAbove(user, currentOrg)) return <Navigate to="/console/dashboard" replace />;
   return <Outlet />;
 }
 
