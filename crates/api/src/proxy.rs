@@ -530,8 +530,6 @@ pub struct SseAuditParams {
     /// Org that owns the API key — threaded through so the SSE AuditTask
     /// lands in the right tenant's audit log.
     pub org_id: String,
-    /// api_keys don't carry a platform role, so this is always false here.
-    pub actor_is_platform_admin: bool,
     pub model_name: String,
     pub provider_id: String,
     pub protocol: llm_gateway_storage::Protocol,
@@ -747,7 +745,7 @@ async fn process_sse_stream(
         request_headers: Some(audit_params.request_headers),
         response_headers: Some(audit_params.response_headers),
         org_id: audit_params.org_id.clone(),
-        actor_is_platform_admin: audit_params.actor_is_platform_admin,
+        actor_is_platform_admin: false, // api_keys don't carry platform role
         routes,
     };
     dispatch_audit_task(&state, task).await;
@@ -1672,7 +1670,6 @@ if status != 200 && status < 500 {
                 key_id: api_key.id.clone(),
                 user_id: api_key.created_by.clone(),
                 org_id: api_key.org_id.clone(),
-                actor_is_platform_admin: false, // api_keys don't carry platform role
                 model_name: upstream_name.to_string(),
                 provider_id: provider_id.clone(),
                 protocol: proto,
