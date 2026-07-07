@@ -41,3 +41,74 @@ pub fn can_access_channel(ctx: &OrgContext, channel_group_id: Option<&str>) -> b
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{MemberRole, OrgContext, PlatformRole};
+
+    fn ctx(role: MemberRole, platform: Option<PlatformRole>, group_id: Option<&str>) -> OrgContext {
+        OrgContext {
+            org_id: "o".into(),
+            member_role: role,
+            platform_role: platform,
+            group_id: group_id.map(String::from),
+        }
+    }
+
+    #[test]
+    fn owner_can_delete_org() {
+        assert!(can_delete_org(&ctx(MemberRole::Owner, None, None)));
+    }
+
+    #[test]
+    fn admin_cannot_delete_org() {
+        assert!(!can_delete_org(&ctx(MemberRole::Admin, None, None)));
+    }
+
+    #[test]
+    fn platform_admin_can_delete_org_even_as_member() {
+        assert!(can_delete_org(&ctx(
+            MemberRole::Member,
+            Some(PlatformRole::PlatformAdmin),
+            None
+        )));
+    }
+
+    #[test]
+    fn member_cannot_invite() {
+        assert!(!can_invite_members(&ctx(MemberRole::Member, None, None)));
+    }
+
+    #[test]
+    fn member_sees_ungrouped_channels() {
+        assert!(can_access_channel(
+            &ctx(MemberRole::Member, None, None),
+            None
+        ));
+    }
+
+    #[test]
+    fn member_sees_own_group_channels() {
+        assert!(can_access_channel(
+            &ctx(MemberRole::Member, None, Some("g1")),
+            Some("g1")
+        ));
+    }
+
+    #[test]
+    fn member_blocked_from_other_group_channels() {
+        assert!(!can_access_channel(
+            &ctx(MemberRole::Member, None, Some("g1")),
+            Some("g2")
+        ));
+    }
+
+    #[test]
+    fn admin_sees_all_channels() {
+        assert!(can_access_channel(
+            &ctx(MemberRole::Admin, None, None),
+            Some("anything")
+        ));
+    }
+}
