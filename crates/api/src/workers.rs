@@ -91,6 +91,7 @@ pub fn calculate_cost(
     if let Some(config) = pricing_policy_config {
         let policy = PricingPolicy {
             id: String::new(),
+            owner_org_id: None,
             name: String::new(),
             billing_type: pricing_policy_billing_type.to_string(),
             config: config.clone(),

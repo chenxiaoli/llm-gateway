@@ -144,10 +144,15 @@ impl InMemoryChannelRegistry {
     }
 
     async fn do_reload(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let channels = self.storage.list_channels().await?;
-        let channel_models = self.storage.list_channel_models().await?;
-        let providers = self.storage.list_providers().await?;
-        let all_storage_models = self.storage.list_models().await?;
+        // TODO(Task 10): ChannelRegistry is currently a process-wide cache. With
+        // multi-tenant storage, it must become per-org (or carry an org_id -> cache
+        // map). For Phase 1 there is exactly one org ("org_default"), so we load
+        // that single shard here; Task 10 will refactor this into an org-keyed map.
+        let org_id = "org_default";
+        let channels = self.storage.list_channels(org_id).await?;
+        let channel_models = self.storage.list_channel_models(org_id).await?;
+        let providers = self.storage.list_providers(org_id).await?;
+        let all_storage_models = self.storage.list_models(org_id).await?;
 
         let mut cache = HashMap::new();
         let mut model_index: HashMap<String, Vec<String>> = HashMap::new();
@@ -888,7 +893,7 @@ async fn proxy_inner(
     if let Some(ref created_by) = api_key.created_by {
         if let Some(account) = state
             .storage
-            .get_account_by_user_id(created_by)
+            .get_account_by_user_id(&api_key.org_id, created_by)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?
         {
@@ -904,12 +909,19 @@ async fn proxy_inner(
 
     // === Step 2.5: Determine request user_id and is_admin for routing filter ===
     let request_user_id = api_key.created_by.clone();
+    // TODO(Task 10): "is_admin" semantics changed — admin status now comes from
+    // the membership layer (members.role in {owner, admin}). platform_admin is
+    // determined separately via the users table; for Phase 1 the routing filter
+    // only cares about per-org admin status, which is good enough.
     let request_is_admin = if let Some(ref uid) = request_user_id {
-        match state.storage.get_user(uid).await {
-            Ok(Some(u)) => u.role == "admin",
+        match state.storage.get_member(uid, &api_key.org_id).await {
+            Ok(Some(m)) => matches!(
+                m.role,
+                llm_gateway_storage::MemberRole::Owner | llm_gateway_storage::MemberRole::Admin
+            ),
             Ok(None) => false,
             Err(e) => {
-                tracing::warn!("[PROXY] Failed to look up user role for {}: {}", uid, e);
+                tracing::warn!("[PROXY] Failed to look up member role for {}: {}", uid, e);
                 false  // Fail-safe: treat as non-admin if lookup fails
             }
         }
@@ -986,7 +998,7 @@ async fn proxy_route_and_forward(
     // === Step 3: Find model → provider → channels ===
     let models = state
         .storage
-        .list_models()
+        .list_models(&api_key.org_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -1044,6 +1056,7 @@ async fn proxy_route_and_forward(
             if let Some(enriched) = rc.model_overrides.get(&model_key) {
                 let cm = llm_gateway_storage::ChannelModel {
                     id: Uuid::new_v4().to_string(), // not used in routing path
+                    org_id: api_key.org_id.clone(),
                     channel_id: rc.channel_id.to_string(),
                     model_id: model_entry.model.id.clone(),
                     enabled: true,
@@ -1083,7 +1096,7 @@ async fn proxy_route_and_forward(
         // Apply user-group routing filter
         if let Some(ref user_id) = request_user_id {
             if !request_is_admin {
-                match state.storage.get_user_group_id(user_id).await {
+                match state.storage.get_user_group_id(user_id, &api_key.org_id).await {
                     Ok(Some(allowed_group_id)) => {
                         candidates.retain(|(rc, _)| {
                             rc.group_id.is_none() || rc.group_id.as_deref() == Some(&allowed_group_id)
@@ -1103,13 +1116,13 @@ async fn proxy_route_and_forward(
         // Cache miss: use original DB routing logic
         let channel_models = state
             .storage
-            .get_channel_models_for_model(&model_entry.model.id)
+            .get_channel_models_for_model(&api_key.org_id, &model_entry.model.id)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
 
         let all_channels = state
             .storage
-            .list_channels()
+            .list_channels(&api_key.org_id)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -1136,7 +1149,7 @@ async fn proxy_route_and_forward(
         // Apply user-group routing filter
         if let Some(ref user_id) = request_user_id {
             if !request_is_admin {
-                if let Ok(Some(allowed_group_id)) = state.storage.get_user_group_id(user_id).await {
+                if let Ok(Some(allowed_group_id)) = state.storage.get_user_group_id(user_id, &api_key.org_id).await {
                     available_channels.retain(|(_, ch)| {
                         ch.group_id.is_none() || ch.group_id.as_deref() == Some(&allowed_group_id)
                     });
@@ -1171,7 +1184,7 @@ async fn proxy_route_and_forward(
         let provider_id = available_channels[0].1.provider_id.as_str();
         let provider = state
             .storage
-            .get_provider(provider_id)
+            .get_provider(&api_key.org_id, provider_id)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?
             .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
@@ -1524,7 +1537,7 @@ if status != 200 && status < 500 {
                     .or(model_entry.model.pricing_policy_id.as_deref());
                 match policy_id {
                     Some(id) => {
-                        state.storage.get_pricing_policy(id).await
+                        state.storage.get_pricing_policy(&api_key.org_id, id).await
                             .map_err(|e| ApiError::Internal(e.to_string()))?
                     }
                     None => None,
@@ -1636,7 +1649,7 @@ if status != 200 && status < 500 {
                     .or(model_entry.model.pricing_policy_id.as_deref());
                 match policy_id {
                     Some(id) => {
-                        state.storage.get_pricing_policy(id).await
+                        state.storage.get_pricing_policy(&api_key.org_id, id).await
                             .map_err(|e| ApiError::Internal(e.to_string()))?
                     }
                     None => None,
@@ -1720,7 +1733,7 @@ if status != 200 && status < 500 {
                 .or(model_entry.model.pricing_policy_id.as_deref());
             match policy_id {
                 Some(id) => {
-                    state.storage.get_pricing_policy(id).await
+                    state.storage.get_pricing_policy(&api_key.org_id, id).await
                         .map_err(|e| ApiError::Internal(e.to_string()))?
                 }
                 None => None,
@@ -1805,7 +1818,7 @@ if status != 200 && status < 500 {
             // Resolve pricing policy from the last-attempted channel (best effort;
             // we don't have channel_model here, fall back to the model's policy).
             let pricing_policy = match model_entry.model.pricing_policy_id.as_deref() {
-                Some(id) => state.storage.get_pricing_policy(id).await
+                Some(id) => state.storage.get_pricing_policy(&api_key.org_id, id).await
                     .map_err(|e| ApiError::Internal(e.to_string()))?,
                 None => None,
             };

@@ -19,7 +19,9 @@ impl From<llm_gateway_org::OrgError> for ApiError {
     fn from(e: llm_gateway_org::OrgError) -> Self {
         match e {
             llm_gateway_org::OrgError::NotFound(msg) => ApiError::NotFound(msg),
-            llm_gateway_org::OrgError::NotMember(user, org) => {
+            llm_gateway_org::OrgError::NotMember(_user, _org) => {
+                // Membership failures are authz rejections — surface as 403
+                // rather than leaking which user/org was probed.
                 ApiError::Forbidden
             }
             llm_gateway_org::OrgError::Forbidden(_) => ApiError::Forbidden,

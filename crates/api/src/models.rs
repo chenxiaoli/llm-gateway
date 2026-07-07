@@ -19,7 +19,7 @@ pub async fn list_models(
     // Auth check - any valid key can list models
     let raw_token = extract_bearer_token(&headers)?;
     let token_hash = hash_api_key(&raw_token);
-    let _api_key = state
+    let api_key = state
         .storage
         .get_key_by_hash(&token_hash)
         .await
@@ -29,7 +29,7 @@ pub async fn list_models(
     // Get all models with their providers
     let models = state
         .storage
-        .list_models()
+        .list_models(&api_key.org_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -39,7 +39,7 @@ pub async fn list_models(
         // Check if model has any channel models
         let channel_models = state
             .storage
-            .get_channel_models_for_model(&m.model.id)
+            .get_channel_models_for_model(&api_key.org_id, &m.model.id)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
 
