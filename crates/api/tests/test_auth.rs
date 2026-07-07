@@ -41,7 +41,10 @@ async fn test_register_first_user_becomes_admin(pool: PgPool) {
         &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
-    assert_eq!(body["user"]["role"], "admin");
+    assert_eq!(body["user"]["platform_role"], "platform_admin");
+    assert_eq!(body["current_org"]["id"], "org_default");
+    assert!(body["orgs"].is_array());
+    assert!(body["orgs"].as_array().unwrap().len() >= 1);
     assert!(body["token"].is_string());
 }
 
@@ -84,7 +87,9 @@ async fn test_register_second_user_becomes_regular(pool: PgPool) {
         &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
-    assert_eq!(body["user"]["role"], "user");
+    assert_eq!(body["user"]["platform_role"], serde_json::Value::Null);
+    assert_eq!(body["current_org"]["id"], "org_default");
+    assert!(body["orgs"].as_array().unwrap().len() >= 1);
     assert!(body["token"].is_string());
 }
 
@@ -294,7 +299,9 @@ async fn test_auth_me_returns_user_info_when_authenticated(pool: PgPool) {
     .unwrap();
     assert_eq!(me_body["username"], "testuser");
     assert!(me_body["id"].is_string());
-    assert!(me_body["role"].is_string());
+    assert!(me_body["current_org"]["role"].is_string());
+    assert!(me_body["current_org"]["id"] == "org_default");
+    assert!(me_body["orgs"].as_array().unwrap().len() >= 1);
 }
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]

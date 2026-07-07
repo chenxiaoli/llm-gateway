@@ -4,8 +4,13 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use llm_gateway_auth::{hash_password, verify_password, create_jwt, create_refresh_jwt, verify_refresh_jwt, validate_password, validate_username};
-use llm_gateway_storage::User;
+use llm_gateway_auth::{
+    create_jwt, create_refresh_jwt, hash_password, validate_password, validate_username,
+    verify_password, verify_refresh_jwt,
+};
+use llm_gateway_storage::{
+    CreateOrg, Member, MemberRole, MembershipSummary, PlatformRole, User,
+};
 
 use crate::error::ApiError;
 use crate::extractors::require_auth;
@@ -28,20 +33,46 @@ pub struct AuthResponse {
     pub token: String,
     pub refresh_token: String,
     pub user: UserInfo,
+    pub current_org: OrgSummary,
+    pub orgs: Vec<OrgSummary>,
 }
 
 #[derive(Serialize, Clone)]
 pub struct UserInfo {
     pub id: String,
     pub username: String,
+    pub platform_role: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct OrgSummary {
+    pub id: String,
+    pub slug: String,
+    pub name: String,
+    /// Mirrors MemberRole as a string ("owner" | "admin" | "member").
     pub role: String,
+    pub group_id: Option<String>,
+}
+
+impl From<MembershipSummary> for OrgSummary {
+    fn from(m: MembershipSummary) -> Self {
+        OrgSummary {
+            id: m.org.id,
+            slug: m.org.slug,
+            name: m.org.name,
+            role: m.role.as_str().to_string(),
+            group_id: m.group_id,
+        }
+    }
 }
 
 #[derive(Serialize)]
 pub struct MeResponse {
     pub id: String,
     pub username: String,
-    pub role: String,
+    pub platform_role: Option<String>,
+    pub current_org: OrgSummary,
+    pub orgs: Vec<OrgSummary>,
     pub allow_registration: bool,
 }
 
@@ -68,12 +99,24 @@ pub struct RefreshResponse {
     pub refresh_token: String,
 }
 
+#[derive(Deserialize)]
+pub struct SwitchOrgRequest {
+    pub org_slug: Option<String>,
+    pub org_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateOrgRequest {
+    pub slug: String,
+    pub name: String,
+}
+
 impl From<&User> for UserInfo {
     fn from(u: &User) -> Self {
         UserInfo {
             id: u.id.clone(),
             username: u.username.clone(),
-            role: u.role.clone(),
+            platform_role: u.platform_role.as_ref().map(|p| p.as_str().to_string()),
         }
     }
 }
@@ -81,7 +124,7 @@ impl From<&User> for UserInfo {
 async fn get_allow_registration(state: &AppState) -> bool {
     state
         .storage
-        .get_setting("allow_registration")
+        .get_platform_setting("allow_registration")
         .await
         .ok()
         .flatten()
@@ -99,6 +142,32 @@ async fn store_refresh_token(state: &AppState, user: &User, refresh_jwt: &str) -
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     Ok(())
+}
+
+/// Pick the user's current membership: the one matching `current_org_id`,
+/// falling back to the first membership if the stored value is stale or absent.
+///
+/// Returns `Internal("user has no org membership")` if the user has zero
+/// memberships — every authenticated user must belong to at least one org.
+async fn current_membership(
+    state: &AppState,
+    user: &User,
+) -> Result<(OrgSummary, Vec<OrgSummary>), ApiError> {
+    let memberships = state
+        .storage
+        .list_orgs_for_user(&user.id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let current = memberships
+        .iter()
+        .find(|m| Some(&m.org.id) == user.current_org_id.as_ref())
+        .or_else(|| memberships.first())
+        .ok_or_else(|| ApiError::Internal("user has no org membership".to_string()))?
+        .clone();
+
+    let orgs: Vec<OrgSummary> = memberships.into_iter().map(Into::into).collect();
+    Ok((current.into(), orgs))
 }
 
 pub async fn login(
@@ -122,7 +191,10 @@ pub async fn login(
         return Err(ApiError::Unauthorized);
     }
 
-    let token = create_jwt(&user.id, &user.role, &state.jwt_secret)
+    let (current_org, orgs) = current_membership(&state, &user).await?;
+
+    let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
+    let token = create_jwt(&user.id, &current_org.id, platform_role_str, &state.jwt_secret)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let refresh_jwt = create_refresh_jwt(&user.id, &state.jwt_secret)
@@ -134,6 +206,8 @@ pub async fn login(
         token,
         refresh_token: refresh_jwt,
         user: UserInfo::from(&user),
+        current_org,
+        orgs,
     }))
 }
 
@@ -169,15 +243,19 @@ pub async fn register(
     }
 
     let now = chrono::Utc::now();
-    let role = if is_first_user { "admin" } else { "user" };
-    let user = User {
+    let platform_role = if is_first_user {
+        Some(PlatformRole::PlatformAdmin)
+    } else {
+        None
+    };
+    let mut user = User {
         id: uuid::Uuid::new_v4().to_string(),
         username: input.username.clone(),
         password: hash_password(&input.password).map_err(|e| ApiError::Internal(e.to_string()))?,
-        role: role.to_string(),
+        platform_role,
+        current_org_id: None,
         enabled: true,
         refresh_token: None,
-        group_id: None,
         created_at: now,
         updated_at: now,
     };
@@ -188,9 +266,45 @@ pub async fn register(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // Auto-create account for new user
+    // TODO(Phase 3): replace the default-org-membership below with auto-creation
+    // of a personal org whose slug is derived from the username.
+    let default_org = state
+        .storage
+        .get_org_by_slug("default")
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::Internal("default org missing".to_string()))?;
+
+    state
+        .storage
+        .upsert_member(Member {
+            user_id: user.id.clone(),
+            org_id: default_org.id.clone(),
+            role: if is_first_user {
+                MemberRole::Owner
+            } else {
+                MemberRole::Member
+            },
+            group_id: None,
+            created_by: Some(user.id.clone()),
+            created_at: now,
+        })
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Persist current_org_id on the user row.
+    user.current_org_id = Some(default_org.id.clone());
+    user.updated_at = chrono::Utc::now();
+    user = state
+        .storage
+        .update_user(&user)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Auto-create account for new user (Phase 1: scoped to default org).
     let account = llm_gateway_storage::Account {
         id: uuid::Uuid::new_v4().to_string(),
+        org_id: default_org.id.clone(),
         user_id: user.id.clone(),
         balance: 0,
         threshold: llm_gateway_storage::usd_to_units(1.0),
@@ -199,11 +313,14 @@ pub async fn register(
     };
     state
         .storage
-        .create_account(&account)
+        .create_account(&default_org.id, &account)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let token = create_jwt(&user.id, &user.role, &state.jwt_secret)
+    let (current_org, orgs) = current_membership(&state, &user).await?;
+
+    let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
+    let token = create_jwt(&user.id, &current_org.id, platform_role_str, &state.jwt_secret)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let refresh_jwt = create_refresh_jwt(&user.id, &state.jwt_secret)
@@ -215,6 +332,8 @@ pub async fn register(
         token,
         refresh_token: refresh_jwt,
         user: UserInfo::from(&user),
+        current_org,
+        orgs,
     }))
 }
 
@@ -231,12 +350,15 @@ pub async fn me(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::Unauthorized)?;
 
+    let (current_org, orgs) = current_membership(&state, &user).await?;
     let allow_reg = get_allow_registration(&state).await;
 
     Ok(Json(MeResponse {
         id: user.id,
         username: user.username,
-        role: user.role,
+        platform_role: user.platform_role.as_ref().map(|p| p.as_str().to_string()),
+        current_org,
+        orgs,
         allow_registration: allow_reg,
     }))
 }
@@ -252,7 +374,7 @@ pub async fn me_balance(
 
     let account = state
         .storage
-        .get_account_by_user_id(&claims.sub)
+        .get_account_by_user_id(&claims.current_org_id, &claims.sub)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("Account not found".to_string()))?;
@@ -260,7 +382,7 @@ pub async fn me_balance(
     let (page, page_size) = pagination.normalized();
     let transactions = state
         .storage
-        .list_transactions(&account.id, page, page_size)
+        .list_transactions(&claims.current_org_id, &account.id, page, page_size)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -295,7 +417,7 @@ pub async fn auth_config(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<AuthConfigResponse>, ApiError> {
     let allow_reg = get_allow_registration(&state).await;
-    let currency = state.storage.get_setting("currency").await
+    let currency = state.storage.get_platform_setting("currency").await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .unwrap_or_else(|| "USD".to_string());
 
@@ -325,8 +447,12 @@ pub async fn refresh(
         return Err(ApiError::Unauthorized);
     }
 
+    // Resolve current org so the new access token carries it.
+    let (current_org, _orgs) = current_membership(&state, &user).await?;
+
     // Issue new access token
-    let new_token = create_jwt(&user.id, &user.role, &state.jwt_secret)
+    let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
+    let new_token = create_jwt(&user.id, &current_org.id, platform_role_str, &state.jwt_secret)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // Issue new refresh token (rotation)
@@ -380,4 +506,149 @@ pub async fn change_password(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(UserInfo::from(&updated_user)))
+}
+
+/// Switch the caller's current org. Persists `current_org_id` on the user
+/// and reissues the access token with the new org embedded.
+pub async fn switch_org(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<SwitchOrgRequest>,
+) -> Result<Json<AuthResponse>, ApiError> {
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+
+    let target_org = if let Some(slug) = body.org_slug {
+        state.storage.get_org_by_slug(&slug).await
+    } else if let Some(id) = body.org_id {
+        state.storage.get_org(&id).await
+    } else {
+        return Err(ApiError::BadRequest("org_slug or org_id required".to_string()));
+    }
+    .map_err(|e| ApiError::Internal(e.to_string()))?
+    .ok_or_else(|| ApiError::NotFound("org".to_string()))?;
+
+    let member = state
+        .storage
+        .get_member(&claims.sub, &target_org.id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::Forbidden)?;
+
+    // Persist new current_org_id on the user row.
+    let mut user = state
+        .storage
+        .get_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::Unauthorized)?;
+    user.current_org_id = Some(target_org.id.clone());
+    user.updated_at = chrono::Utc::now();
+    user = state
+        .storage
+        .update_user(&user)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
+    let token = create_jwt(&user.id, &target_org.id, platform_role_str, &state.jwt_secret)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let memberships = state
+        .storage
+        .list_orgs_for_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let orgs: Vec<OrgSummary> = memberships.into_iter().map(Into::into).collect();
+
+    Ok(Json(AuthResponse {
+        token,
+        refresh_token: user.refresh_token.clone().unwrap_or_default(),
+        user: UserInfo::from(&user),
+        current_org: OrgSummary {
+            id: target_org.id,
+            slug: target_org.slug,
+            name: target_org.name,
+            role: member.role.as_str().to_string(),
+            group_id: member.group_id,
+        },
+        orgs,
+    }))
+}
+
+/// List all orgs the caller is a member of.
+pub async fn list_orgs(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<OrgSummary>>, ApiError> {
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+
+    let memberships = state
+        .storage
+        .list_orgs_for_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(
+        memberships.into_iter().map(Into::into).collect(),
+    ))
+}
+
+/// Create a new org with the caller as owner.
+pub async fn create_org(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<CreateOrgRequest>,
+) -> Result<Json<OrgSummary>, ApiError> {
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+
+    let user = state
+        .storage
+        .get_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::Unauthorized)?;
+
+    let now = chrono::Utc::now();
+    let org = state
+        .storage
+        .create_org(CreateOrg {
+            id: uuid::Uuid::new_v4().to_string(),
+            slug: body.slug,
+            name: body.name,
+            owner_id: claims.sub.clone(),
+        })
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    state
+        .storage
+        .upsert_member(Member {
+            user_id: claims.sub.clone(),
+            org_id: org.id.clone(),
+            role: MemberRole::Owner,
+            group_id: None,
+            created_by: Some(claims.sub.clone()),
+            created_at: now,
+        })
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Make the new org the caller's current org so subsequent requests
+    // default to it without an explicit switch.
+    let mut updated = user.clone();
+    updated.current_org_id = Some(org.id.clone());
+    updated.updated_at = now;
+    state
+        .storage
+        .update_user(&updated)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(Json(OrgSummary {
+        id: org.id,
+        slug: org.slug,
+        name: org.name,
+        role: MemberRole::Owner.as_str().to_string(),
+        group_id: None,
+    }))
 }

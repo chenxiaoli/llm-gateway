@@ -29,8 +29,6 @@ pub struct TestUser {
     pub id: String,
     #[allow(dead_code)]
     pub username: String,
-    #[allow(dead_code)]
-    pub role: String,
     pub token: String,
 }
 
@@ -57,22 +55,20 @@ pub fn make_state(pool: PgPool) -> Arc<AppState> {
 #[allow(dead_code)]
 pub fn make_admin_token() -> TestUser {
     let id = "admin-1".to_string();
-    let token = create_jwt(&id, "admin", TEST_JWT_SECRET).unwrap();
+    let token = create_jwt(&id, "org_default", Some("platform_admin"), TEST_JWT_SECRET).unwrap();
     TestUser {
         id,
         username: "admin".to_string(),
-        role: "admin".to_string(),
         token,
     }
 }
 
 #[allow(dead_code)]
 pub fn make_user_token(user_id: &str) -> TestUser {
-    let token = create_jwt(user_id, "user", TEST_JWT_SECRET).unwrap();
+    let token = create_jwt(user_id, "org_default", None, TEST_JWT_SECRET).unwrap();
     TestUser {
         id: user_id.to_string(),
         username: "testuser".to_string(),
-        role: "user".to_string(),
         token,
     }
 }
