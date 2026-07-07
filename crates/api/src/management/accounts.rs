@@ -4,6 +4,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use llm_gateway_org::{can_manage_channels, resolve_org_context};
 use llm_gateway_storage::{
     units_to_usd, usd_to_units,
     Account, AccountResponse as StorageAccountResponse,
@@ -13,7 +14,7 @@ use llm_gateway_storage::{
 };
 
 use crate::error::ApiError;
-use crate::extractors::require_admin;
+use crate::extractors::require_auth;
 use crate::AppState;
 
 // --- JSON response wrappers with f64 monetary fields ---
@@ -97,11 +98,15 @@ pub async fn get_balance(
     Path(user_id): Path<String>,
     Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<AccountBalanceResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     let account = state
         .storage
-        .get_account_by_user_id(&user_id)
+        .get_account_by_user_id(&ctx.org_id, &user_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))?;
@@ -109,7 +114,7 @@ pub async fn get_balance(
     let (page, page_size) = pagination.normalized();
     let transactions = state
         .storage
-        .list_transactions(&account.id, page, page_size)
+        .list_transactions(&ctx.org_id, &account.id, page, page_size)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -130,7 +135,11 @@ pub async fn recharge(
     Path(user_id): Path<String>,
     Json(input): Json<CreateTransactionRequest>,
 ) -> Result<Json<AccountJsonResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     if input.amount <= 0.0 {
         return Err(ApiError::BadRequest("Amount must be positive".to_string()));
@@ -139,7 +148,7 @@ pub async fn recharge(
     // Look up account for account_id
     let account = state
         .storage
-        .get_account_by_user_id(&user_id)
+        .get_account_by_user_id(&ctx.org_id, &user_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))?;
@@ -154,10 +163,11 @@ pub async fn recharge(
         reference_id: input.reference_id,
     };
 
-    match state.storage.add_balance(&req).await {
+    match state.storage.add_balance(&ctx.org_id, &req).await {
         Ok(AddBalanceResult::Success(tx)) => {
             Ok(Json(AccountJsonResponse::from(StorageAccountResponse::from(&Account {
                 id: tx.account_id,
+                org_id: ctx.org_id.clone(),
                 user_id,
                 balance: tx.balance_after,
                 threshold: account.threshold,
@@ -178,7 +188,11 @@ pub async fn adjust(
     Path(user_id): Path<String>,
     Json(input): Json<CreateTransactionRequest>,
 ) -> Result<Json<AccountJsonResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     if input.amount <= 0.0 {
         return Err(ApiError::BadRequest("Amount must be positive".to_string()));
@@ -197,7 +211,7 @@ pub async fn adjust(
     // Look up account
     let account = state
         .storage
-        .get_account_by_user_id(&user_id)
+        .get_account_by_user_id(&ctx.org_id, &user_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))?;
@@ -220,10 +234,11 @@ pub async fn adjust(
         reference_id: input.reference_id,
     };
 
-    match state.storage.add_balance(&req).await {
+    match state.storage.add_balance(&ctx.org_id, &req).await {
         Ok(AddBalanceResult::Success(tx)) => {
             Ok(Json(AccountJsonResponse::from(StorageAccountResponse::from(&Account {
                 id: tx.account_id,
+                org_id: ctx.org_id.clone(),
                 user_id,
                 balance: tx.balance_after,
                 threshold: account.threshold,
@@ -244,11 +259,15 @@ pub async fn update_threshold(
     Path(user_id): Path<String>,
     Json(input): Json<UpdateThresholdRequest>,
 ) -> Result<Json<AccountJsonResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     let mut account = state
         .storage
-        .get_account_by_user_id(&user_id)
+        .get_account_by_user_id(&ctx.org_id, &user_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))?;
@@ -262,7 +281,7 @@ pub async fn update_threshold(
 
     let updated = state
         .storage
-        .update_account(&account)
+        .update_account(&ctx.org_id, &account)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
