@@ -1460,6 +1460,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "llm-gateway-org"
+version = "1.8.4"
+dependencies = [
+ "async-trait",
+ "llm-gateway-auth",
+ "llm-gateway-storage",
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "llm-gateway-provider"
 version = "1.8.4"
 dependencies = [

@@ -1,0 +1,11 @@
+[package]
+name = "llm-gateway-org"
+version = "1.8.4"
+edition = "2021"
+
+[dependencies]
+llm-gateway-storage = { path = "../storage" }
+llm-gateway-auth = { path = "../auth" }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }

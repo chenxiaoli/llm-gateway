@@ -13,6 +13,7 @@ members = [
     "crates/nats-publisher",
     "crates/usage-worker",
     "crates/audit-worker",
+    "crates/org",
 ]
 
 [workspace.dependencies]
