@@ -879,6 +879,9 @@ pub struct Group {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateGroup {
+    /// Ignored by handlers — `org_id` is taken from the request's OrgContext.
+    /// Kept on the struct for backwards compatibility with older clients.
+    #[serde(default)]
     pub org_id: String,
     pub name: String,
     pub description: Option<String>,

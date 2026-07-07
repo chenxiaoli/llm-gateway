@@ -2,7 +2,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
 use llm_gateway_org::{can_manage_channels, resolve_org_context};
-use llm_gateway_storage::{units_to_usd, PaginatedResponse, PaginationParams, UpdateUser as StorageUpdateUser, User, UserWithBalance};
+use llm_gateway_storage::{units_to_usd, Member, MemberRole, PaginatedResponse, PaginationParams, UpdateUser as StorageUpdateUser, UserWithBalance};
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -76,16 +76,47 @@ pub async fn update_user(
     let mut user = state.storage.get_user(&id).await.map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("User '{}' not found", id)))?;
 
-    // TODO(Task 11/12): the `role` and `group_id` fields in UpdateUser target
-    // the membership layer (members.role / members.group_id), not the users
-    // table. Phase 1 storage doesn't yet expose methods to mutate those, so we
-    // accept the fields in the request body but only apply `enabled` here.
-    // The frontend will be updated in Task 11 to call dedicated membership
-    // endpoints once they exist.
+    // Apply `enabled` to the user row (lives on users table).
     if let Some(enabled) = input.enabled { user.enabled = enabled; }
     user.updated_at = chrono::Utc::now();
-
     let updated = state.storage.update_user(&user).await.map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Apply `group_id` (and `role`, when set) to the membership row.
+    // The membership layer is per-org; we look up by (user_id, ctx.org_id).
+    let existing_member = state.storage.get_member(&updated.id, &ctx.org_id).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let mut member = existing_member.unwrap_or(Member {
+        user_id: updated.id.clone(),
+        org_id: ctx.org_id.clone(),
+        role: MemberRole::Member,
+        group_id: None,
+        created_by: Some(claims.sub.clone()),
+        created_at: chrono::Utc::now(),
+    });
+
+    // If a group_id was provided, validate it exists in this org.
+    if let Some(ref gid_opt) = input.group_id {
+        if let Some(gid) = gid_opt {
+            let exists = state.storage.get_group(&ctx.org_id, gid).await
+                .map_err(|e| ApiError::Internal(e.to_string()))?;
+            if exists.is_none() {
+                return Err(ApiError::BadRequest(format!("Group '{}' not found", gid)));
+            }
+        }
+        member.group_id = gid_opt.clone();
+    }
+
+    // Map legacy role strings to MemberRole. Unknown values are ignored
+    // (TODO(Task 11): the frontend should call a dedicated /members endpoint
+    // rather than piggybacking on /users).
+    if let Some(ref role_str) = input.role {
+        if let Some(parsed) = MemberRole::parse(role_str) {
+            member.role = parsed;
+        }
+    }
+
+    state.storage.upsert_member(member).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // Re-fetch the synthesized view row so the response carries the
     // membership-derived role/group_name fields the frontend expects.

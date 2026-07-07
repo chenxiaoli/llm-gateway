@@ -456,6 +456,7 @@ async fn publish_audit_events(
         ),
         latency_ms: task.latency_ms,
         created_at: now.to_rfc3339(),
+        org_id: task.org_id.clone(),
     };
 
     let audit_event = AuditEvent {
@@ -483,6 +484,8 @@ async fn publish_audit_events(
         request_headers: task.request_headers.clone(),
         response_headers: task.response_headers.clone(),
         created_at: now.to_rfc3339(),
+        org_id: task.org_id.clone(),
+        actor_is_platform_admin: task.actor_is_platform_admin,
         routes: Some(task.routes.clone()),
     };
 
@@ -739,6 +742,11 @@ async fn process_sse_stream(
         upstream_url: Some(audit_params.upstream_url),
         request_headers: Some(audit_params.request_headers),
         response_headers: Some(audit_params.response_headers),
+        // TODO(Task 10): populate from api_key.org_id / platform_role at
+        // the streaming entry point. For now the SSE path constructs the
+        // task before the AuditTask struct has access to those values.
+        org_id: "org_default".to_string(),
+        actor_is_platform_admin: false,
         routes,
     };
     dispatch_audit_task(&state, task).await;
@@ -1598,6 +1606,8 @@ if status != 200 && status < 500 {
                 upstream_url: Some(upstream_url.clone()),
                 request_headers: Some(request_headers_for_worker),
                 response_headers: Some(response_headers_for_worker),
+                org_id: api_key.org_id.clone(),
+                actor_is_platform_admin: false,
                 routes: routes.clone(),
             };
             dispatch_audit_task(&state, task).await;
@@ -1780,6 +1790,8 @@ if status != 200 && status < 500 {
             upstream_url: Some(upstream_url.clone()),
             request_headers: Some(request_headers_for_worker.clone()),
             response_headers: Some(response_headers_for_worker),
+            org_id: api_key.org_id.clone(),
+            actor_is_platform_admin: false,
             routes: routes.clone(),
         };
         dispatch_audit_task(&state, task).await;
@@ -1845,6 +1857,8 @@ if status != 200 && status < 500 {
                 upstream_url: None,
                 request_headers: None,
                 response_headers: None,
+                org_id: api_key.org_id.clone(),
+                actor_is_platform_admin: false,
                 routes: routes.clone(),
             };
             dispatch_audit_task(&state, task).await;

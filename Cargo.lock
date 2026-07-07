@@ -1367,6 +1367,7 @@ dependencies = [
  "llm-gateway-billing",
  "llm-gateway-encryption",
  "llm-gateway-nats-publisher",
+ "llm-gateway-org",
  "llm-gateway-provider",
  "llm-gateway-ratelimit",
  "llm-gateway-storage",

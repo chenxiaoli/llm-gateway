@@ -68,6 +68,7 @@ async fn run_usage_worker(storage: Arc<dyn Storage>, nats: Arc<llm_gateway_nats_
 
         let record = UsageRecord {
             id: event.id,
+            org_id: event.org_id.clone(),
             request_id: Some(event.request_id),
             key_id: event.key_id,
             user_id: event.user_id,
@@ -97,7 +98,7 @@ async fn run_usage_worker(storage: Arc<dyn Storage>, nats: Arc<llm_gateway_nats_
             continue;
         }
 
-        if let Err(e) = storage.record_usage(&record).await {
+        if let Err(e) = storage.record_usage(&record.org_id, &record).await {
             tracing::warn!("[USAGE-WORKER] Failed to record usage: {}", e);
             let _ = msg.ack_with(AckKind::Nak(None)).await;
             continue;
@@ -108,11 +109,11 @@ async fn run_usage_worker(storage: Arc<dyn Storage>, nats: Arc<llm_gateway_nats_
         // Per-request deduction
         if let Some(ref user_id) = record.user_id {
             if record.cost > 0 {
-                match storage.get_account_by_user_id(user_id).await {
+                match storage.get_account_by_user_id(&record.org_id, user_id).await {
                     Ok(Some(account)) => {
                         // Idempotency: skip if already deducted for this request
                         match record.request_id.as_deref() {
-                            Some(rid) => match storage.get_transaction_by_request_id(rid).await {
+                            Some(rid) => match storage.get_transaction_by_request_id(&record.org_id, rid).await {
                                 Ok(None) => {
                                     let req = DeductBalance {
                                         account_id: account.id,
@@ -122,7 +123,7 @@ async fn run_usage_worker(storage: Arc<dyn Storage>, nats: Arc<llm_gateway_nats_
                                         reference_id: None,
                                         request_id: Some(rid.to_string()),
                                     };
-                                    match storage.deduct_balance(&req).await {
+                                    match storage.deduct_balance(&record.org_id, &req).await {
                                         Ok(DeductBalanceResult::Success(_)) => {}
                                         Ok(DeductBalanceResult::InsufficientBalance { current_balance, requested }) => {
                                             tracing::warn!(
