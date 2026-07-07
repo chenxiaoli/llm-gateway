@@ -1173,4 +1173,8 @@ pub struct NatsConfig {
     pub url: String,
     #[serde(default)]
     pub token: Option<String>,
+    /// Path to a NATS credentials file (JWT + NKey seed) for JWT-based auth.
+    /// Takes precedence over `token` when set.
+    #[serde(default)]
+    pub credentials_file: Option<String>,
 }

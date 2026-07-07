@@ -17,6 +17,10 @@ test-results/
 .env.local
 .env.*.local
 
+# NATS credentials (JWT + NKey seed — never commit)
+*.creds
+nats.creds
+
 # IDE
 .idea/
 .vscode/

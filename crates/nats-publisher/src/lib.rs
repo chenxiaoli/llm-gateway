@@ -114,8 +114,22 @@ pub struct NatsPublisher {
 impl NatsPublisher {
     /// Connect to the NATS server at `url` and create the required JetStream
     /// streams idempotently.
-    pub async fn new(url: &str, token: Option<String>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let client = if let Some(token) = token {
+    ///
+    /// Auth precedence: `credentials_file` (JWT + NKey seed) → `token` → none.
+    pub async fn new(
+        url: &str,
+        token: Option<String>,
+        credentials_file: Option<String>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let client = if let Some(path) = credentials_file {
+            let opts = async_nats::ConnectOptions::new()
+                .credentials_file(&path)
+                .await
+                .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> {
+                    format!("failed to load NATS credentials from {path}: {e}").into()
+                })?;
+            async_nats::connect_with_options(url, opts).await?
+        } else if let Some(token) = token {
             async_nats::connect_with_options(
                 url,
                 async_nats::ConnectOptions::new().token(token),

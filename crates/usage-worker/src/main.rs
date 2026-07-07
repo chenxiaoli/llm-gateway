@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Connect to NATS
     let nats_cfg = config.nats.as_ref().ok_or("[nats] section is required")?;
-    let nats = Arc::new(llm_gateway_nats_publisher::NatsPublisher::new(&nats_cfg.url, nats_cfg.token.clone()).await?);
+    let nats = Arc::new(llm_gateway_nats_publisher::NatsPublisher::new(&nats_cfg.url, nats_cfg.token.clone(), nats_cfg.credentials_file.clone()).await?);
     tracing::info!("Connected to NATS: {}", nats_cfg.url);
 
     // Run with supervisor
