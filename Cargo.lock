@@ -1421,6 +1421,7 @@ dependencies = [
  "hex",
  "jsonwebtoken",
  "serde",
+ "serde_json",
  "sha2",
  "uuid",
 ]

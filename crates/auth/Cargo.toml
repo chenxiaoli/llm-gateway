@@ -11,3 +11,6 @@ serde = { workspace = true }
 bcrypt = "0.17"
 jsonwebtoken = "9"
 chrono = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
