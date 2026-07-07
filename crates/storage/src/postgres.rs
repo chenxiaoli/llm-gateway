@@ -1714,41 +1714,59 @@ impl crate::Storage for PostgresStorage {
     }
 
     async fn query_logs(&self, org_id: &str, filter: &LogFilter) -> Result<Vec<AuditLog>, DbErr> {
+        // org_id is always $1; subsequent filter params take $2.. and are
+        // appended in the same order they are bound below. LIMIT/OFFSET (when
+        // present) are bound as trailing params after the filter values.
+        let mut conditions: Vec<String> = vec!["org_id = $1".to_string()];
+        let mut bind_vals: Vec<String> = Vec::new();
+
+        if let Some(ref key_id) = filter.key_id {
+            conditions.push(format!("key_id = ${}", bind_vals.len() + 2));
+            bind_vals.push(key_id.clone());
+        }
+        if let Some(ref model_name) = filter.model_name {
+            conditions.push(format!("model_name = ${}", bind_vals.len() + 2));
+            bind_vals.push(model_name.clone());
+        }
+        if let Some(since) = filter.since {
+            conditions.push(format!("created_at >= ${}", bind_vals.len() + 2));
+            bind_vals.push(since.to_rfc3339());
+        }
+        if let Some(until) = filter.until {
+            conditions.push(format!("created_at <= ${}", bind_vals.len() + 2));
+            bind_vals.push(until.to_rfc3339());
+        }
+
         let mut sql = String::from(
             "SELECT id, org_id, request_id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
              request_path, upstream_url, request_headers, response_headers, user_id, actor_is_platform_admin, routes
-             FROM audit_logs WHERE org_id = $1",
+             FROM audit_logs",
         );
-
-        if filter.key_id.is_some() {
-            sql.push_str(" AND key_id = $2");
-        }
-        if filter.model_name.is_some() {
-            sql.push_str(" AND model_name = $3");
-        }
-        if filter.since.is_some() {
-            sql.push_str(" AND created_at >= $4");
-        }
-        if filter.until.is_some() {
-            sql.push_str(" AND created_at <= $5");
-        }
-
+        sql.push_str(" WHERE ");
+        sql.push_str(&conditions.join(" AND "));
         sql.push_str(" ORDER BY created_at DESC");
 
-        if let Some(limit) = filter.limit {
-            sql.push_str(&format!(" LIMIT {}", limit));
+        let limit_offset_start = bind_vals.len() + 2; // next slot after filters
+        let limit_placeholder: Option<String> = filter.limit.map(|_| format!("${}", limit_offset_start));
+        let offset_placeholder: Option<String> = filter.offset.map(|_| {
+            let idx = limit_offset_start + if filter.limit.is_some() { 1 } else { 0 };
+            format!("${}", idx)
+        });
+        if let Some(ref p) = limit_placeholder {
+            sql.push_str(&format!(" LIMIT {}", p));
         }
-        if let Some(offset) = filter.offset {
-            sql.push_str(&format!(" OFFSET {}", offset));
+        if let Some(ref p) = offset_placeholder {
+            sql.push_str(&format!(" OFFSET {}", p));
         }
 
         let mut q = sqlx::query_as::<_, PgAuditRow>(&sql);
         q = q.bind(org_id);
-        if let Some(ref v) = filter.key_id { q = q.bind(v); }
-        if let Some(ref v) = filter.model_name { q = q.bind(v); }
-        if let Some(v) = filter.since { q = q.bind(v); }
-        if let Some(v) = filter.until { q = q.bind(v); }
+        for val in &bind_vals {
+            q = q.bind(val);
+        }
+        if let Some(limit) = filter.limit { q = q.bind(limit); }
+        if let Some(offset) = filter.offset { q = q.bind(offset); }
         let rows: Vec<PgAuditRow> = q.fetch_all(&self.pool).await?;
         Ok(rows.into_iter().map(AuditLog::from).collect())
     }
@@ -2192,6 +2210,12 @@ impl crate::Storage for PostgresStorage {
         .execute(&self.pool)
         .await?;
         for pm in models {
+            let owner = pm.owner_org_id.as_deref();
+            if !matches!(owner, None) && owner != Some(viewer_org_id) {
+                return Err(Box::new(CatalogNameReserved(
+                    "set_provider_models: cannot assign rows to another org".into(),
+                )));
+            }
             sqlx::query(
                 "INSERT INTO provider_models (provider_id, model_id, owner_org_id, upstream_name, pricing_policy_id, created_at)
                  VALUES ($1, $2, $3, $4, $5, now())",
@@ -3368,11 +3392,11 @@ mod org_tests {
     use super::*;
     use crate::Storage;
 
-    /// After running the SaaS migration, the default org should exist and every
-    /// pre-existing admin user (seeded by the migration backfill in step 5)
-    /// should appear in `members` with role = 'owner'.
+    /// Round-trips membership on the default org: inserts a synthetic user
+    /// into the default org, calls `upsert_member`, and verifies the row
+    /// appears in `list_members` with the role that was written.
     #[sqlx::test(migrator = "crate::MIGRATOR")]
-    async fn bootstrap_default_org_has_admins_as_owners(pool: sqlx::PgPool) {
+    async fn bootstrap_default_org_round_trip_membership(pool: sqlx::PgPool) {
         let storage = crate::postgres::PostgresStorage::from_pool(pool);
 
         let org = storage
