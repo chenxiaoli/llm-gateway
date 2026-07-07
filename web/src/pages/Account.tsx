@@ -14,6 +14,7 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 export default function Account() {
   const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
+  const currentOrg = useAuthStore((s) => s.currentOrg);
   const symbol = useCurrencyStore((s) => s.symbol);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
@@ -22,6 +23,11 @@ export default function Account() {
   const { data, isLoading } = useMyBalance(page, pageSize);
   const transactions = data?.transactions;
   const totalPages = Math.ceil((transactions?.total ?? 0) / pageSize);
+
+  // Phase 1: role badge reflects platform_admin (rare) or current org role.
+  const isPlatformAdmin = user?.platform_role === 'platform_admin';
+  const isOrgAdmin = currentOrg?.role === 'owner' || currentOrg?.role === 'admin';
+  const isAdmin = isPlatformAdmin || isOrgAdmin;
 
   const TX_TYPE_LABELS: Record<string, { label: string; color: 'green' | 'red' | 'blue' | 'purple' }> = {
     credit: { label: t('account.credit'), color: 'green' },
@@ -48,8 +54,8 @@ export default function Account() {
               {user?.username}
             </h1>
             <div className="flex items-center gap-2">
-              <Badge variant={user?.role === 'admin' ? 'green' : 'blue'}>
-                {user?.role === 'admin' ? t('account.administrator') : t('account.user')}
+              <Badge variant={isAdmin ? 'green' : 'blue'}>
+                {isAdmin ? t('account.administrator') : t('account.user')}
               </Badge>
             </div>
           </div>

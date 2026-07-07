@@ -4,19 +4,25 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMe, login as apiLogin, register as apiRegister } from '../api/auth';
 import { getToken, setToken, clearToken, setRefreshToken, clearRefreshToken } from '../api/client';
 import { useCurrencyStore } from './currency';
-import type { User, LoginRequest, RegisterRequest, AuthResponse } from '../types';
+import type { User, OrgSummary, LoginRequest, RegisterRequest, AuthResponse } from '../types';
 
 interface AuthState {
   user: User | null;
+  currentOrg: OrgSummary | null;
+  orgs: OrgSummary[];
   isLoading: boolean;
   login: (input: LoginRequest) => Promise<AuthResponse>;
   register: (input: RegisterRequest) => Promise<AuthResponse>;
   logout: () => void;
   setUser: (user: User) => void;
+  setCurrentOrg: (org: OrgSummary) => void;
+  refreshOrgs: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
+  currentOrg: null,
+  orgs: [],
   isLoading: false,
 
   login: async (input: LoginRequest) => {
@@ -26,7 +32,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       setToken(resp.token);
       setRefreshToken(resp.refresh_token);
       const me = await getMe();
-      set({ user: { id: me.id, username: me.username, role: me.role }, isLoading: false });
+      set({
+        user: { id: me.id, username: me.username, platform_role: me.platform_role },
+        currentOrg: me.current_org,
+        orgs: me.orgs,
+        isLoading: false,
+      });
       return resp;
     } catch (err) {
       set({ isLoading: false });
@@ -41,7 +52,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       setToken(resp.token);
       setRefreshToken(resp.refresh_token);
       const me = await getMe();
-      set({ user: { id: me.id, username: me.username, role: me.role }, isLoading: false });
+      set({
+        user: { id: me.id, username: me.username, platform_role: me.platform_role },
+        currentOrg: me.current_org,
+        orgs: me.orgs,
+        isLoading: false,
+      });
       return resp;
     } catch (err) {
       set({ isLoading: false });
@@ -52,11 +68,22 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: () => {
     clearToken();
     clearRefreshToken();
-    set({ user: null });
+    set({ user: null, currentOrg: null, orgs: [] });
     window.location.href = '/console/login';
   },
 
   setUser: (user: User) => set({ user }),
+
+  setCurrentOrg: (org: OrgSummary) => set({ currentOrg: org }),
+
+  refreshOrgs: async () => {
+    const me = await getMe();
+    set({
+      user: { id: me.id, username: me.username, platform_role: me.platform_role },
+      currentOrg: me.current_org,
+      orgs: me.orgs,
+    });
+  },
 }));
 
 /**
@@ -87,7 +114,8 @@ export function useAuthBootstrap() {
   // Sync React Query data into Zustand store
   useEffect(() => {
     if (me && !useAuthStore.getState().user) {
-      setUser({ id: me.id, username: me.username, role: me.role });
+      setUser({ id: me.id, username: me.username, platform_role: me.platform_role });
+      useAuthStore.setState({ currentOrg: me.current_org, orgs: me.orgs });
     }
   }, [me, setUser]);
 

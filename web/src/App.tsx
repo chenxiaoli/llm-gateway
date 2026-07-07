@@ -42,13 +42,18 @@ function RequireAuth() {
 
 function RequireAdmin() {
   const user = useAuthStore((s) => s.user);
+  const currentOrg = useAuthStore((s) => s.currentOrg);
   const { isLoading } = useAuthBootstrap();
   if (isLoading) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
   if (!user) {
     if (getToken()) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
     return <Navigate to="/console/login" replace />;
   }
-  if (user.role !== 'admin') return <Navigate to="/console/dashboard" replace />;
+  // Phase 1: admin routes are gated by org role (owner/admin) OR platform_admin.
+  // Backend grants actual permissions via membership, not platform_role.
+  const isOrgAdmin = currentOrg?.role === 'owner' || currentOrg?.role === 'admin';
+  const isPlatformAdmin = user.platform_role === 'platform_admin';
+  if (!isOrgAdmin && !isPlatformAdmin) return <Navigate to="/console/dashboard" replace />;
   return <Outlet />;
 }
 
