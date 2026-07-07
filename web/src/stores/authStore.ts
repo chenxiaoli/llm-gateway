@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getMe, login as apiLogin, register as apiRegister } from '../api/auth';
+import { getMe, login as apiLogin, register as apiRegister, switchOrg } from '../api/auth';
 import { getToken, setToken, clearToken, setRefreshToken, clearRefreshToken } from '../api/client';
+import { queryClient } from '../lib/queryClient';
 import { useCurrencyStore } from './currency';
 import type { User, OrgSummary, LoginRequest, RegisterRequest, AuthResponse } from '../types';
 
@@ -15,7 +16,7 @@ interface AuthState {
   register: (input: RegisterRequest) => Promise<AuthResponse>;
   logout: () => void;
   setUser: (user: User) => void;
-  setCurrentOrg: (org: OrgSummary) => void;
+  setCurrentOrg: (org: OrgSummary) => Promise<void>;
   refreshOrgs: () => Promise<void>;
 }
 
@@ -74,7 +75,13 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   setUser: (user: User) => set({ user }),
 
-  setCurrentOrg: (org: OrgSummary) => set({ currentOrg: org }),
+  setCurrentOrg: async (org: OrgSummary) => {
+    const resp = await switchOrg(org.slug);
+    setToken(resp.token);
+    setRefreshToken(resp.refresh_token);
+    set({ currentOrg: org });
+    queryClient.clear();
+  },
 
   refreshOrgs: async () => {
     const me = await getMe();
