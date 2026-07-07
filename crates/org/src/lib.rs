@@ -5,4 +5,5 @@ pub mod types;
 
 pub use access::*;
 pub use error::OrgError;
+pub use extractors::*;
 pub use types::*;
