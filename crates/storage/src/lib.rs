@@ -157,11 +157,15 @@ pub trait Storage: Send + Sync {
     async fn get_user_group_id(&self, user_id: &str, org_id: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
 
     // Model Fallbacks
-    async fn create_model_fallback(&self, org_id: &str, config: &ModelFallbackConfig) -> Result<ModelFallbackConfig, Box<dyn std::error::Error + Send + Sync>>;
-    async fn get_model_fallback(&self, org_id: &str, id: &str) -> Result<Option<ModelFallbackConfig>, Box<dyn std::error::Error + Send + Sync>>;
-    async fn list_model_fallbacks(&self, org_id: &str) -> Result<Vec<ModelFallbackConfig>, Box<dyn std::error::Error + Send + Sync>>;
-    async fn update_model_fallback(&self, org_id: &str, config: &ModelFallbackConfig) -> Result<ModelFallbackConfig, Box<dyn std::error::Error + Send + Sync>>;
-    async fn delete_model_fallback(&self, org_id: &str, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    // model_fallbacks is platform-level config in Phase 1 (not org-scoped).
+    // The migration does not add org_id to model_fallbacks; spec Decision #3
+    // excludes it from the tenant-table list. If Phase 2+ wants per-org fallbacks,
+    // a follow-up migration + scope parameter here will be needed.
+    async fn create_model_fallback(&self, config: &ModelFallbackConfig) -> Result<ModelFallbackConfig, Box<dyn std::error::Error + Send + Sync>>;
+    async fn get_model_fallback(&self, id: &str) -> Result<Option<ModelFallbackConfig>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_model_fallbacks(&self) -> Result<Vec<ModelFallbackConfig>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn update_model_fallback(&self, config: &ModelFallbackConfig) -> Result<ModelFallbackConfig, Box<dyn std::error::Error + Send + Sync>>;
+    async fn delete_model_fallback(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     // Seed data
     async fn seed_data(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
