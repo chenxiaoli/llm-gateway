@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { RefreshResponse } from '../types';
+import { useAuthStore } from '../stores/authStore';
 
 const TOKEN_KEY = 'llm_gateway_admin_token';
 const REFRESH_TOKEN_KEY = 'llm_gateway_refresh_token';
@@ -151,4 +152,19 @@ export function getErrorMessage(err: unknown, fallback: string): string {
     return error.response.data.message;
   }
   return fallback;
+}
+
+/**
+ * Returns `/api/v1/${currentOrg.slug}` for org-scoped endpoints.
+ *
+ * @throws if no current org is set — callers must ensure the user is
+ *   authenticated and has selected an org before invoking. OrgRouteGuard
+ *   guarantees this at the route level (added in Task 14).
+ */
+export function orgPrefix(): string {
+  const slug = useAuthStore.getState().currentOrg?.slug;
+  if (!slug) {
+    throw new Error('no current org — cannot build org-scoped URL');
+  }
+  return `/api/v1/${slug}`;
 }
