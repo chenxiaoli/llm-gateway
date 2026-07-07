@@ -144,10 +144,9 @@ impl InMemoryChannelRegistry {
     }
 
     async fn do_reload(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // TODO(Task 10): ChannelRegistry is currently a process-wide cache. With
-        // multi-tenant storage, it must become per-org (or carry an org_id -> cache
-        // map). For Phase 1 there is exactly one org ("org_default"), so we load
-        // that single shard here; Task 10 will refactor this into an org-keyed map.
+        // Phase 1: single-org deployment — load org_default's channels into a
+        // process-wide cache. Phase 2 will refactor into an org_id → cache map
+        // when the platform supports multiple tenants concurrently.
         let org_id = "org_default";
         let channels = self.storage.list_channels(org_id).await?;
         let channel_models = self.storage.list_channel_models(org_id).await?;
@@ -528,6 +527,11 @@ pub struct SseAuditParams {
     pub request_id: String,
     pub key_id: String,
     pub user_id: Option<String>,
+    /// Org that owns the API key — threaded through so the SSE AuditTask
+    /// lands in the right tenant's audit log.
+    pub org_id: String,
+    /// api_keys don't carry a platform role, so this is always false here.
+    pub actor_is_platform_admin: bool,
     pub model_name: String,
     pub provider_id: String,
     pub protocol: llm_gateway_storage::Protocol,
@@ -742,11 +746,8 @@ async fn process_sse_stream(
         upstream_url: Some(audit_params.upstream_url),
         request_headers: Some(audit_params.request_headers),
         response_headers: Some(audit_params.response_headers),
-        // TODO(Task 10): populate from api_key.org_id / platform_role at
-        // the streaming entry point. For now the SSE path constructs the
-        // task before the AuditTask struct has access to those values.
-        org_id: "org_default".to_string(),
-        actor_is_platform_admin: false,
+        org_id: audit_params.org_id.clone(),
+        actor_is_platform_admin: audit_params.actor_is_platform_admin,
         routes,
     };
     dispatch_audit_task(&state, task).await;
@@ -1670,6 +1671,8 @@ if status != 200 && status < 500 {
                 request_id: request_id.clone(),
                 key_id: api_key.id.clone(),
                 user_id: api_key.created_by.clone(),
+                org_id: api_key.org_id.clone(),
+                actor_is_platform_admin: false, // api_keys don't carry platform role
                 model_name: upstream_name.to_string(),
                 provider_id: provider_id.clone(),
                 protocol: proto,
