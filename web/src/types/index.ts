@@ -213,9 +213,19 @@ export interface LogFilter {
 export interface User {
   id: string;
   username: string;
-  role: 'admin' | 'user';
+  platform_role: 'platform_admin' | null;
   balance?: number;
   threshold?: number;
+}
+
+// --- Org / multi-tenant ---
+
+export interface OrgSummary {
+  id: string;
+  slug: string;
+  name: string;
+  role: 'owner' | 'admin' | 'member';
+  group_id: string | null;
 }
 
 // --- Groups ---
@@ -257,12 +267,16 @@ export interface AuthResponse {
   token: string;
   refresh_token: string;
   user: User;
+  current_org: OrgSummary;
+  orgs: OrgSummary[];
 }
 
 export interface MeResponse {
   id: string;
   username: string;
-  role: 'admin' | 'user';
+  platform_role: 'platform_admin' | null;
+  current_org: OrgSummary;
+  orgs: OrgSummary[];
   allow_registration: boolean;
 }
 

@@ -5,8 +5,9 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::error::ApiError;
-use crate::extractors::require_admin;
+use crate::extractors::require_auth;
 use crate::AppState;
+use llm_gateway_org::resolve_org_context;
 
 #[derive(Deserialize)]
 pub struct UpdateSettingsRequest {
@@ -30,13 +31,21 @@ pub async fn get_settings(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<SettingsResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    // Phase 1: all settings exposed at /api/v1/admin/settings are platform-level
+    // (allow_registration, server_host, currency, audit toggles). Restrict to
+    // platform_admin. Org-scoped settings will land in Phase 2 via a new
+    // /api/v1/org/settings route pair.
+    if !ctx.is_platform_admin() {
+        return Err(ApiError::Forbidden);
+    }
 
-    let allow_reg = state.storage.get_setting("allow_registration").await.map_err(|e| ApiError::Internal(e.to_string()))?;
-    let server_host = state.storage.get_setting("server_host").await.map_err(|e| ApiError::Internal(e.to_string()))?;
-    let audit_req = state.storage.get_setting("audit_log_request").await.map_err(|e| ApiError::Internal(e.to_string()))?;
-    let audit_res = state.storage.get_setting("audit_log_response").await.map_err(|e| ApiError::Internal(e.to_string()))?;
-    let currency = state.storage.get_setting("currency").await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let allow_reg = state.storage.get_platform_setting("allow_registration").await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let server_host = state.storage.get_platform_setting("server_host").await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let audit_req = state.storage.get_platform_setting("audit_log_request").await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let audit_res = state.storage.get_platform_setting("audit_log_response").await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let currency = state.storage.get_platform_setting("currency").await.map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(SettingsResponse {
         allow_registration: allow_reg.map(|v| v == "true").unwrap_or(true),
@@ -52,22 +61,26 @@ pub async fn update_settings(
     headers: HeaderMap,
     Json(input): Json<UpdateSettingsRequest>,
 ) -> Result<Json<SettingsResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !ctx.is_platform_admin() {
+        return Err(ApiError::Forbidden);
+    }
 
     if let Some(ar) = input.allow_registration {
-        state.storage.set_setting("allow_registration", if ar { "true" } else { "false" })
+        state.storage.set_platform_setting("allow_registration", if ar { "true" } else { "false" })
             .await.map_err(|e| ApiError::Internal(e.to_string()))?;
     }
     if let Some(sh) = input.server_host {
-        state.storage.set_setting("server_host", &sh)
+        state.storage.set_platform_setting("server_host", &sh)
             .await.map_err(|e| ApiError::Internal(e.to_string()))?;
     }
     if let Some(alr) = input.audit_log_request {
-        state.storage.set_setting("audit_log_request", if alr { "true" } else { "false" })
+        state.storage.set_platform_setting("audit_log_request", if alr { "true" } else { "false" })
             .await.map_err(|e| ApiError::Internal(e.to_string()))?;
     }
     if let Some(alp) = input.audit_log_response {
-        state.storage.set_setting("audit_log_response", if alp { "true" } else { "false" })
+        state.storage.set_platform_setting("audit_log_response", if alp { "true" } else { "false" })
             .await.map_err(|e| ApiError::Internal(e.to_string()))?;
     }
     if let Some(c) = input.currency {
@@ -75,16 +88,16 @@ pub async fn update_settings(
         if c != "USD" && c != "CNY" {
             return Err(ApiError::BadRequest("Currency must be USD or CNY".to_string()));
         }
-        state.storage.set_setting("currency", &c)
+        state.storage.set_platform_setting("currency", &c)
             .await.map_err(|e| ApiError::Internal(e.to_string()))?;
     }
 
     // Return updated settings
-    let allow_reg = state.storage.get_setting("allow_registration").await.map_err(|e| ApiError::Internal(e.to_string()))?;
-    let server_host = state.storage.get_setting("server_host").await.map_err(|e| ApiError::Internal(e.to_string()))?;
-    let audit_req = state.storage.get_setting("audit_log_request").await.map_err(|e| ApiError::Internal(e.to_string()))?;
-    let audit_res = state.storage.get_setting("audit_log_response").await.map_err(|e| ApiError::Internal(e.to_string()))?;
-    let currency = state.storage.get_setting("currency").await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let allow_reg = state.storage.get_platform_setting("allow_registration").await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let server_host = state.storage.get_platform_setting("server_host").await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let audit_req = state.storage.get_platform_setting("audit_log_request").await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let audit_res = state.storage.get_platform_setting("audit_log_response").await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let currency = state.storage.get_platform_setting("currency").await.map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(SettingsResponse {
         allow_registration: allow_reg.map(|v| v == "true").unwrap_or(true),

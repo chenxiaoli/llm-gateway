@@ -8,6 +8,14 @@ pub use async_nats::jetstream::AckKind;
 // Event types
 // ---------------------------------------------------------------------------
 
+/// Serde default for `org_id` fields. `#[serde(default)]` on a `String`
+/// gives `""`, which would fail the `orgs.id` FK constraint when old NATS
+/// events (emitted before Phase 1 multi-tenancy landed) are replayed by the
+/// workers. Defaulting to "org_default" matches the Phase-1 single-org id.
+fn default_org_id() -> String {
+    "org_default".to_string()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageEvent {
     pub id: String,
@@ -27,6 +35,11 @@ pub struct UsageEvent {
     pub weighted_tokens: i64,
     pub latency_ms: i64,
     pub created_at: String,
+    /// Org scope for the usage row. Defaults to "org_default" for events
+    /// emitted before Phase 1 multi-tenancy landed (a bare `#[serde(default)]`
+    /// would give `""`, which the `orgs.id` FK constraint rejects).
+    #[serde(default = "default_org_id")]
+    pub org_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +65,15 @@ pub struct AuditEvent {
     pub request_headers: Option<String>,
     pub response_headers: Option<String>,
     pub created_at: String,
+    /// Org scope for this audit row. Defaults to "org_default" for events
+    /// emitted before Phase 1 multi-tenancy landed (a bare `#[serde(default)]`
+    /// would give `""`, which the `orgs.id` FK constraint rejects).
+    #[serde(default = "default_org_id")]
+    pub org_id: String,
+    /// Whether the actor held platform-admin privileges at request time.
+    /// Backfills to false for legacy events.
+    #[serde(default)]
+    pub actor_is_platform_admin: bool,
     /// Per-upstream-attempt history. None for legacy events or for
     /// code paths that don't collect route attempts. The `#[serde(default)]`
     /// attribute is critical: it lets the new gateway emit new events
@@ -285,6 +307,8 @@ mod tests {
             request_headers: None,
             response_headers: None,
             created_at: "2026-07-01T00:00:00Z".into(),
+            org_id: "org_default".into(),
+            actor_is_platform_admin: false,
             routes: Some(vec![llm_gateway_storage::RouteAttempt {
                 model: "m".into(),
                 channel_id: "c".into(),

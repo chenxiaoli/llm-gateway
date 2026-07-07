@@ -9,7 +9,23 @@ export const server = setupServer(
     return HttpResponse.json({
       id: 'user-1',
       username: 'admin',
-      role: 'admin',
+      platform_role: 'platform_admin',
+      current_org: {
+        id: 'org-1',
+        slug: 'default',
+        name: 'Default Org',
+        role: 'owner',
+        group_id: null,
+      },
+      orgs: [
+        {
+          id: 'org-1',
+          slug: 'default',
+          name: 'Default Org',
+          role: 'owner',
+          group_id: null,
+        },
+      ],
       allow_registration: true,
     });
   }),
@@ -17,14 +33,46 @@ export const server = setupServer(
     return HttpResponse.json({
       token: 'test-jwt-token',
       refresh_token: 'test-refresh-jwt-token',
-      user: { id: 'user-1', username: 'admin', role: 'admin' },
+      user: { id: 'user-1', username: 'admin', platform_role: 'platform_admin' },
+      current_org: {
+        id: 'org-1',
+        slug: 'default',
+        name: 'Default Org',
+        role: 'owner',
+        group_id: null,
+      },
+      orgs: [
+        {
+          id: 'org-1',
+          slug: 'default',
+          name: 'Default Org',
+          role: 'owner',
+          group_id: null,
+        },
+      ],
     });
   }),
   http.post('*/api/v1/auth/register', () => {
     return HttpResponse.json({
       token: 'test-jwt-token',
       refresh_token: 'test-refresh-jwt-token',
-      user: { id: 'user-1', username: 'admin', role: 'admin' },
+      user: { id: 'user-1', username: 'admin', platform_role: 'platform_admin' },
+      current_org: {
+        id: 'org-1',
+        slug: 'default',
+        name: 'Default Org',
+        role: 'owner',
+        group_id: null,
+      },
+      orgs: [
+        {
+          id: 'org-1',
+          slug: 'default',
+          name: 'Default Org',
+          role: 'owner',
+          group_id: null,
+        },
+      ],
     });
   }),
   http.post('*/api/v1/auth/refresh', () => {
@@ -81,7 +129,7 @@ export const server = setupServer(
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
   http.get('*/api/v1/version', () => {
-    return HttpResponse.json({ version: 'v0.9.6' });
+    return HttpResponse.json({ version: 'v2.0.0' });
   }),
 
   http.get('*/api/v1/admin/system-info', () => {

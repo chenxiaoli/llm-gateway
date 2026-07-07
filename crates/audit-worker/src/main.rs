@@ -77,6 +77,8 @@ async fn run_audit_worker(
         };
 
         if let Err(e) = audit_logger.log_request(
+            &event.org_id,
+            event.actor_is_platform_admin,
             &event.key_id,
             event.user_id.as_deref(),
             &event.model_name,

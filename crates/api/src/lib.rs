@@ -55,6 +55,13 @@ pub struct AuditTask {
     pub upstream_url: Option<String>,
     pub request_headers: Option<String>,
     pub response_headers: Option<String>,
+    /// Org scope for the audit row (Phase 1 multi-tenant). Populated from
+    /// `api_key.org_id` at proxy entry. Defaults to "org_default" for
+    /// legacy/synthetic tasks.
+    pub org_id: String,
+    /// Whether the requesting API key's owner held platform-admin
+    /// privileges at request time.
+    pub actor_is_platform_admin: bool,
     /// Per-upstream-attempt history collected during the failover loop.
     /// Always populated by the proxy (Vec is non-null, may be empty in
     /// pathological cases). The audit worker forwards it to the DB.

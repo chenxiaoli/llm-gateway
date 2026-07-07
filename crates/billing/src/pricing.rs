@@ -199,6 +199,7 @@ mod tests {
             name: "Test".to_string(),
             billing_type: billing_type.to_string(),
             config,
+            owner_org_id: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         }

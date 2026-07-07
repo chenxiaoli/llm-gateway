@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.0] - 2026-07-07
+
+Phase 1 of SaaS multi-tenant support. The schema now models organizations (tenants) as first-class entities; existing single-tenant deployments continue to work — every existing row is moved into a default `org_default` tenant, and the API surface for the default org is unchanged. Future phases will expose org switching and per-org admin surfaces in the UI.
+
+### Changed (BREAKING — schema migration required)
+- **Database schema is now multi-tenant.** New `orgs`, `members`, and `org_settings` tables. Every tenant-scoped table (`api_keys`, `channels`, `channel_models`, `model_fallbacks`, `audit_logs`, `transactions`, `rate_limit_buckets`, `user_groups`, etc.) gains a non-null `org_id` column. Catalog tables (`providers`, `models`, `pricing_policies`, `groups`) gain a nullable `owner_org_id` (NULL = platform-wide, visible to all orgs; non-NULL = org-private). The `20260708000000_saas_orgs.sql` migration creates `org_default` and moves every existing row into it. Back-roll available via `20260708000000_saas_orgs.down.sql` (documented semantic gaps — old `users.role` cannot be perfectly reconstructed).
+- **JWT claims shape changed.** Tokens now carry `current_org_id` (active tenant for the session) and `platform_role` (`null` or `"platform_admin"`). Existing JWTs are rejected — every web user must re-authenticate once after upgrade. API keys (separate from JWTs) continue to work and resolve to `org_default`.
+- **Two-layer role model.** `users.role` is removed. Tenant role lives in `members.role` (`owner` / `admin` / `member`); platform-wide admin lives in `users.platform_role`. First user in the DB becomes `owner` of `org_default`; subsequent users become `member` (preserves the prior first-user-is-admin behavior).
+- **Web frontend version** jumps from `0.16.7` to `2.0.0` to align with backend versioning.
+
+### Added
+- `POST /api/v1/auth/orgs` — create a new org. Caller becomes its `owner`. Slug must match `^[a-z0-9-]{3,64}$`.
+- `GET /api/v1/auth/orgs` — list orgs the current user is a member of.
+- `POST /api/v1/auth/orgs/{id}/switch` — switch the current session's active org. Returns a fresh JWT scoped to the new org.
+- `current_org` and `orgs` fields on `AuthResponse` and `MeResponse`.
+- `org` crate: `resolve_org_context` extractor and permission helpers (`can_create_org_catalog`, `can_create_platform_catalog`, etc.) used by catalog handlers to enforce the `owner_org_id IS NULL OR owner_org_id = $1` visibility filter.
+
+### Fixed
+- `query_logs` had a parameter-binding bug when partial filters were applied — hard-coded `$2`–`$5` didn't match the dynamic bind order, producing wrong results or PG errors. Now uses the same dynamic-index pattern as the paginated sibling query.
+- `set_provider_models` now rejects caller attempts to reassign catalog rows to a different org (defense-in-depth against ownership drift).
+- `nats-publisher` events now default `org_id` to `"org_default"` via `#[serde(default = "default_org_id")]`. The previous `#[serde(default)]` on a `String` field defaulted to `""`, breaking the FK on replay of pre-migration events.
+- Cross-org authorization gaps in `/admin/users/{id}`, `/admin/logs/{id}`, and `/admin/requests/{id}` — members can no longer read or mutate other orgs' resources (returns 404 to avoid existence leak).
+
 ## [1.8.4] - 2026-07-04
 
 ### Changed

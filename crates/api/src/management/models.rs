@@ -1,24 +1,25 @@
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::Json;
-use serde::Serialize;
 use std::sync::Arc;
 
+use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, resolve_org_context};
 use llm_gateway_storage::{Model, ProviderModel, ProviderModelInfo, UpdateModel};
 
 use crate::error::ApiError;
-use crate::extractors::require_admin;
+use crate::extractors::require_auth;
 use crate::AppState;
 
 pub async fn list_all_models(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<llm_gateway_storage::ModelWithProvider>>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let models = state
         .storage
-        .list_models()
+        .list_models(&ctx.org_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -29,6 +30,7 @@ pub async fn list_all_models(
 pub struct CreateModelRequest {
     pub name: String,
     pub pricing_policy_id: Option<String>,
+    pub owner_org_id: Option<String>,
 }
 
 pub async fn create_model_global(
@@ -36,10 +38,29 @@ pub async fn create_model_global(
     headers: HeaderMap,
     Json(input): Json<CreateModelRequest>,
 ) -> Result<Json<Model>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+
+    // Decide ownership: explicit body value wins, otherwise non-platform-admin
+    // callers get an org-private entry; platform_admin defaults to platform-level.
+    let owner_org_id = input.owner_org_id.clone().or_else(|| {
+        if can_create_platform_catalog(&ctx) { None } else { Some(ctx.org_id.clone()) }
+    });
+    if owner_org_id.as_deref() == Some(ctx.org_id.as_str()) {
+        if !can_create_org_catalog(&ctx) {
+            return Err(ApiError::Forbidden);
+        }
+    } else if owner_org_id.is_none() {
+        if !can_create_platform_catalog(&ctx) {
+            return Err(ApiError::Forbidden);
+        }
+    } else {
+        return Err(ApiError::Forbidden);
+    }
 
     let model = Model {
         id: input.name.clone(),
+        owner_org_id,
         name: input.name,
         model_type: None,
         pricing_policy_id: input.pricing_policy_id,
@@ -48,7 +69,7 @@ pub async fn create_model_global(
 
     let created = state
         .storage
-        .create_model(&model)
+        .create_model(&ctx.org_id, &model)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -61,14 +82,23 @@ pub async fn update_model(
     Path(model_name): Path<String>,
     Json(input): Json<UpdateModel>,
 ) -> Result<Json<Model>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let mut model = state
         .storage
-        .get_model(&model_name)
+        .get_model(&ctx.org_id, &model_name)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?;
+
+    if let Some(ref owner_org_id) = model.owner_org_id {
+        if owner_org_id != &ctx.org_id || !can_create_org_catalog(&ctx) {
+            return Err(ApiError::Forbidden);
+        }
+    } else if !can_create_platform_catalog(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     // Apply partial updates
     if let Some(pricing_policy_id) = input.pricing_policy_id {
@@ -77,7 +107,7 @@ pub async fn update_model(
 
     let updated = state
         .storage
-        .update_model(&model)
+        .update_model(&ctx.org_id, &model)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -89,19 +119,27 @@ pub async fn delete_model(
     headers: HeaderMap,
     Path(model_name): Path<String>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
-    // Verify the model exists
-    let _model = state
+    let model = state
         .storage
-        .get_model(&model_name)
+        .get_model(&ctx.org_id, &model_name)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?;
 
+    if let Some(ref owner_org_id) = model.owner_org_id {
+        if owner_org_id != &ctx.org_id || !can_create_org_catalog(&ctx) {
+            return Err(ApiError::Forbidden);
+        }
+    } else if !can_create_platform_catalog(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
+
     state
         .storage
-        .delete_model(&model_name)
+        .delete_model(&ctx.org_id, &model_name)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -113,11 +151,12 @@ pub async fn list_provider_models(
     headers: HeaderMap,
     Path(provider_id): Path<String>,
 ) -> Result<Json<Vec<ProviderModelInfo>>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let models = state
         .storage
-        .list_provider_models(&provider_id)
+        .list_provider_models(&ctx.org_id, &provider_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -142,11 +181,18 @@ pub async fn update_provider_models(
     Path(provider_id): Path<String>,
     Json(input): Json<UpdateProviderModelsRequest>,
 ) -> Result<Json<Vec<ProviderModelInfo>>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+
+    // Gate on catalog-write permission — provider_models are catalog data.
+    if !can_create_org_catalog(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     let models: Vec<ProviderModel> = input.models.into_iter().map(|m| ProviderModel {
         provider_id: provider_id.clone(),
         model_id: m.model_id,
+        owner_org_id: Some(ctx.org_id.clone()),
         upstream_name: m.upstream_name,
         pricing_policy_id: m.pricing_policy_id,
         created_at: chrono::Utc::now(),
@@ -154,13 +200,13 @@ pub async fn update_provider_models(
 
     state
         .storage
-        .set_provider_models(&provider_id, models)
+        .set_provider_models(&ctx.org_id, &provider_id, models)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let result = state
         .storage
-        .list_provider_models(&provider_id)
+        .list_provider_models(&ctx.org_id, &provider_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 

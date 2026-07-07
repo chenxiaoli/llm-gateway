@@ -18,6 +18,7 @@ fn bearer_token(token: &str) -> String {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_get_settings_default_allow_registration_true(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
     let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
@@ -61,6 +62,7 @@ async fn test_get_settings_without_admin_auth_returns_401(pool: PgPool) {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_update_settings_disable_registration(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
     let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
@@ -89,6 +91,7 @@ async fn test_update_settings_disable_registration(pool: PgPool) {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_get_settings_after_update(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
     let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 

@@ -101,6 +101,7 @@ pub fn get_seed_providers() -> Vec<Provider> {
                 endpoints,
                 proxy_url: None,
                 enabled: p.enabled.unwrap_or(true),
+                owner_org_id: None,
                 created_at: Utc::now(),
                 updated_at: Utc::now(),
             }
@@ -176,6 +177,7 @@ fn build_policy(model_name: &str, billing_type: &str, config: serde_json::Value)
         name: format!("{} Pricing", model_name),
         billing_type: billing_type.to_string(),
         config,
+        owner_org_id: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     }
@@ -197,6 +199,7 @@ pub fn get_seed_models(_provider_ids: &[(String, String)]) -> Vec<Model> {
             name: m.name,
             model_type: None,
             pricing_policy_id: None,
+            owner_org_id: None,
             created_at: Utc::now(),
         })
         .collect()
@@ -238,6 +241,7 @@ pub fn get_seed_provider_models(
                         model_id: model_id.to_string(),
                         upstream_name: Some(model_name.to_string()),
                         pricing_policy_id: None,
+                        owner_org_id: None,
                         created_at: Utc::now(),
                     });
                 }
