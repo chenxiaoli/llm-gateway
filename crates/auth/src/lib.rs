@@ -52,6 +52,10 @@ pub fn validate_username(username: &str) -> Result<(), String> {
 
 // --- JWT ---
 
+// Phase 1 token shape. `current_org_id` is required (always "org_default" in Phase 1).
+// `platform_role` is omitted when None so old code can still parse new tokens.
+// NOTE: pre-Phase-1 tokens that carry `role` instead of `current_org_id` will NOT
+// deserialize — sessions are rotated on deploy.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JwtClaims {
     pub sub: String,
@@ -73,7 +77,7 @@ pub fn create_jwt(
         sub: user_id.to_string(),
         current_org_id: current_org_id.to_string(),
         platform_role: platform_role.map(|s| s.to_string()),
-        exp: now + 86400,
+        exp: now + 86400, // 24 hours
         iat: now,
     };
     encode(
@@ -238,6 +242,8 @@ mod tests {
     fn test_jwt_claims_deserialize_without_platform_role() {
         // Tokens minted before Phase 1 do not carry `platform_role`. They must
         // deserialize as platform_role = None so existing sessions survive the upgrade.
+        // `serde_json::from_str` exercises the same Deserialize impl that `verify_jwt`
+        // runs on a real token, without requiring a hand-signed HMAC.
         let old_token_payload =
             r#"{"sub":"u","current_org_id":"org_default","exp":9999999999,"iat":0}"#;
         let parsed: JwtClaims = serde_json::from_str(old_token_payload).unwrap();
