@@ -326,7 +326,7 @@ pub struct UpdateChannelApiKey {
 
 // --- Models ---
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Model {
     pub id: String,           // primary key
     pub owner_org_id: Option<String>,

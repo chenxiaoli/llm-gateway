@@ -1,7 +1,19 @@
 use crate::types::*;
 use async_trait::async_trait;
 use sqlx::postgres::PgPool;
-use sqlx::{Acquire, FromRow};
+use sqlx::{Acquire, FromRow, Row};
+
+/// Error returned when an org-private catalog entry would shadow a
+/// platform-level entry with the same name/slug. Lives here (not in
+/// `org::OrgError`) to avoid a circular `storage ↔ org` dependency.
+#[derive(Debug)]
+struct CatalogNameReserved(String);
+impl std::fmt::Display for CatalogNameReserved {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "catalog name reserved at platform level: {}", self.0)
+    }
+}
+impl std::error::Error for CatalogNameReserved {}
 
 pub struct PostgresStorage {
     pool: PgPool,
@@ -29,6 +41,7 @@ impl PostgresStorage {
 #[derive(FromRow)]
 struct PgKeyRow {
     id: String,
+    org_id: String,
     name: String,
     key_hash: String,
     key_prefix: Option<String>,
@@ -45,6 +58,7 @@ impl From<PgKeyRow> for ApiKey {
     fn from(r: PgKeyRow) -> Self {
         ApiKey {
             id: r.id,
+            org_id: r.org_id,
             name: r.name,
             key_hash: r.key_hash,
             key_prefix: r.key_prefix,
@@ -62,6 +76,7 @@ impl From<PgKeyRow> for ApiKey {
 #[derive(FromRow)]
 struct PgProviderRow {
     id: String,
+    owner_org_id: Option<String>,
     name: String,
     slug: String,
     #[allow(dead_code)]
@@ -77,6 +92,7 @@ impl From<PgProviderRow> for Provider {
     fn from(r: PgProviderRow) -> Self {
         Provider {
             id: r.id,
+            owner_org_id: r.owner_org_id,
             name: r.name,
             slug: r.slug,
             endpoints: r.endpoints,
@@ -91,6 +107,7 @@ impl From<PgProviderRow> for Provider {
 #[derive(FromRow)]
 struct PgModelRow {
     id: String,
+    owner_org_id: Option<String>,
     name: String,
     model_type: Option<String>,
     pricing_policy_id: Option<String>,
@@ -100,6 +117,7 @@ struct PgModelRow {
 #[derive(FromRow)]
 struct PgModelEnrichedRow {
     id: String,
+    owner_org_id: Option<String>,
     name: String,
     model_type: Option<String>,
     pp_id: Option<String>,
@@ -113,6 +131,7 @@ impl From<PgModelRow> for Model {
     fn from(r: PgModelRow) -> Self {
         Model {
             id: r.id,
+            owner_org_id: r.owner_org_id,
             name: r.name,
             model_type: r.model_type,
             pricing_policy_id: r.pricing_policy_id,
@@ -124,6 +143,7 @@ impl From<PgModelRow> for Model {
 #[derive(FromRow)]
 struct PgModelWithProviderRow {
     id: String,
+    owner_org_id: Option<String>,
     name: String,
     model_type: Option<String>,
     pricing_policy_id: Option<String>,
@@ -139,6 +159,7 @@ impl From<PgModelWithProviderRow> for ModelWithProvider {
         ModelWithProvider {
             model: Model {
                 id: r.id,
+                owner_org_id: r.owner_org_id,
                 name: r.name,
                 model_type: r.model_type,
                 pricing_policy_id: r.pricing_policy_id,
@@ -154,6 +175,7 @@ impl From<PgModelWithProviderRow> for ModelWithProvider {
 #[derive(FromRow)]
 struct PgUsageRow {
     id: String,
+    org_id: String,
     request_id: Option<String>,
     key_id: String,
     model_name: String,
@@ -175,6 +197,7 @@ impl From<PgUsageRow> for UsageRecord {
     fn from(r: PgUsageRow) -> Self {
         UsageRecord {
             id: r.id,
+            org_id: r.org_id,
             request_id: r.request_id,
             key_id: r.key_id,
             model_name: r.model_name,
@@ -302,6 +325,7 @@ impl From<PgAuditSummaryRow> for AuditLogSummary {
 #[derive(FromRow)]
 struct PgAuditRow {
     id: String,
+    org_id: String,
     request_id: Option<String>,
     key_id: String,
     model_name: String,
@@ -325,6 +349,7 @@ struct PgAuditRow {
     request_headers: Option<String>,
     response_headers: Option<String>,
     user_id: Option<String>,
+    actor_is_platform_admin: bool,
     routes: Option<serde_json::Value>,
 }
 
@@ -332,6 +357,7 @@ impl From<PgAuditRow> for AuditLog {
     fn from(r: PgAuditRow) -> Self {
         AuditLog {
             id: r.id,
+            org_id: r.org_id,
             request_id: r.request_id,
             key_id: r.key_id,
             model_name: r.model_name,
@@ -355,6 +381,7 @@ impl From<PgAuditRow> for AuditLog {
             request_headers: r.request_headers,
             response_headers: r.response_headers,
             user_id: r.user_id,
+            actor_is_platform_admin: r.actor_is_platform_admin,
             routes: r.routes.and_then(|v| serde_json::from_value(v).ok()),
         }
     }
@@ -363,6 +390,7 @@ impl From<PgAuditRow> for AuditLog {
 #[derive(FromRow)]
 struct PgChannelRow {
     id: String,
+    org_id: String,
     provider_id: String,
     name: String,
     api_key: String,
@@ -388,6 +416,7 @@ impl From<PgChannelRow> for Channel {
     fn from(r: PgChannelRow) -> Self {
         Channel {
             id: r.id,
+            org_id: r.org_id,
             provider_id: r.provider_id,
             name: r.name,
             api_key: r.api_key,
@@ -417,10 +446,10 @@ struct PgUserRow {
     id: String,
     username: String,
     password: String,
-    role: String,
+    platform_role: Option<String>,
+    current_org_id: Option<String>,
     enabled: bool,
     refresh_token: Option<String>,
-    group_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -431,10 +460,10 @@ impl From<PgUserRow> for User {
             id: r.id,
             username: r.username,
             password: r.password,
-            role: r.role,
+            platform_role: r.platform_role.and_then(|s| crate::types::PlatformRole::parse(&s)),
+            current_org_id: r.current_org_id,
             enabled: r.enabled,
             refresh_token: r.refresh_token,
-            group_id: r.group_id,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -475,6 +504,7 @@ impl From<PgUserWithBalanceRow> for UserWithBalance {
 #[derive(FromRow)]
 struct PgGroupRow {
     id: String,
+    org_id: String,
     name: String,
     description: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
@@ -485,6 +515,7 @@ impl From<PgGroupRow> for Group {
     fn from(r: PgGroupRow) -> Self {
         Group {
             id: r.id,
+            org_id: r.org_id,
             name: r.name,
             description: r.description,
             created_at: r.created_at,
@@ -496,6 +527,7 @@ impl From<PgGroupRow> for Group {
 #[derive(FromRow)]
 struct PgChannelModelRow {
     id: String,
+    org_id: String,
     channel_id: String,
     model_id: String,
     upstream_model_name: Option<String>,
@@ -511,6 +543,7 @@ impl From<PgChannelModelRow> for ChannelModel {
     fn from(r: PgChannelModelRow) -> Self {
         ChannelModel {
             id: r.id,
+            org_id: r.org_id,
             channel_id: r.channel_id,
             model_id: r.model_id,
             upstream_model_name: r.upstream_model_name,
@@ -527,6 +560,7 @@ impl From<PgChannelModelRow> for ChannelModel {
 #[derive(FromRow)]
 struct PgPricingPolicyRow {
     id: String,
+    owner_org_id: Option<String>,
     name: String,
     billing_type: String,
     config: String,
@@ -538,6 +572,7 @@ impl From<PgPricingPolicyRow> for PricingPolicy {
     fn from(r: PgPricingPolicyRow) -> Self {
         PricingPolicy {
             id: r.id,
+            owner_org_id: r.owner_org_id,
             name: r.name,
             billing_type: r.billing_type,
             config: serde_json::from_str(&r.config).unwrap_or(serde_json::Value::Null),
@@ -552,6 +587,7 @@ impl From<PgPricingPolicyRow> for PricingPolicy {
 #[derive(FromRow)]
 struct PgAccountRow {
     id: String,
+    org_id: String,
     user_id: String,
     balance: i64,
     threshold: i64,
@@ -563,6 +599,7 @@ impl From<PgAccountRow> for Account {
     fn from(r: PgAccountRow) -> Self {
         Account {
             id: r.id,
+            org_id: r.org_id,
             user_id: r.user_id,
             balance: r.balance,
             threshold: r.threshold,
@@ -577,6 +614,7 @@ impl From<PgAccountRow> for Account {
 #[derive(FromRow)]
 struct PgTransactionRow {
     id: String,
+    org_id: String,
     account_id: String,
     transaction_type: String,
     amount: i64,
@@ -598,6 +636,7 @@ impl From<PgTransactionRow> for Transaction {
         };
         Transaction {
             id: r.id,
+            org_id: r.org_id,
             account_id: r.account_id,
             transaction_type: tt,
             amount: r.amount,
@@ -668,12 +707,13 @@ impl crate::Storage for PostgresStorage {
 
     // ---- API Keys ----
 
-    async fn create_key(&self, key: &ApiKey) -> Result<ApiKey, DbErr> {
+    async fn create_key(&self, org_id: &str, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
-            "INSERT INTO api_keys (id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+            "INSERT INTO api_keys (id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
         )
         .bind(&key.id)
+        .bind(org_id)
         .bind(&key.name)
         .bind(&key.key_hash)
         .bind(&key.key_prefix)
@@ -687,14 +727,17 @@ impl crate::Storage for PostgresStorage {
         .execute(&self.pool)
         .await?;
 
-        Ok(key.clone())
+        let mut k = key.clone();
+        k.org_id = org_id.to_string();
+        Ok(k)
     }
 
-    async fn get_key(&self, id: &str) -> Result<Option<ApiKey>, DbErr> {
+    async fn get_key(&self, org_id: &str, id: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
-             FROM api_keys WHERE id = $1",
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+             FROM api_keys WHERE org_id = $1 AND id = $2",
         )
+        .bind(org_id)
         .bind(id)
         .fetch_optional(&self.pool)
         .await?;
@@ -704,7 +747,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_key_by_hash(&self, hash: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
              FROM api_keys WHERE key_hash = $1",
         )
         .bind(hash)
@@ -714,26 +757,29 @@ impl crate::Storage for PostgresStorage {
         Ok(row.map(ApiKey::from))
     }
 
-    async fn list_keys(&self) -> Result<Vec<ApiKey>, DbErr> {
+    async fn list_keys(&self, org_id: &str) -> Result<Vec<ApiKey>, DbErr> {
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
-             FROM api_keys",
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+             FROM api_keys WHERE org_id = $1",
         )
+        .bind(org_id)
         .fetch_all(&self.pool)
         .await?;
 
         Ok(rows.into_iter().map(ApiKey::from).collect())
     }
 
-    async fn list_keys_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>> {
-        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM api_keys")
+    async fn list_keys_paginated(&self, org_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>> {
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM api_keys WHERE org_id = $1")
+            .bind(org_id)
             .fetch_one(&self.pool)
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
-             FROM api_keys ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+             FROM api_keys WHERE org_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         )
+        .bind(org_id)
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -746,16 +792,18 @@ impl crate::Storage for PostgresStorage {
         })
     }
 
-    async fn list_keys_paginated_for_user(&self, created_by: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>> {
-        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM api_keys WHERE created_by = $1")
+    async fn list_keys_paginated_for_user(&self, org_id: &str, created_by: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>> {
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM api_keys WHERE org_id = $1 AND created_by = $2")
+            .bind(org_id)
             .bind(created_by)
             .fetch_one(&self.pool)
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
-             FROM api_keys WHERE created_by = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+             FROM api_keys WHERE org_id = $1 AND created_by = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
         )
+        .bind(org_id)
         .bind(created_by)
         .bind(page_size)
         .bind(offset)
@@ -769,10 +817,10 @@ impl crate::Storage for PostgresStorage {
         })
     }
 
-    async fn update_key(&self, key: &ApiKey) -> Result<ApiKey, DbErr> {
+    async fn update_key(&self, org_id: &str, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
             "UPDATE api_keys SET name = $1, key_hash = $2, rate_limit = $3, budget_monthly = $4,
-             enabled = $5, created_by = $6, model_fallback_id = $7, updated_at = $8 WHERE id = $9",
+             enabled = $5, created_by = $6, model_fallback_id = $7, updated_at = $8 WHERE org_id = $9 AND id = $10",
         )
         .bind(&key.name)
         .bind(&key.key_hash)
@@ -782,29 +830,47 @@ impl crate::Storage for PostgresStorage {
         .bind(&key.created_by)
         .bind(&key.model_fallback_id)
         .bind(key.updated_at)
+        .bind(org_id)
         .bind(&key.id)
         .execute(&self.pool)
         .await?;
 
-        Ok(key.clone())
+        let mut k = key.clone();
+        k.org_id = org_id.to_string();
+        Ok(k)
     }
 
-    async fn delete_key(&self, id: &str) -> Result<(), DbErr> {
-        sqlx::query("DELETE FROM api_keys WHERE id = $1")
+    async fn delete_key(&self, org_id: &str, id: &str) -> Result<(), DbErr> {
+        sqlx::query("DELETE FROM api_keys WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
             .bind(id)
             .execute(&self.pool)
             .await?;
         Ok(())
     }
 
-    // ---- Providers ----
+    // ---- Providers (catalog: visibility filter + anti-shadowing) ----
 
-    async fn create_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
+    async fn create_provider(&self, viewer_org_id: &str, provider: &Provider) -> Result<Provider, DbErr> {
+        // Anti-shadowing: an org-private provider may not reuse a platform-level slug.
+        if let Some(_org) = &provider.owner_org_id {
+            let collision: Option<(String,)> = sqlx::query_as(
+                "SELECT id FROM providers WHERE slug = $1 AND owner_org_id IS NULL",
+            )
+            .bind(&provider.slug)
+            .fetch_optional(&self.pool)
+            .await?;
+            if collision.is_some() {
+                return Err(Box::new(CatalogNameReserved(provider.slug.clone())));
+            }
+        }
+
         sqlx::query(
-            "INSERT INTO providers (id, name, slug, base_url, endpoints, proxy_url, enabled, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            "INSERT INTO providers (id, owner_org_id, name, slug, base_url, endpoints, proxy_url, enabled, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         )
         .bind(&provider.id)
+        .bind(&provider.owner_org_id)
         .bind(&provider.name)
         .bind(&provider.slug)
         .bind(None::<String>)
@@ -816,36 +882,42 @@ impl crate::Storage for PostgresStorage {
         .execute(&self.pool)
         .await?;
 
+        let _ = viewer_org_id;
         Ok(provider.clone())
     }
 
-    async fn get_provider(&self, id: &str) -> Result<Option<Provider>, DbErr> {
+    async fn get_provider(&self, viewer_org_id: &str, id: &str) -> Result<Option<Provider>, DbErr> {
         let row: Option<PgProviderRow> = sqlx::query_as(
-            "SELECT id, name, slug, base_url, endpoints, proxy_url, enabled, created_at, updated_at
-             FROM providers WHERE id = $1",
+            "SELECT id, owner_org_id, name, slug, base_url, endpoints, proxy_url, enabled, created_at, updated_at
+             FROM providers
+             WHERE id = $1 AND (owner_org_id IS NULL OR owner_org_id = $2)",
         )
         .bind(id)
+        .bind(viewer_org_id)
         .fetch_optional(&self.pool)
         .await?;
 
         Ok(row.map(Provider::from))
     }
 
-    async fn list_providers(&self) -> Result<Vec<Provider>, DbErr> {
+    async fn list_providers(&self, viewer_org_id: &str) -> Result<Vec<Provider>, DbErr> {
         let rows: Vec<PgProviderRow> = sqlx::query_as(
-            "SELECT id, name, slug, base_url, endpoints, proxy_url, enabled, created_at, updated_at
-             FROM providers",
+            "SELECT id, owner_org_id, name, slug, base_url, endpoints, proxy_url, enabled, created_at, updated_at
+             FROM providers
+             WHERE owner_org_id IS NULL OR owner_org_id = $1",
         )
+        .bind(viewer_org_id)
         .fetch_all(&self.pool)
         .await?;
 
         Ok(rows.into_iter().map(Provider::from).collect())
     }
 
-    async fn update_provider(&self, provider: &Provider) -> Result<Provider, DbErr> {
+    async fn update_provider(&self, viewer_org_id: &str, provider: &Provider) -> Result<Provider, DbErr> {
         sqlx::query(
             "UPDATE providers SET name = $1, slug = $2, base_url = $3, endpoints = $4,
-             proxy_url = $5, enabled = $6, updated_at = $7 WHERE id = $8",
+             proxy_url = $5, enabled = $6, updated_at = $7
+             WHERE id = $8 AND (owner_org_id IS NULL OR owner_org_id = $9)",
         )
         .bind(&provider.name)
         .bind(&provider.slug)
@@ -855,28 +927,33 @@ impl crate::Storage for PostgresStorage {
         .bind(provider.enabled)
         .bind(provider.updated_at)
         .bind(&provider.id)
+        .bind(viewer_org_id)
         .execute(&self.pool)
         .await?;
 
         Ok(provider.clone())
     }
 
-    async fn delete_provider(&self, id: &str) -> Result<(), DbErr> {
-        sqlx::query("DELETE FROM providers WHERE id = $1")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
+    async fn delete_provider(&self, viewer_org_id: &str, id: &str) -> Result<(), DbErr> {
+        sqlx::query(
+            "DELETE FROM providers WHERE id = $1 AND (owner_org_id IS NULL OR owner_org_id = $2)",
+        )
+        .bind(id)
+        .bind(viewer_org_id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    // ---- Channels ----
+    // ---- Channels (tenant: org_id scoping) ----
 
-    async fn create_channel(&self, channel: &Channel) -> Result<Channel, DbErr> {
+    async fn create_channel(&self, org_id: &str, channel: &Channel) -> Result<Channel, DbErr> {
         sqlx::query(
-            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, available_hours, created_by, group_id, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
+            "INSERT INTO channels (id, org_id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, available_hours, created_by, group_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
         )
         .bind(&channel.id)
+        .bind(org_id)
         .bind(&channel.provider_id)
         .bind(&channel.name)
         .bind(&channel.api_key)
@@ -892,24 +969,26 @@ impl crate::Storage for PostgresStorage {
         .bind(channel.available_hours.as_ref().map(|s| serde_json::to_string(s).unwrap()))
         .bind(&channel.created_by)
         .bind(&channel.group_id)
-        .bind(channel.disabled_until)
         .bind(channel.created_at)
         .bind(channel.updated_at)
         .execute(&self.pool)
         .await?;
 
-        Ok(channel.clone())
+        let mut c = channel.clone();
+        c.org_id = org_id.to_string();
+        Ok(c)
     }
 
-    async fn create_channel_with_models(&self, channel: &Channel, models: Vec<ChannelModel>) -> Result<Channel, DbErr> {
+    async fn create_channel_with_models(&self, org_id: &str, channel: &Channel, models: Vec<ChannelModel>) -> Result<Channel, DbErr> {
         let mut tx = self.pool.begin().await?;
         let channel_id = channel.id.clone();
 
         sqlx::query(
-            "INSERT INTO channels (id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, available_hours, created_by, group_id, disabled_until, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)",
+            "INSERT INTO channels (id, org_id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, available_hours, created_by, group_id, disabled_until, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)",
         )
         .bind(&channel.id)
+        .bind(org_id)
         .bind(&channel.provider_id)
         .bind(&channel.name)
         .bind(&channel.api_key)
@@ -933,10 +1012,11 @@ impl crate::Storage for PostgresStorage {
 
         for cm in &models {
             sqlx::query(
-                "INSERT INTO channel_models (id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+                "INSERT INTO channel_models (id, org_id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
             )
             .bind(&cm.id)
+            .bind(org_id)
             .bind(&channel_id)
             .bind(&cm.model_id)
             .bind(&cm.upstream_model_name)
@@ -951,14 +1031,17 @@ impl crate::Storage for PostgresStorage {
         }
 
         tx.commit().await?;
-        Ok(channel.clone())
+        let mut c = channel.clone();
+        c.org_id = org_id.to_string();
+        Ok(c)
     }
 
-    async fn get_channel(&self, id: &str) -> Result<Option<Channel>, DbErr> {
+    async fn get_channel(&self, org_id: &str, id: &str) -> Result<Option<Channel>, DbErr> {
         let row: Option<PgChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, group_id, disabled_until, created_at, updated_at, available_hours
-             FROM channels WHERE id = $1",
+            "SELECT id, org_id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, group_id, disabled_until, created_at, updated_at, available_hours
+             FROM channels WHERE org_id = $1 AND id = $2",
         )
+        .bind(org_id)
         .bind(id)
         .fetch_optional(&self.pool)
         .await?;
@@ -966,22 +1049,24 @@ impl crate::Storage for PostgresStorage {
         Ok(row.map(Channel::from))
     }
 
-    async fn list_channels(&self) -> Result<Vec<Channel>, DbErr> {
+    async fn list_channels(&self, org_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<PgChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, group_id, disabled_until, created_at, updated_at, available_hours
-             FROM channels ORDER BY priority ASC",
+            "SELECT id, org_id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, group_id, disabled_until, created_at, updated_at, available_hours
+             FROM channels WHERE org_id = $1 ORDER BY priority ASC",
         )
+        .bind(org_id)
         .fetch_all(&self.pool)
         .await?;
 
         Ok(rows.into_iter().map(Channel::from).collect())
     }
 
-    async fn list_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
+    async fn list_channels_by_provider(&self, org_id: &str, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<PgChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, group_id, disabled_until, created_at, updated_at, available_hours
-             FROM channels WHERE provider_id = $1 ORDER BY priority ASC",
+            "SELECT id, org_id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, group_id, disabled_until, created_at, updated_at, available_hours
+             FROM channels WHERE org_id = $1 AND provider_id = $2 ORDER BY priority ASC",
         )
+        .bind(org_id)
         .bind(provider_id)
         .fetch_all(&self.pool)
         .await?;
@@ -989,11 +1074,12 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(Channel::from).collect())
     }
 
-    async fn list_enabled_channels_by_provider(&self, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
+    async fn list_enabled_channels_by_provider(&self, org_id: &str, provider_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<PgChannelRow> = sqlx::query_as(
-            "SELECT id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, group_id, disabled_until, created_at, updated_at, available_hours
-             FROM channels WHERE provider_id = $1 AND enabled = true ORDER BY priority ASC",
+            "SELECT id, org_id, provider_id, name, api_key, base_url, priority, pricing_policy_id, markup_ratio, enabled, rpm_limit, tpm_limit, balance, weight, created_by, group_id, disabled_until, created_at, updated_at, available_hours
+             FROM channels WHERE org_id = $1 AND provider_id = $2 AND enabled = true ORDER BY priority ASC",
         )
+        .bind(org_id)
         .bind(provider_id)
         .fetch_all(&self.pool)
         .await?;
@@ -1001,10 +1087,10 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(Channel::from).collect())
     }
 
-    async fn update_channel(&self, channel: &Channel) -> Result<Channel, DbErr> {
+    async fn update_channel(&self, org_id: &str, channel: &Channel) -> Result<Channel, DbErr> {
         sqlx::query(
             "UPDATE channels SET name = $1, api_key = $2, base_url = $3, priority = $4, pricing_policy_id = $5, markup_ratio = $6,
-             enabled = $7, rpm_limit = $8, tpm_limit = $9, balance = $10, weight = $11, available_hours = $12, group_id = $13, disabled_until = $14, updated_at = $15 WHERE id = $16",
+             enabled = $7, rpm_limit = $8, tpm_limit = $9, balance = $10, weight = $11, available_hours = $12, group_id = $13, disabled_until = $14, updated_at = $15 WHERE org_id = $16 AND id = $17",
         )
         .bind(&channel.name)
         .bind(&channel.api_key)
@@ -1021,38 +1107,57 @@ impl crate::Storage for PostgresStorage {
         .bind(&channel.group_id)
         .bind(channel.disabled_until)
         .bind(channel.updated_at)
+        .bind(org_id)
         .bind(&channel.id)
         .execute(&self.pool)
         .await?;
 
-        Ok(channel.clone())
+        let mut c = channel.clone();
+        c.org_id = org_id.to_string();
+        Ok(c)
     }
 
-    async fn delete_channel(&self, id: &str) -> Result<(), DbErr> {
-        sqlx::query("DELETE FROM channels WHERE id = $1")
+    async fn delete_channel(&self, org_id: &str, id: &str) -> Result<(), DbErr> {
+        sqlx::query("DELETE FROM channels WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
             .bind(id)
             .execute(&self.pool)
             .await?;
         Ok(())
     }
 
-    async fn disable_channel_until(&self, id: &str, until: chrono::DateTime<chrono::Utc>) -> Result<(), DbErr> {
-        sqlx::query("UPDATE channels SET disabled_until = $1, updated_at = NOW() WHERE id = $2")
+    async fn disable_channel_until(&self, org_id: &str, id: &str, until: chrono::DateTime<chrono::Utc>) -> Result<(), DbErr> {
+        sqlx::query("UPDATE channels SET disabled_until = $1, updated_at = NOW() WHERE org_id = $2 AND id = $3")
             .bind(until)
+            .bind(org_id)
             .bind(id)
             .execute(&self.pool)
             .await?;
         Ok(())
     }
 
-    // ---- Models ----
+    // ---- Models (catalog: visibility filter + anti-shadowing) ----
 
-    async fn create_model(&self, model: &Model) -> Result<Model, DbErr> {
+    async fn create_model(&self, viewer_org_id: &str, model: &Model) -> Result<Model, DbErr> {
+        // Anti-shadowing: an org-private model may not reuse a platform-level name.
+        if let Some(_org) = &model.owner_org_id {
+            let collision: Option<(String,)> = sqlx::query_as(
+                "SELECT id FROM models WHERE name = $1 AND owner_org_id IS NULL",
+            )
+            .bind(&model.name)
+            .fetch_optional(&self.pool)
+            .await?;
+            if collision.is_some() {
+                return Err(Box::new(CatalogNameReserved(model.name.clone())));
+            }
+        }
+
         sqlx::query(
-            "INSERT INTO models (id, name, model_type, pricing_policy_id, created_at)
-             VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO models (id, owner_org_id, name, model_type, pricing_policy_id, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6)",
         )
         .bind(&model.id)
+        .bind(&model.owner_org_id)
         .bind(&model.name)
         .bind(&model.model_type)
         .bind(&model.pricing_policy_id)
@@ -1060,43 +1165,50 @@ impl crate::Storage for PostgresStorage {
         .execute(&self.pool)
         .await?;
 
+        let _ = viewer_org_id;
         Ok(model.clone())
     }
 
-    async fn get_model(&self, name: &str) -> Result<Option<Model>, DbErr> {
+    async fn get_model(&self, viewer_org_id: &str, name: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<PgModelRow> = sqlx::query_as(
-            "SELECT id, name, model_type, pricing_policy_id, created_at
-             FROM models WHERE name = $1",
+            "SELECT id, owner_org_id, name, model_type, pricing_policy_id, created_at
+             FROM models
+             WHERE name = $1 AND (owner_org_id IS NULL OR owner_org_id = $2)",
         )
         .bind(name)
+        .bind(viewer_org_id)
         .fetch_optional(&self.pool)
         .await?;
 
         Ok(row.map(Model::from))
     }
 
-    async fn get_model_by_id(&self, id: &str) -> Result<Option<Model>, DbErr> {
+    async fn get_model_by_id(&self, viewer_org_id: &str, id: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<PgModelRow> = sqlx::query_as(
-            "SELECT id, name, model_type, pricing_policy_id, created_at
-             FROM models WHERE id = $1",
+            "SELECT id, owner_org_id, name, model_type, pricing_policy_id, created_at
+             FROM models
+             WHERE id = $1 AND (owner_org_id IS NULL OR owner_org_id = $2)",
         )
         .bind(id)
+        .bind(viewer_org_id)
         .fetch_optional(&self.pool)
         .await?;
 
         Ok(row.map(Model::from))
     }
 
-    async fn get_model_by_provider(&self, _provider_id: &str, _name: &str) -> Result<Option<Model>, DbErr> {
+    async fn get_model_by_provider(&self, viewer_org_id: &str, _provider_id: &str, _name: &str) -> Result<Option<Model>, DbErr> {
         // No longer supported - models are now N:N with providers
+        let _ = viewer_org_id;
         Ok(None)
     }
 
-    async fn list_models(&self) -> Result<Vec<ModelWithProvider>, DbErr> {
+    async fn list_models(&self, viewer_org_id: &str) -> Result<Vec<ModelWithProvider>, DbErr> {
         let rows = sqlx::query_as::<_, PgModelEnrichedRow>(
             r#"
             SELECT
                 m.id,
+                m.owner_org_id,
                 m.name,
                 m.model_type,
                 m.pricing_policy_id AS pp_id,
@@ -1108,10 +1220,12 @@ impl crate::Storage for PostgresStorage {
             LEFT JOIN pricing_policies pp ON m.pricing_policy_id = pp.id
             LEFT JOIN channel_models cm ON cm.model_id = m.id
             LEFT JOIN channels c ON c.id = cm.channel_id
-            GROUP BY m.id, m.name, m.model_type, m.pricing_policy_id, m.created_at, pp.name
+            WHERE m.owner_org_id IS NULL OR m.owner_org_id = $1
+            GROUP BY m.id, m.owner_org_id, m.name, m.model_type, m.pricing_policy_id, m.created_at, pp.name
             ORDER BY m.name
             "#
         )
+        .bind(viewer_org_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -1128,6 +1242,7 @@ impl crate::Storage for PostgresStorage {
             ModelWithProvider {
                 model: Model {
                     id: r.id,
+                    owner_org_id: r.owner_org_id,
                     name: r.name,
                     model_type: r.model_type,
                     pricing_policy_id: r.pp_id,
@@ -1142,40 +1257,48 @@ impl crate::Storage for PostgresStorage {
         Ok(result)
     }
 
-    async fn list_models_by_provider(&self, _provider_id: &str) -> Result<Vec<Model>, DbErr> {
+    async fn list_models_by_provider(&self, viewer_org_id: &str, _provider_id: &str) -> Result<Vec<Model>, DbErr> {
         // No longer supported - models are now N:N with providers
+        let _ = viewer_org_id;
         Ok(vec![])
     }
 
-    async fn update_model(&self, model: &Model) -> Result<Model, DbErr> {
+    async fn update_model(&self, viewer_org_id: &str, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "UPDATE models SET name = $1, pricing_policy_id = $2 WHERE id = $3",
+            "UPDATE models SET name = $1, pricing_policy_id = $2
+             WHERE id = $3 AND (owner_org_id IS NULL OR owner_org_id = $4)",
         )
         .bind(&model.name)
         .bind(&model.pricing_policy_id)
         .bind(&model.id)
+        .bind(viewer_org_id)
         .execute(&self.pool)
         .await?;
 
         Ok(model.clone())
     }
 
-    async fn delete_model(&self, name: &str) -> Result<(), DbErr> {
-        sqlx::query("DELETE FROM models WHERE name = $1")
-            .bind(name)
-            .execute(&self.pool)
-            .await?;
+    async fn delete_model(&self, viewer_org_id: &str, name: &str) -> Result<(), DbErr> {
+        sqlx::query(
+            "DELETE FROM models
+             WHERE name = $1 AND (owner_org_id IS NULL OR owner_org_id = $2)",
+        )
+        .bind(name)
+        .bind(viewer_org_id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    // ---- Key-Model Rate Limits ----
+    // ---- Key-Model Rate Limits (tenant: org_id scoping) ----
 
-    async fn set_key_model_rate_limit(&self, limit: &KeyModelRateLimit) -> Result<(), DbErr> {
+    async fn set_key_model_rate_limit(&self, org_id: &str, limit: &KeyModelRateLimit) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO key_model_rate_limits (key_id, model_id, rpm, tpm)
-             VALUES ($1, $2, $3, $4)
-             ON CONFLICT(key_id, model_id) DO UPDATE SET rpm = $5, tpm = $6",
+            "INSERT INTO key_model_rate_limits (org_id, key_id, model_id, rpm, tpm)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT(key_id, model_id) DO UPDATE SET rpm = $6, tpm = $7",
         )
+        .bind(org_id)
         .bind(&limit.key_id)
         .bind(&limit.model_id)
         .bind(limit.rpm)
@@ -1189,19 +1312,22 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_key_model_rate_limit(
         &self,
+        org_id: &str,
         key_id: &str,
         model_id: &str,
     ) -> Result<Option<KeyModelRateLimit>, DbErr> {
         let row: Option<(String, String, i64, i64)> = sqlx::query_as(
             "SELECT key_id, model_id, rpm, tpm FROM key_model_rate_limits
-             WHERE key_id = $1 AND model_id = $2",
+             WHERE org_id = $1 AND key_id = $2 AND model_id = $3",
         )
+        .bind(org_id)
         .bind(key_id)
         .bind(model_id)
         .fetch_optional(&self.pool)
         .await?;
 
         Ok(row.map(|r| KeyModelRateLimit {
+            org_id: org_id.to_string(),
             key_id: r.0,
             model_id: r.1,
             rpm: r.2,
@@ -1209,10 +1335,12 @@ impl crate::Storage for PostgresStorage {
         }))
     }
 
-    async fn list_key_model_rate_limits(&self, key_id: &str) -> Result<Vec<KeyModelRateLimit>, DbErr> {
+    async fn list_key_model_rate_limits(&self, org_id: &str, key_id: &str) -> Result<Vec<KeyModelRateLimit>, DbErr> {
         let rows: Vec<(String, String, i64, i64)> = sqlx::query_as(
-            "SELECT key_id, model_id, rpm, tpm FROM key_model_rate_limits WHERE key_id = $1",
+            "SELECT key_id, model_id, rpm, tpm FROM key_model_rate_limits
+             WHERE org_id = $1 AND key_id = $2",
         )
+        .bind(org_id)
         .bind(key_id)
         .fetch_all(&self.pool)
         .await?;
@@ -1220,6 +1348,7 @@ impl crate::Storage for PostgresStorage {
         Ok(rows
             .into_iter()
             .map(|r| KeyModelRateLimit {
+                org_id: org_id.to_string(),
                 key_id: r.0,
                 model_id: r.1,
                 rpm: r.2,
@@ -1228,10 +1357,11 @@ impl crate::Storage for PostgresStorage {
             .collect())
     }
 
-    async fn delete_key_model_rate_limit(&self, key_id: &str, model_id: &str) -> Result<(), DbErr> {
+    async fn delete_key_model_rate_limit(&self, org_id: &str, key_id: &str, model_id: &str) -> Result<(), DbErr> {
         sqlx::query(
-            "DELETE FROM key_model_rate_limits WHERE key_id = $1 AND model_id = $2",
+            "DELETE FROM key_model_rate_limits WHERE org_id = $1 AND key_id = $2 AND model_id = $3",
         )
+        .bind(org_id)
         .bind(key_id)
         .bind(model_id)
         .execute(&self.pool)
@@ -1239,14 +1369,15 @@ impl crate::Storage for PostgresStorage {
         Ok(())
     }
 
-    // ---- Usage ----
+    // ---- Usage (tenant: org_id scoping) ----
 
-    async fn record_usage(&self, usage: &UsageRecord) -> Result<(), DbErr> {
+    async fn record_usage(&self, org_id: &str, usage: &UsageRecord) -> Result<(), DbErr> {
         sqlx::query(
-            "INSERT INTO usage_records (id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
+            "INSERT INTO usage_records (id, org_id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
         )
         .bind(&usage.id)
+        .bind(org_id)
         .bind(&usage.request_id)
         .bind(&usage.key_id)
         .bind(&usage.model_name)
@@ -1267,20 +1398,23 @@ impl crate::Storage for PostgresStorage {
         Ok(())
     }
 
-    async fn query_usage(&self, filter: &UsageFilter) -> Result<Vec<UsageRecord>, DbErr> {
-        // Build query dynamically based on filter - for now, just fetch all
+    async fn query_usage(&self, org_id: &str, _filter: &UsageFilter) -> Result<Vec<UsageRecord>, DbErr> {
+        // Build query dynamically based on filter - for now, just fetch all (org-scoped)
         let rows: Vec<PgUsageRow> = sqlx::query_as(
-            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at
-             FROM usage_records ORDER BY created_at DESC",
+            "SELECT id, org_id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at
+             FROM usage_records WHERE org_id = $1 ORDER BY created_at DESC",
         )
+        .bind(org_id)
         .fetch_all(&self.pool)
         .await?;
         Ok(rows.into_iter().map(UsageRecord::from).collect())
     }
 
-    async fn query_usage_paginated(&self, filter: &UsageFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<UsageRecord>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut conditions = Vec::new();
-        let mut param_idx = 1;
+    async fn query_usage_paginated(&self, org_id: &str, filter: &UsageFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<UsageRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        // org_id is always $1; filter conditions take parameters $2.. and are
+        // rebuilt in the same order for both the count and data queries below.
+        let mut conditions = vec!["org_id = $1".to_string()];
+        let mut param_idx = 2;
         let mut bind_user: Option<String> = None;
         let mut bind_key: Option<String> = None;
         let mut bind_model: Option<String> = None;
@@ -1310,17 +1444,13 @@ impl crate::Storage for PostgresStorage {
         if let Some(until) = filter.until {
             conditions.push(format!("created_at <= ${}", param_idx));
             bind_until = Some(until);
-            param_idx += 1;
         }
 
-        let where_clause = if conditions.is_empty() {
-            String::new()
-        } else {
-            format!(" WHERE {}", conditions.join(" AND "))
-        };
+        let where_clause = format!(" WHERE {}", conditions.join(" AND "));
 
         let count_sql = format!("SELECT COUNT(*) FROM usage_records{}", where_clause);
         let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
+        count_query = count_query.bind(org_id);
         if let Some(ref v) = bind_user { count_query = count_query.bind(v); }
         if let Some(ref v) = bind_key { count_query = count_query.bind(v); }
         if let Some(ref v) = bind_model { count_query = count_query.bind(v); }
@@ -1330,13 +1460,14 @@ impl crate::Storage for PostgresStorage {
 
         let offset = (page - 1) * page_size;
         let data_sql = format!(
-            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at \
+            "SELECT id, org_id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at \
              FROM usage_records{} ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
             where_clause,
             param_idx,
             param_idx + 1
         );
         let mut data_query = sqlx::query_as::<_, PgUsageRow>(&data_sql);
+        data_query = data_query.bind(org_id);
         if let Some(v) = bind_user { data_query = data_query.bind(v); }
         if let Some(v) = bind_key { data_query = data_query.bind(v); }
         if let Some(v) = bind_model { data_query = data_query.bind(v); }
@@ -1353,9 +1484,9 @@ impl crate::Storage for PostgresStorage {
         })
     }
 
-    async fn query_usage_summary(&self, filter: &UsageFilter) -> Result<Vec<UsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut conditions = Vec::new();
-        let mut param_idx = 1;
+    async fn query_usage_summary(&self, org_id: &str, filter: &UsageFilter) -> Result<Vec<UsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut conditions = vec!["org_id = $1".to_string()];
+        let mut param_idx = 2;
         let mut bind_user: Option<String> = None;
         let mut bind_key: Option<String> = None;
         let mut bind_model: Option<String> = None;
@@ -1385,14 +1516,9 @@ impl crate::Storage for PostgresStorage {
         if let Some(until) = filter.until {
             conditions.push(format!("created_at <= ${}", param_idx));
             bind_until = Some(until);
-            param_idx += 1;
         }
 
-        let where_clause = if conditions.is_empty() {
-            String::new()
-        } else {
-            format!(" WHERE {}", conditions.join(" AND "))
-        };
+        let where_clause = format!(" WHERE {}", conditions.join(" AND "));
 
         let sql = format!(
             "SELECT \
@@ -1410,6 +1536,7 @@ impl crate::Storage for PostgresStorage {
         );
 
         let mut query = sqlx::query_as::<_, PgUsageSummaryRow>(&sql);
+        query = query.bind(org_id);
         if let Some(v) = bind_user { query = query.bind(v); }
         if let Some(v) = bind_key { query = query.bind(v); }
         if let Some(v) = bind_model { query = query.bind(v); }
@@ -1420,9 +1547,9 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(UsageSummaryRecord::from).collect())
     }
 
-    async fn query_channel_usage_summary(&self, filter: &UsageFilter) -> Result<Vec<ChannelUsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut conditions = Vec::new();
-        let mut param_idx = 1;
+    async fn query_channel_usage_summary(&self, org_id: &str, filter: &UsageFilter) -> Result<Vec<ChannelUsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut conditions = vec!["u.org_id = $1".to_string()];
+        let mut param_idx = 2;
         let mut bind_vals: Vec<String> = Vec::new();
         let mut bind_since: Option<chrono::DateTime<chrono::Utc>> = None;
         let mut bind_until: Option<chrono::DateTime<chrono::Utc>> = None;
@@ -1450,14 +1577,9 @@ impl crate::Storage for PostgresStorage {
         if let Some(until) = filter.until {
             conditions.push(format!("u.created_at <= ${}", param_idx));
             bind_until = Some(until);
-            param_idx += 1;
         }
 
-        let where_clause = if conditions.is_empty() {
-            String::new()
-        } else {
-            format!(" WHERE {}", conditions.join(" AND "))
-        };
+        let where_clause = format!(" WHERE {}", conditions.join(" AND "));
 
         let sql = format!(
             "SELECT \
@@ -1476,6 +1598,7 @@ impl crate::Storage for PostgresStorage {
         );
 
         let mut query = sqlx::query_as::<_, PgChannelUsageSummaryRow>(&sql);
+        query = query.bind(org_id);
         for v in bind_vals {
             query = query.bind(v);
         }
@@ -1486,28 +1609,30 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(ChannelUsageSummaryRecord::from).collect())
     }
 
-    async fn get_usage_by_request_id(&self, request_id: &str) -> Result<Option<UsageRecord>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_usage_by_request_id(&self, org_id: &str, request_id: &str) -> Result<Option<UsageRecord>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgUsageRow> = sqlx::query_as(
-            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at
-             FROM usage_records WHERE request_id = $1",
+            "SELECT id, org_id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at
+             FROM usage_records WHERE org_id = $1 AND request_id = $2",
         )
+        .bind(org_id)
         .bind(request_id)
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.map(UsageRecord::from))
     }
 
-    async fn query_daily_usage(&self, filter: &UsageFilter) -> Result<Vec<crate::types::DailyUsageRecord>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut where_clauses = Vec::new();
-        let mut param_idx = 1u32;
+    async fn query_daily_usage(&self, org_id: &str, filter: &UsageFilter) -> Result<Vec<crate::types::DailyUsageRecord>, Box<dyn std::error::Error + Send + Sync>> {
+        // org_id is always $1; subsequent filter params take $2..
+        let mut where_clauses = vec![format!("org_id = $1")];
+        let mut param_idx = 2u32;
 
         if filter.user_id.is_some() { where_clauses.push(format!("user_id = ${}", param_idx)); param_idx += 1; }
         if filter.key_id.is_some() { where_clauses.push(format!("key_id = ${}", param_idx)); param_idx += 1; }
         if filter.model_name.is_some() { where_clauses.push(format!("model_name = ${}", param_idx)); param_idx += 1; }
         if filter.since.is_some() { where_clauses.push(format!("created_at >= ${}", param_idx)); param_idx += 1; }
-        if filter.until.is_some() { where_clauses.push(format!("created_at < ${}", param_idx)); param_idx += 1; }
+        if filter.until.is_some() { where_clauses.push(format!("created_at < ${}", param_idx)); }
 
-        let where_sql = if where_clauses.is_empty() { String::new() } else { format!("WHERE {}", where_clauses.join(" AND ")) };
+        let where_sql = format!("WHERE {}", where_clauses.join(" AND "));
 
         let tz = filter.tz.as_deref().unwrap_or("Etc/UTC");
         let sql = format!(
@@ -1526,6 +1651,7 @@ impl crate::Storage for PostgresStorage {
         );
 
         let mut query = sqlx::query_as::<_, (String, i64, i64, i64, i64, i64, i64, i64)>(&sql);
+        query = query.bind(org_id);
 
         if let Some(ref v) = filter.user_id { query = query.bind(v); }
         if let Some(ref v) = filter.key_id { query = query.bind(v); }
@@ -1543,20 +1669,21 @@ impl crate::Storage for PostgresStorage {
         }).collect())
     }
 
-    // ---- Audit ----
+    // ---- Audit (tenant: org_id scoping) ----
 
-    async fn insert_log(&self, log: &AuditLog) -> Result<(), DbErr> {
+    async fn insert_log(&self, org_id: &str, log: &AuditLog) -> Result<(), DbErr> {
         let routes_json = match log.routes.as_ref() {
             Some(r) => serde_json::to_value(r).unwrap_or(serde_json::Value::Null),
             None => serde_json::Value::Null,
         };
         sqlx::query(
-            "INSERT INTO audit_logs (id, request_id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
+            "INSERT INTO audit_logs (id, org_id, request_id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
-             request_path, upstream_url, request_headers, response_headers, user_id, routes)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)",
+             request_path, upstream_url, request_headers, response_headers, user_id, actor_is_platform_admin, routes)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)",
         )
         .bind(&log.id)
+        .bind(org_id)
         .bind(&log.request_id)
         .bind(&log.key_id)
         .bind(&log.model_name)
@@ -1579,31 +1706,32 @@ impl crate::Storage for PostgresStorage {
         .bind(&log.request_headers)
         .bind(&log.response_headers)
         .bind(log.user_id.clone())
+        .bind(log.actor_is_platform_admin)
         .bind(routes_json)
         .execute(&self.pool)
         .await?;
         Ok(())
     }
 
-    async fn query_logs(&self, filter: &LogFilter) -> Result<Vec<AuditLog>, DbErr> {
+    async fn query_logs(&self, org_id: &str, filter: &LogFilter) -> Result<Vec<AuditLog>, DbErr> {
         let mut sql = String::from(
-            "SELECT id, request_id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
+            "SELECT id, org_id, request_id, key_id, model_name, provider_id, channel_id, protocol, stream, request_body, response_body,
              status_code, latency_ms, input_tokens, output_tokens, created_at, original_model, upstream_model, model_override_reason,
-             request_path, upstream_url, request_headers, response_headers, routes
-             FROM audit_logs WHERE 1=1",
+             request_path, upstream_url, request_headers, response_headers, user_id, actor_is_platform_admin, routes
+             FROM audit_logs WHERE org_id = $1",
         );
 
         if filter.key_id.is_some() {
-            sql.push_str(" AND key_id = $1");
+            sql.push_str(" AND key_id = $2");
         }
         if filter.model_name.is_some() {
-            sql.push_str(" AND model_name = $2");
+            sql.push_str(" AND model_name = $3");
         }
         if filter.since.is_some() {
-            sql.push_str(" AND created_at >= $3");
+            sql.push_str(" AND created_at >= $4");
         }
         if filter.until.is_some() {
-            sql.push_str(" AND created_at <= $4");
+            sql.push_str(" AND created_at <= $5");
         }
 
         sql.push_str(" ORDER BY created_at DESC");
@@ -1615,52 +1743,57 @@ impl crate::Storage for PostgresStorage {
             sql.push_str(&format!(" OFFSET {}", offset));
         }
 
-        let rows: Vec<PgAuditRow> = sqlx::query_as::<_, PgAuditRow>(&sql).fetch_all(&self.pool).await?;
+        let mut q = sqlx::query_as::<_, PgAuditRow>(&sql);
+        q = q.bind(org_id);
+        if let Some(ref v) = filter.key_id { q = q.bind(v); }
+        if let Some(ref v) = filter.model_name { q = q.bind(v); }
+        if let Some(v) = filter.since { q = q.bind(v); }
+        if let Some(v) = filter.until { q = q.bind(v); }
+        let rows: Vec<PgAuditRow> = q.fetch_all(&self.pool).await?;
         Ok(rows.into_iter().map(AuditLog::from).collect())
     }
 
-    async fn query_logs_paginated(&self, filter: &LogFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<AuditLogSummary>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut conditions = Vec::new();
+    async fn query_logs_paginated(&self, org_id: &str, filter: &LogFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<AuditLogSummary>, Box<dyn std::error::Error + Send + Sync>> {
+        // org_id is always $1; subsequent filter params take $2.. and are
+        // rebound in the same order for both count and data queries below.
+        let mut conditions = vec!["a.org_id = $1".to_string()];
         let mut bind_vals: Vec<String> = Vec::new();
 
         if let Some(ref request_id) = filter.request_id {
-            conditions.push(format!("a.request_id = ${}", bind_vals.len() + 1));
+            conditions.push(format!("a.request_id = ${}", bind_vals.len() + 2));
             bind_vals.push(request_id.clone());
         }
 
         if let Some(ref user_id) = filter.user_id {
-            conditions.push(format!("a.user_id = ${}", bind_vals.len() + 1));
+            conditions.push(format!("a.user_id = ${}", bind_vals.len() + 2));
             bind_vals.push(user_id.clone());
         }
         if let Some(ref key_id) = filter.key_id {
-            conditions.push(format!("a.key_id = ${}", bind_vals.len() + 1));
+            conditions.push(format!("a.key_id = ${}", bind_vals.len() + 2));
             bind_vals.push(key_id.clone());
         }
         if let Some(ref channel_id) = filter.channel_id {
-            conditions.push(format!("a.channel_id = ${}", bind_vals.len() + 1));
+            conditions.push(format!("a.channel_id = ${}", bind_vals.len() + 2));
             bind_vals.push(channel_id.clone());
         }
         if let Some(ref model_name) = filter.model_name {
-            conditions.push(format!("a.model_name = ${}", bind_vals.len() + 1));
+            conditions.push(format!("a.model_name = ${}", bind_vals.len() + 2));
             bind_vals.push(model_name.clone());
         }
         if let Some(since) = filter.since {
-            conditions.push(format!("a.created_at >= ${}", bind_vals.len() + 1));
+            conditions.push(format!("a.created_at >= ${}", bind_vals.len() + 2));
             bind_vals.push(since.to_rfc3339());
         }
         if let Some(until) = filter.until {
-            conditions.push(format!("a.created_at <= ${}", bind_vals.len() + 1));
+            conditions.push(format!("a.created_at <= ${}", bind_vals.len() + 2));
             bind_vals.push(until.to_rfc3339());
         }
 
-        let where_clause = if conditions.is_empty() {
-            String::new()
-        } else {
-            format!(" WHERE {}", conditions.join(" AND "))
-        };
+        let where_clause = format!(" WHERE {}", conditions.join(" AND "));
 
         let count_sql = format!("SELECT COUNT(*) FROM audit_logs a{}", where_clause);
         let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
+        count_query = count_query.bind(org_id);
         for val in &bind_vals {
             count_query = count_query.bind(val);
         }
@@ -1673,10 +1806,11 @@ impl crate::Storage for PostgresStorage {
              a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id, a.routes
              FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id{} ORDER BY a.created_at DESC LIMIT ${} OFFSET ${}",
             where_clause,
-            bind_vals.len() + 1,
-            bind_vals.len() + 2
+            bind_vals.len() + 2,
+            bind_vals.len() + 3
         );
         let mut data_query = sqlx::query_as::<_, PgAuditSummaryRow>(&data_sql);
+        data_query = data_query.bind(org_id);
         for val in bind_vals {
             data_query = data_query.bind(val);
         }
@@ -1691,26 +1825,28 @@ impl crate::Storage for PostgresStorage {
         })
     }
 
-    async fn get_log(&self, id: &str) -> Result<Option<AuditLog>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_log(&self, org_id: &str, id: &str) -> Result<Option<AuditLog>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgAuditRow> = sqlx::query_as(
-            "SELECT a.id, a.request_id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream, a.request_body, a.response_body,
+            "SELECT a.id, a.org_id, a.request_id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream, a.request_body, a.response_body,
              a.status_code, a.latency_ms, a.input_tokens, a.output_tokens, a.created_at, a.original_model, a.upstream_model, a.model_override_reason,
-             a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id, a.routes
-             FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id WHERE a.id = $1",
+             a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id, a.actor_is_platform_admin, a.routes
+             FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id WHERE a.org_id = $1 AND a.id = $2",
         )
+        .bind(org_id)
         .bind(id)
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.map(AuditLog::from))
     }
 
-    async fn get_audit_by_request_id(&self, request_id: &str) -> Result<Option<AuditLog>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_audit_by_request_id(&self, org_id: &str, request_id: &str) -> Result<Option<AuditLog>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgAuditRow> = sqlx::query_as(
-            "SELECT a.id, a.request_id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream, a.request_body, a.response_body,
+            "SELECT a.id, a.org_id, a.request_id, a.key_id, a.model_name, a.provider_id, a.channel_id, c.name AS channel_name, a.protocol, a.stream, a.request_body, a.response_body,
              a.status_code, a.latency_ms, a.input_tokens, a.output_tokens, a.created_at, a.original_model, a.upstream_model, a.model_override_reason,
-             a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id, a.routes
-             FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id WHERE a.request_id = $1",
+             a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id, a.actor_is_platform_admin, a.routes
+             FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id WHERE a.org_id = $1 AND a.request_id = $2",
         )
+        .bind(org_id)
         .bind(request_id)
         .fetch_optional(&self.pool)
         .await?;
@@ -1767,16 +1903,16 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "INSERT INTO users (id, username, password, role, enabled, refresh_token, group_id, created_at, updated_at)
+            "INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, refresh_token, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
         )
         .bind(&user.id)
         .bind(&user.username)
         .bind(&user.password)
-        .bind(&user.role)
+        .bind(user.platform_role.as_ref().map(|r| r.as_str()))
+        .bind(&user.current_org_id)
         .bind(user.enabled)
         .bind(&user.refresh_token)
-        .bind(&user.group_id)
         .bind(user.created_at)
         .bind(user.updated_at)
         .execute(&self.pool)
@@ -1786,7 +1922,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_user(&self, id: &str) -> Result<Option<User>, DbErr> {
         let row: Option<PgUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, refresh_token, group_id, created_at, updated_at FROM users WHERE id = $1",
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token, created_at, updated_at FROM users WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -1796,7 +1932,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_user_by_username(&self, username: &str) -> Result<Option<User>, DbErr> {
         let row: Option<PgUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, refresh_token, group_id, created_at, updated_at FROM users WHERE username = $1",
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token, created_at, updated_at FROM users WHERE username = $1",
         )
         .bind(username)
         .fetch_optional(&self.pool)
@@ -1804,28 +1940,42 @@ impl crate::Storage for PostgresStorage {
         Ok(row.map(User::from))
     }
 
-    async fn list_users(&self) -> Result<Vec<User>, DbErr> {
+    async fn list_users(&self, org_id: &str) -> Result<Vec<User>, DbErr> {
         let rows: Vec<PgUserRow> = sqlx::query_as(
-            "SELECT id, username, password, role, enabled, refresh_token, group_id, created_at, updated_at FROM users",
+            "SELECT u.id, u.username, u.password, u.platform_role, u.current_org_id, u.enabled, u.refresh_token, u.created_at, u.updated_at
+             FROM users u
+             JOIN members m ON m.user_id = u.id
+             WHERE m.org_id = $1
+             ORDER BY u.username",
         )
+        .bind(org_id)
         .fetch_all(&self.pool)
         .await?;
         Ok(rows.into_iter().map(User::from).collect())
     }
 
-    async fn list_users_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<UserWithBalance>, Box<dyn std::error::Error + Send + Sync>> {
-        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
-            .fetch_one(&self.pool)
-            .await?;
+    async fn list_users_paginated(&self, org_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<UserWithBalance>, Box<dyn std::error::Error + Send + Sync>> {
+        // TODO(Task 9): UserWithBalance still carries legacy role/group_id columns.
+        // Once the management handlers stop reading them, the struct + this query
+        // should drop them. Until then we synthesize a role/group_id from the
+        // membership row so the existing UI keeps rendering.
+        let total: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM users u JOIN members m ON m.user_id = u.id WHERE m.org_id = $1",
+        )
+        .bind(org_id)
+        .fetch_one(&self.pool)
+        .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgUserWithBalanceRow> = sqlx::query_as(
-            "SELECT u.id, u.username, u.role, u.enabled, u.group_id, g.name AS group_name, \
+            "SELECT u.id, u.username, COALESCE(m.role, 'member') AS role, u.enabled, m.group_id, g.name AS group_name, \
                     COALESCE(a.balance, 0) AS balance, COALESCE(a.threshold, 0) AS threshold, u.created_at, u.updated_at \
              FROM users u \
-             LEFT JOIN accounts a ON a.user_id = u.id \
-             LEFT JOIN groups g ON g.id = u.group_id \
-             ORDER BY u.created_at DESC LIMIT $1 OFFSET $2",
+             JOIN members m ON m.user_id = u.id AND m.org_id = $1 \
+             LEFT JOIN accounts a ON a.user_id = u.id AND a.org_id = $1 \
+             LEFT JOIN groups g ON g.id = m.group_id \
+             ORDER BY u.created_at DESC LIMIT $2 OFFSET $3",
         )
+        .bind(org_id)
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -1840,14 +1990,14 @@ impl crate::Storage for PostgresStorage {
 
     async fn update_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "UPDATE users SET username = $1, password = $2, role = $3, enabled = $4, refresh_token = $5, group_id = $6, updated_at = $7 WHERE id = $8",
+            "UPDATE users SET username = $1, password = $2, platform_role = $3, current_org_id = $4, enabled = $5, refresh_token = $6, updated_at = $7 WHERE id = $8",
         )
         .bind(&user.username)
         .bind(&user.password)
-        .bind(&user.role)
+        .bind(user.platform_role.as_ref().map(|r| r.as_str()))
+        .bind(&user.current_org_id)
         .bind(user.enabled)
         .bind(&user.refresh_token)
-        .bind(&user.group_id)
         .bind(user.updated_at)
         .bind(&user.id)
         .execute(&self.pool)
@@ -1863,14 +2013,15 @@ impl crate::Storage for PostgresStorage {
         Ok(())
     }
 
-    // ---- Channel Models ----
+    // ---- Channel Models (tenant: org_id scoping) ----
 
-    async fn create_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, DbErr> {
+    async fn create_channel_model(&self, org_id: &str, cm: &ChannelModel) -> Result<ChannelModel, DbErr> {
         sqlx::query(
-            "INSERT INTO channel_models (id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+            "INSERT INTO channel_models (id, org_id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
         )
         .bind(&cm.id)
+        .bind(org_id)
         .bind(&cm.channel_id)
         .bind(&cm.model_id)
         .bind(&cm.upstream_model_name)
@@ -1883,14 +2034,17 @@ impl crate::Storage for PostgresStorage {
         .execute(&self.pool)
         .await?;
 
-        Ok(cm.clone())
+        let mut c = cm.clone();
+        c.org_id = org_id.to_string();
+        Ok(c)
     }
 
-    async fn get_channel_model(&self, id: &str) -> Result<Option<ChannelModel>, DbErr> {
+    async fn get_channel_model(&self, org_id: &str, id: &str) -> Result<Option<ChannelModel>, DbErr> {
         let row: Option<PgChannelModelRow> = sqlx::query_as(
-            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
-             FROM channel_models WHERE id = $1",
+            "SELECT id, org_id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
+             FROM channel_models WHERE org_id = $1 AND id = $2",
         )
+        .bind(org_id)
         .bind(id)
         .fetch_optional(&self.pool)
         .await?;
@@ -1898,22 +2052,24 @@ impl crate::Storage for PostgresStorage {
         Ok(row.map(ChannelModel::from))
     }
 
-    async fn list_channel_models(&self) -> Result<Vec<ChannelModel>, DbErr> {
+    async fn list_channel_models(&self, org_id: &str) -> Result<Vec<ChannelModel>, DbErr> {
         let rows: Vec<PgChannelModelRow> = sqlx::query_as(
-            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
-             FROM channel_models",
+            "SELECT id, org_id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
+             FROM channel_models WHERE org_id = $1",
         )
+        .bind(org_id)
         .fetch_all(&self.pool)
         .await?;
 
         Ok(rows.into_iter().map(ChannelModel::from).collect())
     }
 
-    async fn list_channel_models_by_channel(&self, channel_id: &str) -> Result<Vec<ChannelModel>, DbErr> {
+    async fn list_channel_models_by_channel(&self, org_id: &str, channel_id: &str) -> Result<Vec<ChannelModel>, DbErr> {
         let rows: Vec<PgChannelModelRow> = sqlx::query_as(
-            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
-             FROM channel_models WHERE channel_id = $1",
+            "SELECT id, org_id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
+             FROM channel_models WHERE org_id = $1 AND channel_id = $2",
         )
+        .bind(org_id)
         .bind(channel_id)
         .fetch_all(&self.pool)
         .await?;
@@ -1921,11 +2077,12 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(ChannelModel::from).collect())
     }
 
-    async fn get_channel_models_for_model(&self, model_id: &str) -> Result<Vec<ChannelModel>, DbErr> {
+    async fn get_channel_models_for_model(&self, org_id: &str, model_id: &str) -> Result<Vec<ChannelModel>, DbErr> {
         let rows: Vec<PgChannelModelRow> = sqlx::query_as(
-            "SELECT id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
-             FROM channel_models WHERE model_id = $1",
+            "SELECT id, org_id, channel_id, model_id, upstream_model_name, priority_override, pricing_policy_id, markup_ratio, enabled, created_at, updated_at
+             FROM channel_models WHERE org_id = $1 AND model_id = $2",
         )
+        .bind(org_id)
         .bind(model_id)
         .fetch_all(&self.pool)
         .await?;
@@ -1933,13 +2090,14 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(ChannelModel::from).collect())
     }
 
-    async fn get_channels_for_model(&self, model_id: &str) -> Result<Vec<Channel>, DbErr> {
+    async fn get_channels_for_model(&self, org_id: &str, model_id: &str) -> Result<Vec<Channel>, DbErr> {
         let rows: Vec<PgChannelRow> = sqlx::query_as(
-            "SELECT c.id, c.provider_id, c.name, c.api_key, c.base_url, c.priority, c.pricing_policy_id, c.markup_ratio, c.enabled, c.rpm_limit, c.tpm_limit, c.balance, c.weight, c.created_by, c.\"group\", c.disabled_until, c.created_at, c.updated_at, c.available_hours
+            "SELECT c.id, c.org_id, c.provider_id, c.name, c.api_key, c.base_url, c.priority, c.pricing_policy_id, c.markup_ratio, c.enabled, c.rpm_limit, c.tpm_limit, c.balance, c.weight, c.created_by, c.group_id, c.disabled_until, c.created_at, c.updated_at, c.available_hours
              FROM channels c
              JOIN channel_models cm ON c.id = cm.channel_id
-             WHERE cm.model_id = $1 AND c.enabled = true",
+             WHERE c.org_id = $1 AND cm.model_id = $2 AND c.enabled = true",
         )
+        .bind(org_id)
         .bind(model_id)
         .fetch_all(&self.pool)
         .await?;
@@ -1947,10 +2105,11 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(Channel::from).collect())
     }
 
-    async fn update_channel_model(&self, cm: &ChannelModel) -> Result<ChannelModel, DbErr> {
+    async fn update_channel_model(&self, org_id: &str, cm: &ChannelModel) -> Result<ChannelModel, DbErr> {
         sqlx::query(
             "UPDATE channel_models SET channel_id = $1, model_id = $2, upstream_model_name = $3,
-             priority_override = $4, pricing_policy_id = $5, markup_ratio = $6, enabled = $7, updated_at = $8 WHERE id = $9",
+             priority_override = $4, pricing_policy_id = $5, markup_ratio = $6, enabled = $7, updated_at = $8
+             WHERE org_id = $9 AND id = $10",
         )
         .bind(&cm.channel_id)
         .bind(&cm.model_id)
@@ -1960,47 +2119,58 @@ impl crate::Storage for PostgresStorage {
         .bind(cm.markup_ratio)
         .bind(cm.enabled)
         .bind(cm.updated_at)
+        .bind(org_id)
         .bind(&cm.id)
         .execute(&self.pool)
         .await?;
 
-        Ok(cm.clone())
+        let mut c = cm.clone();
+        c.org_id = org_id.to_string();
+        Ok(c)
     }
 
-    async fn delete_channel_model(&self, id: &str) -> Result<(), DbErr> {
-        sqlx::query("DELETE FROM channel_models WHERE id = $1")
+    async fn delete_channel_model(&self, org_id: &str, id: &str) -> Result<(), DbErr> {
+        sqlx::query("DELETE FROM channel_models WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
             .bind(id)
             .execute(&self.pool)
             .await?;
         Ok(())
     }
 
-    async fn upsert_provider_models(&self, provider_id: &str, models: Vec<ProviderModel>) -> Result<(), DbErr> {
+    // ---- Provider Models (catalog: visibility filter on provider + model) ----
+
+    async fn upsert_provider_models(&self, viewer_org_id: &str, provider_id: &str, models: Vec<ProviderModel>) -> Result<(), DbErr> {
         for pm in models {
             sqlx::query(
-                "INSERT INTO provider_models (provider_id, model_id, upstream_name, pricing_policy_id, created_at)
-                 VALUES ($1, $2, $3, $4, NOW())
+                "INSERT INTO provider_models (provider_id, model_id, owner_org_id, upstream_name, pricing_policy_id, created_at)
+                 VALUES ($1, $2, $3, $4, $5, NOW())
                  ON CONFLICT (provider_id, model_id) DO UPDATE SET upstream_name = EXCLUDED.upstream_name, pricing_policy_id = EXCLUDED.pricing_policy_id",
             )
             .bind(provider_id)
             .bind(&pm.model_id)
+            .bind(&pm.owner_org_id)
             .bind(&pm.upstream_name)
             .bind(&pm.pricing_policy_id)
             .execute(&self.pool)
             .await?;
         }
+        let _ = viewer_org_id;
         Ok(())
     }
 
-    async fn list_provider_models(&self, provider_id: &str) -> Result<Vec<ProviderModelInfo>, DbErr> {
+    async fn list_provider_models(&self, viewer_org_id: &str, provider_id: &str) -> Result<Vec<ProviderModelInfo>, DbErr> {
         let rows = sqlx::query_as::<_, (String, String, Option<String>, Option<String>)>(
             "SELECT pm.model_id, m.name, pm.upstream_name, pm.pricing_policy_id
              FROM provider_models pm
              JOIN models m ON m.id = pm.model_id
              WHERE pm.provider_id = $1
+               AND (pm.owner_org_id IS NULL OR pm.owner_org_id = $2)
+               AND (m.owner_org_id IS NULL OR m.owner_org_id = $2)
              ORDER BY m.name",
         )
         .bind(provider_id)
+        .bind(viewer_org_id)
         .fetch_all(&self.pool)
         .await?;
         Ok(rows.into_iter().map(|(model_id, model_name, upstream_name, pricing_policy_id)| ProviderModelInfo {
@@ -2011,33 +2181,30 @@ impl crate::Storage for PostgresStorage {
         }).collect())
     }
 
-    async fn set_provider_models(&self, provider_id: &str, models: Vec<ProviderModel>) -> Result<(), DbErr> {
-        sqlx::query("DELETE FROM provider_models WHERE provider_id = $1")
-            .bind(provider_id)
-            .execute(&self.pool)
-            .await?;
+    async fn set_provider_models(&self, viewer_org_id: &str, provider_id: &str, models: Vec<ProviderModel>) -> Result<(), DbErr> {
+        // Only delete rows visible to this viewer (platform + own org-private).
+        sqlx::query(
+            "DELETE FROM provider_models WHERE provider_id = $1
+             AND (owner_org_id IS NULL OR owner_org_id = $2)",
+        )
+        .bind(provider_id)
+        .bind(viewer_org_id)
+        .execute(&self.pool)
+        .await?;
         for pm in models {
             sqlx::query(
-                "INSERT INTO provider_models (provider_id, model_id, upstream_name, pricing_policy_id, created_at)
-                 VALUES ($1, $2, $3, $4, now())",
+                "INSERT INTO provider_models (provider_id, model_id, owner_org_id, upstream_name, pricing_policy_id, created_at)
+                 VALUES ($1, $2, $3, $4, $5, now())",
             )
             .bind(provider_id)
             .bind(&pm.model_id)
+            .bind(&pm.owner_org_id)
             .bind(&pm.upstream_name)
             .bind(&pm.pricing_policy_id)
             .execute(&self.pool)
             .await?;
         }
         Ok(())
-    }
-
-    async fn count_admin_users(&self) -> Result<i64, DbErr> {
-        let row: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM users WHERE role = 'admin' AND enabled = true",
-        )
-        .fetch_one(&self.pool)
-        .await?;
-        Ok(row.0)
     }
 
     async fn user_count(&self) -> Result<i64, DbErr> {
@@ -2061,41 +2228,20 @@ impl crate::Storage for PostgresStorage {
         Ok(result.rows_affected() > 0)
     }
 
-    // ---- Settings ----
-
-    async fn get_setting(&self, key: &str) -> Result<Option<String>, DbErr> {
-        let row: Option<(String,)> = sqlx::query_as(
-            "SELECT value FROM settings WHERE key = $1",
-        )
-        .bind(key)
-        .fetch_optional(&self.pool)
-        .await?;
-        Ok(row.map(|r| r.0))
-    }
-
-    async fn set_setting(&self, key: &str, value: &str) -> Result<(), DbErr> {
-        sqlx::query(
-            "INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = $3",
-        )
-        .bind(key)
-        .bind(value)
-        .bind(value)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
     // ─── Atomic Balance Operations ───────────────────────────────────────────────
 
-    async fn deduct_balance(&self, req: &DeductBalance) -> Result<DeductBalanceResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn deduct_balance(&self, org_id: &str, req: &DeductBalance) -> Result<DeductBalanceResult, Box<dyn std::error::Error + Send + Sync>> {
         let mut conn = self.pool.acquire().await?;
         let mut tx = conn.begin().await?;
 
-        // Lock the account row and get current balance
-        let row: Option<(i64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE")
-            .bind(&req.account_id)
-            .fetch_optional(&mut *tx)
-            .await?;
+        // Lock the account row and get current balance (org-scoped)
+        let row: Option<(i64,)> = sqlx::query_as(
+            "SELECT balance FROM accounts WHERE org_id = $1 AND id = $2 FOR UPDATE",
+        )
+        .bind(org_id)
+        .bind(&req.account_id)
+        .fetch_optional(&mut *tx)
+        .await?;
 
         let current_balance = match row {
             Some((b,)) => b,
@@ -2123,10 +2269,11 @@ impl crate::Storage for PostgresStorage {
         // Create transaction record
         let tx_id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
-            "INSERT INTO transactions (id, account_id, type, amount, balance_after, description, reference_id, request_id, created_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+            "INSERT INTO transactions (id, org_id, account_id, type, amount, balance_after, description, reference_id, request_id, created_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"
         )
         .bind(&tx_id)
+        .bind(org_id)
         .bind(&req.account_id)
         .bind(req.transaction_type.as_str())
         .bind(req.amount)
@@ -2142,6 +2289,7 @@ impl crate::Storage for PostgresStorage {
 
         Ok(DeductBalanceResult::Success(Transaction {
             id: tx_id,
+            org_id: org_id.to_string(),
             account_id: req.account_id.clone(),
             transaction_type: req.transaction_type,
             amount: req.amount,
@@ -2153,15 +2301,18 @@ impl crate::Storage for PostgresStorage {
         }))
     }
 
-    async fn add_balance(&self, req: &AddBalance) -> Result<AddBalanceResult, Box<dyn std::error::Error + Send + Sync>> {
+    async fn add_balance(&self, org_id: &str, req: &AddBalance) -> Result<AddBalanceResult, Box<dyn std::error::Error + Send + Sync>> {
         let mut conn = self.pool.acquire().await?;
         let mut tx = conn.begin().await?;
 
-        // Lock the account row and get current balance
-        let row: Option<(i64,)> = sqlx::query_as("SELECT balance FROM accounts WHERE id = $1 FOR UPDATE")
-            .bind(&req.account_id)
-            .fetch_optional(&mut *tx)
-            .await?;
+        // Lock the account row and get current balance (org-scoped)
+        let row: Option<(i64,)> = sqlx::query_as(
+            "SELECT balance FROM accounts WHERE org_id = $1 AND id = $2 FOR UPDATE",
+        )
+        .bind(org_id)
+        .bind(&req.account_id)
+        .fetch_optional(&mut *tx)
+        .await?;
 
         let current_balance = match row {
             Some((b,)) => b,
@@ -2182,10 +2333,11 @@ impl crate::Storage for PostgresStorage {
         // Create transaction record
         let tx_id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
-            "INSERT INTO transactions (id, account_id, type, amount, balance_after, description, reference_id, created_at) \
+            "INSERT INTO transactions (id, org_id, account_id, type, amount, balance_after, description, reference_id, created_at) \
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
         )
         .bind(&tx_id)
+        .bind(org_id)
         .bind(&req.account_id)
         .bind(req.transaction_type.as_str())
         .bind(req.amount)
@@ -2200,6 +2352,7 @@ impl crate::Storage for PostgresStorage {
 
         Ok(AddBalanceResult::Success(Transaction {
             id: tx_id,
+            org_id: org_id.to_string(),
             account_id: req.account_id.clone(),
             transaction_type: req.transaction_type,
             amount: req.amount,
@@ -2275,23 +2428,26 @@ impl crate::Storage for PostgresStorage {
 
     // ---- Groups ----
 
-    async fn list_groups(&self) -> Result<Vec<Group>, DbErr> {
+    async fn list_groups(&self, org_id: &str) -> Result<Vec<Group>, DbErr> {
         let rows: Vec<PgGroupRow> = sqlx::query_as(
-            "SELECT id, name, description, created_at, updated_at FROM groups ORDER BY name",
+            "SELECT id, org_id, name, description, created_at, updated_at FROM groups WHERE org_id = $1 ORDER BY name",
         )
+        .bind(org_id)
         .fetch_all(&self.pool)
         .await?;
         Ok(rows.into_iter().map(Group::from).collect())
     }
 
-    async fn list_groups_paginated(&self, page: i64, page_size: i64) -> Result<PaginatedResponse<Group>, Box<dyn std::error::Error + Send + Sync>> {
-        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM groups")
+    async fn list_groups_paginated(&self, org_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<Group>, Box<dyn std::error::Error + Send + Sync>> {
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM groups WHERE org_id = $1")
+            .bind(org_id)
             .fetch_one(&self.pool)
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgGroupRow> = sqlx::query_as(
-            "SELECT id, name, description, created_at, updated_at FROM groups ORDER BY name LIMIT $1 OFFSET $2",
+            "SELECT id, org_id, name, description, created_at, updated_at FROM groups WHERE org_id = $1 ORDER BY name LIMIT $2 OFFSET $3",
         )
+        .bind(org_id)
         .bind(page_size)
         .bind(offset)
         .fetch_all(&self.pool)
@@ -2304,24 +2460,26 @@ impl crate::Storage for PostgresStorage {
         })
     }
 
-    async fn get_group(&self, id: &str) -> Result<Option<Group>, DbErr> {
+    async fn get_group(&self, org_id: &str, id: &str) -> Result<Option<Group>, DbErr> {
         let row: Option<PgGroupRow> = sqlx::query_as(
-            "SELECT id, name, description, created_at, updated_at FROM groups WHERE id = $1",
+            "SELECT id, org_id, name, description, created_at, updated_at FROM groups WHERE org_id = $1 AND id = $2",
         )
+        .bind(org_id)
         .bind(id)
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.map(Group::from))
     }
 
-    async fn create_group(&self, input: &CreateGroup) -> Result<Group, DbErr> {
+    async fn create_group(&self, org_id: &str, input: &CreateGroup) -> Result<Group, DbErr> {
         let id = uuid::Uuid::new_v4().to_string();
         let row: PgGroupRow = sqlx::query_as(
-            "INSERT INTO groups (id, name, description)
-             VALUES ($1, $2, $3)
-             RETURNING id, name, description, created_at, updated_at",
+            "INSERT INTO groups (id, org_id, name, description)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id, org_id, name, description, created_at, updated_at",
         )
         .bind(&id)
+        .bind(org_id)
         .bind(&input.name)
         .bind(&input.description)
         .fetch_one(&self.pool)
@@ -2331,7 +2489,7 @@ impl crate::Storage for PostgresStorage {
 
     // Tri-state description: None=keep, Some(None)=clear, Some(Some(v))=set
     // Uses a flag param to distinguish "don't touch" vs "set to NULL" (cleared).
-    async fn update_group(&self, id: &str, input: &UpdateGroup) -> Result<Group, DbErr> {
+    async fn update_group(&self, org_id: &str, id: &str, input: &UpdateGroup) -> Result<Group, DbErr> {
         let should_update_description = input.description.is_some();
         let new_description: Option<String> = match &input.description {
             Some(Some(v)) => Some(v.clone()),
@@ -2339,12 +2497,13 @@ impl crate::Storage for PostgresStorage {
         };
         let row: Option<PgGroupRow> = sqlx::query_as(
             "UPDATE groups
-             SET name = COALESCE($2, name),
-                 description = CASE WHEN $3::boolean THEN $4 ELSE description END,
+             SET name = COALESCE($3, name),
+                 description = CASE WHEN $4::boolean THEN $5 ELSE description END,
                  updated_at = NOW()
-             WHERE id = $1
-             RETURNING id, name, description, created_at, updated_at",
+             WHERE org_id = $1 AND id = $2
+             RETURNING id, org_id, name, description, created_at, updated_at",
         )
+        .bind(org_id)
         .bind(id)
         .bind(&input.name)
         .bind(should_update_description)
@@ -2356,20 +2515,29 @@ impl crate::Storage for PostgresStorage {
         })
     }
 
-    async fn delete_group(&self, id: &str) -> Result<DeleteGroupResult, DbErr> {
-        let cleared_users = sqlx::query("UPDATE users SET group_id = NULL WHERE group_id = $1")
-            .bind(id)
-            .execute(&self.pool)
-            .await?
-            .rows_affected() as i64;
+    async fn delete_group(&self, org_id: &str, id: &str) -> Result<DeleteGroupResult, DbErr> {
+        // group_id moved from users → members in the migration; clear it on
+        // memberships in this org, plus channels in this org.
+        let cleared_users = sqlx::query(
+            "UPDATE members SET group_id = NULL WHERE group_id = $1 AND org_id = $2",
+        )
+        .bind(id)
+        .bind(org_id)
+        .execute(&self.pool)
+        .await?
+        .rows_affected() as i64;
 
-        let cleared_channels = sqlx::query("UPDATE channels SET group_id = NULL WHERE group_id = $1")
-            .bind(id)
-            .execute(&self.pool)
-            .await?
-            .rows_affected() as i64;
+        let cleared_channels = sqlx::query(
+            "UPDATE channels SET group_id = NULL WHERE group_id = $1 AND org_id = $2",
+        )
+        .bind(id)
+        .bind(org_id)
+        .execute(&self.pool)
+        .await?
+        .rows_affected() as i64;
 
-        sqlx::query("DELETE FROM groups WHERE id = $1")
+        sqlx::query("DELETE FROM groups WHERE org_id = $1 AND id = $2")
+            .bind(org_id)
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -2377,11 +2545,12 @@ impl crate::Storage for PostgresStorage {
         Ok(DeleteGroupResult { cleared_users, cleared_channels })
     }
 
-    async fn get_user_group_id(&self, user_id: &str) -> Result<Option<String>, DbErr> {
+    async fn get_user_group_id(&self, user_id: &str, org_id: &str) -> Result<Option<String>, DbErr> {
         let row: Option<(Option<String>,)> = sqlx::query_as(
-            "SELECT group_id FROM users WHERE id = $1",
+            "SELECT group_id FROM members WHERE user_id = $1 AND org_id = $2",
         )
         .bind(user_id)
+        .bind(org_id)
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.and_then(|(g,)| g))
@@ -2392,46 +2561,51 @@ impl crate::Storage for PostgresStorage {
     async fn seed_data(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use crate::seed;
 
+        // Seed data is platform-level: viewer_org_id = "" because the rows we
+        // create all have owner_org_id = NULL. The visibility filter
+        // (owner_org_id IS NULL OR owner_org_id = $1) matches them regardless.
+        let viewer_org_id = "";
+
         // Seed providers if none exist (idempotent)
-        let existing_providers = self.list_providers().await?;
+        let existing_providers = self.list_providers(viewer_org_id).await?;
         if existing_providers.is_empty() {
             let seed_providers = seed::get_seed_providers();
             for provider in seed_providers {
-                self.create_provider(&provider).await?;
+                self.create_provider(viewer_org_id, &provider).await?;
             }
         }
 
         // Seed pricing policies independently — check pricing_policies table
-        let existing_policies = self.list_pricing_policies().await?;
+        let existing_policies = self.list_pricing_policies(viewer_org_id).await?;
         if existing_policies.is_empty() {
             let seed_policies = seed::get_seed_pricing_policies();
             let mut policy_map: std::collections::HashMap<String, String> = std::collections::HashMap::new();
             for (policy, model_name) in &seed_policies {
                 let policy_id = policy.id.clone();
-                self.create_pricing_policy(policy).await?;
+                self.create_pricing_policy(viewer_org_id, policy).await?;
                 policy_map.insert(model_name.to_lowercase(), policy_id);
             }
 
             // Seed models — check models table independently
-            let existing_models = self.list_models().await?;
+            let existing_models = self.list_models(viewer_org_id).await?;
             if existing_models.is_empty() {
                 let seed_models = seed::get_seed_models(&[]);
                 for mut model in seed_models {
                     if let Some(policy_id) = policy_map.get(&model.name.to_lowercase()) {
                         model.pricing_policy_id = Some(policy_id.clone());
                     }
-                    self.create_model(&model).await?;
+                    self.create_model(viewer_org_id, &model).await?;
                 }
             }
         }
 
-        // Seed default settings for audit logs (idempotent - uses ON CONFLICT)
-        self.set_setting("audit_log_request", "true").await?;
-        self.set_setting("audit_log_response", "true").await?;
+        // Seed default platform settings for audit logs (idempotent - uses ON CONFLICT)
+        self.set_platform_setting("audit_log_request", "true").await?;
+        self.set_platform_setting("audit_log_response", "true").await?;
 
         // Seed provider_models if empty
-        let providers = self.list_providers().await?;
-        let models = self.list_models().await?;
+        let providers = self.list_providers(viewer_org_id).await?;
+        let models = self.list_models(viewer_org_id).await?;
         let provider_id_map = seed::build_provider_id_map(&providers);
         let model_id_map: Vec<(String, String)> = models.iter().map(|m| (m.model.name.clone(), m.model.id.clone())).collect();
         let seed_pm = seed::get_seed_provider_models(&provider_id_map, &model_id_map);
@@ -2440,21 +2614,35 @@ impl crate::Storage for PostgresStorage {
                 acc.entry(pm.provider_id.clone()).or_default().push(pm.clone());
                 acc
             }) {
-                let _ = self.upsert_provider_models(provider_id, group.clone()).await;
+                let _ = self.upsert_provider_models(viewer_org_id, provider_id, group.clone()).await;
             }
         }
 
         Ok(())
     }
 
-    // ---- Pricing Policies ----
+    // ---- Pricing Policies (catalog: visibility filter + anti-shadowing) ----
 
-    async fn create_pricing_policy(&self, policy: &PricingPolicy) -> Result<PricingPolicy, DbErr> {
+    async fn create_pricing_policy(&self, viewer_org_id: &str, policy: &PricingPolicy) -> Result<PricingPolicy, DbErr> {
+        // Anti-shadowing: an org-private policy may not reuse a platform-level name.
+        if let Some(_org) = &policy.owner_org_id {
+            let collision: Option<(String,)> = sqlx::query_as(
+                "SELECT id FROM pricing_policies WHERE name = $1 AND owner_org_id IS NULL",
+            )
+            .bind(&policy.name)
+            .fetch_optional(&self.pool)
+            .await?;
+            if collision.is_some() {
+                return Err(Box::new(CatalogNameReserved(policy.name.clone())));
+            }
+        }
+
         sqlx::query(
-            "INSERT INTO pricing_policies (id, name, billing_type, config, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6)",
+            "INSERT INTO pricing_policies (id, owner_org_id, name, billing_type, config, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
         )
         .bind(&policy.id)
+        .bind(&policy.owner_org_id)
         .bind(&policy.name)
         .bind(&policy.billing_type)
         .bind(policy.config.to_string())
@@ -2463,44 +2651,59 @@ impl crate::Storage for PostgresStorage {
         .execute(&self.pool)
         .await?;
 
+        let _ = viewer_org_id;
         Ok(policy.clone())
     }
 
-    async fn get_pricing_policy(&self, id: &str) -> Result<Option<PricingPolicy>, DbErr> {
+    async fn get_pricing_policy(&self, viewer_org_id: &str, id: &str) -> Result<Option<PricingPolicy>, DbErr> {
         let row: Option<PgPricingPolicyRow> = sqlx::query_as(
-            "SELECT id, name, billing_type, config, created_at, updated_at FROM pricing_policies WHERE id = $1",
+            "SELECT id, owner_org_id, name, billing_type, config, created_at, updated_at
+             FROM pricing_policies
+             WHERE id = $1 AND (owner_org_id IS NULL OR owner_org_id = $2)",
         )
         .bind(id)
+        .bind(viewer_org_id)
         .fetch_optional(&self.pool)
         .await?;
 
         Ok(row.map(PricingPolicy::from))
     }
 
-    async fn list_pricing_policies(&self) -> Result<Vec<PricingPolicy>, DbErr> {
+    async fn list_pricing_policies(&self, viewer_org_id: &str) -> Result<Vec<PricingPolicy>, DbErr> {
         let rows: Vec<PgPricingPolicyRow> = sqlx::query_as(
-            "SELECT id, name, billing_type, config, created_at, updated_at FROM pricing_policies",
+            "SELECT id, owner_org_id, name, billing_type, config, created_at, updated_at
+             FROM pricing_policies
+             WHERE owner_org_id IS NULL OR owner_org_id = $1",
         )
+        .bind(viewer_org_id)
         .fetch_all(&self.pool)
         .await?;
 
         Ok(rows.into_iter().map(PricingPolicy::from).collect())
     }
 
-    async fn list_pricing_policies_with_counts(&self) -> Result<Vec<PricingPolicyWithCounts>, DbErr> {
+    async fn list_pricing_policies_with_counts(&self, viewer_org_id: &str) -> Result<Vec<PricingPolicyWithCounts>, DbErr> {
         let rows: Vec<PgPricingPolicyRow> = sqlx::query_as(
-            "SELECT id, name, billing_type, config, created_at, updated_at FROM pricing_policies",
+            "SELECT id, owner_org_id, name, billing_type, config, created_at, updated_at
+             FROM pricing_policies
+             WHERE owner_org_id IS NULL OR owner_org_id = $1",
         )
+        .bind(viewer_org_id)
         .fetch_all(&self.pool)
         .await?;
 
         let mut results = Vec::new();
         for row in rows {
             let policy = PricingPolicy::from(row);
+            // Count models using this policy that are also visible to this viewer
+            // (platform + own org-private).
             let model_count: (i64,) = sqlx::query_as(
-                "SELECT COUNT(*) FROM models WHERE pricing_policy_id = $1",
+                "SELECT COUNT(*) FROM models
+                 WHERE pricing_policy_id = $1
+                   AND (owner_org_id IS NULL OR owner_org_id = $2)",
             )
             .bind(&policy.id)
+            .bind(viewer_org_id)
             .fetch_one(&self.pool)
             .await?;
             let channel_model_count: (i64,) = sqlx::query_as(
@@ -2518,36 +2721,42 @@ impl crate::Storage for PostgresStorage {
         Ok(results)
     }
 
-    async fn update_pricing_policy(&self, policy: &PricingPolicy) -> Result<PricingPolicy, DbErr> {
+    async fn update_pricing_policy(&self, viewer_org_id: &str, policy: &PricingPolicy) -> Result<PricingPolicy, DbErr> {
         sqlx::query(
-            "UPDATE pricing_policies SET name = $1, billing_type = $2, config = $3, updated_at = $4 WHERE id = $5",
+            "UPDATE pricing_policies SET name = $1, billing_type = $2, config = $3, updated_at = $4
+             WHERE id = $5 AND (owner_org_id IS NULL OR owner_org_id = $6)",
         )
         .bind(&policy.name)
         .bind(&policy.billing_type)
         .bind(policy.config.to_string())
         .bind(policy.updated_at)
         .bind(&policy.id)
+        .bind(viewer_org_id)
         .execute(&self.pool)
         .await?;
 
         Ok(policy.clone())
     }
 
-    async fn delete_pricing_policy(&self, id: &str) -> Result<(), DbErr> {
-        sqlx::query("DELETE FROM pricing_policies WHERE id = $1")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
+    async fn delete_pricing_policy(&self, viewer_org_id: &str, id: &str) -> Result<(), DbErr> {
+        sqlx::query(
+            "DELETE FROM pricing_policies WHERE id = $1 AND (owner_org_id IS NULL OR owner_org_id = $2)",
+        )
+        .bind(id)
+        .bind(viewer_org_id)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
-    // ─── Accounts ────────────────────────────────────────────────────────────────
+    // ─── Accounts (tenant: org_id scoping) ──────────────────────────────────────
 
-    async fn create_account(&self, account: &Account) -> Result<Account, Box<dyn std::error::Error + Send + Sync>> {
+    async fn create_account(&self, org_id: &str, account: &Account) -> Result<Account, Box<dyn std::error::Error + Send + Sync>> {
         sqlx::query(
-            "INSERT INTO accounts (id, user_id, balance, threshold, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)"
+            "INSERT INTO accounts (id, org_id, user_id, balance, threshold, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)"
         )
         .bind(&account.id)
+        .bind(org_id)
         .bind(&account.user_id)
         .bind(account.balance)
         .bind(account.threshold)
@@ -2555,49 +2764,57 @@ impl crate::Storage for PostgresStorage {
         .bind(account.updated_at)
         .execute(self.pool())
         .await?;
-        Ok(account.clone())
+        let mut a = account.clone();
+        a.org_id = org_id.to_string();
+        Ok(a)
     }
 
-    async fn get_account(&self, id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_account(&self, org_id: &str, id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgAccountRow> = sqlx::query_as(
-            "SELECT id, user_id, balance, threshold, created_at, updated_at FROM accounts WHERE id = $1"
+            "SELECT id, org_id, user_id, balance, threshold, created_at, updated_at FROM accounts WHERE org_id = $1 AND id = $2"
         )
+        .bind(org_id)
         .bind(id)
         .fetch_optional(self.pool())
         .await?;
         Ok(row.map(Account::from))
     }
 
-    async fn get_account_by_user_id(&self, user_id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_account_by_user_id(&self, org_id: &str, user_id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgAccountRow> = sqlx::query_as(
-            "SELECT id, user_id, balance, threshold, created_at, updated_at FROM accounts WHERE user_id = $1"
+            "SELECT id, org_id, user_id, balance, threshold, created_at, updated_at FROM accounts WHERE org_id = $1 AND user_id = $2"
         )
+        .bind(org_id)
         .bind(user_id)
         .fetch_optional(self.pool())
         .await?;
         Ok(row.map(Account::from))
     }
 
-    async fn update_account(&self, account: &Account) -> Result<Account, Box<dyn std::error::Error + Send + Sync>> {
+    async fn update_account(&self, org_id: &str, account: &Account) -> Result<Account, Box<dyn std::error::Error + Send + Sync>> {
         sqlx::query(
-            "UPDATE accounts SET balance = $1, threshold = $2, updated_at = $3 WHERE id = $4"
+            "UPDATE accounts SET balance = $1, threshold = $2, updated_at = $3 WHERE org_id = $4 AND id = $5"
         )
         .bind(account.balance)
         .bind(account.threshold)
         .bind(account.updated_at)
+        .bind(org_id)
         .bind(&account.id)
         .execute(self.pool())
         .await?;
-        Ok(account.clone())
+        let mut a = account.clone();
+        a.org_id = org_id.to_string();
+        Ok(a)
     }
 
-    // ─── Transactions ───────────────────────────────────────────────────────────
+    // ─── Transactions (tenant: org_id scoping) ──────────────────────────────────
 
-    async fn create_transaction(&self, transaction: &Transaction) -> Result<Transaction, Box<dyn std::error::Error + Send + Sync>> {
+    async fn create_transaction(&self, org_id: &str, transaction: &Transaction) -> Result<Transaction, Box<dyn std::error::Error + Send + Sync>> {
         sqlx::query(
-            "INSERT INTO transactions (id, account_id, type, amount, balance_after, description, reference_id, request_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+            "INSERT INTO transactions (id, org_id, account_id, type, amount, balance_after, description, reference_id, request_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)"
         )
         .bind(&transaction.id)
+        .bind(org_id)
         .bind(&transaction.account_id)
         .bind(transaction.transaction_type.as_str())
         .bind(transaction.amount)
@@ -2608,23 +2825,27 @@ impl crate::Storage for PostgresStorage {
         .bind(transaction.created_at)
         .execute(self.pool())
         .await?;
-        Ok(transaction.clone())
+        let mut t = transaction.clone();
+        t.org_id = org_id.to_string();
+        Ok(t)
     }
 
-    async fn get_transaction(&self, id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_transaction(&self, org_id: &str, id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, request_id, created_at FROM transactions WHERE id = $1"
+            "SELECT id, org_id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, request_id, created_at FROM transactions WHERE org_id = $1 AND id = $2"
         )
+        .bind(org_id)
         .bind(id)
         .fetch_optional(self.pool())
         .await?;
         Ok(row.map(Transaction::from))
     }
 
-    async fn get_transaction_by_reference(&self, account_id: &str, reference_id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_transaction_by_reference(&self, org_id: &str, account_id: &str, reference_id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, request_id, created_at FROM transactions WHERE account_id = $1 AND reference_id = $2"
+            "SELECT id, org_id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, request_id, created_at FROM transactions WHERE org_id = $1 AND account_id = $2 AND reference_id = $3"
         )
+        .bind(org_id)
         .bind(account_id)
         .bind(reference_id)
         .fetch_optional(self.pool())
@@ -2632,22 +2853,24 @@ impl crate::Storage for PostgresStorage {
         Ok(row.map(Transaction::from))
     }
 
-    async fn get_transaction_by_request_id(&self, request_id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn get_transaction_by_request_id(&self, org_id: &str, request_id: &str) -> Result<Option<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
         let row: Option<PgTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, request_id, created_at FROM transactions WHERE request_id = $1"
+            "SELECT id, org_id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, request_id, created_at FROM transactions WHERE org_id = $1 AND request_id = $2"
         )
+        .bind(org_id)
         .bind(request_id)
         .fetch_optional(self.pool())
         .await?;
         Ok(row.map(Transaction::from))
     }
 
-    async fn list_transactions(&self, account_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
+    async fn list_transactions(&self, org_id: &str, account_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<Transaction>, Box<dyn std::error::Error + Send + Sync>> {
         let offset = (page - 1) * page_size;
 
         let rows: Vec<PgTransactionRow> = sqlx::query_as(
-            "SELECT id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, request_id, created_at FROM transactions WHERE account_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3"
+            "SELECT id, org_id, account_id, type AS transaction_type, amount, balance_after, description, reference_id, request_id, created_at FROM transactions WHERE org_id = $1 AND account_id = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4"
         )
+        .bind(org_id)
         .bind(account_id)
         .bind(page_size)
         .bind(offset)
@@ -2655,8 +2878,9 @@ impl crate::Storage for PostgresStorage {
         .await?;
 
         let count_row: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM transactions WHERE account_id = $1"
+            "SELECT COUNT(*) FROM transactions WHERE org_id = $1 AND account_id = $2"
         )
+        .bind(org_id)
         .bind(account_id)
         .fetch_one(self.pool())
         .await?;
@@ -2669,7 +2893,322 @@ impl crate::Storage for PostgresStorage {
             page_size,
         })
     }
+
+    // ---- Orgs ----
+
+    async fn create_org(&self, org: CreateOrg) -> Result<Org, DbErr> {
+        let row: PgOrgRow = sqlx::query_as::<_, PgOrgRow>(
+            "INSERT INTO orgs (id, slug, name, owner_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, NOW(), NOW())
+             RETURNING id, slug, name, owner_id, created_at, updated_at",
+        )
+        .bind(&org.id)
+        .bind(&org.slug)
+        .bind(&org.name)
+        .bind(&org.owner_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.into())
+    }
+
+    async fn get_org(&self, id: &str) -> Result<Option<Org>, DbErr> {
+        let row: Option<PgOrgRow> = sqlx::query_as::<_, PgOrgRow>(
+            "SELECT id, slug, name, owner_id, created_at, updated_at FROM orgs WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(Into::into))
+    }
+
+    async fn get_org_by_slug(&self, slug: &str) -> Result<Option<Org>, DbErr> {
+        let row: Option<PgOrgRow> = sqlx::query_as::<_, PgOrgRow>(
+            "SELECT id, slug, name, owner_id, created_at, updated_at FROM orgs WHERE slug = $1",
+        )
+        .bind(slug)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(Into::into))
+    }
+
+    async fn list_orgs_for_user(&self, user_id: &str) -> Result<Vec<MembershipSummary>, DbErr> {
+        // Manual row parsing: MembershipSummary has a nested Org struct that
+        // query_as can't auto-flatten. See Issue A in the task plan.
+        let rows: Vec<sqlx::postgres::PgRow> = sqlx::query(
+            "SELECT o.id, o.slug, o.name, o.owner_id, o.created_at, o.updated_at,
+                    m.role, m.group_id
+             FROM members m JOIN orgs o ON o.id = m.org_id
+             WHERE m.user_id = $1 ORDER BY o.name",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let result = rows
+            .into_iter()
+            .map(|r| {
+                let role_str: String = r
+                    .try_get("role")
+                    .ok()
+                    .unwrap_or_else(|| "member".to_string());
+                MembershipSummary {
+                    org: Org {
+                        id: r.try_get("id").unwrap_or_default(),
+                        slug: r.try_get("slug").unwrap_or_default(),
+                        name: r.try_get("name").unwrap_or_default(),
+                        owner_id: r.try_get("owner_id").ok().flatten(),
+                        created_at: r
+                            .try_get("created_at")
+                            .unwrap_or_else(|_| chrono::Utc::now()),
+                        updated_at: r
+                            .try_get("updated_at")
+                            .unwrap_or_else(|_| chrono::Utc::now()),
+                    },
+                    role: MemberRole::parse(&role_str).unwrap_or(MemberRole::Member),
+                    group_id: r.try_get("group_id").ok().flatten(),
+                }
+            })
+            .collect();
+        Ok(result)
+    }
+
+    async fn update_org(&self, id: &str, updates: UpdateOrg) -> Result<Org, DbErr> {
+        // COALESCE per field: None = keep, Some(v) = set. Slug is unique; if
+        // the caller passes a duplicate slug the DB raises a constraint error
+        // that surfaces as the usual boxed DbErr.
+        let row: PgOrgRow = sqlx::query_as::<_, PgOrgRow>(
+            "UPDATE orgs
+             SET name = COALESCE($2, name),
+                 slug = COALESCE($3, slug),
+                 updated_at = NOW()
+             WHERE id = $1
+             RETURNING id, slug, name, owner_id, created_at, updated_at",
+        )
+        .bind(id)
+        .bind(&updates.name)
+        .bind(&updates.slug)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| match e {
+            sqlx::Error::RowNotFound => {
+                // Re-shape RowNotFound into a more descriptive error.
+                Box::new(OrgNotFound(id.to_string())) as DbErr
+            }
+            other => Box::new(other) as DbErr,
+        })?;
+        Ok(row.into())
+    }
+
+    async fn delete_org(&self, id: &str) -> Result<(), DbErr> {
+        let result = sqlx::query("DELETE FROM orgs WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        if result.rows_affected() == 0 {
+            return Err(Box::new(OrgNotFound(id.to_string())));
+        }
+        Ok(())
+    }
+
+    // ---- Members ----
+
+    async fn get_member(&self, user_id: &str, org_id: &str) -> Result<Option<Member>, DbErr> {
+        let row: Option<PgMemberRow> = sqlx::query_as(
+            "SELECT user_id, org_id, role, group_id, created_by, created_at
+             FROM members WHERE user_id = $1 AND org_id = $2",
+        )
+        .bind(user_id)
+        .bind(org_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(Member::from))
+    }
+
+    async fn list_members(&self, org_id: &str) -> Result<Vec<Member>, DbErr> {
+        let rows: Vec<PgMemberRow> = sqlx::query_as(
+            "SELECT user_id, org_id, role, group_id, created_by, created_at
+             FROM members WHERE org_id = $1 ORDER BY created_at",
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(Member::from).collect())
+    }
+
+    async fn upsert_member(&self, member: Member) -> Result<Member, DbErr> {
+        let row: PgMemberRow = sqlx::query_as(
+            "INSERT INTO members (user_id, org_id, role, group_id, created_by)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (user_id, org_id) DO UPDATE
+               SET role = EXCLUDED.role, group_id = EXCLUDED.group_id
+             RETURNING user_id, org_id, role, group_id, created_by, created_at",
+        )
+        .bind(&member.user_id)
+        .bind(&member.org_id)
+        .bind(member.role.as_str())
+        .bind(&member.group_id)
+        .bind(&member.created_by)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(Member::from(row))
+    }
+
+    async fn update_member_role(
+        &self,
+        user_id: &str,
+        org_id: &str,
+        role: MemberRole,
+    ) -> Result<(), DbErr> {
+        sqlx::query(
+            "UPDATE members SET role = $3 WHERE user_id = $1 AND org_id = $2",
+        )
+        .bind(user_id)
+        .bind(org_id)
+        .bind(role.as_str())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn delete_member(&self, user_id: &str, org_id: &str) -> Result<(), DbErr> {
+        sqlx::query("DELETE FROM members WHERE user_id = $1 AND org_id = $2")
+            .bind(user_id)
+            .bind(org_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn count_owners(&self, org_id: &str) -> Result<i64, DbErr> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM members WHERE org_id = $1 AND role = 'owner'",
+        )
+        .bind(org_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.0)
+    }
+
+    // ---- Settings (platform + org) ----
+
+    async fn get_platform_setting(&self, key: &str) -> Result<Option<String>, DbErr> {
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT value FROM platform_settings WHERE key = $1",
+        )
+        .bind(key)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| r.0))
+    }
+
+    async fn set_platform_setting(&self, key: &str, value: &str) -> Result<(), DbErr> {
+        sqlx::query(
+            "INSERT INTO platform_settings (key, value) VALUES ($1, $2)
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+        )
+        .bind(key)
+        .bind(value)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn get_org_setting(&self, org_id: &str, key: &str) -> Result<Option<String>, DbErr> {
+        let row: Option<(String,)> = sqlx::query_as(
+            "SELECT value FROM org_settings WHERE org_id = $1 AND key = $2",
+        )
+        .bind(org_id)
+        .bind(key)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|r| r.0))
+    }
+
+    async fn set_org_setting(&self, org_id: &str, key: &str, value: &str) -> Result<(), DbErr> {
+        sqlx::query(
+            "INSERT INTO org_settings (org_id, key, value) VALUES ($1, $2, $3)
+             ON CONFLICT (org_id, key) DO UPDATE SET value = EXCLUDED.value",
+        )
+        .bind(org_id)
+        .bind(key)
+        .bind(value)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn list_org_settings(&self, org_id: &str) -> Result<Vec<(String, String)>, DbErr> {
+        let rows: Vec<(String, String)> = sqlx::query_as(
+            "SELECT key, value FROM org_settings WHERE org_id = $1 ORDER BY key",
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
 }
+
+// ---------------------------------------------------------------------------
+// Helper types for the new methods above
+// ---------------------------------------------------------------------------
+
+#[derive(sqlx::FromRow)]
+struct PgMemberRow {
+    user_id: String,
+    org_id: String,
+    role: String,
+    group_id: Option<String>,
+    created_by: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct PgOrgRow {
+    id: String,
+    slug: String,
+    name: String,
+    owner_id: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<PgOrgRow> for Org {
+    fn from(r: PgOrgRow) -> Self {
+        Org {
+            id: r.id,
+            slug: r.slug,
+            name: r.name,
+            owner_id: r.owner_id,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        }
+    }
+}
+
+impl From<PgMemberRow> for Member {
+    fn from(r: PgMemberRow) -> Self {
+        Member {
+            user_id: r.user_id,
+            org_id: r.org_id,
+            role: MemberRole::parse(&r.role).unwrap_or(MemberRole::Member),
+            group_id: r.group_id,
+            created_by: r.created_by,
+            created_at: r.created_at,
+        }
+    }
+}
+
+/// Lightweight error returned by `update_org` / `delete_org` when the org
+/// is missing. Kept local to avoid pulling in `org::OrgError` (which would
+/// create a circular dependency — `org` already depends on `storage`).
+#[derive(Debug)]
+struct OrgNotFound(String);
+impl std::fmt::Display for OrgNotFound {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "org not found: {}", self.0)
+    }
+}
+impl std::error::Error for OrgNotFound {}
 
 #[cfg(test)]
 mod tests {
@@ -2691,10 +3230,22 @@ mod tests {
 
         let now = chrono::Utc::now();
 
+        // Ensure the default org exists (the migration creates it but the
+        // shared test DB may be in any state). Use ON CONFLICT so this is
+        // idempotent.
+        let _ = sqlx::query(
+            "INSERT INTO orgs (id, slug, name, created_at, updated_at)
+             VALUES ('org_test', 'test-org', 'Test Org', NOW(), NOW())
+             ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await;
+
         // Use a synthetic API key. Insert it if missing.
         let key_id = "test-routes-key";
-        let _ = sqlx::query("INSERT INTO api_keys (id, name, key_hash, enabled, created_at, updated_at) VALUES ($1, $2, $3, true, $4, $5) ON CONFLICT (id) DO NOTHING")
+        let _ = sqlx::query("INSERT INTO api_keys (id, org_id, name, key_hash, enabled, created_at, updated_at) VALUES ($1, $2, $3, $4, true, $5, $6) ON CONFLICT (id) DO NOTHING")
             .bind(key_id)
+            .bind("org_test")
             .bind("test-routes")
             .bind("0000000000000000000000000000000000000000000000000000000000000000")
             .bind(now)
@@ -2738,6 +3289,7 @@ mod tests {
 
         let log = AuditLog {
             id: format!("test-routes-{}", uuid::Uuid::new_v4()),
+            org_id: "org_test".to_string(),
             request_id: Some(format!("test-req-{}", uuid::Uuid::new_v4())),
             key_id: key_id.to_string(),
             user_id: None,
@@ -2761,13 +3313,14 @@ mod tests {
             upstream_url: Some("https://example.com/v1/chat/completions".to_string()),
             request_headers: None,
             response_headers: None,
+            actor_is_platform_admin: false,
             routes: Some(routes.clone()),
         };
 
-        storage.insert_log(&log).await.expect("insert");
+        storage.insert_log("org_test", &log).await.expect("insert");
 
         let fetched = storage
-            .get_audit_by_request_id(log.request_id.as_deref().unwrap())
+            .get_audit_by_request_id("org_test", log.request_id.as_deref().unwrap())
             .await
             .expect("fetch")
             .expect("found");
@@ -2787,7 +3340,7 @@ mod tests {
         // Previously its SELECT missed the routes column, producing
         // sqlx ColumnNotFound("routes") at this call site.
         let by_id = storage
-            .get_log(&log.id)
+            .get_log("org_test", &log.id)
             .await
             .expect("get_log fetch")
             .expect("get_log found");
@@ -2807,5 +3360,259 @@ mod tests {
             .execute(&storage.pool)
             .await
             .expect("cleanup api_keys");
+    }
+}
+
+#[cfg(test)]
+mod org_tests {
+    use super::*;
+    use crate::Storage;
+
+    /// After running the SaaS migration, the default org should exist and every
+    /// pre-existing admin user (seeded by the migration backfill in step 5)
+    /// should appear in `members` with role = 'owner'.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn bootstrap_default_org_has_admins_as_owners(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+
+        let org = storage
+            .get_org("org_default")
+            .await
+            .expect("get_org")
+            .expect("default org exists after migration");
+
+        assert_eq!(org.slug, "default");
+        assert_eq!(org.name, "Default Org");
+
+        // The migration only creates memberships for users that already existed
+        // when it ran. In a fresh sqlx::test DB there are no users, so we
+        // insert a synthetic admin-style user + verify the membership backfill
+        // path manually instead.
+        sqlx::query(
+            "INSERT INTO users (id, username, password, created_at, updated_at)
+             VALUES ('u-bootstrap-test', 'bootstrap_test', 'x', NOW(), NOW())
+             ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert user");
+
+        storage
+            .upsert_member(Member {
+                user_id: "u-bootstrap-test".to_string(),
+                org_id: "org_default".to_string(),
+                role: MemberRole::Owner,
+                group_id: None,
+                created_by: Some("u-bootstrap-test".to_string()),
+                created_at: chrono::Utc::now(),
+            })
+            .await
+            .expect("upsert_member");
+
+        let members = storage.list_members("org_default").await.expect("list_members");
+        let found = members
+            .iter()
+            .find(|m| m.user_id == "u-bootstrap-test")
+            .expect("membership row present");
+        assert_eq!(found.role, MemberRole::Owner);
+
+        // cleanup
+        sqlx::query("DELETE FROM members WHERE user_id = 'u-bootstrap-test' AND org_id = 'org_default'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup members");
+        sqlx::query("DELETE FROM users WHERE id = 'u-bootstrap-test'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup users");
+    }
+
+    /// Catalog visibility: platform-level rows (owner_org_id IS NULL) are visible
+    /// to every org; org-private rows are visible only to their owner org.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn catalog_visibility_filter_works(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+
+        // Two orgs.
+        for slug in &["org-a-vis", "org-b-vis"] {
+            // Owner user must exist first — orgs.owner_id has a deferred FK to users(id).
+            sqlx::query(
+                "INSERT INTO users (id, username, password, created_at, updated_at)
+                 VALUES ($1, $2, 'x', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+            )
+            .bind(format!("u-{}", slug))
+            .bind(slug)
+            .execute(&storage.pool)
+            .await
+            .expect("insert owner user");
+            storage
+                .create_org(crate::types::CreateOrg {
+                    id: slug.to_string(),
+                    slug: slug.to_string(),
+                    name: format!("{} org", slug),
+                    owner_id: format!("u-{}", slug),
+                })
+                .await
+                .expect("create_org");
+        }
+
+        // Platform-level model (owner_org_id = NULL) — visible to everyone.
+        let platform_model = Model {
+            id: "m-platform-vis".to_string(),
+            name: "platform-visible-model".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: None,
+            created_at: chrono::Utc::now(),
+        };
+        storage
+            .create_model("org-a-vis", &platform_model)
+            .await
+            .expect("create platform-level model");
+
+        // Org-A-private model — visible only to org-a-vis.
+        let org_a_model = Model {
+            id: "m-orga-private".to_string(),
+            name: "orga-private-model".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: Some("org-a-vis".to_string()),
+            created_at: chrono::Utc::now(),
+        };
+        storage
+            .create_model("org-a-vis", &org_a_model)
+            .await
+            .expect("create org-a-private model");
+
+        // Org-A sees both.
+        let names_a: Vec<String> = storage
+            .list_models("org-a-vis")
+            .await
+            .expect("list models for org-a")
+            .into_iter()
+            .map(|m| m.model.name)
+            .collect();
+        assert!(
+            names_a.iter().any(|n| n == "platform-visible-model"),
+            "org-a should see the platform model: {:?}",
+            names_a
+        );
+        assert!(
+            names_a.iter().any(|n| n == "orga-private-model"),
+            "org-a should see its own private model: {:?}",
+            names_a
+        );
+
+        // Org-B sees only the platform model, NOT org-a's private model.
+        let names_b: Vec<String> = storage
+            .list_models("org-b-vis")
+            .await
+            .expect("list models for org-b")
+            .into_iter()
+            .map(|m| m.model.name)
+            .collect();
+        assert!(
+            names_b.iter().any(|n| n == "platform-visible-model"),
+            "org-b should see the platform model: {:?}",
+            names_b
+        );
+        assert!(
+            !names_b.iter().any(|n| n == "orga-private-model"),
+            "org-b must NOT see org-a's private model: {:?}",
+            names_b
+        );
+
+        // Cleanup.
+        sqlx::query("DELETE FROM models WHERE id IN ('m-platform-vis', 'm-orga-private')")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup models");
+        sqlx::query("DELETE FROM orgs WHERE id IN ('org-a-vis', 'org-b-vis')")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup orgs");
+        sqlx::query("DELETE FROM users WHERE id IN ('u-org-a-vis', 'u-org-b-vis')")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup users");
+    }
+
+    /// Anti-shadowing: an org-private model must not be allowed to reuse a name
+    /// that's already taken at the platform level. This protects the catalog
+    /// invariant that a model name uniquely identifies either a platform row or
+    /// a row owned by exactly one org — never both.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn anti_shadowing_rejects_org_private_with_platform_name(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+
+        // Org for the private model.
+        // Owner user first (FK constraint on orgs.owner_id → users.id is deferred
+        // but committing a tx without the user present still fails).
+        sqlx::query(
+            "INSERT INTO users (id, username, password, created_at, updated_at)
+             VALUES ('u-shadow', 'shadow', 'x', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert owner user");
+        storage
+            .create_org(crate::types::CreateOrg {
+                id: "org-shadow".to_string(),
+                slug: "org-shadow".to_string(),
+                name: "Shadow Org".to_string(),
+                owner_id: "u-shadow".to_string(),
+            })
+            .await
+            .expect("create_org");
+
+        // Platform-level model named "gpt-4".
+        let platform = Model {
+            id: "m-platform-shadow".to_string(),
+            name: "gpt-4".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: None,
+            created_at: chrono::Utc::now(),
+        };
+        storage
+            .create_model("org-shadow", &platform)
+            .await
+            .expect("create platform model");
+
+        // Now attempt an org-private model with the SAME name. Should fail.
+        let attempt = Model {
+            id: "m-shadow-attempt".to_string(),
+            name: "gpt-4".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: Some("org-shadow".to_string()),
+            created_at: chrono::Utc::now(),
+        };
+        let res = storage.create_model("org-shadow", &attempt).await;
+        assert!(
+            res.is_err(),
+            "creating an org-private model with a name that's already platform-level must fail"
+        );
+        // Sanity-check the error message mentions the reserved name.
+        let msg = res.unwrap_err().to_string();
+        assert!(
+            msg.contains("gpt-4"),
+            "error should reference the reserved name, got: {}",
+            msg
+        );
+
+        // Cleanup.
+        sqlx::query("DELETE FROM models WHERE id = 'm-platform-shadow'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup platform model");
+        sqlx::query("DELETE FROM orgs WHERE id = 'org-shadow'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup org");
+        sqlx::query("DELETE FROM users WHERE id = 'u-shadow'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup user");
     }
 }
