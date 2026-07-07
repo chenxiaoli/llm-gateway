@@ -8,11 +8,30 @@
 //! Handlers pull `OrgContext` via `FromRequestParts`; they no longer call
 //! `require_auth(&headers, ...)` directly.
 
-use axum::extract::Request;
+use std::sync::Arc;
+
+use axum::extract::{Request, State};
+use axum::http::HeaderMap;
 use axum::middleware::Next;
 use axum::response::Response;
 
-/// Placeholder — real implementation in Task 2.
-pub async fn auth_layer(_req: Request, _next: Next) -> Response {
-    unimplemented!("auth_layer — filled in by Task 2")
+use crate::error::ApiError;
+use crate::extractors::require_auth;
+use crate::AppState;
+
+/// Verify the bearer JWT and inject `JwtClaims` into request extensions.
+///
+/// Rejects with 401 Unauthorized on missing/invalid token. Token validation
+/// logic is shared with the existing `require_auth` helper — we wrap it so
+/// downstream layers (org_resolve, membership) and handlers don't repeat the
+/// header-parse + decode work.
+pub async fn auth_layer(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    mut req: Request,
+    next: Next,
+) -> Result<Response, ApiError> {
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    req.extensions_mut().insert(claims);
+    Ok(next.run(req).await)
 }
