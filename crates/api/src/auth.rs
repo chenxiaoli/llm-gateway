@@ -593,6 +593,21 @@ pub async fn list_orgs(
     ))
 }
 
+/// Validate an org slug against the same rule as the DB CHECK constraint:
+/// `^[a-z0-9-]{3,64}$` (lowercase letters, digits, hyphens; 3-64 chars).
+fn validate_org_slug(slug: &str) -> Result<(), String> {
+    if slug.len() < 3 || slug.len() > 64 {
+        return Err("Slug must be 3-64 characters".into());
+    }
+    if !slug
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
+        return Err("Slug can only contain lowercase letters, digits, and hyphens".into());
+    }
+    Ok(())
+}
+
 /// Create a new org with the caller as owner.
 pub async fn create_org(
     State(state): State<Arc<AppState>>,
@@ -600,6 +615,11 @@ pub async fn create_org(
     Json(body): Json<CreateOrgRequest>,
 ) -> Result<Json<OrgSummary>, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
+
+    validate_org_slug(&body.slug).map_err(ApiError::BadRequest)?;
+    if body.name.trim().is_empty() {
+        return Err(ApiError::BadRequest("name is required".into()));
+    }
 
     let user = state
         .storage
@@ -618,7 +638,21 @@ pub async fn create_org(
             owner_id: claims.sub.clone(),
         })
         .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+        // Map duplicate-slug storage errors to 409 Conflict. The storage trait
+        // returns `Box<dyn Error>`, so we string-sniff for the Postgres unique
+        // constraint name (`orgs_slug_key`) and common violation keywords.
+        .map_err(|e| {
+            let msg = e.to_string();
+            let lower = msg.to_lowercase();
+            if msg.contains("orgs_slug_key")
+                || lower.contains("duplicate")
+                || lower.contains("unique")
+            {
+                ApiError::Conflict("org slug already taken".into())
+            } else {
+                ApiError::Internal(msg)
+            }
+        })?;
 
     state
         .storage
@@ -651,4 +685,27 @@ pub async fn create_org(
         role: MemberRole::Owner.as_str().to_string(),
         group_id: None,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_org_slug_accepts_valid() {
+        assert!(validate_org_slug("my-org").is_ok());
+        assert!(validate_org_slug("abc").is_ok());
+        assert!(validate_org_slug("a1b2c3").is_ok());
+        assert!(validate_org_slug(&"x".repeat(64)).is_ok());
+    }
+
+    #[test]
+    fn validate_org_slug_rejects_invalid() {
+        assert!(validate_org_slug("ab").is_err());            // too short
+        assert!(validate_org_slug(&"x".repeat(65)).is_err()); // too long
+        assert!(validate_org_slug("MyOrg").is_err());         // uppercase
+        assert!(validate_org_slug("my_org").is_err());        // underscore
+        assert!(validate_org_slug("my org").is_err());        // space
+        assert!(validate_org_slug("").is_err());              // empty
+    }
 }
