@@ -32,6 +32,7 @@ import { useTheme } from '../hooks/useTheme';
 import { apiClient } from '../api/client';
 import { useTranslation } from 'react-i18next';
 import { Globe } from 'lucide-react';
+import { OrgSwitcher } from './OrgSwitcher';
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -47,6 +48,7 @@ export default function AppLayout() {
   const isAdmin = isAdminOrAbove(user, currentOrg);
   const { theme, toggleTheme } = useTheme();
   const { t, i18n } = useTranslation();
+  const slug = currentOrg?.slug ?? '';
   const toggleLanguage = () => {
     const next = i18n.language === 'zh' ? 'en' : 'zh';
     i18n.changeLanguage(next);
@@ -54,23 +56,23 @@ export default function AppLayout() {
   };
 
   const consoleItems = [
-    { key: '/console/dashboard', icon: LayoutDashboard, label: t('sidebar.dashboard') },
-    { key: '/console/keys', icon: KeyRound, label: t('sidebar.keys') },
-    { key: '/console/model-fallbacks', icon: ArrowRightLeft, label: t('sidebar.modelFallbacks') },
-    { key: '/console/models', icon: SquareStack, label: t('sidebar.models') },
-    { key: '/console/usage', icon: BarChart3, label: t('sidebar.usage') },
+    { key: `/${slug}/dashboard`, icon: LayoutDashboard, label: t('sidebar.dashboard') },
+    { key: `/${slug}/keys`, icon: KeyRound, label: t('sidebar.keys') },
+    { key: `/${slug}/model-fallbacks`, icon: ArrowRightLeft, label: t('sidebar.modelFallbacks') },
+    { key: `/${slug}/models`, icon: SquareStack, label: t('sidebar.models') },
+    { key: `/${slug}/usage`, icon: BarChart3, label: t('sidebar.usage') },
   ];
 
   const adminItems = [
-    { key: '/admin/dashboard', icon: LayoutDashboard, label: t('sidebar.dashboard') },
-    { key: '/admin/channels', icon: Network, label: t('sidebar.channels') },
-    { key: '/admin/providers', icon: Server, label: t('sidebar.providers') },
-    { key: '/admin/models', icon: Cpu, label: t('sidebar.models') },
-    { key: '/admin/pricing-policies', icon: DollarSign, label: t('sidebar.pricingPolicies') },
-    { key: '/admin/users', icon: Users, label: t('sidebar.users') },
-    { key: '/admin/groups', icon: UsersRound, label: t('groups.title') },
-    { key: '/admin/settings', icon: Settings, label: t('sidebar.settings') },
-    { key: '/admin/logs', icon: FileText, label: t('sidebar.logs') },
+    { key: `/${slug}/admin/dashboard`, icon: LayoutDashboard, label: t('sidebar.dashboard') },
+    { key: `/${slug}/admin/channels`, icon: Network, label: t('sidebar.channels') },
+    { key: `/${slug}/admin/providers`, icon: Server, label: t('sidebar.providers') },
+    { key: `/${slug}/admin/models`, icon: Cpu, label: t('sidebar.models') },
+    { key: `/${slug}/admin/pricing-policies`, icon: DollarSign, label: t('sidebar.pricingPolicies') },
+    { key: `/${slug}/admin/users`, icon: Users, label: t('sidebar.users') },
+    { key: `/${slug}/admin/groups`, icon: UsersRound, label: t('groups.title') },
+    { key: `/${slug}/admin/settings`, icon: Settings, label: t('sidebar.settings') },
+    { key: `/${slug}/admin/logs`, icon: FileText, label: t('sidebar.logs') },
   ];
 
   // Map paths to display names for breadcrumbs
@@ -110,7 +112,7 @@ export default function AppLayout() {
 
   const sidebarWidth = collapsed ? 'w-[68px]' : 'w-[232px]';
 
-  const breadcrumbSegment = location.pathname.replace(/^\/(console|admin)\//, '');
+  const breadcrumbSegment = location.pathname.replace(/^\/[^/]+\/(admin\/)?/, '');
 
   const navItem = (item: { key: string; icon: typeof LayoutDashboard; label: string }, active: boolean) => {
     const Icon = item.icon;
@@ -155,6 +157,13 @@ export default function AppLayout() {
           TokenVis
         </span>
       </div>
+
+      {/* Org switcher — only show if currentOrg is set */}
+      {currentOrg && !collapsed && (
+        <div className="border-b border-base-300/60 px-2 py-2">
+          <OrgSwitcher />
+        </div>
+      )}
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 flex flex-col gap-0.5" role="navigation" aria-label="Main navigation">
@@ -226,6 +235,12 @@ export default function AppLayout() {
                 <X className="h-5 w-5" />
               </button>
             </div>
+            {/* Org switcher — mobile */}
+            {currentOrg && (
+              <div className="border-b border-base-300/60 px-2 py-2">
+                <OrgSwitcher />
+              </div>
+            )}
             {/* Reuse nav items at full width */}
             <nav className="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-0.5" role="navigation" aria-label="Main navigation">
               <div className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-1 pb-2">
@@ -302,7 +317,7 @@ export default function AppLayout() {
               </button>
               <nav className="flex items-center gap-1.5 text-xs min-w-0">
                 <button
-                  onClick={() => navigate('/console/dashboard')}
+                  onClick={() => navigate(slug ? `/${slug}/dashboard` : '/login')}
                   className="text-base-content/30 hover:text-base-content/50 transition-colors shrink-0 font-medium"
                 >
                   {t('sidebar.console')}
@@ -341,7 +356,6 @@ export default function AppLayout() {
               <div className="h-4 w-px bg-base-300/60 mx-1" />
 
               <div ref={dropdownRef} className="relative">
-                {/* TODO(Phase 2): render OrgSwitcher here using useAuthStore.currentOrg + .orgs */}
                 <button
                   className="flex items-center gap-2 text-sm cursor-pointer rounded-lg px-2 py-1 hover:bg-base-200/60 transition-colors"
                   onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -359,14 +373,14 @@ export default function AppLayout() {
                   <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl border border-base-300/60 bg-base-100 shadow-lg shadow-black/10 py-1.5 z-50">
                     <button
                       className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors cursor-pointer"
-                      onClick={() => { setDropdownOpen(false); navigate('/console/account'); }}
+                      onClick={() => { setDropdownOpen(false); navigate(slug ? `/${slug}/account` : '/login'); }}
                     >
                       <User className="h-4 w-4 text-base-content/40" />
                       {t('header.account')}
                     </button>
                     <button
                       className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors cursor-pointer"
-                      onClick={() => { setDropdownOpen(false); navigate('/console/change-password'); }}
+                      onClick={() => { setDropdownOpen(false); navigate(slug ? `/${slug}/change-password` : '/login'); }}
                     >
                       <Lock className="h-4 w-4 text-base-content/40" />
                       {t('header.changePassword')}

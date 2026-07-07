@@ -70,7 +70,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     clearToken();
     clearRefreshToken();
     set({ user: null, currentOrg: null, orgs: [] });
-    window.location.href = '/console/login';
+    window.location.href = '/login';
   },
 
   setUser: (user: User) => set({ user }),

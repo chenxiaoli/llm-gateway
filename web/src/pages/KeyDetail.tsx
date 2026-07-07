@@ -7,11 +7,13 @@ import { useModelFallbacks } from '../hooks/useModelFallbacks';
 import { Button } from '../components/ui/Button';
 import { Toggle } from '../components/ui/Toggle';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { useAuthStore } from '../stores/authStore';
 
 export default function KeyDetail() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const slug = useAuthStore((s) => s.currentOrg?.slug);
   const { data: key, isLoading } = useKey(id!);
   const updateMutation = useUpdateKey();
   const deleteMutation = useDeleteKey();
@@ -52,12 +54,12 @@ export default function KeyDetail() {
 
   const handleDelete = async () => {
     await deleteMutation.mutateAsync(key.id);
-    navigate('/console/keys');
+    navigate(slug ? `/${slug}/keys` : '/login');
   };
 
   return (
     <div>
-      <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/console/keys')} className="mb-4">
+      <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate(slug ? `/${slug}/keys` : '/login')} className="mb-4">
         {t('keyDetail.backToKeys')}
       </Button>
 

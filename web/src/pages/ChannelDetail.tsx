@@ -15,6 +15,7 @@ import { Modal } from '../components/ui/Modal';
 import { Toggle } from '../components/ui/Toggle';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Select } from '../components/ui/Select';
+import { useAuthStore } from '../stores/authStore';
 import type { UpdateChannelRequest, ChannelModel, TimeSlot } from '../types';
 import { utcToLocalTime, localToUtcTime, utcDayToLocalDay, localDayToUtcDay, getBrowserTimezone, getTimezoneLabel } from '../lib/timezone';
 
@@ -22,6 +23,7 @@ export default function ChannelDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const slug = useAuthStore((s) => s.currentOrg?.slug);
   const { data: channel, isLoading } = useChannel(id!);
   const { data: providers } = useProviders();
   const { data: channelModels, isLoading: modelsLoading } = useChannelModels(channel?.id || '');
@@ -159,7 +161,7 @@ export default function ChannelDetail() {
     return (
       <div className="text-center py-12">
         <div className="text-base-content/40 mb-4">{t('channelDetail.channelNotFound')}</div>
-        <Button variant="secondary" onClick={() => navigate('/admin/channels')}>
+        <Button variant="secondary" onClick={() => navigate(slug ? `/${slug}/admin/channels` : '/login')}>
           {t('channelDetail.backToChannels')}
         </Button>
       </div>
@@ -183,7 +185,7 @@ export default function ChannelDetail() {
 
   const handleDelete = async () => {
     await deleteMutation.mutateAsync(channel.id);
-    navigate('/admin/channels');
+    navigate(slug ? `/${slug}/admin/channels` : '/login');
   };
 
   const handleCancelEdit = () => {
@@ -205,7 +207,7 @@ export default function ChannelDetail() {
 
   return (
     <div>
-      <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/admin/channels')} className="mb-4">
+      <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate(slug ? `/${slug}/admin/channels` : '/login')} className="mb-4">
         {t('channelDetail.backToChannels')}
       </Button>
 

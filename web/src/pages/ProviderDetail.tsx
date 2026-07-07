@@ -12,12 +12,14 @@ import { Badge } from '../components/ui/Badge';
 import { Toggle } from '../components/ui/Toggle';
 import { Select } from '../components/ui/Select';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { useAuthStore } from '../stores/authStore';
 import type { ChannelModel, CreateChannelModelRequest, UpdateChannelModelRequest, Channel } from '../types';
 
 export default function ProviderDetail() {
   const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const slug = useAuthStore((s) => s.currentOrg?.slug);
   const { data: provider, isLoading } = useProvider(id!);
   const updateMutation = useUpdateProvider();
   const deleteMutation = useDeleteProvider();
@@ -92,7 +94,7 @@ export default function ProviderDetail() {
 
   const handleDeleteProvider = async () => {
     await deleteMutation.mutateAsync(provider.id);
-    navigate('/admin/providers');
+    navigate(slug ? `/${slug}/admin/providers` : '/login');
   };
 
   const resetModelForm = () => {
@@ -151,7 +153,7 @@ export default function ProviderDetail() {
 
   return (
     <div>
-      <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate('/admin/providers')} className="mb-4">{t('providerDetail.backToProviders')}</Button>
+      <Button variant="ghost" icon={<ArrowLeft className="h-4 w-4" />} onClick={() => navigate(slug ? `/${slug}/admin/providers` : '/login')} className="mb-4">{t('providerDetail.backToProviders')}</Button>
       <div className="mb-6"><h1 className="text-4xl font-bold">{t('providerDetail.pageTitle', { name: provider.name })}</h1></div>
 
       <form onSubmit={handleUpdateProvider} className="mb-8 max-w-lg bg-base-100 rounded-box p-5 shadow-sm space-y-4">

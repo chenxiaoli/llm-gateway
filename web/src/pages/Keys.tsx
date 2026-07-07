@@ -12,6 +12,7 @@ import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
 import { toast } from 'sonner';
 import i18n from '../i18n';
+import { useAuthStore } from '../stores/authStore';
 import type { CreateKeyResponse } from '../types';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -23,6 +24,7 @@ export default function Keys() {
   const [pageSize] = useState(20);
   const { data, isLoading } = useKeys(page, pageSize);
   const createKeyMutation = useCreateKey();
+  const slug = useAuthStore((s) => s.currentOrg?.slug);
   const navigate = useNavigate();
   const { data: fallbacks } = useModelFallbacks();
   const reducedMotion = useReducedMotion();
@@ -124,7 +126,7 @@ export default function Keys() {
                     className="border-b border-base-200/40 hover:bg-base-200/20 transition-colors"
                   >
                     <td>
-                      <button onClick={() => navigate(`/console/keys/${key.id}`)} className="link link-primary text-sm font-medium">
+                      <button onClick={() => navigate(slug ? `/${slug}/keys/${key.id}` : '/login')} className="link link-primary text-sm font-medium">
                         {key.name}
                       </button>
                     </td>

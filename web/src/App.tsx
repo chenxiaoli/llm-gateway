@@ -4,6 +4,8 @@ import { getToken } from './api/client';
 import { isAdminOrAbove } from './lib/auth';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import Layout from './components/Layout';
+import { OrgRouteGuard } from './components/OrgRouteGuard';
+import { LegacyRedirect } from './components/LegacyRedirect';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -36,7 +38,7 @@ function RequireAuth() {
   if (isLoading) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
   if (!user) {
     if (getToken()) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
-    return <Navigate to="/console/login" replace />;
+    return <Navigate to="/login" replace />;
   }
   return <Outlet />;
 }
@@ -48,9 +50,12 @@ function RequireAdmin() {
   if (isLoading) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
   if (!user) {
     if (getToken()) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
-    return <Navigate to="/console/login" replace />;
+    return <Navigate to="/login" replace />;
   }
-  if (!isAdminOrAbove(user, currentOrg)) return <Navigate to="/console/dashboard" replace />;
+  if (!isAdminOrAbove(user, currentOrg)) {
+    const slug = currentOrg?.slug;
+    return <Navigate to={slug ? `/${slug}/dashboard` : '/login'} replace />;
+  }
   return <Outlet />;
 }
 
@@ -66,38 +71,49 @@ function App() {
           />
           <Route path=":lang/:section/:slug" element={<DocsPage />} />
         </Route>
-        <Route path="/console/login" element={<Login />} />
-        <Route path="/console/register" element={<Register />} />
-        <Route path="/console" element={<Layout />}>
+
+        {/* User-scoped — no org prefix, no Layout */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+
+        {/* Org-scoped — wraps everything else */}
+        <Route path="/:orgSlug" element={<Layout />}>
           <Route element={<RequireAuth />}>
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="account" element={<Account />} />
-            <Route path="change-password" element={<ChangePassword />} />
-            <Route path="keys" element={<Keys />} />
-            <Route path="keys/:id" element={<KeyDetail />} />
-            <Route path="model-fallbacks" element={<ModelFallbacks />} />
-            <Route path="models" element={<ConsoleModels />} />
-            <Route path="usage" element={<Usage />} />
+            <Route element={<OrgRouteGuard />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="keys" element={<Keys />} />
+              <Route path="keys/:id" element={<KeyDetail />} />
+              <Route path="model-fallbacks" element={<ModelFallbacks />} />
+              <Route path="models" element={<ConsoleModels />} />
+              <Route path="usage" element={<Usage />} />
+              <Route path="account" element={<Account />} />
+              <Route path="change-password" element={<ChangePassword />} />
+            </Route>
           </Route>
-        </Route>
-        <Route path="/admin" element={<Layout />}>
+
           <Route element={<RequireAdmin />}>
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="channels" element={<Channels />} />
-            <Route path="channels/:id" element={<ChannelDetail />} />
-            <Route path="providers" element={<Providers />} />
-            <Route path="providers/:id" element={<ProviderDetail />} />
-            <Route path="models" element={<Models />} />
-            <Route path="pricing-policies" element={<PricingPolicies />} />
-            <Route path="users" element={<Users />} />
-            <Route path="groups" element={<Groups />} />
-            <Route path="users/:userId/balance" element={<AccountBalance />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="logs" element={<Logs />} />
+            <Route element={<OrgRouteGuard />}>
+              <Route path="admin/dashboard" element={<AdminDashboard />} />
+              <Route path="admin/channels" element={<Channels />} />
+              <Route path="admin/channels/:id" element={<ChannelDetail />} />
+              <Route path="admin/providers" element={<Providers />} />
+              <Route path="admin/providers/:id" element={<ProviderDetail />} />
+              <Route path="admin/models" element={<Models />} />
+              <Route path="admin/pricing-policies" element={<PricingPolicies />} />
+              <Route path="admin/users" element={<Users />} />
+              <Route path="admin/groups" element={<Groups />} />
+              <Route path="admin/users/:userId/balance" element={<AccountBalance />} />
+              <Route path="admin/settings" element={<Settings />} />
+              <Route path="admin/logs" element={<Logs />} />
+            </Route>
           </Route>
         </Route>
+
+        {/* Legacy paths — redirect to current org */}
+        <Route path="/console/*" element={<LegacyRedirect />} />
+        <Route path="/admin/*" element={<LegacyRedirect />} />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

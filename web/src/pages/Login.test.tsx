@@ -49,7 +49,7 @@ describe('Login page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/console/dashboard');
+      expect(mockNavigate).toHaveBeenCalledWith('/default/dashboard');
     });
   });
 

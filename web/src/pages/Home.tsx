@@ -9,6 +9,7 @@ import { Button } from '../components/ui/Button';
 import { apiClient, getToken } from '../api/client';
 import { useTheme } from '../hooks/useTheme';
 import { useSettings } from '../hooks/useSettings';
+import { useAuthStore } from '../stores/authStore';
 
 type Protocol = 'openai' | 'anthropic';
 
@@ -55,6 +56,9 @@ export default function Home() {
   const [activeProtocol, setActiveProtocol] = useState<Protocol>('openai');
   const { theme, toggleTheme } = useTheme();
   const { data: settings } = useSettings();
+  const currentOrg = useAuthStore((s) => s.currentOrg);
+
+  const dashPath = currentOrg ? `/${currentOrg.slug}/dashboard` : '/login';
 
   const toggleLanguage = () => {
     const next = i18n.language === 'zh' ? 'en' : 'zh';
@@ -120,7 +124,7 @@ export default function Home() {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => navigate(getToken() ? '/console/dashboard' : '/console/login')}
+              onClick={() => navigate(getToken() ? dashPath : '/login')}
             >
               {t('home.dashboard')}
             </Button>
@@ -145,7 +149,7 @@ export default function Home() {
                 variant="primary"
                 size="lg"
                 icon={<ArrowRight className="h-4 w-4" />}
-                onClick={() => navigate(getToken() ? '/console/dashboard' : '/console/login')}
+                onClick={() => navigate(getToken() ? dashPath : '/login')}
               >
                 {t('home.hero.getStarted')}
               </Button>
@@ -286,7 +290,7 @@ export default function Home() {
                 variant="primary"
                 size="lg"
                 icon={<ArrowRight className="h-4 w-4" />}
-                onClick={() => navigate(getToken() ? '/console/dashboard' : '/console/login')}
+                onClick={() => navigate(getToken() ? dashPath : '/login')}
               >
                 {t('home.cta.goToDashboard')}
               </Button>

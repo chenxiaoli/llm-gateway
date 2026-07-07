@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../hooks/useTheme';
 import { Button } from '../components/ui/Button';
 import { getToken } from '../api/client';
+import { useAuthStore } from '../stores/authStore';
 import { Menu, X } from 'lucide-react';
 
 const docsNav = {
@@ -29,6 +30,9 @@ export default function DocsLayout() {
   const location = useLocation();
   const { theme, toggleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const currentOrg = useAuthStore((s) => s.currentOrg);
+
+  const dashPath = currentOrg ? `/${currentOrg.slug}/dashboard` : '/login';
 
   const langMatch = location.pathname.match(/\/docs\/(zh|en)\//);
   const currentLang = langMatch ? langMatch[1] : (i18n.language === 'en' ? 'en' : 'zh');
@@ -80,7 +84,7 @@ export default function DocsLayout() {
             >
               {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
-            <Button variant="primary" size="sm" onClick={() => navigate(getToken() ? '/console/dashboard' : '/console/login')}>
+            <Button variant="primary" size="sm" onClick={() => navigate(getToken() ? dashPath : '/login')}>
               {t('home.dashboard')}
             </Button>
           </div>
