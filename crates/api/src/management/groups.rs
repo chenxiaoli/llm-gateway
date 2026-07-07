@@ -1,12 +1,13 @@
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
+use llm_gateway_org::{can_manage_channels, resolve_org_context};
 use llm_gateway_storage::{CreateGroup, DeleteGroupResult, Group, PaginatedResponse, PaginationParams, UpdateGroup};
 use serde::Serialize;
 use std::sync::Arc;
 
 use crate::error::ApiError;
-use crate::extractors::require_admin;
+use crate::extractors::require_auth;
 use crate::AppState;
 
 #[derive(Serialize)]
@@ -35,11 +36,12 @@ pub async fn list_groups(
     headers: HeaderMap,
     Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<PaginatedResponse<GroupResponse>>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     let (page, page_size) = pagination.normalized();
     let result = state
         .storage
-        .list_groups_paginated(page, page_size)
+        .list_groups_paginated(&ctx.org_id, page, page_size)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     Ok(Json(PaginatedResponse {
@@ -55,10 +57,11 @@ pub async fn get_group(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<GroupResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     let group = state
         .storage
-        .get_group(&id)
+        .get_group(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Group '{}' not found", id)))?;
@@ -70,10 +73,20 @@ pub async fn create_group(
     headers: HeaderMap,
     Json(input): Json<CreateGroup>,
 ) -> Result<Json<GroupResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
+    // Force org_id to the caller's org regardless of what the body says.
+    let input = CreateGroup {
+        org_id: ctx.org_id.clone(),
+        name: input.name,
+        description: input.description,
+    };
     let group = state
         .storage
-        .create_group(&input)
+        .create_group(&ctx.org_id, &input)
         .await
         .map_err(|e| match e.downcast_ref::<sqlx::Error>() {
             Some(sqlx::Error::Database(db)) if db.is_unique_violation() => {
@@ -90,10 +103,14 @@ pub async fn update_group(
     Path(id): Path<String>,
     Json(input): Json<UpdateGroup>,
 ) -> Result<Json<GroupResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
     let group = state
         .storage
-        .update_group(&id, &input)
+        .update_group(&ctx.org_id, &id, &input)
         .await
         .map_err(|e| match e.downcast_ref::<sqlx::Error>() {
             Some(sqlx::Error::Database(db)) if db.is_unique_violation() => {
@@ -112,10 +129,14 @@ pub async fn delete_group(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<DeleteGroupResult>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
     let result = state
         .storage
-        .delete_group(&id)
+        .delete_group(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     Ok(Json(result))

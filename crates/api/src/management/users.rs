@@ -1,13 +1,13 @@
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
+use llm_gateway_org::{can_manage_channels, resolve_org_context};
+use llm_gateway_storage::{units_to_usd, PaginatedResponse, PaginationParams, UpdateUser as StorageUpdateUser, User, UserWithBalance};
 use serde::Serialize;
 use std::sync::Arc;
 
-use llm_gateway_storage::{units_to_usd, PaginatedResponse, PaginationParams, UpdateUser as StorageUpdateUser, User, UserWithBalance};
-
 use crate::error::ApiError;
-use crate::extractors::require_admin;
+use crate::extractors::require_auth;
 use crate::AppState;
 
 #[derive(Serialize)]
@@ -41,31 +41,18 @@ impl From<UserWithBalance> for UserResponse {
     }
 }
 
-impl From<&User> for UserResponse {
-    fn from(u: &User) -> Self {
-        UserResponse {
-            id: u.id.clone(),
-            username: u.username.clone(),
-            role: u.role.clone(),
-            enabled: u.enabled,
-            group_id: u.group_id.clone(),
-            group_name: None,
-            balance: 0.0,
-            threshold: 1.0,
-            created_at: u.created_at.to_rfc3339(),
-            updated_at: u.updated_at.to_rfc3339(),
-        }
-    }
-}
-
 pub async fn list_users(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<PaginatedResponse<UserResponse>>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
     let (page, page_size) = pagination.normalized();
-    let result = state.storage.list_users_paginated(page, page_size).await.map_err(|e| ApiError::Internal(e.to_string()))?;
+    let result = state.storage.list_users_paginated(&ctx.org_id, page, page_size).await.map_err(|e| ApiError::Internal(e.to_string()))?;
     Ok(Json(PaginatedResponse {
         items: result.items.into_iter().map(UserResponse::from).collect(),
         total: result.total,
@@ -80,55 +67,44 @@ pub async fn update_user(
     Path(id): Path<String>,
     Json(input): Json<StorageUpdateUser>,
 ) -> Result<Json<UserResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     let mut user = state.storage.get_user(&id).await.map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("User '{}' not found", id)))?;
 
-    if let Some(false) = input.enabled {
-        if user.role == "admin" {
-            let admin_count = state.storage.count_admin_users().await.map_err(|e| ApiError::Internal(e.to_string()))?;
-            if admin_count <= 1 {
-                return Err(ApiError::BadRequest("Cannot disable the last admin user".to_string()));
-            }
-        }
-    }
-
-    if let Some(ref role) = input.role {
-        if user.role == "admin" && role != "admin" {
-            let admin_count = state.storage.count_admin_users().await.map_err(|e| ApiError::Internal(e.to_string()))?;
-            if admin_count <= 1 {
-                return Err(ApiError::BadRequest("Cannot demote the last admin user".to_string()));
-            }
-        }
-        user.role = role.clone();
-    }
-
+    // TODO(Task 11/12): the `role` and `group_id` fields in UpdateUser target
+    // the membership layer (members.role / members.group_id), not the users
+    // table. Phase 1 storage doesn't yet expose methods to mutate those, so we
+    // accept the fields in the request body but only apply `enabled` here.
+    // The frontend will be updated in Task 11 to call dedicated membership
+    // endpoints once they exist.
     if let Some(enabled) = input.enabled { user.enabled = enabled; }
-
-    if let Some(ref group_id) = input.group_id {
-        if let Some(gid) = group_id {
-            // Validate the group exists
-            let exists = state.storage.get_group(gid).await
-                .map_err(|e| ApiError::Internal(e.to_string()))?;
-            if exists.is_none() {
-                return Err(ApiError::BadRequest(format!("Group '{}' not found", gid)));
-            }
-        }
-        user.group_id = group_id.clone();
-    }
-
     user.updated_at = chrono::Utc::now();
 
     let updated = state.storage.update_user(&user).await.map_err(|e| ApiError::Internal(e.to_string()))?;
-    let mut resp = UserResponse::from(&updated);
-    if let Some(ref gid) = resp.group_id {
-        if let Some(g) = state.storage.get_group(gid).await
-            .map_err(|e| ApiError::Internal(e.to_string()))? {
-            resp.group_name = Some(g.name);
-        }
-    }
-    Ok(Json(resp))
+
+    // Re-fetch the synthesized view row so the response carries the
+    // membership-derived role/group_name fields the frontend expects.
+    let users = state.storage.list_users_paginated(&ctx.org_id, 1, i64::MAX).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let uwb = users.items.into_iter().find(|u| u.id == updated.id)
+        .unwrap_or_else(|| UserWithBalance {
+            id: updated.id.clone(),
+            username: updated.username.clone(),
+            role: "member".into(),
+            enabled: updated.enabled,
+            group_id: None,
+            group_name: None,
+            balance: 0,
+            threshold: 0,
+            created_at: updated.created_at,
+            updated_at: updated.updated_at,
+        });
+    Ok(Json(UserResponse::from(uwb)))
 }
 
 pub async fn delete_user(
@@ -136,17 +112,19 @@ pub async fn delete_user(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
-
-    let user = state.storage.get_user(&id).await.map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or(ApiError::NotFound(format!("User '{}' not found", id)))?;
-
-    if user.role == "admin" {
-        let admin_count = state.storage.count_admin_users().await.map_err(|e| ApiError::Internal(e.to_string()))?;
-        if admin_count <= 1 {
-            return Err(ApiError::BadRequest("Cannot delete the last admin user".to_string()));
-        }
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
     }
+
+    // TODO(Task 11/12): the old `count_admin_users` check is gone — Task 4
+    // removed it because role moved from users to members. Phase 1 simplifies
+    // and trusts the can_manage_channels gate; a follow-up should re-introduce
+    // a "last owner" guard via count_owners once delete_user also tears down
+    // the membership row.
+    let _ = state.storage.get_user(&id).await.map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound(format!("User '{}' not found", id)))?;
 
     state.storage.delete_user(&id).await.map_err(|e| ApiError::Internal(e.to_string()))?;
     Ok(axum::http::StatusCode::NO_CONTENT)
