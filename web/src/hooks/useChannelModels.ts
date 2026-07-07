@@ -4,39 +4,44 @@ import type { CreateChannelModelRequest, UpdateChannelModelRequest } from '../ty
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
 import i18n from '../i18n';
+import { useAuthStore } from '../stores/authStore';
 
 export function useChannelModels(providerId: string) {
+  const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
   return useQuery({
-    queryKey: ['providers', providerId, 'channelModels'],
+    queryKey: [slug, 'providers', providerId, 'channelModels'],
     queryFn: () => listChannelModelsByProvider(providerId),
-    enabled: !!providerId,
+    enabled: !!slug && !!providerId,
   });
 }
 
 export function useCreateChannelModel(providerId: string) {
   const queryClient = useQueryClient();
+  const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
   return useMutation({
     mutationFn: (input: CreateChannelModelRequest) => createChannelModel(providerId, input),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channelModels'] }); toast.success(i18n.t('toasts.providerModelAdded')); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [slug, 'providers', providerId, 'channelModels'] }); toast.success(i18n.t('toasts.providerModelAdded')); },
     onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.providerModelAddFailed'))); },
   });
 }
 
 export function useUpdateChannelModel(providerId: string) {
   const queryClient = useQueryClient();
+  const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateChannelModelRequest }) =>
       updateChannelModel(id, input),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channelModels'] }); toast.success(i18n.t('toasts.providerModelUpdated')); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [slug, 'providers', providerId, 'channelModels'] }); toast.success(i18n.t('toasts.providerModelUpdated')); },
     onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.providerModelUpdateFailed'))); },
   });
 }
 
 export function useDeleteChannelModel(providerId: string) {
   const queryClient = useQueryClient();
+  const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
   return useMutation({
     mutationFn: (id: string) => deleteChannelModel(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['providers', providerId, 'channelModels'] }); toast.success(i18n.t('toasts.providerModelRemoved')); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [slug, 'providers', providerId, 'channelModels'] }); toast.success(i18n.t('toasts.providerModelRemoved')); },
     onError: (err) => { toast.error(getErrorMessage(err, i18n.t('toasts.providerModelRemoveFailed'))); },
   });
 }

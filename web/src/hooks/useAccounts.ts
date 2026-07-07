@@ -11,17 +11,20 @@ import type { CreateTransactionRequest, UpdateThresholdRequest } from '../types'
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
 import i18n from '../i18n';
+import { useAuthStore } from '../stores/authStore';
 
 export function useUserBalance(userId: string, page = 1, pageSize = 20) {
+  const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
   return useQuery({
-    queryKey: ['user-balance', userId, page, pageSize],
+    queryKey: [slug, 'user-balance', userId, page, pageSize],
     queryFn: () => getUserBalance(userId, page, pageSize),
-    enabled: !!userId,
+    enabled: !!slug && !!userId,
   });
 }
 
 export function useRechargeUser() {
   const queryClient = useQueryClient();
+  const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
   return useMutation({
     mutationFn: ({
       userId,
@@ -32,7 +35,7 @@ export function useRechargeUser() {
     }) => rechargeUser(userId, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ['user-balance', variables.userId],
+        queryKey: [slug, 'user-balance', variables.userId],
       });
       toast.success(i18n.t('toasts.balanceRecharged'));
     },
@@ -44,6 +47,7 @@ export function useRechargeUser() {
 
 export function useAdjustUser() {
   const queryClient = useQueryClient();
+  const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
   return useMutation({
     mutationFn: ({
       userId,
@@ -54,7 +58,7 @@ export function useAdjustUser() {
     }) => adjustUserBalance(userId, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ['user-balance', variables.userId],
+        queryKey: [slug, 'user-balance', variables.userId],
       });
       toast.success(i18n.t('toasts.balanceAdjusted'));
     },
@@ -66,6 +70,7 @@ export function useAdjustUser() {
 
 export function useUpdateThreshold() {
   const queryClient = useQueryClient();
+  const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
   return useMutation({
     mutationFn: ({
       userId,
@@ -76,7 +81,7 @@ export function useUpdateThreshold() {
     }) => updateUserThreshold(userId, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
-        queryKey: ['user-balance', variables.userId],
+        queryKey: [slug, 'user-balance', variables.userId],
       });
       toast.success(i18n.t('toasts.thresholdUpdated'));
     },
@@ -87,16 +92,19 @@ export function useUpdateThreshold() {
 }
 
 export function useMyBalance(page = 1, pageSize = 20) {
+  const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
   return useQuery({
-    queryKey: ['my-balance', page, pageSize],
+    queryKey: [slug, 'my-balance', page, pageSize],
     queryFn: () => getMyBalance(page, pageSize),
+    enabled: !!slug,
   });
 }
 
 export function useRequestDetails(requestId: string | null) {
+  const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
   return useQuery({
-    queryKey: ['request-details', requestId],
+    queryKey: [slug, 'request-details', requestId],
     queryFn: () => getRequestDetails(requestId!),
-    enabled: !!requestId,
+    enabled: !!slug && !!requestId,
   });
 }
