@@ -1,21 +1,21 @@
-import { adminApiClient } from './client';
+import { apiClient, orgPrefix } from './client';
 import type { PricingPolicyWithCounts, CreatePricingPolicy, UpdatePricingPolicy } from '../types';
 
 export async function listPricingPolicies(): Promise<PricingPolicyWithCounts[]> {
-  const { data } = await adminApiClient.get<PricingPolicyWithCounts[]>('/pricing-policies');
+  const { data } = await apiClient.get<PricingPolicyWithCounts[]>(`${orgPrefix()}/admin/pricing-policies`);
   return data;
 }
 
 export async function createPricingPolicy(input: CreatePricingPolicy): Promise<PricingPolicyWithCounts> {
-  const { data } = await adminApiClient.post<PricingPolicyWithCounts>('/pricing-policies', input);
+  const { data } = await apiClient.post<PricingPolicyWithCounts>(`${orgPrefix()}/admin/pricing-policies`, input);
   return data;
 }
 
 export async function updatePricingPolicy(id: string, input: UpdatePricingPolicy): Promise<PricingPolicyWithCounts> {
-  const { data } = await adminApiClient.patch<PricingPolicyWithCounts>(`/pricing-policies/${id}`, input);
+  const { data } = await apiClient.patch<PricingPolicyWithCounts>(`${orgPrefix()}/admin/pricing-policies/${id}`, input);
   return data;
 }
 
 export async function deletePricingPolicy(id: string): Promise<void> {
-  await adminApiClient.delete(`/pricing-policies/${id}`);
+  await apiClient.delete(`${orgPrefix()}/admin/pricing-policies/${id}`);
 }

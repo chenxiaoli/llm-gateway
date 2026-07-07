@@ -1,4 +1,4 @@
-import { adminApiClient } from './client';
+import { apiClient, orgPrefix } from './client';
 import type { AuditLog, AuditLogSummary, LogFilter, PaginatedResponse } from '../types';
 
 export async function queryLogs(filter: LogFilter = {}, page = 1, pageSize = 20): Promise<PaginatedResponse<AuditLogSummary>> {
@@ -9,11 +9,11 @@ export async function queryLogs(filter: LogFilter = {}, page = 1, pageSize = 20)
   if (filter.since) params.since = filter.since;
   if (filter.until) params.until = filter.until;
   if (filter.request_id) params.request_id = filter.request_id;
-  const { data } = await adminApiClient.get<PaginatedResponse<AuditLogSummary>>('/logs', { params });
+  const { data } = await apiClient.get<PaginatedResponse<AuditLogSummary>>(`${orgPrefix()}/admin/logs`, { params });
   return data;
 }
 
 export async function getLog(id: string): Promise<AuditLog> {
-  const { data } = await adminApiClient.get<AuditLog>(`/logs/${id}`);
+  const { data } = await apiClient.get<AuditLog>(`${orgPrefix()}/admin/logs/${id}`);
   return data;
 }

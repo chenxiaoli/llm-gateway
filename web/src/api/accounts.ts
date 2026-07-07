@@ -1,4 +1,4 @@
-import { adminApiClient, apiClient } from './client';
+import { apiClient, orgPrefix } from './client';
 import type {
   Account,
   AccountBalanceResponse,
@@ -13,8 +13,8 @@ export async function getUserBalance(
   page = 1,
   pageSize = 20
 ): Promise<AccountBalanceResponse> {
-  const response = await adminApiClient.get<AccountBalanceResponse>(
-    `/users/${userId}/balance`,
+  const response = await apiClient.get<AccountBalanceResponse>(
+    `${orgPrefix()}/admin/users/${userId}/balance`,
     { params: { page, page_size: pageSize } }
   );
   return response.data;
@@ -24,8 +24,8 @@ export async function rechargeUser(
   userId: string,
   data: CreateTransactionRequest
 ): Promise<Account> {
-  const response = await adminApiClient.post<Account>(
-    `/users/${userId}/recharge`,
+  const response = await apiClient.post<Account>(
+    `${orgPrefix()}/admin/users/${userId}/recharge`,
     { ...data, type: 'credit' as const }
   );
   return response.data;
@@ -35,8 +35,8 @@ export async function adjustUserBalance(
   userId: string,
   data: CreateTransactionRequest
 ): Promise<Account> {
-  const response = await adminApiClient.post<Account>(
-    `/users/${userId}/adjust`,
+  const response = await apiClient.post<Account>(
+    `${orgPrefix()}/admin/users/${userId}/adjust`,
     data
   );
   return response.data;
@@ -46,8 +46,8 @@ export async function updateUserThreshold(
   userId: string,
   data: UpdateThresholdRequest
 ): Promise<Account> {
-  const response = await adminApiClient.patch<Account>(
-    `/users/${userId}/threshold`,
+  const response = await apiClient.patch<Account>(
+    `${orgPrefix()}/admin/users/${userId}/threshold`,
     data
   );
   return response.data;
@@ -57,6 +57,7 @@ export async function getMyBalance(
   page = 1,
   pageSize = 20
 ): Promise<MeBalanceResponse> {
+  // Global route — not org-scoped (mounted outside management_router)
   const response = await apiClient.get<MeBalanceResponse>(
     '/auth/me/balance',
     { params: { page, page_size: pageSize } }
@@ -72,8 +73,8 @@ function unitsToUsd(units: number): number {
 export async function getRequestDetails(
   requestId: string
 ): Promise<RequestDetailsResponse> {
-  const response = await adminApiClient.get<RequestDetailsResponse>(
-    `/requests/${requestId}`
+  const response = await apiClient.get<RequestDetailsResponse>(
+    `${orgPrefix()}/admin/requests/${requestId}`
   );
   const data = response.data;
   // Convert raw i64 monetary units to USD floats

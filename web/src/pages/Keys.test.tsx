@@ -33,7 +33,7 @@ const mockKeys: ApiKey[] = [
 describe('Keys page', () => {
   it('renders keys table', async () => {
     server.use(
-      http.get('*/api/v1/keys', () => HttpResponse.json({ items: mockKeys, total: 2, page: 1, page_size: 20 })),
+      http.get('*/api/v1/test-org/keys', () => HttpResponse.json({ items: mockKeys, total: 2, page: 1, page_size: 20 })),
     );
 
     renderWithProviders(<Keys />, { route: '/console/keys' });
@@ -53,7 +53,7 @@ describe('Keys page', () => {
 
   it('opens create key modal', async () => {
     server.use(
-      http.get('*/api/v1/keys', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
+      http.get('*/api/v1/test-org/keys', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
     );
 
     renderWithProviders(<Keys />, { route: '/console/keys' });
@@ -71,8 +71,8 @@ describe('Keys page', () => {
 
   it('creates a key and shows the raw key', async () => {
     server.use(
-      http.get('*/api/v1/keys', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
-      http.post('*/api/v1/keys', () =>
+      http.get('*/api/v1/test-org/keys', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
+      http.post('*/api/v1/test-org/keys', () =>
         HttpResponse.json({
           id: 'key-new',
           name: 'my-new-key',
@@ -112,7 +112,7 @@ describe('Keys page', () => {
 
   it('shows empty table when no keys', async () => {
     server.use(
-      http.get('*/api/v1/keys', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
+      http.get('*/api/v1/test-org/keys', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
     );
 
     renderWithProviders(<Keys />, { route: '/console/keys' });
