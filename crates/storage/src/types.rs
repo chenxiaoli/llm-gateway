@@ -1,6 +1,95 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+// --- Org / Membership ---
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemberRole {
+    Owner,
+    Admin,
+    Member,
+}
+
+impl MemberRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            MemberRole::Owner => "owner",
+            MemberRole::Admin => "admin",
+            MemberRole::Member => "member",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "owner" => MemberRole::Owner,
+            "admin" => MemberRole::Admin,
+            "member" => MemberRole::Member,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlatformRole {
+    PlatformAdmin,
+}
+
+impl PlatformRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PlatformRole::PlatformAdmin => "platform_admin",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "platform_admin" => Some(PlatformRole::PlatformAdmin),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Org {
+    pub id: String,
+    pub slug: String,
+    pub name: String,
+    pub owner_id: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CreateOrg {
+    pub id: String,
+    pub slug: String,
+    pub name: String,
+    pub owner_id: String,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct UpdateOrg {
+    pub name: Option<String>,
+    pub slug: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Member {
+    pub user_id: String,
+    pub org_id: String,
+    pub role: MemberRole,
+    pub group_id: Option<String>,
+    pub created_by: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct MembershipSummary {
+    pub org: Org,
+    pub role: MemberRole,
+    pub group_id: Option<String>,
+}
+
 // --- Pagination ---
 
 #[derive(Debug, Clone, Serialize)]
@@ -40,6 +129,7 @@ impl PaginationParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKey {
     pub id: String,
+    pub org_id: String,
     pub name: String,
     pub key_hash: String,
     pub key_prefix: Option<String>,
@@ -54,6 +144,7 @@ pub struct ApiKey {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateApiKey {
+    pub org_id: String,
     pub name: String,
     pub rate_limit: Option<i64>,
     pub budget_monthly: Option<i64>,
@@ -74,6 +165,7 @@ pub struct UpdateApiKey {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Provider {
     pub id: String,
+    pub owner_org_id: Option<String>,
     pub name: String,
     pub slug: String,
     pub endpoints: Option<String>,      // JSON string {"default": "...", "openai": "...", "anthropic": "..."}
@@ -114,6 +206,7 @@ impl From<Provider> for ProviderWithEndpoints {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateProvider {
+    pub owner_org_id: Option<String>,
     pub name: String,
     pub slug: Option<String>,
     pub endpoints: Option<serde_json::Value>,
@@ -134,6 +227,7 @@ pub struct UpdateProvider {
 pub struct ProviderModel {
     pub provider_id: String,
     pub model_id: String,
+    pub owner_org_id: Option<String>,
     pub upstream_name: Option<String>,
     pub pricing_policy_id: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -159,6 +253,7 @@ pub struct TimeSlot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Channel {
     pub id: String,
+    pub org_id: String,
     pub provider_id: String,
     pub name: String,
     pub api_key: String,
@@ -180,6 +275,7 @@ pub struct Channel {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateChannel {
+    pub org_id: String,
     pub provider_id: String,
     pub name: String,
     pub api_key: String,
@@ -226,6 +322,7 @@ pub struct UpdateChannelApiKey {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Model {
     pub id: String,           // primary key
+    pub owner_org_id: Option<String>,
     pub name: String,          // display name
     pub model_type: Option<String>,
     pub pricing_policy_id: Option<String>,
@@ -369,6 +466,7 @@ impl HybridConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PricingPolicy {
     pub id: String,
+    pub owner_org_id: Option<String>,
     pub name: String,
     pub billing_type: String,
     pub config: serde_json::Value,
@@ -386,6 +484,7 @@ pub struct PricingPolicyWithCounts {
 
 #[derive(Debug, Deserialize)]
 pub struct CreatePricingPolicy {
+    pub owner_org_id: Option<String>,
     pub name: String,
     pub billing_type: String,
     pub config: serde_json::Value,
@@ -427,6 +526,7 @@ impl Usage {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateModel {
+    pub owner_org_id: Option<String>,
     pub name: String,
     pub pricing_policy_id: Option<String>,
 }
@@ -465,6 +565,7 @@ pub struct UserModelView {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelModel {
     pub id: String,
+    pub org_id: String,
     pub channel_id: String,
     pub model_id: String,
     pub upstream_model_name: Option<String>,
@@ -510,6 +611,7 @@ pub struct UpdateChannelModel {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeyModelRateLimit {
+    pub org_id: String,
     pub key_id: String,
     pub model_id: String,
     pub rpm: i64,
@@ -521,6 +623,7 @@ pub struct KeyModelRateLimit {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageRecord {
     pub id: String,
+    pub org_id: String,
     pub request_id: Option<String>,
     pub key_id: String,
     pub model_name: String,
@@ -629,6 +732,7 @@ pub struct RouteAttempt {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditLog {
     pub id: String,
+    pub org_id: String,
     pub request_id: Option<String>,
     pub key_id: String,
     pub model_name: String,
@@ -652,6 +756,7 @@ pub struct AuditLog {
     pub request_headers: Option<String>,
     pub response_headers: Option<String>,
     pub user_id: Option<String>,
+    pub actor_is_platform_admin: bool,
     /// Per-upstream-attempt history. None for legacy rows (data created
     /// before the v1.8.0 migration). New rows always populate this.
     pub routes: Option<Vec<RouteAttempt>>,
@@ -710,10 +815,10 @@ pub struct User {
     pub id: String,
     pub username: String,
     pub password: String,
-    pub role: String,
+    pub platform_role: Option<PlatformRole>,
+    pub current_org_id: Option<String>,
     pub enabled: bool,
     pub refresh_token: Option<String>,
-    pub group_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -750,6 +855,7 @@ pub struct UpdateUser {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Group {
     pub id: String,
+    pub org_id: String,
     pub name: String,
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -758,6 +864,7 @@ pub struct Group {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateGroup {
+    pub org_id: String,
     pub name: String,
     pub description: Option<String>,
 }
@@ -779,6 +886,7 @@ pub struct DeleteGroupResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     pub id: String,
+    pub org_id: String,
     pub user_id: String,
     pub balance: i64,
     pub threshold: i64,
@@ -789,6 +897,7 @@ pub struct Account {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     pub id: String,
+    pub org_id: String,
     pub account_id: String,
     #[serde(rename = "type")]
     pub transaction_type: TransactionType,
