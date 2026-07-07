@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 fn build_app(state: Arc<AppState>) -> axum::Router {
-    management::management_router().with_state(state)
+    management::management_router(state.clone()).with_state(state)
 }
 
 fn bearer_token(token: &str) -> String {
@@ -26,7 +26,7 @@ async fn test_create_provider(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/admin/providers")
+                .uri("/api/v1/default/admin/providers")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -58,7 +58,7 @@ async fn test_create_provider_dual_protocol(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/admin/providers")
+                .uri("/api/v1/default/admin/providers")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -95,7 +95,7 @@ async fn test_list_providers(pool: PgPool) {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/admin/providers")
+                    .uri("/api/v1/default/admin/providers")
                     .header("authorization", bearer_token(&admin.token))
                     .header("content-type", "application/json")
                     .body(Body::from(
@@ -111,7 +111,7 @@ async fn test_list_providers(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/admin/providers")
+                .uri("/api/v1/default/admin/providers")
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
@@ -139,7 +139,7 @@ async fn test_provider_model_lifecycle(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/admin/providers")
+                .uri("/api/v1/default/admin/providers")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -162,7 +162,7 @@ async fn test_provider_model_lifecycle(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/admin/models")
+                .uri("/api/v1/default/admin/models")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -188,7 +188,7 @@ async fn test_provider_model_lifecycle(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri("/api/v1/admin/models/test-model")
+                .uri("/api/v1/default/admin/models/test-model")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"output_price": 20.0}).to_string()))
@@ -204,7 +204,7 @@ async fn test_provider_model_lifecycle(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri("/api/v1/admin/models/test-model")
+                .uri("/api/v1/default/admin/models/test-model")
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
@@ -219,7 +219,7 @@ async fn test_provider_model_lifecycle(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(&format!("/api/v1/admin/providers/{}", provider_id))
+                .uri(&format!("/api/v1/default/admin/providers/{}", provider_id))
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
@@ -240,7 +240,7 @@ async fn test_create_and_list_channels(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/admin/providers")
+                .uri("/api/v1/default/admin/providers")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -263,7 +263,7 @@ async fn test_create_and_list_channels(pool: PgPool) {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(&format!("/api/v1/admin/providers/{}/channels", provider_id))
+                    .uri(&format!("/api/v1/default/admin/providers/{}/channels", provider_id))
                     .header("authorization", bearer_token(&admin.token))
                     .header("content-type", "application/json")
                     .body(Body::from(json!({
@@ -289,7 +289,7 @@ async fn test_create_and_list_channels(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/api/v1/admin/providers/{}/channels", provider_id))
+                .uri(&format!("/api/v1/default/admin/providers/{}/channels", provider_id))
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
@@ -318,7 +318,7 @@ async fn test_update_and_delete_channel(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/admin/providers")
+                .uri("/api/v1/default/admin/providers")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -340,7 +340,7 @@ async fn test_update_and_delete_channel(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri(&format!("/api/v1/admin/providers/{}/channels", provider_id))
+                .uri(&format!("/api/v1/default/admin/providers/{}/channels", provider_id))
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({
@@ -364,7 +364,7 @@ async fn test_update_and_delete_channel(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(&format!("/api/v1/admin/channels/{}", channel_id))
+                .uri(&format!("/api/v1/default/admin/channels/{}", channel_id))
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "updated-ch", "api_key": "sk-new"}).to_string()))
@@ -384,7 +384,7 @@ async fn test_update_and_delete_channel(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(&format!("/api/v1/admin/channels/{}", channel_id))
+                .uri(&format!("/api/v1/default/admin/channels/{}", channel_id))
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),

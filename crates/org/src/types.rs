@@ -16,8 +16,13 @@ pub struct ResolvedOrg {
 /// Per-request context derived from JWT + membership lookup.
 /// In Phase 1 this is constructed from `claims.current_org_id` only
 /// (no path-based routing yet — Phase 2 adds OrgResolveLayer/MembershipLayer).
+///
+/// Field order note: `user_id` is first so that when additional identity fields
+/// arrive in later phases (e.g. an org-scoped display name) they slot in below
+/// the identity block and above the role block.
 #[derive(Debug, Clone)]
 pub struct OrgContext {
+    pub user_id: String,
     pub org_id: String,
     pub member_role: MemberRole,
     pub platform_role: Option<PlatformRole>,

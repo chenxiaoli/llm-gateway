@@ -1,14 +1,12 @@
 use axum::extract::{Path, State};
-use axum::http::HeaderMap;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use llm_gateway_org::{can_access_channel, can_manage_channels, resolve_org_context};
+use llm_gateway_org::{can_access_channel, can_manage_channels, OrgContext};
 use llm_gateway_storage::{bps_to_ratio, ratio_to_bps, ChannelModel};
 
 use crate::error::ApiError;
-use crate::extractors::require_auth;
 use crate::AppState;
 
 // --- JSON response wrapper with f64 markup_ratio ---
@@ -68,12 +66,10 @@ pub struct UpdateChannelModelRequest {
 
 pub async fn create_channel_model(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(provider_id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, provider_id)): Path<(String, String)>,
     Json(input): Json<CreateChannelModelRequest>,
 ) -> Result<Json<ChannelModelResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -122,12 +118,10 @@ pub async fn create_channel_model(
 
 pub async fn create_channel_model_by_channel(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(channel_id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, channel_id)): Path<(String, String)>,
     Json(input): Json<CreateChannelModelRequest>,
 ) -> Result<Json<ChannelModelResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -168,12 +162,9 @@ pub async fn create_channel_model_by_channel(
 
 pub async fn list_channel_models(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(provider_id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, provider_id)): Path<(String, String)>,
 ) -> Result<Json<Vec<ChannelModelResponse>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     // Get channels for provider, then channel_models for those channels
     let mut channels = state.storage.list_channels_by_provider(&ctx.org_id, &provider_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
@@ -196,12 +187,9 @@ pub async fn list_channel_models(
 
 pub async fn get_channel_model(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<Json<ChannelModelResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let cm = state.storage.get_channel_model(&ctx.org_id, &id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("ChannelModel not found".to_string()))?;
@@ -221,12 +209,10 @@ pub async fn get_channel_model(
 
 pub async fn update_channel_model(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
     Json(input): Json<UpdateChannelModelRequest>,
 ) -> Result<Json<ChannelModelResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -260,11 +246,9 @@ pub async fn update_channel_model(
 
 pub async fn delete_channel_model(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -277,12 +261,9 @@ pub async fn delete_channel_model(
 
 pub async fn list_channel_models_by_channel(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(channel_id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, channel_id)): Path<(String, String)>,
 ) -> Result<Json<Vec<ChannelModelResponse>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     // Verify the parent channel exists and the caller can read it.
     let channel = state.storage.get_channel(&ctx.org_id, &channel_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?

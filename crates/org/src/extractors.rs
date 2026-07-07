@@ -48,6 +48,7 @@ pub async fn resolve_org_context(
         .and_then(PlatformRole::parse);
 
     Ok(OrgContext {
+        user_id: claims.sub.clone(),
         org_id,
         member_role: member.role,
         platform_role,
@@ -95,6 +96,7 @@ mod tests {
     #[tokio::test]
     async fn extracts_org_context_from_extensions() {
         let ctx = OrgContext {
+            user_id: "u".into(),
             org_id: "org_default".into(),
             member_role: MemberRole::Owner,
             platform_role: None,

@@ -1,14 +1,12 @@
 use axum::extract::{Path, State};
-use axum::http::HeaderMap;
 use axum::Json;
 use serde::Serialize;
 use std::sync::Arc;
 
-use llm_gateway_org::{can_manage_channels, resolve_org_context};
+use llm_gateway_org::{can_manage_channels, OrgContext};
 use llm_gateway_storage::{AuditLog, Transaction, UsageRecord};
 
 use crate::error::ApiError;
-use crate::extractors::require_auth;
 use crate::AppState;
 
 #[derive(Debug, Serialize)]
@@ -20,12 +18,9 @@ pub struct RequestDetailsResponse {
 
 pub async fn get_request_details(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(request_id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, request_id)): Path<(String, String)>,
 ) -> Result<Json<RequestDetailsResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let transaction = state
         .storage
         .get_transaction_by_request_id(&ctx.org_id, &request_id)
@@ -53,7 +48,7 @@ pub async fn get_request_details(
         let owner_matches = audit
             .as_ref()
             .and_then(|a| a.user_id.as_deref())
-            .map(|uid| uid == claims.sub)
+            .map(|uid| uid == ctx.user_id.as_str())
             .unwrap_or(false);
         if !owner_matches {
             return Err(ApiError::NotFound(format!(

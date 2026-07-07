@@ -109,6 +109,7 @@ pub async fn membership_layer(
         .ok_or(ApiError::Forbidden)?;
 
     let ctx = OrgContext {
+        user_id: claims.sub.clone(),
         org_id: org.id.clone(),
         member_role: member.role,
         platform_role: claims

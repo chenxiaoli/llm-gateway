@@ -1,10 +1,9 @@
 use axum::extract::{Path, Query, State};
-use axum::http::HeaderMap;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use llm_gateway_org::{can_manage_channels, resolve_org_context};
+use llm_gateway_org::{can_manage_channels, OrgContext};
 use llm_gateway_storage::{
     units_to_usd, usd_to_units,
     Account, AccountResponse as StorageAccountResponse,
@@ -14,7 +13,6 @@ use llm_gateway_storage::{
 };
 
 use crate::error::ApiError;
-use crate::extractors::require_auth;
 use crate::AppState;
 
 // --- JSON response wrappers with f64 monetary fields ---
@@ -94,12 +92,10 @@ pub struct UpdateThresholdRequest {
 
 pub async fn get_balance(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(user_id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, user_id)): Path<(String, String)>,
     Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<AccountBalanceResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -131,12 +127,10 @@ pub async fn get_balance(
 
 pub async fn recharge(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(user_id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, user_id)): Path<(String, String)>,
     Json(input): Json<CreateTransactionRequest>,
 ) -> Result<Json<AccountJsonResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -184,12 +178,10 @@ pub async fn recharge(
 
 pub async fn adjust(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(user_id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, user_id)): Path<(String, String)>,
     Json(input): Json<CreateTransactionRequest>,
 ) -> Result<Json<AccountJsonResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -255,12 +247,10 @@ pub async fn adjust(
 
 pub async fn update_threshold(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(user_id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, user_id)): Path<(String, String)>,
     Json(input): Json<UpdateThresholdRequest>,
 ) -> Result<Json<AccountJsonResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }

@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 fn build_app(state: Arc<AppState>) -> axum::Router {
-    management::management_router().with_state(state)
+    management::management_router(state.clone()).with_state(state)
 }
 
 fn bearer_token(token: &str) -> String {
@@ -27,7 +27,7 @@ async fn test_create_key(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/keys")
+                .uri("/api/v1/default/keys")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "test-key"}).to_string()))
@@ -56,7 +56,7 @@ async fn test_list_keys(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/keys")
+                .uri("/api/v1/default/keys")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "key1"}).to_string()))
@@ -69,7 +69,7 @@ async fn test_list_keys(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/keys")
+                .uri("/api/v1/default/keys")
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
@@ -94,7 +94,7 @@ async fn test_unauthorized_access(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/keys")
+                .uri("/api/v1/default/keys")
                 .header("authorization", "Bearer invalid-jwt")
                 .body(Body::empty())
                 .unwrap(),
@@ -103,6 +103,32 @@ async fn test_unauthorized_access(pool: PgPool) {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+/// Pre-Phase-2 paths (no org slug in the URL) must return 410 Gone with a
+/// pointer to the new path, not a 404 or fall-through to the SPA.
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn legacy_path_returns_410_gone(pool: PgPool) {
+    let app = build_app(common::make_state(pool));
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/keys")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::GONE);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["error"], "gone");
+    assert_eq!(body["new_path"], "/api/v1/{org_slug}/keys");
 }
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
@@ -116,7 +142,7 @@ async fn test_update_key(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/keys")
+                .uri("/api/v1/default/keys")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "original"}).to_string()))
@@ -135,7 +161,7 @@ async fn test_update_key(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(&format!("/api/v1/keys/{}", key_id))
+                .uri(&format!("/api/v1/default/keys/{}", key_id))
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "updated"}).to_string()))
@@ -162,7 +188,7 @@ async fn test_delete_key(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/keys")
+                .uri("/api/v1/default/keys")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "to-delete"}).to_string()))
@@ -181,7 +207,7 @@ async fn test_delete_key(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(&format!("/api/v1/keys/{}", key_id))
+                .uri(&format!("/api/v1/default/keys/{}", key_id))
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
@@ -194,7 +220,7 @@ async fn test_delete_key(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/api/v1/keys/{}", key_id))
+                .uri(&format!("/api/v1/default/keys/{}", key_id))
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),

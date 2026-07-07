@@ -1,19 +1,17 @@
 use axum::extract::{Path, Query, State};
-use axum::http::HeaderMap;
 use axum::Json;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use llm_gateway_auth::{generate_api_key, hash_api_key};
-use llm_gateway_org::{can_manage_channels, resolve_org_context};
+use llm_gateway_org::{can_manage_channels, OrgContext};
 use llm_gateway_storage::{
     opt_units_to_usd, opt_usd_to_units,
     ApiKey, PaginatedResponse, PaginationParams,
 };
 
 use crate::error::ApiError;
-use crate::extractors::require_auth;
 use crate::AppState;
 
 // --- JSON request structs (f64 for API boundary) ---
@@ -81,12 +79,9 @@ impl From<ApiKey> for KeyResponse {
 
 pub async fn create_key(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Json(input): Json<CreateKeyRequest>,
 ) -> Result<Json<CreateKeyResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let budget_monthly_i64 = opt_usd_to_units(input.budget_monthly);
 
     let now = chrono::Utc::now();
@@ -101,7 +96,7 @@ pub async fn create_key(
         rate_limit: input.rate_limit,
         budget_monthly: budget_monthly_i64,
         enabled: true,
-        created_by: Some(claims.sub),
+        created_by: Some(ctx.user_id.clone()),
         model_fallback_id: input.model_fallback_id,
         created_at: now,
         updated_at: now,
@@ -126,12 +121,9 @@ pub async fn create_key(
 
 pub async fn list_keys(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<PaginatedResponse<KeyResponse>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let (page, page_size) = pagination.normalized();
     // Admin-or-above in this org (or platform_admin) sees all keys in the org;
     // a regular member sees only keys they created.
@@ -144,7 +136,7 @@ pub async fn list_keys(
     } else {
         state
             .storage
-            .list_keys_paginated_for_user(&ctx.org_id, &claims.sub, page, page_size)
+            .list_keys_paginated_for_user(&ctx.org_id, &ctx.user_id, page, page_size)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?
     };
@@ -159,12 +151,9 @@ pub async fn list_keys(
 
 pub async fn get_key(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<Json<KeyResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let key = state
         .storage
         .get_key(&ctx.org_id, &id)
@@ -172,7 +161,7 @@ pub async fn get_key(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Key '{}' not found", id)))?;
 
-    if !can_manage_channels(&ctx) && key.created_by.as_deref() != Some(&claims.sub) {
+    if !can_manage_channels(&ctx) && key.created_by.as_deref() != Some(ctx.user_id.as_str()) {
         return Err(ApiError::NotFound(format!("Key '{}' not found", id)));
     }
 
@@ -181,13 +170,10 @@ pub async fn get_key(
 
 pub async fn update_key(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
     Json(input): Json<UpdateKeyRequest>,
 ) -> Result<Json<KeyResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let mut key = state
         .storage
         .get_key(&ctx.org_id, &id)
@@ -195,7 +181,7 @@ pub async fn update_key(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Key '{}' not found", id)))?;
 
-    if !can_manage_channels(&ctx) && key.created_by.as_deref() != Some(&claims.sub) {
+    if !can_manage_channels(&ctx) && key.created_by.as_deref() != Some(ctx.user_id.as_str()) {
         return Err(ApiError::NotFound(format!("Key '{}' not found", id)));
     }
 
@@ -217,12 +203,9 @@ pub async fn update_key(
 
 pub async fn delete_key(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     // Non-admins may only delete keys they own.
     if !can_manage_channels(&ctx) {
         let key = state
@@ -232,7 +215,7 @@ pub async fn delete_key(
             .map_err(|e| ApiError::Internal(e.to_string()))?
             .ok_or(ApiError::NotFound(format!("Key '{}' not found", id)))?;
 
-        if key.created_by.as_deref() != Some(&claims.sub) {
+        if key.created_by.as_deref() != Some(ctx.user_id.as_str()) {
             return Err(ApiError::NotFound(format!("Key '{}' not found", id)));
         }
     }
