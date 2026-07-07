@@ -173,7 +173,7 @@ pub fn management_router() -> Router<Arc<AppState>> {
 
 async fn version(State(_state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
-        "version": option_env!("GIT_VERSION").unwrap_or(env!("CARGO_PKG_VERSION")),
+        "version": option_env!("GIT_VERSION").unwrap_or(concat!("v", env!("CARGO_PKG_VERSION"))),
     }))
 }
 
