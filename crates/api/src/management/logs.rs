@@ -57,5 +57,13 @@ pub async fn get_log(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or_else(|| ApiError::NotFound(format!("Log {} not found", id)))?;
 
+    // Members may only fetch their own audit logs; otherwise they could read
+    // request/response bodies of other members' LLM calls. Admins/owners (and
+    // platform_admin via can_manage_channels) see all logs in the org. Return
+    // 404 (not 403) to avoid leaking log existence.
+    if !can_manage_channels(&ctx) && log.user_id.as_deref() != Some(&claims.sub) {
+        return Err(ApiError::NotFound(format!("Log {} not found", id)));
+    }
+
     Ok(Json(log))
 }

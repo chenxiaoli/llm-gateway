@@ -73,6 +73,20 @@ pub async fn update_user(
         return Err(ApiError::Forbidden);
     }
 
+    // Gate on membership before mutation: an admin of one org must not be
+    // able to mutate a user that belongs to a different org (the underlying
+    // get_user/update_user storage calls are NOT org-scoped). platform_admin
+    // is exempt (can operate across orgs). Use a generic 404 so we don't leak
+    // "user exists in another org" via a distinct status code.
+    let membership = state
+        .storage
+        .get_member(&id, &ctx.org_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if membership.is_none() && !ctx.is_platform_admin() {
+        return Err(ApiError::NotFound(format!("User '{}' not found", id)));
+    }
+
     let mut user = state.storage.get_user(&id).await.map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("User '{}' not found", id)))?;
 
@@ -147,6 +161,16 @@ pub async fn delete_user(
     let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
+    }
+
+    // Gate on membership before mutation (see update_user for rationale).
+    let membership = state
+        .storage
+        .get_member(&id, &ctx.org_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if membership.is_none() && !ctx.is_platform_admin() {
+        return Err(ApiError::NotFound(format!("User '{}' not found", id)));
     }
 
     // TODO(Task 11/12): the old `count_admin_users` check is gone — Task 4

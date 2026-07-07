@@ -306,7 +306,7 @@ pub async fn list_all_channels(
         return Err(ApiError::Forbidden);
     }
 
-    let mut channels = state
+    let channels = state
         .storage
         .list_channels(&ctx.org_id)
         .await
@@ -349,7 +349,6 @@ pub async fn list_all_channels(
 
     // list_channels returns channels ordered by created_at; preserve that
     // stable order in the response.
-    let _ = channels.len();
     let result: Vec<ChannelWithModels> = channels
         .into_iter()
         .map(|c| {

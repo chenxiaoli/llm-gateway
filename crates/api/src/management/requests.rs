@@ -4,7 +4,7 @@ use axum::Json;
 use serde::Serialize;
 use std::sync::Arc;
 
-use llm_gateway_org::resolve_org_context;
+use llm_gateway_org::{can_manage_channels, resolve_org_context};
 use llm_gateway_storage::{AuditLog, Transaction, UsageRecord};
 
 use crate::error::ApiError;
@@ -43,6 +43,25 @@ pub async fn get_request_details(
         .get_audit_by_request_id(&ctx.org_id, &request_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Members may only fetch their own request details. The owning user is
+    // carried on the audit_logs row (request_id -> user_id). If no audit row
+    // exists we cannot confirm ownership, so deny. Admins/owners (and
+    // platform_admin via can_manage_channels) see all rows in the org.
+    // Return 404 (not 403) to avoid leaking request existence.
+    if !can_manage_channels(&ctx) {
+        let owner_matches = audit
+            .as_ref()
+            .and_then(|a| a.user_id.as_deref())
+            .map(|uid| uid == claims.sub)
+            .unwrap_or(false);
+        if !owner_matches {
+            return Err(ApiError::NotFound(format!(
+                "Request '{}' not found",
+                request_id
+            )));
+        }
+    }
 
     Ok(Json(RequestDetailsResponse {
         transaction,
