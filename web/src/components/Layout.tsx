@@ -27,6 +27,7 @@ import {
   SquareStack,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
+import { isAdminOrAbove } from '../lib/auth';
 import { useTheme } from '../hooks/useTheme';
 import { apiClient } from '../api/client';
 import { useTranslation } from 'react-i18next';
@@ -41,8 +42,9 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
+  const currentOrg = useAuthStore((s) => s.currentOrg);
   const logout = useAuthStore((s) => s.logout);
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = isAdminOrAbove(user, currentOrg);
   const { theme, toggleTheme } = useTheme();
   const { t, i18n } = useTranslation();
   const toggleLanguage = () => {
@@ -339,6 +341,7 @@ export default function AppLayout() {
               <div className="h-4 w-px bg-base-300/60 mx-1" />
 
               <div ref={dropdownRef} className="relative">
+                {/* TODO(Phase 2): render OrgSwitcher here using useAuthStore.currentOrg + .orgs */}
                 <button
                   className="flex items-center gap-2 text-sm cursor-pointer rounded-lg px-2 py-1 hover:bg-base-200/60 transition-colors"
                   onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -411,7 +414,10 @@ export default function AppLayout() {
               )}
             </div>
             <span className="text-[11px] text-base-content/40 font-mono hidden sm:inline">
-              {user?.role === 'admin' ? 'admin' : 'user'}
+              {/* Phase 1: show org role, falling back to platform_role for platform admins */}
+              {user?.platform_role === 'platform_admin'
+                ? 'platform_admin'
+                : currentOrg?.role ?? 'member'}
             </span>
           </div>
         </footer>

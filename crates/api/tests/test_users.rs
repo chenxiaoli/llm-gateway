@@ -121,7 +121,9 @@ async fn test_update_user_role_admin_to_user(pool: PgPool) {
         .unwrap();
     assert_eq!(promote_resp.status(), StatusCode::OK);
 
-    // Now demote the original admin to user
+    // Now demote the original admin to a regular member.
+    // Phase 1: legacy role string "user" is accepted as an alias for "member"
+    // (the closest equivalent in the membership model).
     let admin_id = admin_body["user"]["id"].as_str().unwrap();
     let demote_resp = app
         .clone()
@@ -131,7 +133,7 @@ async fn test_update_user_role_admin_to_user(pool: PgPool) {
                 .uri(&format!("/api/v1/admin/users/{}", admin_id))
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
-                .body(Body::from(json!({"role": "user"}).to_string()))
+                .body(Body::from(json!({"role": "member"}).to_string()))
                 .unwrap(),
         )
         .await
@@ -142,7 +144,7 @@ async fn test_update_user_role_admin_to_user(pool: PgPool) {
         &to_bytes(demote_resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
-    assert_eq!(body["role"], "user");
+    assert_eq!(body["role"], "member");
 }
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
@@ -180,7 +182,14 @@ async fn test_update_user_role_user_to_admin(pool: PgPool) {
     assert_eq!(body["role"], "admin");
 }
 
+// TODO(Task 11/12): "cannot disable last admin" was a Phase 0 invariant
+// enforced via users.role='admin'. With multi-tenant membership, the
+// equivalent invariant is "cannot disable the last owner of an org",
+// which needs to count MemberRole::Owner rows in the members table.
+// Phase 1 deliberately drops the check; restore once /members endpoints
+// exist with a count_owners-backed guard.
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+#[ignore = "Phase 1 drops last-admin guard; restore with last-owner guard in /members (Task 11/12)"]
 async fn test_cannot_disable_last_admin_user(pool: PgPool) {
     let app = build_app(common::make_state(pool));
 
@@ -207,7 +216,11 @@ async fn test_cannot_disable_last_admin_user(pool: PgPool) {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
 
+// TODO(Task 11/12): see test_cannot_disable_last_admin_user — Phase 1 drops
+// the last-admin protection until a membership-aware /members endpoint
+// exists with a count_owners-backed guard.
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+#[ignore = "Phase 1 drops last-admin guard; restore with last-owner guard in /members (Task 11/12)"]
 async fn test_cannot_demote_last_admin_user(pool: PgPool) {
     let app = build_app(common::make_state(pool));
 
@@ -283,7 +296,11 @@ async fn test_delete_user(pool: PgPool) {
     assert_eq!(list_body["items"].as_array().unwrap().len(), 1);
 }
 
+// TODO(Task 11/12): see test_cannot_disable_last_admin_user — Phase 1 drops
+// the last-admin protection until a membership-aware /members endpoint
+// exists with a count_owners-backed guard.
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+#[ignore = "Phase 1 drops last-admin guard; restore with last-owner guard in /members (Task 11/12)"]
 async fn test_cannot_delete_last_admin_user(pool: PgPool) {
     let app = build_app(common::make_state(pool));
 

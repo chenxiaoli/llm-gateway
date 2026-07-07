@@ -32,6 +32,9 @@ pub fn management_router() -> Router<Arc<AppState>> {
         .route("/api/v1/auth/me/balance", get(auth::me_balance))
         .route("/api/v1/auth/refresh", post(auth::refresh))
         .route("/api/v1/auth/change-password", post(auth::change_password))
+        // Orgs (authenticated) — list/create/switch membership context
+        .route("/api/v1/orgs", get(auth::list_orgs).post(auth::create_org))
+        .route("/api/v1/me/current-org", post(auth::switch_org))
         // Keys (authenticated)
         .route("/api/v1/keys", post(keys::create_key).get(keys::list_keys))
         .route(

@@ -3,10 +3,11 @@ use axum::http::HeaderMap;
 use axum::Json;
 use std::sync::Arc;
 
+use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, resolve_org_context};
 use llm_gateway_storage::{CreateProvider as StorageCreateProvider, Provider, ProviderWithEndpoints, UpdateProvider as StorageUpdateProvider};
 
 use crate::error::ApiError;
-use crate::extractors::require_admin;
+use crate::extractors::require_auth;
 use crate::AppState;
 
 /// Generate slug from provider name
@@ -26,12 +27,32 @@ pub async fn create_provider(
     headers: HeaderMap,
     Json(input): Json<StorageCreateProvider>,
 ) -> Result<Json<ProviderWithEndpoints>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+
+    // Decide ownership: explicit body value wins, otherwise non-platform-admin
+    // callers get an org-private entry; platform_admin defaults to platform-level.
+    let owner_org_id = input.owner_org_id.clone().or_else(|| {
+        if can_create_platform_catalog(&ctx) { None } else { Some(ctx.org_id.clone()) }
+    });
+    if owner_org_id.as_deref() == Some(ctx.org_id.as_str()) {
+        if !can_create_org_catalog(&ctx) {
+            return Err(ApiError::Forbidden);
+        }
+    } else if owner_org_id.is_none() {
+        if !can_create_platform_catalog(&ctx) {
+            return Err(ApiError::Forbidden);
+        }
+    } else {
+        // Caller tried to attach the entry to a different org.
+        return Err(ApiError::Forbidden);
+    }
 
     let now = chrono::Utc::now();
     let slug = input.slug.unwrap_or_else(|| make_slug(&input.name));
     let provider = Provider {
         id: uuid::Uuid::new_v4().to_string(),
+        owner_org_id,
         name: input.name,
         slug,
         endpoints: input.endpoints.and_then(|v| {
@@ -45,7 +66,7 @@ pub async fn create_provider(
 
     let created = state
         .storage
-        .create_provider(&provider)
+        .create_provider(&ctx.org_id, &provider)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -56,11 +77,12 @@ pub async fn list_providers(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<ProviderWithEndpoints>>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let providers = state
         .storage
-        .list_providers()
+        .list_providers(&ctx.org_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -73,11 +95,12 @@ pub async fn get_provider(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<ProviderWithEndpoints>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let provider = state
         .storage
-        .get_provider(&id)
+        .get_provider(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Provider '{}' not found", id)))?;
@@ -91,14 +114,24 @@ pub async fn update_provider(
     Path(id): Path<String>,
     Json(input): Json<StorageUpdateProvider>,
 ) -> Result<Json<ProviderWithEndpoints>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let mut provider = state
         .storage
-        .get_provider(&id)
+        .get_provider(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Provider '{}' not found", id)))?;
+
+    // Ownership check before mutating.
+    if let Some(ref owner_org_id) = provider.owner_org_id {
+        if owner_org_id != &ctx.org_id || !can_create_org_catalog(&ctx) {
+            return Err(ApiError::Forbidden);
+        }
+    } else if !can_create_platform_catalog(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     // Apply partial updates
     if let Some(name) = input.name {
@@ -119,7 +152,7 @@ pub async fn update_provider(
 
     let updated = state
         .storage
-        .update_provider(&provider)
+        .update_provider(&ctx.org_id, &provider)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -131,11 +164,27 @@ pub async fn delete_provider(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+
+    let provider = state
+        .storage
+        .get_provider(&ctx.org_id, &id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound(format!("Provider '{}' not found", id)))?;
+
+    if let Some(ref owner_org_id) = provider.owner_org_id {
+        if owner_org_id != &ctx.org_id || !can_create_org_catalog(&ctx) {
+            return Err(ApiError::Forbidden);
+        }
+    } else if !can_create_platform_catalog(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     state
         .storage
-        .delete_provider(&id)
+        .delete_provider(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 

@@ -4,6 +4,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use llm_gateway_org::{can_manage_channels, resolve_org_context};
 use llm_gateway_storage::{units_to_usd, ChannelUsageSummaryRecord, PaginatedResponse, PaginationParams, UsageFilter, UsageRecord, UsageSummaryRecord};
 
 use crate::error::ApiError;
@@ -94,17 +95,19 @@ pub async fn get_usage(
     Query(query): Query<UsageQuery>,
 ) -> Result<Json<PaginatedResponse<UsageRecordResponse>>, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let (page, page_size) = query.pagination.normalized();
     let mut filter = query.filter;
 
-    if claims.role != "admin" {
+    // Members see only their own usage rows; admins/platform_admin see all rows in the org.
+    if !can_manage_channels(&ctx) {
         filter.user_id = Some(claims.sub);
     }
 
     let result = state
         .storage
-        .query_usage_paginated(&filter, page, page_size)
+        .query_usage_paginated(&ctx.org_id, &filter, page, page_size)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -128,16 +131,17 @@ pub async fn get_usage_summary(
     Query(query): Query<UsageSummaryQuery>,
 ) -> Result<Json<Vec<UsageSummaryResponse>>, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let mut filter = query.filter;
 
-    if claims.role != "admin" {
+    if !can_manage_channels(&ctx) {
         filter.user_id = Some(claims.sub);
     }
 
     let records = state
         .storage
-        .query_usage_summary(&filter)
+        .query_usage_summary(&ctx.org_id, &filter)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -175,16 +179,17 @@ pub async fn get_channel_usage_summary(
     Query(query): Query<UsageSummaryQuery>,
 ) -> Result<Json<Vec<ChannelUsageSummaryResponse>>, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let mut filter = query.filter;
 
-    if claims.role != "admin" {
+    if !can_manage_channels(&ctx) {
         filter.user_id = Some(claims.sub);
     }
 
     let records = state
         .storage
-        .query_channel_usage_summary(&filter)
+        .query_channel_usage_summary(&ctx.org_id, &filter)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -211,16 +216,17 @@ pub async fn get_daily_usage(
     Query(query): Query<UsageSummaryQuery>,
 ) -> Result<Json<Vec<DailyUsageResponse>>, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let mut filter = query.filter;
 
-    if claims.role != "admin" {
+    if !can_manage_channels(&ctx) {
         filter.user_id = Some(claims.sub);
     }
 
     let records = state
         .storage
-        .query_daily_usage(&filter)
+        .query_daily_usage(&ctx.org_id, &filter)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 

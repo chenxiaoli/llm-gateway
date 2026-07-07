@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use llm_gateway_auth::{generate_api_key, hash_api_key};
+use llm_gateway_org::{can_manage_channels, resolve_org_context};
 use llm_gateway_storage::{
     opt_units_to_usd, opt_usd_to_units,
     ApiKey, PaginatedResponse, PaginationParams,
@@ -84,6 +85,7 @@ pub async fn create_key(
     Json(input): Json<CreateKeyRequest>,
 ) -> Result<Json<CreateKeyResponse>, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let budget_monthly_i64 = opt_usd_to_units(input.budget_monthly);
 
@@ -92,6 +94,7 @@ pub async fn create_key(
     let key_prefix = raw_key.chars().take(8).collect::<String>();
     let key = ApiKey {
         id: uuid::Uuid::new_v4().to_string(),
+        org_id: ctx.org_id.clone(),
         name: input.name,
         key_hash: hash_api_key(&raw_key),
         key_prefix: Some(key_prefix),
@@ -106,7 +109,7 @@ pub async fn create_key(
 
     let created = state
         .storage
-        .create_key(&key)
+        .create_key(&ctx.org_id, &key)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -127,18 +130,21 @@ pub async fn list_keys(
     Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<PaginatedResponse<KeyResponse>>, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let (page, page_size) = pagination.normalized();
-    let result = if claims.role == "admin" {
+    // Admin-or-above in this org (or platform_admin) sees all keys in the org;
+    // a regular member sees only keys they created.
+    let result = if can_manage_channels(&ctx) {
         state
             .storage
-            .list_keys_paginated(page, page_size)
+            .list_keys_paginated(&ctx.org_id, page, page_size)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?
     } else {
         state
             .storage
-            .list_keys_paginated_for_user(&claims.sub, page, page_size)
+            .list_keys_paginated_for_user(&ctx.org_id, &claims.sub, page, page_size)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?
     };
@@ -157,15 +163,16 @@ pub async fn get_key(
     Path(id): Path<String>,
 ) -> Result<Json<KeyResponse>, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let key = state
         .storage
-        .get_key(&id)
+        .get_key(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Key '{}' not found", id)))?;
 
-    if claims.role != "admin" && key.created_by.as_deref() != Some(&claims.sub) {
+    if !can_manage_channels(&ctx) && key.created_by.as_deref() != Some(&claims.sub) {
         return Err(ApiError::NotFound(format!("Key '{}' not found", id)));
     }
 
@@ -179,15 +186,16 @@ pub async fn update_key(
     Json(input): Json<UpdateKeyRequest>,
 ) -> Result<Json<KeyResponse>, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let mut key = state
         .storage
-        .get_key(&id)
+        .get_key(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Key '{}' not found", id)))?;
 
-    if claims.role != "admin" && key.created_by.as_deref() != Some(&claims.sub) {
+    if !can_manage_channels(&ctx) && key.created_by.as_deref() != Some(&claims.sub) {
         return Err(ApiError::NotFound(format!("Key '{}' not found", id)));
     }
 
@@ -200,7 +208,7 @@ pub async fn update_key(
 
     let updated = state
         .storage
-        .update_key(&key)
+        .update_key(&ctx.org_id, &key)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -213,11 +221,13 @@ pub async fn delete_key(
     Path(id): Path<String>,
 ) -> Result<axum::http::StatusCode, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
-    if claims.role != "admin" {
+    // Non-admins may only delete keys they own.
+    if !can_manage_channels(&ctx) {
         let key = state
             .storage
-            .get_key(&id)
+            .get_key(&ctx.org_id, &id)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?
             .ok_or(ApiError::NotFound(format!("Key '{}' not found", id)))?;
@@ -229,7 +239,7 @@ pub async fn delete_key(
 
     state
         .storage
-        .delete_key(&id)
+        .delete_key(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 

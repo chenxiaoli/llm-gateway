@@ -1367,6 +1367,7 @@ dependencies = [
  "llm-gateway-billing",
  "llm-gateway-encryption",
  "llm-gateway-nats-publisher",
+ "llm-gateway-org",
  "llm-gateway-provider",
  "llm-gateway-ratelimit",
  "llm-gateway-storage",
@@ -1421,6 +1422,7 @@ dependencies = [
  "hex",
  "jsonwebtoken",
  "serde",
+ "serde_json",
  "sha2",
  "uuid",
 ]
@@ -1457,6 +1459,17 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "llm-gateway-org"
+version = "1.8.4"
+dependencies = [
+ "async-trait",
+ "llm-gateway-auth",
+ "llm-gateway-storage",
+ "serde",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

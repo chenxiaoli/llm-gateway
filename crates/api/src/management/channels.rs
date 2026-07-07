@@ -6,13 +6,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use llm_gateway_encryption::{decrypt, encrypt};
+use llm_gateway_org::{can_access_channel, can_manage_channels, resolve_org_context};
 use llm_gateway_storage::{
     bps_to_ratio, opt_units_to_usd, opt_usd_to_units, ratio_to_bps,
     Channel, ChannelModel, TimeSlot, UpdateChannelApiKey,
 };
 
 use crate::error::ApiError;
-use crate::extractors::require_admin;
+use crate::extractors::require_auth;
 use crate::AppState;
 
 /// Summary of a channel model with model name resolved from the models table.
@@ -149,7 +150,11 @@ pub async fn create_channel(
     headers: HeaderMap,
     Json(input): Json<CreateChannelRequest>,
 ) -> Result<Json<ChannelResponse>, ApiError> {
-    let claims = require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     let provider_id = input.provider_id.clone();
     let name = input.name.trim().to_string();
@@ -162,13 +167,13 @@ pub async fn create_channel(
 
     state
         .storage
-        .get_provider(&provider_id)
+        .get_provider(&ctx.org_id, &provider_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
 
     if let Some(ref gid) = input.group_id {
-        let exists = state.storage.get_group(gid).await
+        let exists = state.storage.get_group(&ctx.org_id, gid).await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
         if exists.is_none() {
             return Err(ApiError::BadRequest(format!("Group '{}' not found", gid)));
@@ -180,6 +185,7 @@ pub async fn create_channel(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     let channel = Channel {
         id: uuid::Uuid::new_v4().to_string(),
+        org_id: ctx.org_id.clone(),
         provider_id,
         name,
         api_key: encrypted_key,
@@ -207,6 +213,7 @@ pub async fn create_channel(
             let now = chrono::Utc::now();
             ChannelModel {
                 id: uuid::Uuid::new_v4().to_string(),
+                org_id: ctx.org_id.clone(),
                 channel_id: channel.id.clone(),
                 model_id: m.model_id.clone(),
                 upstream_model_name: m.upstream_model_name.clone(),
@@ -224,7 +231,7 @@ pub async fn create_channel(
     for m in &models {
         state
             .storage
-            .get_model_by_id(&m.model_id)
+            .get_model_by_id(&ctx.org_id, &m.model_id)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?
             .ok_or(ApiError::NotFound(format!("Model '{}' not found", m.model_id)))?;
@@ -232,14 +239,14 @@ pub async fn create_channel(
 
     let created = state
         .storage
-        .create_channel_with_models(&channel, models)
+        .create_channel_with_models(&ctx.org_id, &channel, models)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // Enrich with group_name (single channel lookup, no N+1)
     let mut resp = ChannelResponse::from(created);
     if let Some(ref gid) = resp.group_id {
-        if let Some(g) = state.storage.get_group(gid).await
+        if let Some(g) = state.storage.get_group(&ctx.org_id, gid).await
             .map_err(|e| ApiError::Internal(e.to_string()))? {
             resp.group_name = Some(g.name);
         }
@@ -252,18 +259,24 @@ pub async fn list_channels(
     headers: HeaderMap,
     Path(provider_id): Path<String>,
 ) -> Result<Json<Vec<ChannelResponse>>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
-    let channels = state
+    let mut channels = state
         .storage
-        .list_channels_by_provider(&provider_id)
+        .list_channels_by_provider(&ctx.org_id, &provider_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
+    // Members see only channels in their own group + ungrouped;
+    // admins/owners/platform_admin see everything.
+    if !can_manage_channels(&ctx) {
+        channels.retain(|c| can_access_channel(&ctx, c.group_id.as_deref()));
+    }
 
     // Single batched group lookup, then join client-side to avoid N+1.
     let groups = state
         .storage
-        .list_groups()
+        .list_groups(&ctx.org_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     let group_name_map: HashMap<String, String> = groups
@@ -287,28 +300,32 @@ pub async fn list_all_channels(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<ChannelWithModels>>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     let channels = state
         .storage
-        .list_channels()
+        .list_channels(&ctx.org_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // Batch-fetch all channel models and all models (for name resolution)
     let all_cms = state
         .storage
-        .list_channel_models()
+        .list_channel_models(&ctx.org_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     let all_models = state
         .storage
-        .list_models()
+        .list_models(&ctx.org_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     let groups = state
         .storage
-        .list_groups()
+        .list_groups(&ctx.org_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -330,6 +347,8 @@ pub async fn list_all_channels(
         cms_by_channel.entry(cm.channel_id.clone()).or_default().push(cm);
     }
 
+    // list_channels returns channels ordered by created_at; preserve that
+    // stable order in the response.
     let result: Vec<ChannelWithModels> = channels
         .into_iter()
         .map(|c| {
@@ -383,14 +402,20 @@ pub async fn get_channel(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<ChannelResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let mut channel = state
         .storage
-        .get_channel(&id)
+        .get_channel(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Channel '{}' not found", id)))?;
+
+    // Members can only read channels in their group (or ungrouped ones).
+    if !can_access_channel(&ctx, channel.group_id.as_deref()) {
+        return Err(ApiError::NotFound(format!("Channel '{}' not found", id)));
+    }
 
     // Decrypt api_key for display
     channel.api_key = decrypt(&channel.api_key, &state.encryption_key)
@@ -399,7 +424,7 @@ pub async fn get_channel(
     // Enrich with group_name
     let mut resp = ChannelResponse::from(channel);
     if let Some(ref gid) = resp.group_id {
-        if let Some(g) = state.storage.get_group(gid).await
+        if let Some(g) = state.storage.get_group(&ctx.org_id, gid).await
             .map_err(|e| ApiError::Internal(e.to_string()))? {
             resp.group_name = Some(g.name);
         }
@@ -413,11 +438,15 @@ pub async fn update_channel(
     Path(id): Path<String>,
     Json(input): Json<UpdateChannelRequest>,
 ) -> Result<Json<ChannelResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     let mut channel = state
         .storage
-        .get_channel(&id)
+        .get_channel(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Channel '{}' not found", id)))?;
@@ -458,7 +487,7 @@ pub async fn update_channel(
     }
     if let Some(ref group_id) = input.group_id {
         if let Some(gid) = group_id {
-            let exists = state.storage.get_group(gid).await
+            let exists = state.storage.get_group(&ctx.org_id, gid).await
                 .map_err(|e| ApiError::Internal(e.to_string()))?;
             if exists.is_none() {
                 return Err(ApiError::BadRequest(format!("Group '{}' not found", gid)));
@@ -470,14 +499,14 @@ pub async fn update_channel(
 
     let updated = state
         .storage
-        .update_channel(&channel)
+        .update_channel(&ctx.org_id, &channel)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // Enrich with group_name
     let mut resp = ChannelResponse::from(updated);
     if let Some(ref gid) = resp.group_id {
-        if let Some(g) = state.storage.get_group(gid).await
+        if let Some(g) = state.storage.get_group(&ctx.org_id, gid).await
             .map_err(|e| ApiError::Internal(e.to_string()))? {
             resp.group_name = Some(g.name);
         }
@@ -493,11 +522,15 @@ pub async fn update_channel_api_key(
     Path(id): Path<String>,
     Json(input): Json<UpdateChannelApiKey>,
 ) -> Result<Json<ChannelResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     let mut channel = state
         .storage
-        .get_channel(&id)
+        .get_channel(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Channel '{}' not found", id)))?;
@@ -512,7 +545,7 @@ pub async fn update_channel_api_key(
 
     let updated = state
         .storage
-        .update_channel(&channel)
+        .update_channel(&ctx.org_id, &channel)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -524,11 +557,15 @@ pub async fn delete_channel(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     state
         .storage
-        .delete_channel(&id)
+        .delete_channel(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -547,25 +584,29 @@ pub async fn test_channel(
     Path(id): Path<String>,
     Query(query): Query<TestChannelQuery>,
 ) -> Result<Json<Vec<llm_gateway_storage::ChannelTestResult>>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     let channel = state
         .storage
-        .get_channel(&id)
+        .get_channel(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Channel '{}' not found", id)))?;
 
     let provider = state
         .storage
-        .get_provider(&channel.provider_id)
+        .get_provider(&ctx.org_id, &channel.provider_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Provider '{}' not found", channel.provider_id)))?;
 
     let channel_models = state
         .storage
-        .list_channel_models_by_channel(&id)
+        .list_channel_models_by_channel(&ctx.org_id, &id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -578,7 +619,7 @@ pub async fn test_channel(
         Some(name) => name.clone(),
         None => state
             .storage
-            .get_model_by_id(&cm.model_id)
+            .get_model_by_id(&ctx.org_id, &cm.model_id)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?
             .map(|m| m.name)

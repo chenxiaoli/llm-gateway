@@ -19,6 +19,7 @@ fn bearer_token(token: &str) -> String {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_create_key(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
     let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
@@ -47,6 +48,7 @@ async fn test_create_key(pool: PgPool) {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_list_keys(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
     let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
@@ -105,6 +107,7 @@ async fn test_unauthorized_access(pool: PgPool) {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_update_key(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
     let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
@@ -150,6 +153,7 @@ async fn test_update_key(pool: PgPool) {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_delete_key(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
     let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
@@ -221,7 +225,11 @@ async fn test_register_first_user_is_admin(pool: PgPool) {
         &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
-    assert_eq!(body["user"]["role"], "admin");
+    // Phase 1 multi-tenant: "first user is admin" now means (a) the user has
+    // platform_role=platform_admin and (b) their auto-membership in the
+    // default org has role=owner.
+    assert_eq!(body["user"]["platform_role"], "platform_admin");
+    assert_eq!(body["current_org"]["role"], "owner");
     assert!(body["token"].is_string());
 }
 

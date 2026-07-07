@@ -3,6 +3,7 @@ use axum::http::HeaderMap;
 use axum::Json;
 use std::sync::Arc;
 
+use llm_gateway_org::resolve_org_context;
 use llm_gateway_storage::{UserModelView, UserPricingInfo};
 
 use crate::error::ApiError;
@@ -14,11 +15,12 @@ pub async fn list_user_models(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<UserModelView>>, ApiError> {
-    let _claims = require_auth(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     let models = state
         .storage
-        .list_models()
+        .list_models(&ctx.org_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -26,7 +28,7 @@ pub async fn list_user_models(
     for m in models {
         let channel_models = state
             .storage
-            .get_channel_models_for_model(&m.model.id)
+            .get_channel_models_for_model(&ctx.org_id, &m.model.id)
             .await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -36,7 +38,7 @@ pub async fn list_user_models(
             Some(policy_id) => {
                 let policy = state
                     .storage
-                    .get_pricing_policy(policy_id)
+                    .get_pricing_policy(&ctx.org_id, policy_id)
                     .await
                     .map_err(|e| ApiError::Internal(e.to_string()))?;
                 match policy {

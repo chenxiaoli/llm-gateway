@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore, useAuthBootstrap } from './stores/authStore';
 import { getToken } from './api/client';
+import { isAdminOrAbove } from './lib/auth';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import Layout from './components/Layout';
 import Home from './pages/Home';
@@ -42,13 +43,14 @@ function RequireAuth() {
 
 function RequireAdmin() {
   const user = useAuthStore((s) => s.user);
+  const currentOrg = useAuthStore((s) => s.currentOrg);
   const { isLoading } = useAuthBootstrap();
   if (isLoading) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
   if (!user) {
     if (getToken()) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
     return <Navigate to="/console/login" replace />;
   }
-  if (user.role !== 'admin') return <Navigate to="/console/dashboard" replace />;
+  if (!isAdminOrAbove(user, currentOrg)) return <Navigate to="/console/dashboard" replace />;
   return <Outlet />;
 }
 

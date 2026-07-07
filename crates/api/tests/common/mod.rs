@@ -22,6 +22,7 @@ impl ChannelRegistry for MockChannelRegistry {
 }
 
 pub const TEST_JWT_SECRET: &str = "test-jwt-secret";
+pub const TEST_ORG: &str = "org_default";
 
 #[allow(dead_code)]
 pub struct TestUser {
@@ -29,8 +30,6 @@ pub struct TestUser {
     pub id: String,
     #[allow(dead_code)]
     pub username: String,
-    #[allow(dead_code)]
-    pub role: String,
     pub token: String,
 }
 
@@ -54,25 +53,87 @@ pub fn make_state(pool: PgPool) -> Arc<AppState> {
     })
 }
 
+/// Insert (or replace) the canonical test admin user with id="admin-1" plus
+/// an owner membership in `org_default`. Required because `resolve_org_context`
+/// now does a member lookup — JWTs alone are no longer sufficient.
+///
+/// `role: "admin"` historically meant "platform admin" in the test fixtures;
+/// we now store that as `platform_role = Some(PlatformRole::PlatformAdmin)` on
+/// the user row, plus an owner member row so the per-org checks pass too.
+pub async fn seed_admin_user(pool: &PgPool) {
+    // upsert user
+    sqlx::query(
+        r#"INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, created_at, updated_at)
+           VALUES ('admin-1', 'admin', 'x', 'platform_admin', $1, true, NOW(), NOW())
+           ON CONFLICT (id) DO UPDATE SET platform_role = 'platform_admin', current_org_id = $1, enabled = true"#,
+    )
+    .bind(TEST_ORG)
+    .execute(pool)
+    .await
+    .expect("seed admin user");
+
+    // upsert owner membership in org_default
+    sqlx::query(
+        r#"INSERT INTO members (user_id, org_id, role, created_by, created_at)
+           VALUES ('admin-1', $1, 'owner', 'admin-1', NOW())
+           ON CONFLICT (user_id, org_id) DO UPDATE SET role = 'owner'"#,
+    )
+    .bind(TEST_ORG)
+    .execute(pool)
+    .await
+    .expect("seed admin member");
+}
+
+/// Insert (or replace) a regular test member with the given id and an
+/// optional group_id. Used by tests that exercise the member-role path.
+pub async fn seed_member(pool: &PgPool, user_id: &str, group_id: Option<&str>) {
+    sqlx::query(
+        r#"INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, created_at, updated_at)
+           VALUES ($1, $1, 'x', NULL, $2, true, NOW(), NOW())
+           ON CONFLICT (id) DO NOTHING"#,
+    )
+    .bind(user_id)
+    .bind(TEST_ORG)
+    .execute(pool)
+    .await
+    .expect("seed member user");
+
+    sqlx::query(
+        r#"INSERT INTO members (user_id, org_id, role, group_id, created_by, created_at)
+           VALUES ($1, $2, 'member', $3, 'admin-1', NOW())
+           ON CONFLICT (user_id, org_id) DO UPDATE SET group_id = $3"#,
+    )
+    .bind(user_id)
+    .bind(TEST_ORG)
+    .bind(group_id)
+    .execute(pool)
+    .await
+    .expect("seed member row");
+}
+
 #[allow(dead_code)]
 pub fn make_admin_token() -> TestUser {
     let id = "admin-1".to_string();
-    let token = create_jwt(&id, "admin", TEST_JWT_SECRET).unwrap();
+    let token = create_jwt(&id, TEST_ORG, Some("platform_admin"), TEST_JWT_SECRET).unwrap();
     TestUser {
         id,
         username: "admin".to_string(),
-        role: "admin".to_string(),
         token,
     }
 }
 
 #[allow(dead_code)]
 pub fn make_user_token(user_id: &str) -> TestUser {
-    let token = create_jwt(user_id, "user", TEST_JWT_SECRET).unwrap();
+    let token = create_jwt(user_id, TEST_ORG, None, TEST_JWT_SECRET).unwrap();
     TestUser {
         id: user_id.to_string(),
         username: "testuser".to_string(),
-        role: "user".to_string(),
         token,
     }
+}
+
+#[allow(dead_code)]
+pub fn make_member_token(user_id: &str) -> TestUser {
+    // Alias for make_user_token; kept separate to communicate intent.
+    make_user_token(user_id)
 }

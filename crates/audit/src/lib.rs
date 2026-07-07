@@ -33,6 +33,8 @@ impl AuditLogger {
 
     pub async fn log_request(
         &self,
+        org_id: &str,
+        actor_is_platform_admin: bool,
         key_id: &str,
         user_id: Option<&str>,
         model_name: &str,
@@ -99,6 +101,7 @@ impl AuditLogger {
         });
         let log = AuditLog {
             id: uuid::Uuid::new_v4().to_string(),
+            org_id: org_id.to_string(),
             request_id: request_id.map(String::from),
             key_id: key_id.to_string(),
             user_id: user_id.map(String::from),
@@ -122,9 +125,10 @@ impl AuditLogger {
             upstream_url: upstream_url.map(String::from),
             request_headers: request_headers.map(String::from),
             response_headers: response_headers.map(String::from),
+            actor_is_platform_admin,
             routes: routes_sanitized,
         };
-        self.storage.insert_log(&log).await
+        self.storage.insert_log(org_id, &log).await
     }
 }
 
@@ -164,7 +168,7 @@ mod tests {
         let logger = AuditLogger::new(storage.clone());
 
         // Use a synthetic API key. Insert it if missing.
-        let _ = sqlx::query("INSERT INTO api_keys (id, name, key_hash, enabled, created_at, updated_at) VALUES ('test-san', 'san', 'test-san-hash', true, NOW(), NOW()) ON CONFLICT (id) DO NOTHING")
+        let _ = sqlx::query("INSERT INTO api_keys (id, name, key_hash, enabled, org_id, created_at, updated_at) VALUES ('test-san', 'san', 'test-san-hash', true, 'org_default', NOW(), NOW()) ON CONFLICT (id) DO NOTHING")
             .execute(&sqlx::PgPool::connect(url_ref).await.expect("pool"))
             .await;
 
@@ -176,6 +180,7 @@ mod tests {
             latency_ms: 100, started_at: chrono::Utc::now(),
         };
         let result = logger.log_request(
+            "org_default", false,
             "test-san", None, "m", "p", Some("c"),
             Protocol::Openai, false, "{}", "{}", 500, 100, None, None,
             None, None, None, None, None, None, None, None, Some(&[route]),

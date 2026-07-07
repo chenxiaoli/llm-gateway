@@ -4,10 +4,11 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use llm_gateway_org::{can_access_channel, can_manage_channels, resolve_org_context};
 use llm_gateway_storage::{bps_to_ratio, ratio_to_bps, ChannelModel};
 
 use crate::error::ApiError;
-use crate::extractors::require_admin;
+use crate::extractors::require_auth;
 use crate::AppState;
 
 // --- JSON response wrapper with f64 markup_ratio ---
@@ -71,29 +72,37 @@ pub async fn create_channel_model(
     Path(provider_id): Path<String>,
     Json(input): Json<CreateChannelModelRequest>,
 ) -> Result<Json<ChannelModelResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
     // channel_id is required when creating by provider
     let channel_id = input.channel_id.as_ref()
         .ok_or(ApiError::BadRequest("channel_id is required".to_string()))?;
 
-    // Verify channel belongs to provider
-    let channel = state.storage.get_channel(channel_id).await
+    // Verify channel belongs to provider (and is visible to caller).
+    let channel = state.storage.get_channel(&ctx.org_id, channel_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("Channel not found".to_string()))?;
+    if !can_access_channel(&ctx, channel.group_id.as_deref()) {
+        return Err(ApiError::NotFound("Channel not found".to_string()));
+    }
 
     if channel.provider_id != provider_id {
         return Err(ApiError::BadRequest("Channel does not belong to provider".to_string()));
     }
 
     // Verify model exists
-    let _model = state.storage.get_model_by_id(&input.model_id).await
+    let _model = state.storage.get_model_by_id(&ctx.org_id, &input.model_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("Model not found".to_string()))?;
 
     let now = chrono::Utc::now();
     let cm = ChannelModel {
         id: uuid::Uuid::new_v4().to_string(),
+        org_id: ctx.org_id.clone(),
         channel_id: channel_id.clone(),
         model_id: input.model_id,
         upstream_model_name: input.upstream_model_name,
@@ -105,7 +114,7 @@ pub async fn create_channel_model(
         updated_at: now,
     };
 
-    let created = state.storage.create_channel_model(&cm).await
+    let created = state.storage.create_channel_model(&ctx.org_id, &cm).await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(ChannelModelResponse::from(created)))
@@ -117,21 +126,29 @@ pub async fn create_channel_model_by_channel(
     Path(channel_id): Path<String>,
     Json(input): Json<CreateChannelModelRequest>,
 ) -> Result<Json<ChannelModelResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
-    // Verify channel exists
-    let _channel = state.storage.get_channel(&channel_id).await
+    // Verify channel exists and caller can manage it.
+    let channel = state.storage.get_channel(&ctx.org_id, &channel_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("Channel not found".to_string()))?;
+    if !can_access_channel(&ctx, channel.group_id.as_deref()) {
+        return Err(ApiError::NotFound("Channel not found".to_string()));
+    }
 
     // Verify model exists by ID
-    let _model = state.storage.get_model_by_id(&input.model_id).await
+    let _model = state.storage.get_model_by_id(&ctx.org_id, &input.model_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("Model not found".to_string()))?;
 
     let now = chrono::Utc::now();
     let cm = ChannelModel {
         id: uuid::Uuid::new_v4().to_string(),
+        org_id: ctx.org_id.clone(),
         channel_id: channel_id.clone(),
         model_id: input.model_id,
         upstream_model_name: input.upstream_model_name,
@@ -143,7 +160,7 @@ pub async fn create_channel_model_by_channel(
         updated_at: now,
     };
 
-    let created = state.storage.create_channel_model(&cm).await
+    let created = state.storage.create_channel_model(&ctx.org_id, &cm).await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(ChannelModelResponse::from(created)))
@@ -154,18 +171,22 @@ pub async fn list_channel_models(
     headers: HeaderMap,
     Path(provider_id): Path<String>,
 ) -> Result<Json<Vec<ChannelModelResponse>>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
     // Get channels for provider, then channel_models for those channels
-    let channels = state.storage.list_channels_by_provider(&provider_id).await
+    let mut channels = state.storage.list_channels_by_provider(&ctx.org_id, &provider_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if !can_manage_channels(&ctx) {
+        channels.retain(|c| can_access_channel(&ctx, c.group_id.as_deref()));
+    }
 
     let channel_ids: Vec<String> = channels.iter().map(|c| c.id.clone()).collect();
 
     // Get all channel_models for these channels
     let mut all_models = Vec::new();
     for channel_id in channel_ids {
-        let cms = state.storage.list_channel_models_by_channel(&channel_id).await
+        let cms = state.storage.list_channel_models_by_channel(&ctx.org_id, &channel_id).await
             .map_err(|e| ApiError::Internal(e.to_string()))?;
         all_models.extend(cms);
     }
@@ -178,11 +199,22 @@ pub async fn get_channel_model(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<ChannelModelResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
-    let cm = state.storage.get_channel_model(&id).await
+    let cm = state.storage.get_channel_model(&ctx.org_id, &id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("ChannelModel not found".to_string()))?;
+
+    // Members can read a channel_model only if its parent channel is visible.
+    if !can_manage_channels(&ctx) {
+        let channel = state.storage.get_channel(&ctx.org_id, &cm.channel_id).await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+            .ok_or(ApiError::NotFound("ChannelModel not found".to_string()))?;
+        if !can_access_channel(&ctx, channel.group_id.as_deref()) {
+            return Err(ApiError::NotFound("ChannelModel not found".to_string()));
+        }
+    }
 
     Ok(Json(ChannelModelResponse::from(cm)))
 }
@@ -193,9 +225,13 @@ pub async fn update_channel_model(
     Path(id): Path<String>,
     Json(input): Json<UpdateChannelModelRequest>,
 ) -> Result<Json<ChannelModelResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
-    let mut cm = state.storage.get_channel_model(&id).await
+    let mut cm = state.storage.get_channel_model(&ctx.org_id, &id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("ChannelModel not found".to_string()))?;
 
@@ -216,7 +252,7 @@ pub async fn update_channel_model(
     }
     cm.updated_at = chrono::Utc::now();
 
-    let updated = state.storage.update_channel_model(&cm).await
+    let updated = state.storage.update_channel_model(&ctx.org_id, &cm).await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(ChannelModelResponse::from(updated)))
@@ -227,9 +263,13 @@ pub async fn delete_channel_model(
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
+    if !can_manage_channels(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
 
-    state.storage.delete_channel_model(&id).await
+    state.storage.delete_channel_model(&ctx.org_id, &id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(axum::http::StatusCode::NO_CONTENT)
@@ -240,9 +280,18 @@ pub async fn list_channel_models_by_channel(
     headers: HeaderMap,
     Path(channel_id): Path<String>,
 ) -> Result<Json<Vec<ChannelModelResponse>>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
 
-    let models = state.storage.list_channel_models_by_channel(&channel_id).await
+    // Verify the parent channel exists and the caller can read it.
+    let channel = state.storage.get_channel(&ctx.org_id, &channel_id).await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::NotFound("Channel not found".to_string()))?;
+    if !can_access_channel(&ctx, channel.group_id.as_deref()) {
+        return Err(ApiError::NotFound("Channel not found".to_string()));
+    }
+
+    let models = state.storage.list_channel_models_by_channel(&ctx.org_id, &channel_id).await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(models.into_iter().map(ChannelModelResponse::from).collect()))

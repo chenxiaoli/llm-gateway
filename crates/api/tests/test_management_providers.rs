@@ -18,6 +18,7 @@ fn bearer_token(token: &str) -> String {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_create_provider(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
     let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
@@ -49,6 +50,7 @@ async fn test_create_provider(pool: PgPool) {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_create_provider_dual_protocol(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
     let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
@@ -83,6 +85,7 @@ async fn test_create_provider_dual_protocol(pool: PgPool) {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_list_providers(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
     let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
@@ -126,6 +129,7 @@ async fn test_list_providers(pool: PgPool) {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_provider_model_lifecycle(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
     let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
@@ -227,6 +231,7 @@ async fn test_provider_model_lifecycle(pool: PgPool) {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_create_and_list_channels(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
     let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
@@ -304,6 +309,7 @@ async fn test_create_and_list_channels(pool: PgPool) {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_update_and_delete_channel(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
     let app = build_app(common::make_state(pool));
     let admin = common::make_admin_token();
 
