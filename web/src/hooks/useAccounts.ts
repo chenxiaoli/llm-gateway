@@ -92,11 +92,9 @@ export function useUpdateThreshold() {
 }
 
 export function useMyBalance(page = 1, pageSize = 20) {
-  const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
   return useQuery({
-    queryKey: [slug, 'my-balance', page, pageSize],
+    queryKey: ['my-balance', page, pageSize],
     queryFn: () => getMyBalance(page, pageSize),
-    enabled: !!slug,
   });
 }
 

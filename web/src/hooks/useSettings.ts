@@ -22,11 +22,9 @@ export function useUpdateSettings() {
 }
 
 export function useSystemInfo() {
-  const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
-  return useQuery({ queryKey: [slug, 'system-info'], queryFn: getSystemInfo, enabled: !!slug });
+  return useQuery({ queryKey: ['system-info'], queryFn: getSystemInfo });
 }
 
 export function useNatsStatus() {
-  const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
-  return useQuery({ queryKey: [slug, 'nats-status'], queryFn: getNatsStatus, enabled: !!slug });
+  return useQuery({ queryKey: ['nats-status'], queryFn: getNatsStatus });
 }
