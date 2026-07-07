@@ -1,5 +1,18 @@
 pub use llm_gateway_storage::{Member, MemberRole, Org, PlatformRole};
 
+/// Lightweight org reference injected by `org_resolve_layer`.
+///
+/// Heavier `OrgContext` (with role + group_id) is added later by
+/// `membership_layer`. Splitting the two lets `org_resolve_layer` run
+/// before the membership check, so 404 (no such org) is distinct from
+/// 403 (you're not a member).
+#[derive(Debug, Clone)]
+pub struct ResolvedOrg {
+    pub id: String,
+    pub slug: String,
+    pub name: String,
+}
+
 /// Per-request context derived from JWT + membership lookup.
 /// In Phase 1 this is constructed from `claims.current_org_id` only
 /// (no path-based routing yet — Phase 2 adds OrgResolveLayer/MembershipLayer).

@@ -10,14 +10,16 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Request, State};
+use axum::extract::{Path, Request, State};
 use axum::http::HeaderMap;
 use axum::middleware::Next;
 use axum::response::Response;
+use std::collections::HashMap;
 
 use crate::error::ApiError;
 use crate::extractors::require_auth;
 use crate::AppState;
+use llm_gateway_org::ResolvedOrg;
 
 /// Verify the bearer JWT and inject `JwtClaims` into request extensions.
 ///
@@ -33,5 +35,35 @@ pub async fn auth_layer(
 ) -> Result<Response, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
     req.extensions_mut().insert(claims);
+    Ok(next.run(req).await)
+}
+
+/// Resolve `{org_slug}` from the matched path to an `Org` row and inject a
+/// `ResolvedOrg` into request extensions for downstream layers/handlers.
+///
+/// Returns 404 if no org matches the slug (distinct from the 403 the later
+/// `membership_layer` would raise for a non-member). Path params are only
+/// populated by Axum after route matching, so this layer must come after the
+/// router — it cannot short-circuit unmatched paths.
+pub async fn org_resolve_layer(
+    State(state): State<Arc<AppState>>,
+    Path(params): Path<HashMap<String, String>>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response, ApiError> {
+    let slug = params
+        .get("org_slug")
+        .ok_or_else(|| ApiError::BadRequest("missing org_slug path param".into()))?;
+    let org = state
+        .storage
+        .get_org_by_slug(slug)
+        .await
+        .map_err(|e| ApiError::Internal(format!("org lookup failed: {e}")))?;
+    let org = org.ok_or_else(|| ApiError::NotFound("org not found".into()))?;
+    req.extensions_mut().insert(ResolvedOrg {
+        id: org.id,
+        slug: org.slug,
+        name: org.name,
+    });
     Ok(next.run(req).await)
 }

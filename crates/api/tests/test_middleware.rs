@@ -5,7 +5,8 @@ use axum::http::{Request, StatusCode};
 use axum::middleware::from_fn_with_state;
 use axum::routing::get;
 use axum::Router;
-use llm_gateway_api::middleware::auth_layer;
+use llm_gateway_api::middleware::{auth_layer, org_resolve_layer};
+use llm_gateway_org::ResolvedOrg;
 use sqlx::PgPool;
 use tower::ServiceExt;
 
@@ -43,4 +44,60 @@ async fn auth_layer_accepts_valid_token(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn org_resolve_layer_404s_unknown_slug(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    let state = common::make_state(pool);
+    // Stack auth_layer → org_resolve_layer so the JWT in extensions is
+    // populated before org_resolve_layer reads path params. The 404 must
+    // come from org_resolve_layer, not auth_layer (token is valid).
+    let app = Router::new()
+        .route("/{org_slug}/probe", get(|| async { "ok" }))
+        .layer(from_fn_with_state(state.clone(), org_resolve_layer))
+        .layer(from_fn_with_state(state, auth_layer));
+
+    let token = common::make_admin_token().token;
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/ghost-org/probe")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn org_resolve_layer_injects_resolved_org_extension(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    let state = common::make_state(pool);
+    let app = Router::new()
+        .route(
+            "/{org_slug}/probe",
+            get(|axum::Extension(org): axum::Extension<ResolvedOrg>| async move {
+                format!("{}/{}", org.id, org.slug)
+            }),
+        )
+        .layer(from_fn_with_state(state.clone(), org_resolve_layer))
+        .layer(from_fn_with_state(state, auth_layer));
+
+    let token = common::make_admin_token().token;
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/default/probe")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    assert_eq!(&body[..], b"org_default/default");
 }
