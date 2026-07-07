@@ -14,6 +14,10 @@ use llm_gateway_storage::Storage;
 /// - [`OrgError::NotMember`] when the user has no member row in the org.
 /// - [`OrgError::NotFound`] when the underlying storage call fails (surfaced
 ///   as a generic lookup failure for now).
+// TODO(Task 9/10): storage failures are currently mapped to `NotFound`, which
+// will mislead API handlers that branch on `NotFound` -> 404. Before wiring
+// this into HTTP responses, add `OrgError::Internal` (or similar) and remap
+// storage errors there so a DB outage becomes 500, not 404.
 pub async fn resolve_org_context(
     claims: &JwtClaims,
     storage: &dyn Storage,
