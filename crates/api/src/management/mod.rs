@@ -93,6 +93,8 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
 /// `/api/v1/{org_slug}/keys`).
 fn org_scoped_routes() -> Router<Arc<AppState>> {
     Router::new()
+        // Org details (authenticated member) — GET /api/v1/{org_slug}
+        .route("/", get(auth::get_org))
         // Keys (authenticated)
         .route("/keys", post(keys::create_key).get(keys::list_keys))
         .route(

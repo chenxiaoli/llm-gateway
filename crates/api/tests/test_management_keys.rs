@@ -107,6 +107,14 @@ async fn test_unauthorized_access(pool: PgPool) {
 
 /// Pre-Phase-2 paths (no org slug in the URL) must return 410 Gone with a
 /// pointer to the new path, not a 404 or fall-through to the SPA.
+///
+/// Uses a multi-segment legacy path because single-segment paths under
+/// `/api/v1/` (e.g. `/api/v1/keys`) are now ambiguous with the new
+/// `GET /api/v1/{org_slug}` endpoint added in Task 9 — Axum routes them to
+/// the org-scoped router, where they fail auth (401) before the legacy
+/// catch-all can return 410. Multi-segment paths like `/api/v1/admin/users`
+/// are unambiguous: the org-scoped router has no matching inner route, so
+/// they fall through to the legacy catch-all as intended.
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn legacy_path_returns_410_gone(pool: PgPool) {
     let app = build_app(common::make_state(pool));
@@ -115,7 +123,7 @@ async fn legacy_path_returns_410_gone(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/keys")
+                .uri("/api/v1/admin/users")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -128,7 +136,7 @@ async fn legacy_path_returns_410_gone(pool: PgPool) {
     )
     .unwrap();
     assert_eq!(body["error"], "gone");
-    assert_eq!(body["new_path"], "/api/v1/{org_slug}/keys");
+    assert_eq!(body["new_path"], "/api/v1/{org_slug}/admin/users");
 }
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]

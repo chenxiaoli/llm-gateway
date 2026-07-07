@@ -8,6 +8,7 @@ use llm_gateway_auth::{
     create_jwt, create_refresh_jwt, hash_password, validate_password, validate_username,
     verify_password, verify_refresh_jwt,
 };
+use llm_gateway_org::OrgContext;
 use llm_gateway_storage::{
     CreateOrg, Member, MemberRole, MembershipSummary, PlatformRole, User,
 };
@@ -684,6 +685,31 @@ pub async fn create_org(
         name: org.name,
         role: MemberRole::Owner.as_str().to_string(),
         group_id: None,
+    }))
+}
+
+/// GET /api/v1/{org_slug} — read details of the resolved org.
+///
+/// Caller must be a member (enforced by `membership_layer` before reaching
+/// here). Returns the same `OrgSummary` shape as `list_orgs`/`create_org`
+/// so the frontend can treat them uniformly.
+pub async fn get_org(
+    State(state): State<Arc<AppState>>,
+    ctx: OrgContext,
+) -> Result<Json<OrgSummary>, ApiError> {
+    let org = state
+        .storage
+        .get_org(&ctx.org_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::NotFound("org not found".into()))?;
+
+    Ok(Json(OrgSummary {
+        id: org.id,
+        slug: org.slug,
+        name: org.name,
+        role: ctx.member_role.as_str().to_string(),
+        group_id: ctx.group_id,
     }))
 }
 
