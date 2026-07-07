@@ -15,6 +15,20 @@ pub enum ApiError {
     Internal(String),
 }
 
+impl From<llm_gateway_org::OrgError> for ApiError {
+    fn from(e: llm_gateway_org::OrgError) -> Self {
+        match e {
+            llm_gateway_org::OrgError::NotFound(msg) => ApiError::NotFound(msg),
+            llm_gateway_org::OrgError::NotMember(user, org) => {
+                ApiError::Forbidden
+            }
+            llm_gateway_org::OrgError::Forbidden(_) => ApiError::Forbidden,
+            llm_gateway_org::OrgError::SlugTaken(_) => ApiError::Conflict(e.to_string()),
+            llm_gateway_org::OrgError::LastOwner(_) => ApiError::BadRequest(e.to_string()),
+        }
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, message) = match &self {

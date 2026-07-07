@@ -7,6 +7,7 @@ edition = "2021"
 axum = { workspace = true }
 llm-gateway-storage = { path = "../storage" }
 llm-gateway-auth = { path = "../auth" }
+llm-gateway-org = { path = "../org" }
 llm-gateway-provider = { path = "../provider" }
 llm-gateway-billing = { path = "../billing" }
 llm-gateway-nats-publisher = { path = "../nats-publisher" }

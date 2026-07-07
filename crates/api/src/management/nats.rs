@@ -1,6 +1,6 @@
 use crate::AppState;
 use crate::error::ApiError;
-use crate::extractors::require_admin;
+use crate::extractors::require_platform_admin;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::Json;
@@ -16,7 +16,7 @@ pub async fn get_nats_status(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<NatsStatusResponse>, ApiError> {
-    require_admin(&headers, &state.jwt_secret)?;
+    require_platform_admin(&headers, &state.jwt_secret)?;
 
     let nats = state.nats_publisher.as_ref().ok_or_else(|| {
         ApiError::Internal("NATS is not configured".to_string())

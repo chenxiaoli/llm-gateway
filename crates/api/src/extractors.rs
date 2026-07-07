@@ -21,9 +21,15 @@ pub fn require_auth(headers: &HeaderMap, jwt_secret: &str) -> Result<JwtClaims, 
     Ok(claims)
 }
 
-pub fn require_admin(headers: &HeaderMap, jwt_secret: &str) -> Result<JwtClaims, ApiError> {
+/// Returns the JWT claims only if the bearer is a platform_admin.
+///
+/// Most handlers should prefer `resolve_org_context` + a `can_*` check
+/// (per-org admin = owner/admin member role). This helper is reserved for
+/// the few platform-only operations that have no per-org analogue in
+/// Phase 1 (model_fallbacks, NATS status).
+pub fn require_platform_admin(headers: &HeaderMap, jwt_secret: &str) -> Result<JwtClaims, ApiError> {
     let claims = require_auth(headers, jwt_secret)?;
-    if claims.role != "admin" {
+    if claims.platform_role.as_deref() != Some("platform_admin") {
         return Err(ApiError::Forbidden);
     }
     Ok(claims)
