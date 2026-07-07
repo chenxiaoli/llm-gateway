@@ -1,7 +1,7 @@
 {
   "name": "llm-gateway-web",
   "private": true,
-  "version": "0.16.7",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
