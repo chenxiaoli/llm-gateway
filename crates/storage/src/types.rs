@@ -49,7 +49,7 @@ impl PlatformRole {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Org {
     pub id: String,
     pub slug: String,
@@ -59,7 +59,7 @@ pub struct Org {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CreateOrg {
     pub id: String,
     pub slug: String,
@@ -73,7 +73,7 @@ pub struct UpdateOrg {
     pub slug: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Member {
     pub user_id: String,
     pub org_id: String,
@@ -83,7 +83,14 @@ pub struct Member {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+/// Summary of a user's membership in one org.
+///
+/// NOTE for Task 5: this struct has a nested `org: Org` field. The SQL for
+/// `list_orgs_for_user` will need either a custom `FromRow` impl that
+/// constructs `Org` from the prefixed columns, or the query should use
+/// `o.id AS "org.id"` etc. with `#[sqlx(flatten)]` if supported.
+/// Plain `query_as::<_, MembershipSummary>` will fail.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct MembershipSummary {
     pub org: Org,
     pub role: MemberRole,
@@ -823,6 +830,10 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
+// TODO(Task 5/8): migrate alongside User — drop role/group_id fields once
+// list_users_paginated and the management handlers stop reading them.
+// User was migrated in this commit; these sibling types were intentionally
+// left for the next task to avoid expanding scope.
 #[derive(Debug, Clone, Serialize)]
 pub struct UserWithBalance {
     pub id: String,
@@ -843,6 +854,10 @@ pub struct CreateUser {
     pub password: String,
 }
 
+// TODO(Task 5/8): migrate alongside User — drop role/group_id fields once
+// list_users_paginated and the management handlers stop reading them.
+// User was migrated in this commit; these sibling types were intentionally
+// left for the next task to avoid expanding scope.
 #[derive(Debug, Deserialize)]
 pub struct UpdateUser {
     pub role: Option<String>,
@@ -1053,6 +1068,7 @@ mod tests {
         let now = chrono::Utc::now();
         let account = Account {
             id: "acc-1".to_string(),
+            org_id: "org_test".to_string(),
             user_id: "user-1".to_string(),
             balance: 10050,
             threshold: 100,
