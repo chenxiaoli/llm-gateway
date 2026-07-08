@@ -381,13 +381,18 @@ pub async fn me(
     // org was created by `system` (the temp-membership path in
     // `membership_layer`) rather than by a real user. The flag is only
     // meaningful when a current org is selected.
+    //
+    // Propagate storage errors as 500 rather than silently defaulting to
+    // `false`: failing closed here would hide the banner while the user is
+    // still operating in the impersonated org. Fail-closed belongs at the
+    // layer that *grants* access (membership_layer), not the layer that
+    // surfaces a warning.
     let impersonating = match &current_org {
         Some(org) => state
             .storage
             .get_member(&user.id, &org.id)
             .await
-            .ok()
-            .flatten()
+            .map_err(|e| ApiError::Internal(format!("member lookup failed: {e}")))?
             .map(|m| m.created_by.as_deref() == Some("system"))
             .unwrap_or(false),
         None => false,
