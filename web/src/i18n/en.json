@@ -41,7 +41,9 @@
     "providers": "Providers",
     "pricingPolicies": "Pricing Policies",
     "users": "Users",
+    "members": "Members",
     "settings": "Settings",
+    "orgSettings": "Org Settings",
     "logs": "Audit Logs",
     "collapse": "Collapse",
     "expand": "Expand sidebar"
@@ -855,6 +857,76 @@
         "next": "Next"
       }
     }
+  },
+  "members": {
+    "title": "Members",
+    "description": "Manage members and roles for this organization",
+    "invite": "Invite Member",
+    "table": {
+      "username": "Username",
+      "role": "Role",
+      "joined": "Joined",
+      "actions": "Actions"
+    },
+    "role": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "member": "Member"
+    },
+    "noMembers": "No members found",
+    "inviteModal": {
+      "title": "Invite Member",
+      "username": "Username",
+      "usernamePlaceholder": "e.g., alice",
+      "role": "Role",
+      "invite": "Invite"
+    },
+    "confirmRemove": "Remove {{name}} from this organization?",
+    "confirmLeave": "Leave this organization?",
+    "confirmDemote": "Demote this owner to {{role}}?",
+    "remove": "Remove",
+    "leave": "Leave",
+    "selfLabel": "(you)",
+    "forbidden": "You don't have permission to view members.",
+    "toasts": {
+      "invited": "Member invited",
+      "inviteFailed": "Failed to invite member",
+      "roleUpdated": "Role updated",
+      "roleUpdateFailed": "Failed to update role",
+      "removed": "Member removed",
+      "removeFailed": "Failed to remove member"
+    }
+  },
+  "orgSettings": {
+    "title": "Org Settings",
+    "description": "Rename or remove this organization",
+    "general": {
+      "sectionTitle": "GENERAL",
+      "name": "Org Name",
+      "namePlaceholder": "e.g., Acme Inc.",
+      "slug": "Org Slug",
+      "slugHint": "Lowercase letters, digits, and hyphens. 3-64 chars.",
+      "save": "Save Changes",
+      "readOnlyNotice": "Only admins can change org settings."
+    },
+    "danger": {
+      "sectionTitle": "DANGER ZONE",
+      "warning": "Deleting this org permanently removes all keys, channels, usage history, and audit logs. This cannot be undone.",
+      "confirmLabel": "Type the org slug to confirm",
+      "confirmPlaceholder": "enter the org slug",
+      "passwordLabel": "Your Password",
+      "passwordPlaceholder": "enter your password",
+      "delete": "Delete This Org",
+      "deleteConfirm": "This will permanently delete the org and all its data. Continue?"
+    },
+    "toasts": {
+      "updated": "Org updated",
+      "updateFailed": "Failed to update org",
+      "deleted": "Org deleted",
+      "deleteFailed": "Failed to delete org",
+      "wrongPassword": "Wrong password"
+    },
+    "forbidden": "You don't have permission to view org settings."
   },
   "groups": {
     "title": "Groups",

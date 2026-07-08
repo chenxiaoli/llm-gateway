@@ -10,6 +10,7 @@ import {
   Cpu,
   Users,
   UsersRound,
+  UserPlus,
   Settings,
   FileText,
   DollarSign,
@@ -61,6 +62,7 @@ export default function AppLayout() {
     { key: `/${slug}/model-fallbacks`, icon: ArrowRightLeft, label: t('sidebar.modelFallbacks') },
     { key: `/${slug}/models`, icon: SquareStack, label: t('sidebar.models') },
     { key: `/${slug}/usage`, icon: BarChart3, label: t('sidebar.usage') },
+    { key: `/${slug}/settings`, icon: Settings, label: t('sidebar.orgSettings') },
   ];
 
   const adminItems = [
@@ -70,6 +72,7 @@ export default function AppLayout() {
     { key: `/${slug}/admin/models`, icon: Cpu, label: t('sidebar.models') },
     { key: `/${slug}/admin/pricing-policies`, icon: DollarSign, label: t('sidebar.pricingPolicies') },
     { key: `/${slug}/admin/users`, icon: Users, label: t('sidebar.users') },
+    { key: `/${slug}/members`, icon: UserPlus, label: t('sidebar.members') },
     { key: `/${slug}/admin/groups`, icon: UsersRound, label: t('groups.title') },
     { key: `/${slug}/admin/settings`, icon: Settings, label: t('sidebar.settings') },
     { key: `/${slug}/admin/logs`, icon: FileText, label: t('sidebar.logs') },
@@ -86,6 +89,7 @@ export default function AppLayout() {
     models: t('sidebar.models'),
     'pricing-policies': t('sidebar.pricingPolicies'),
     users: t('sidebar.users'),
+    members: t('sidebar.members'),
     settings: t('sidebar.settings'),
     logs: t('sidebar.logs'),
   };

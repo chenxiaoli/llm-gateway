@@ -8,6 +8,7 @@ pub mod providers;
 pub mod models;
 pub mod usage;
 pub mod logs;
+pub mod members;
 pub mod requests;
 pub mod users;
 pub mod settings;
@@ -125,8 +126,13 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
 /// `/api/v1/{org_slug}/keys`).
 fn org_scoped_routes() -> Router<Arc<AppState>> {
     Router::new()
-        // Org details (authenticated member) — GET /api/v1/{org_slug}
-        .route("/", get(auth::get_org))
+        // Org details (authenticated member) — GET/PATCH/DELETE /api/v1/{org_slug}
+        .route(
+            "/",
+            get(auth::get_org)
+                .patch(auth::update_org)
+                .delete(auth::delete_org),
+        )
         // Keys (authenticated)
         .route("/keys", post(keys::create_key).get(keys::list_keys))
         .route(
@@ -250,6 +256,15 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
         .route(
             "/admin/pricing-policies/{id}",
             get(pricing_policies::get).patch(pricing_policies::update).delete(pricing_policies::delete),
+        )
+        // Members (admin)
+        .route(
+            "/members",
+            get(members::list_members).post(members::invite_member),
+        )
+        .route(
+            "/members/{user_id}",
+            patch(members::change_member_role).delete(members::remove_member),
         )
 }
 

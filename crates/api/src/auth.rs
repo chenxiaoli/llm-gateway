@@ -1,4 +1,5 @@
 use axum::extract::{Query, State};
+use axum::http::StatusCode;
 use axum::http::HeaderMap;
 use axum::Json;
 use serde::{Deserialize, Serialize};
@@ -10,7 +11,7 @@ use llm_gateway_auth::{
 };
 use llm_gateway_org::OrgContext;
 use llm_gateway_storage::{
-    CreateOrg, Member, MemberRole, MembershipSummary, PlatformRole, User,
+    CreateOrg, Member, MemberRole, MembershipSummary, PlatformRole, UpdateOrg, User,
 };
 
 use crate::error::ApiError;
@@ -72,7 +73,9 @@ pub struct MeResponse {
     pub id: String,
     pub username: String,
     pub platform_role: Option<String>,
-    pub current_org: OrgSummary,
+    /// null when the user has no memberships (e.g. just self-left their last
+    /// org). Callers (frontend `refreshOrgs`) treat null as "send to /login".
+    pub current_org: Option<OrgSummary>,
     pub orgs: Vec<OrgSummary>,
     pub allow_registration: bool,
 }
@@ -150,10 +153,13 @@ async fn store_refresh_token(state: &AppState, user: &User, refresh_jwt: &str) -
 ///
 /// Returns `Internal("user has no org membership")` if the user has zero
 /// memberships — every authenticated user must belong to at least one org.
+/// Resolve the user's current org + full membership list. Returns
+/// `current_org = None` if the user has zero memberships; callers that need
+/// a real org (login/register/refresh) handle that via [`require_membership`].
 async fn current_membership(
     state: &AppState,
     user: &User,
-) -> Result<(OrgSummary, Vec<OrgSummary>), ApiError> {
+) -> Result<(Option<OrgSummary>, Vec<OrgSummary>), ApiError> {
     let memberships = state
         .storage
         .list_orgs_for_user(&user.id)
@@ -164,11 +170,11 @@ async fn current_membership(
         .iter()
         .find(|m| Some(&m.org.id) == user.current_org_id.as_ref())
         .or_else(|| memberships.first())
-        .ok_or_else(|| ApiError::Internal("user has no org membership".to_string()))?
-        .clone();
+        .cloned()
+        .map(Into::into);
 
     let orgs: Vec<OrgSummary> = memberships.into_iter().map(Into::into).collect();
-    Ok((current.into(), orgs))
+    Ok((current, orgs))
 }
 
 pub async fn login(
@@ -193,6 +199,13 @@ pub async fn login(
     }
 
     let (current_org, orgs) = current_membership(&state, &user).await?;
+    // Login requires at least one membership — the access token carries a
+    // single org_id, so we can't issue one without a target. This branch
+    // should be unreachable in normal flow (users always belong to ≥1 org),
+    // but we fail loudly rather than silently issuing a useless token.
+    let current_org = current_org.ok_or_else(|| {
+        ApiError::Internal("user has no org membership".to_string())
+    })?;
 
     let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
     let token = create_jwt(&user.id, &current_org.id, platform_role_str, &state.jwt_secret)
@@ -319,6 +332,11 @@ pub async fn register(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let (current_org, orgs) = current_membership(&state, &user).await?;
+    // Register always assigns the new user to a default org above, so this
+    // should never be None — but match login's contract just in case.
+    let current_org = current_org.ok_or_else(|| {
+        ApiError::Internal("user has no org membership".to_string())
+    })?;
 
     let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
     let token = create_jwt(&user.id, &current_org.id, platform_role_str, &state.jwt_secret)
@@ -450,6 +468,9 @@ pub async fn refresh(
 
     // Resolve current org so the new access token carries it.
     let (current_org, _orgs) = current_membership(&state, &user).await?;
+    let current_org = current_org.ok_or_else(|| {
+        ApiError::Internal("user has no org membership".to_string())
+    })?;
 
     // Issue new access token
     let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
@@ -594,6 +615,13 @@ pub async fn list_orgs(
     ))
 }
 
+/// Slugs that collide with the literal-410 legacy routes in
+/// `management::management_router` (`keys`, `model-fallbacks`, `usage`).
+/// If an org took one of these slugs, every request under
+/// `/api/v1/{slug}/...` would be absorbed by the 410 handlers and the org
+/// would be effectively unusable. Reject up-front at validation time.
+const RESERVED_SLUGS: [&str; 3] = ["keys", "model-fallbacks", "usage"];
+
 /// Validate an org slug against the same rule as the DB CHECK constraint:
 /// `^[a-z0-9-]{3,64}$` (lowercase letters, digits, hyphens; 3-64 chars).
 fn validate_org_slug(slug: &str) -> Result<(), String> {
@@ -605,6 +633,9 @@ fn validate_org_slug(slug: &str) -> Result<(), String> {
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
     {
         return Err("Slug can only contain lowercase letters, digits, and hyphens".into());
+    }
+    if RESERVED_SLUGS.contains(&slug) {
+        return Err(format!("Slug '{slug}' is reserved"));
     }
     Ok(())
 }
@@ -713,6 +744,155 @@ pub async fn get_org(
     }))
 }
 
+/// PATCH /api/v1/{org_slug} — update the resolved org's name and/or slug.
+///
+/// Requires admin-or-above in the org (or platform_admin). Slug updates are
+/// validated against the same rules as `create_org`; duplicate slugs surface
+/// as 409 Conflict so callers can distinguish from validation failures.
+///
+/// **Slug rename caveat:** changing the slug invalidates any URL that embeds
+/// the old slug (frontend routes like `/{slug}/keys`, deep-linked bookmarks,
+/// external API clients using the slug in the path). The frontend's
+/// `OrgSwitcher` rewrites `currentOrg` on rename so in-app navigation
+/// survives, but anything caching the old slug will hit `org_resolve_layer`'s
+/// 404. Document this in the CHANGELOG when the rename flow ships.
+#[derive(Deserialize)]
+pub struct UpdateOrgRequest {
+    pub name: Option<String>,
+    pub slug: Option<String>,
+}
+
+pub async fn update_org(
+    State(state): State<Arc<AppState>>,
+    ctx: OrgContext,
+    Json(req): Json<UpdateOrgRequest>,
+) -> Result<Json<OrgSummary>, ApiError> {
+    if !llm_gateway_org::can_manage_org_settings(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
+
+    // Validate inputs. An explicitly-empty name (after trim) is rejected
+    // rather than silently treated as missing — the caller asked to blank
+    // something out, which we don't allow.
+    let name = match req.name {
+        Some(s) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                return Err(ApiError::BadRequest("name must not be empty".into()));
+            }
+            Some(trimmed.to_string())
+        }
+        None => None,
+    };
+    let slug = match req.slug {
+        Some(s) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                return Err(ApiError::BadRequest("slug must not be empty".into()));
+            }
+            Some(trimmed.to_string())
+        }
+        None => None,
+    };
+
+    if name.is_none() && slug.is_none() {
+        return Err(ApiError::BadRequest(
+            "must provide at least one of 'name' or 'slug'".into(),
+        ));
+    }
+
+    if let Some(s) = &slug {
+        validate_org_slug(s).map_err(ApiError::BadRequest)?;
+    }
+
+    let org = state
+        .storage
+        .update_org(
+            &ctx.org_id,
+            UpdateOrg {
+                name: name.clone(),
+                slug: slug.clone(),
+            },
+        )
+        .await
+        // Map duplicate-slug storage errors to 409 Conflict. The storage trait
+        // returns `Box<dyn Error>`, so we string-sniff for the Postgres unique
+        // constraint name (`orgs_slug_key`) and common violation keywords —
+        // same approach as `create_org`.
+        .map_err(|e| {
+            let msg = e.to_string();
+            let lower = msg.to_lowercase();
+            if msg.contains("orgs_slug_key")
+                || lower.contains("duplicate")
+                || lower.contains("unique")
+            {
+                ApiError::Conflict("org slug already taken".into())
+            } else {
+                ApiError::Internal(msg)
+            }
+        })?;
+
+    Ok(Json(OrgSummary {
+        id: org.id,
+        slug: org.slug,
+        name: org.name,
+        // Role isn't affected by an org update — echo back the caller's role.
+        role: ctx.member_role.as_str().to_string(),
+        group_id: ctx.group_id,
+    }))
+}
+
+/// DELETE /api/v1/{org_slug} — hard-delete the resolved org.
+///
+/// Requires the org owner role (or platform_admin) AND a password re-check to
+/// guard against accidental or session-hijack deletion. The DB cascade removes
+/// members and other org-scoped rows.
+#[derive(Deserialize)]
+pub struct DeleteOrgRequest {
+    pub password: String,
+}
+
+pub async fn delete_org(
+    State(state): State<Arc<AppState>>,
+    ctx: OrgContext,
+    Json(req): Json<DeleteOrgRequest>,
+) -> Result<StatusCode, ApiError> {
+    if !llm_gateway_org::can_delete_org(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
+
+    let user = state
+        .storage
+        .get_user(&ctx.user_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::NotFound("user not found".into()))?;
+
+    if !verify_password(&req.password, &user.password) {
+        return Err(ApiError::Unauthorized);
+    }
+
+    state
+        .storage
+        .delete_org(&ctx.org_id)
+        .await
+        // Map the storage layer's "org not found" outcome to a clean 404.
+        // This happens deterministically when a concurrent DELETE won the
+        // race after we passed the password check; surfacing it as 500
+        // would leak the org id and report a server error for a benign
+        // lost race.
+        .map_err(|e| {
+            let msg = e.to_string().to_lowercase();
+            if msg.contains("not found") {
+                ApiError::NotFound("org".into())
+            } else {
+                ApiError::Internal(e.to_string())
+            }
+        })?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -733,5 +913,17 @@ mod tests {
         assert!(validate_org_slug("my_org").is_err());        // underscore
         assert!(validate_org_slug("my org").is_err());        // space
         assert!(validate_org_slug("").is_err());              // empty
+    }
+
+    #[test]
+    fn validate_org_slug_rejects_reserved() {
+        // Slugs that collide with literal-410 legacy routes would make the
+        // org unreachable; reject at validation time.
+        assert!(validate_org_slug("keys").is_err());
+        assert!(validate_org_slug("model-fallbacks").is_err());
+        assert!(validate_org_slug("usage").is_err());
+        // Sanity: close-but-not-exact slugs are fine.
+        assert!(validate_org_slug("keys-prod").is_ok());
+        assert!(validate_org_slug("usage-team").is_ok());
     }
 }
