@@ -180,6 +180,31 @@ export function useNeedsOnboarding(): boolean {
 }
 
 /**
+ * Discriminated auth-gate status shared by every route guard / inline gate so
+ * the "loading vs. login vs. ok" decision lives in exactly one place.
+ *
+ * - 'loading': bootstrap in flight, OR we have a token but no user yet — keep
+ *   showing a spinner so we don't bounce an authenticated user to /login.
+ * - 'login': no token and no user — send to /login.
+ * - 'ok': user resolved — render the protected content.
+ *
+ * Used by RequireAuth (App.tsx) and the inline OnboardingGate (Onboarding.tsx).
+ * RequireAdmin keeps its own copy because it layers `isAdminOrAbove` on top.
+ */
+export type AuthGateStatus = 'loading' | 'login' | 'ok';
+
+export function useAuthGate(): AuthGateStatus {
+  const user = useAuthStore((s) => s.user);
+  const { isLoading } = useAuthBootstrap();
+  if (isLoading) return 'loading';
+  if (!user) {
+    if (getToken()) return 'loading';
+    return 'login';
+  }
+  return 'ok';
+}
+
+/**
  * Hook to bootstrap auth state on app load.
  * Call once in App — fetches /auth/me if a token exists.
  */

@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
-import { useAuthStore, useAuthBootstrap } from './stores/authStore';
+import { useAuthStore, useAuthBootstrap, useAuthGate } from './stores/authStore';
 import { getToken } from './api/client';
 import { isAdminOrAbove } from './lib/auth';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
@@ -37,13 +37,9 @@ import DocsLayout from './pages/DocsLayout';
 import DocsPage from './pages/DocsPage';
 
 function RequireAuth() {
-  const user = useAuthStore((s) => s.user);
-  const { isLoading } = useAuthBootstrap();
-  if (isLoading) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
-  if (!user) {
-    if (getToken()) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
-    return <Navigate to="/login" replace />;
-  }
+  const status = useAuthGate();
+  if (status === 'loading') return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
+  if (status === 'login') return <Navigate to="/login" replace />;
   return <Outlet />;
 }
 
@@ -73,16 +69,21 @@ function RequireAdmin() {
 function OnboardingRedirect() {
   const user = useAuthStore((s) => s.user);
   const orgs = useAuthStore((s) => s.orgs);
+  const { isLoading } = useAuthBootstrap();
   const location = useLocation();
   const navigate = useNavigate();
   useEffect(() => {
+    // During cold-load bootstrap, user may be populated from a prior session
+    // while orgs is still the stale []. Bail until bootstrap settles so we
+    // don't bounce a user who actually has orgs.
+    if (isLoading) return;
     if (!user || orgs.length > 0) return;
     const path = location.pathname;
     const onAllowedPath = path === '/onboarding' || path.startsWith('/accept-invite');
     if (!onAllowedPath) {
       navigate('/onboarding', { replace: true });
     }
-  }, [user, orgs, location.pathname, navigate]);
+  }, [isLoading, user, orgs, location.pathname, navigate]);
   return null;
 }
 

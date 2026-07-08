@@ -1300,7 +1300,8 @@
       "tokenPlaceholder": "Paste your invitation link or token",
       "submit": "Join",
       "errors": {
-        "invalidToken": "This invitation is no longer valid"
+        "invalidToken": "This invitation is no longer valid",
+        "alreadyAccepted": "This invitation has already been accepted"
       }
     }
   }

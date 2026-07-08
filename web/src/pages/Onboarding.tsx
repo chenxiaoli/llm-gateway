@@ -1,8 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
-import { useAuthStore, useAuthBootstrap } from '../stores/authStore';
-import { getToken } from '../api/client';
+import { useAuthGate } from '../stores/authStore';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { OnboardingCreateCard } from '../components/OnboardingCreateCard';
 import { OnboardingJoinCard } from '../components/OnboardingJoinCard';
@@ -14,26 +13,19 @@ const EASE = [0.16, 1, 0.3, 1] as const;
  * RequireAuth in App.tsx renders an <Outlet/> (so it can only be used as a
  * route element inside the org-scoped subtree). /onboarding lives outside
  * that subtree (limbo users have no org), so we inline the same auth check
- * here: loading → spinner, no token → /login, otherwise render the wizard.
+ * here via the shared useAuthGate hook: loading → spinner, no token → /login,
+ * otherwise render the wizard.
  */
 function OnboardingGate({ children }: { children: React.ReactNode }) {
-  const user = useAuthStore((s) => s.user);
-  const { isLoading } = useAuthBootstrap();
-  if (isLoading) {
+  const status = useAuthGate();
+  if (status === 'loading') {
     return (
       <div className="flex h-screen items-center justify-center">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
-  if (!user) {
-    if (getToken()) {
-      return (
-        <div className="flex h-screen items-center justify-center">
-          <LoadingSpinner size="lg" />
-        </div>
-      );
-    }
+  if (status === 'login') {
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;

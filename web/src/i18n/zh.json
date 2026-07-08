@@ -1300,7 +1300,8 @@
       "tokenPlaceholder": "粘贴您的邀请链接或令牌",
       "submit": "加入",
       "errors": {
-        "invalidToken": "此邀请已失效"
+        "invalidToken": "此邀请已失效",
+        "alreadyAccepted": "此邀请已被接受"
       }
     }
   }

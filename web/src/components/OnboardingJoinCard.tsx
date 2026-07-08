@@ -53,10 +53,12 @@ export function OnboardingJoinCard() {
       }
     } catch (err) {
       const status = (err as { response?: { status?: number } })?.response?.status;
-      // 410 Gone (expired/revoked) and 409 Conflict (race-loser: invitation
-      // already accepted) both surface as "no longer valid" to the user.
-      if (status === 410 || status === 409) {
+      // 410 Gone = expired/revoked → "no longer valid".
+      // 409 Conflict = race-loser: someone else already accepted → distinct copy.
+      if (status === 410) {
         setError(t('onboarding.join.errors.invalidToken'));
+      } else if (status === 409) {
+        setError(t('onboarding.join.errors.alreadyAccepted'));
       } else {
         toast.error(getErrorMessage(err, t('onboarding.join.errors.invalidToken')));
       }
