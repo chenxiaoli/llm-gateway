@@ -37,8 +37,11 @@ fn build_response(member: llm_gateway_storage::Member, username: String) -> Memb
 // --- Role parsing ---
 
 fn parse_role(s: &str) -> Result<MemberRole, ApiError> {
-    MemberRole::parse(s)
-        .ok_or_else(|| ApiError::BadRequest(format!("unknown role: {s}")))
+    MemberRole::parse(s).ok_or_else(|| {
+        ApiError::BadRequest(format!(
+            "unknown role '{s}'; expected one of: owner, admin, member"
+        ))
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -154,9 +157,22 @@ pub async fn change_member_role(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or_else(|| ApiError::NotFound(format!("member '{}' not found", user_id)))?;
 
+    let username = state
+        .storage
+        .get_user(&user_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .map(|u| u.username)
+        .unwrap_or_default();
+
     let new_role = parse_role(&req.role)?;
 
     // Last-owner guard: demoting the only owner would orphan the org.
+    // NOTE: TOCTOU — count_owners and update_member_role run as separate
+    // statements. Two concurrent demotions of the last two owners could
+    // both pass. Acceptable while admin actions are rare and human-driven;
+    // revisit with a row-locked transaction or SQL-conditional UPDATE if
+    // this is ever exposed to automation.
     if existing.role == MemberRole::Owner && new_role != MemberRole::Owner {
         let owners = state
             .storage
@@ -172,25 +188,16 @@ pub async fn change_member_role(
 
     state
         .storage
-        .update_member_role(&user_id, &ctx.org_id, new_role)
+        .update_member_role(&user_id, &ctx.org_id, new_role.clone())
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // Re-fetch to return the canonical row.
-    let updated = state
-        .storage
-        .get_member(&user_id, &ctx.org_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or_else(|| ApiError::NotFound(format!("member '{}' not found", user_id)))?;
-    let username = state
-        .storage
-        .get_user(&user_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .map(|u| u.username)
-        .unwrap_or_default();
-
+    // Compose response from the row we already have + the new role; no
+    // need to re-fetch — update_member_role is a no-op on other fields.
+    let updated = llm_gateway_storage::Member {
+        role: new_role,
+        ..existing
+    };
     Ok(Json(build_response(updated, username)))
 }
 
@@ -213,6 +220,7 @@ pub async fn remove_member(
         .ok_or_else(|| ApiError::NotFound(format!("member '{}' not found", user_id)))?;
 
     // Last-owner guard: removing the only owner would orphan the org.
+    // NOTE: TOCTOU — see change_member_role for the same caveat.
     if existing.role == MemberRole::Owner {
         let owners = state
             .storage
