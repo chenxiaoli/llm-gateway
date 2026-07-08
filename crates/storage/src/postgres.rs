@@ -3064,7 +3064,7 @@ impl crate::Storage for PostgresStorage {
             "INSERT INTO members (user_id, org_id, role, group_id, created_by)
              VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT (user_id, org_id) DO UPDATE
-               SET role = EXCLUDED.role, group_id = EXCLUDED.group_id
+               SET role = EXCLUDED.role, group_id = EXCLUDED.group_id, created_by = EXCLUDED.created_by
              RETURNING user_id, org_id, role, group_id, created_by, created_at",
         )
         .bind(&member.user_id)

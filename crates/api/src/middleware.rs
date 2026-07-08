@@ -75,9 +75,12 @@ pub async fn org_resolve_layer(
 ///
 /// Pulls `JwtClaims` and `ResolvedOrg` (set by the two upstream layers) from
 /// extensions, looks up the membership row, and returns 403 Forbidden if no
-/// such row exists. Storage failures surface as 500 Internal — distinct from
-/// the clean 403 for a non-member, so a DB outage does not look like an
-/// authz rejection.
+/// such row exists AND the caller is not a platform_admin. Platform admins
+/// with no membership row get a temp `role=admin, created_by='system'` row
+/// created on the fly so they can debug an org's data without an explicit
+/// invite — a janitor task (Task 4) reaps stale temp rows by `last_seen`.
+/// Storage failures surface as 500 Internal — distinct from the clean 403
+/// for a non-member, so a DB outage does not look like an authz rejection.
 ///
 /// `platform_role` is parsed via `PlatformRole::parse` rather than the
 /// `map(|_| ...)` shortcut suggested in the plan — that shortcut silently
@@ -101,12 +104,32 @@ pub async fn membership_layer(
         .cloned()
         .ok_or_else(|| ApiError::Internal("org_resolve_layer did not run".into()))?;
 
-    let member = state
-        .storage
-        .get_member(&claims.sub, &org.id)
-        .await
-        .map_err(|e| ApiError::Internal(format!("member lookup failed: {e}")))?
-        .ok_or(ApiError::Forbidden)?;
+    let member = match state.storage.get_member(&claims.sub, &org.id).await {
+        Ok(Some(m)) => m,
+        Ok(None) => {
+            // No membership row. If the caller is a platform_admin, create a
+            // temp admin row so they can debug the org without an explicit
+            // invite. The janitor task (Task 4) cleans up stale temp rows by
+            // last_seen. Otherwise 403.
+            if claims.platform_role.as_deref() == Some("platform_admin") {
+                state
+                    .storage
+                    .upsert_member(llm_gateway_storage::Member {
+                        user_id: claims.sub.clone(),
+                        org_id: org.id.clone(),
+                        role: llm_gateway_storage::MemberRole::Admin,
+                        group_id: None,
+                        created_by: Some("system".to_string()),
+                        created_at: chrono::Utc::now(),
+                    })
+                    .await
+                    .map_err(|e| ApiError::Internal(format!("temp member upsert failed: {e}")))?
+            } else {
+                return Err(ApiError::Forbidden);
+            }
+        }
+        Err(e) => return Err(ApiError::Internal(format!("member lookup failed: {e}"))),
+    };
 
     let ctx = OrgContext {
         user_id: claims.sub.clone(),

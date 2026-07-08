@@ -218,3 +218,92 @@ async fn membership_layer_updates_last_seen(pool: PgPool) {
 
     assert!(after > before, "last_seen should advance: before={before:?} after={after:?}");
 }
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn platform_admin_without_membership_gets_temp_admin_row(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    // admin-1 has platform_role=platform_admin + owner membership in org_default,
+    // but NO row in org_other. Insert a second org to test cross-org impersonation.
+    sqlx::query(
+        r#"INSERT INTO orgs (id, slug, name, owner_id, created_at, updated_at)
+           VALUES ('org_other', 'other', 'Other Org', NULL, NOW(), NOW())"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let state = common::make_state(pool.clone());
+    let app = Router::new()
+        .route(
+            "/{org_slug}/probe",
+            get(|req: axum::extract::Request| async move {
+                let ctx = req.extensions().get::<OrgContext>().cloned().unwrap();
+                format!("{:?}:{:?}", ctx.member_role, ctx.platform_role)
+            }),
+        )
+        .layer(from_fn_with_state(state.clone(), membership_layer))
+        .layer(from_fn_with_state(state.clone(), org_resolve_layer))
+        .layer(from_fn_with_state(state, auth_layer));
+
+    let token = common::make_admin_token().token;
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/other/probe")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    // OrgContext member_role is Admin (the temp row), platform_role is Some(PlatformAdmin).
+    assert_eq!(&body[..], b"Admin:Some(PlatformAdmin)");
+
+    // Verify the temp row exists with role=admin, created_by=system.
+    let row: (String, String) = sqlx::query_as(
+        "SELECT role, created_by FROM members WHERE user_id = 'admin-1' AND org_id = 'org_other'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.0, "admin");
+    assert_eq!(row.1, "system");
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn platform_admin_with_existing_membership_uses_real_row(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    // admin-1 already has an OWNER row in org_default via seed_admin_user.
+    // Visiting /default should NOT create a temp row.
+
+    let state = common::make_state(pool.clone());
+    let app = Router::new()
+        .route("/{org_slug}/probe", get(|| async { "ok" }))
+        .layer(from_fn_with_state(state.clone(), membership_layer))
+        .layer(from_fn_with_state(state.clone(), org_resolve_layer))
+        .layer(from_fn_with_state(state, auth_layer));
+
+    let token = common::make_admin_token().token;
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/default/probe")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Confirm no temp row was created in any org.
+    let temp_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM members WHERE user_id = 'admin-1' AND created_by = 'system'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(temp_count, 0);
+}
