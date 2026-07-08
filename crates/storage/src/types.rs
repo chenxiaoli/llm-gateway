@@ -148,7 +148,7 @@ pub struct AcceptInvitationRequest {
 /// Note: `already_member` was originally specced but is computed client-side
 /// (the frontend already has the user's membership list) — drop it from the
 /// type per the plan's self-review note.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct InvitationPreview {
     pub org_name: String,
     pub org_slug: String,

@@ -1,5 +1,6 @@
 use axum::extract::{Path, Query, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -178,10 +179,14 @@ const INVITATION_GONE_REASON: &str = "This invitation is no longer valid.";
 /// Returns org metadata for the landing page. Any non-consumable token
 /// (invalid/expired/revoked/already-accepted) yields the same 410 body so
 /// the endpoint cannot be probed to enumerate valid tokens.
+///
+/// Tokens travel in the URL query string and could be cached by
+/// intermediate proxies/CDNs, so the response always carries
+/// `Cache-Control: no-store, private`.
 pub async fn preview_invitation(
     State(state): State<Arc<AppState>>,
     Query(q): Query<PreviewQuery>,
-) -> Result<Json<InvitationPreview>, ApiError> {
+) -> Result<Response, ApiError> {
     let Some(inv) = state
         .storage
         .get_invitation_by_token(&q.token)
@@ -210,13 +215,19 @@ pub async fn preview_invitation(
         .map(|u| u.username)
         .unwrap_or_default();
 
-    Ok(Json(InvitationPreview {
+    let preview = InvitationPreview {
         org_name: org.name,
         org_slug: org.slug,
         role: inv.role.as_str().to_string(),
         inviter_username: inviter,
         expires_at: inv.expires_at,
-    }))
+    };
+    let mut response = Json(preview).into_response();
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-store, private"),
+    );
+    Ok(response)
 }
 
 /// POST /api/v1/invitations/accept — authed. Body `{ token }`.
@@ -237,6 +248,20 @@ pub async fn accept_invitation(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
     else {
+        // Distinguish race-loser from invalid/expired/revoked.
+        // - If the token exists AND was accepted (regardless of by whom) → 409 Conflict.
+        // - Otherwise (expired, revoked, never-existed) → 410 Gone.
+        let existing = state
+            .storage
+            .get_invitation_by_token(&body.token)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+        let was_just_consumed = matches!(existing, Some(inv) if inv.accepted_at.is_some());
+        if was_just_consumed {
+            return Err(ApiError::Conflict(
+                "invitation was already accepted".to_string(),
+            ));
+        }
         return Err(ApiError::Gone(INVITATION_GONE_REASON.to_string()));
     };
 
@@ -596,7 +621,17 @@ mod tests {
         .await
         .expect("preview ok");
 
-        let body = resp.0;
+        // Cache-Control: no-store, private is always set on preview responses.
+        assert_eq!(
+            resp.headers()
+                .get(header::CACHE_CONTROL)
+                .map(|v| v.to_str().unwrap()),
+            Some("no-store, private")
+        );
+
+        let body: InvitationPreview =
+            serde_json::from_slice(&axum::body::to_bytes(resp.into_body(), usize::MAX).await.expect("collect body"))
+                .expect("deserialize preview body");
         assert_eq!(body.org_name, "acme");
         assert_eq!(body.org_slug, "acme");
         assert_eq!(body.role, "admin");
@@ -787,7 +822,11 @@ mod tests {
     }
 
     #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
-    async fn accept_returns_410_for_consumed_token(pool: sqlx::PgPool) {
+    async fn accept_returns_409_after_sequential_consume(pool: sqlx::PgPool) {
+        // A second caller hitting an already-accepted token is the race-loser
+        // case (the winner's accept landed first). Per spec, the loser gets
+        // 409 Conflict — not 410 Gone (410 is reserved for invalid/expired/
+        // revoked tokens that were never accepted).
         let storage = Arc::new(PostgresStorage::from_pool(pool));
         let org = make_org(&storage, "acme").await;
         make_user(&storage, "carol").await;
@@ -809,7 +848,7 @@ mod tests {
         .await
         .expect("first accept ok");
 
-        // Dave tries the same token -> 410.
+        // Dave tries the same (already-consumed) token -> 409 Conflict.
         let result = accept_invitation(
             State(state),
             auth_header("dave", &org.id),
@@ -820,12 +859,83 @@ mod tests {
         .await;
 
         let err = match result {
-            Ok(_) => panic!("second accept should fail with 410, got Ok"),
+            Ok(_) => panic!("second accept should fail with 409, got Ok"),
             Err(e) => e,
         };
-        assert!(matches!(err, ApiError::Gone(_)), "got {err:?}");
+        assert!(matches!(err, ApiError::Conflict(_)), "got {err:?}");
         // Dave never became a member.
         let dave_member = storage.get_member("dave", &org.id).await.unwrap();
         assert!(dave_member.is_none(), "dave must not be a member");
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn accept_concurrent_only_one_wins(pool: sqlx::PgPool) {
+        // Two distinct invitees race on the same token. The storage layer's
+        // SELECT ... FOR UPDATE serializes them: exactly one returns
+        // Ok(AuthResponse), the other returns Err(ApiError::Conflict). The org
+        // gains exactly one membership from this invitation (the winner's).
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let org = make_org(&storage, "acme").await;
+        make_user(&storage, "alice").await; // user_a
+        make_user(&storage, "bob").await; // user_b
+        let state = make_state(storage.clone());
+
+        let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
+        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Member, expires_at)
+            .await;
+
+        // Fire both accepts concurrently. tokio::join! polls them on the same
+        // executor; the row lock guarantees one winner + one loser.
+        let (res_a, res_b) = tokio::join!(
+            accept_invitation(
+                State(state.clone()),
+                auth_header("alice", &org.id),
+                Json(AcceptInvitationRequest {
+                    token: inv.token.clone(),
+                }),
+            ),
+            accept_invitation(
+                State(state.clone()),
+                auth_header("bob", &org.id),
+                Json(AcceptInvitationRequest {
+                    token: inv.token.clone(),
+                }),
+            ),
+        );
+
+        // Exactly one Ok, exactly one Err(Conflict).
+        let (winner, loser) = match (res_a, res_b) {
+            (Ok(_), Err(e)) => ("alice", e),
+            (Err(e), Ok(_)) => ("bob", e),
+            (Ok(_), Ok(_)) => panic!("both accepts succeeded; row lock failed to serialize"),
+            (Err(_), Err(_)) => panic!("both accepts failed; expected exactly one winner"),
+        };
+        assert!(
+            matches!(loser, ApiError::Conflict(_)),
+            "race-loser should be 409 Conflict, got {loser:?}"
+        );
+
+        // The org gained exactly one membership from this invitation — the
+        // winner's. The loser is not a member.
+        let winner_member = storage.get_member(winner, &org.id).await.unwrap();
+        assert!(
+            winner_member.is_some(),
+            "winner {winner} should be a member"
+        );
+        let loser_id = if winner == "alice" { "bob" } else { "alice" };
+        let loser_member = storage.get_member(loser_id, &org.id).await.unwrap();
+        assert!(
+            loser_member.is_none(),
+            "loser {loser_id} must not be a member"
+        );
+
+        // The invitation row records exactly the winner as accepter.
+        let after = storage
+            .get_invitation_by_token(&inv.token)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(after.accepted_at.is_some());
+        assert_eq!(after.accepted_by.as_deref(), Some(winner));
     }
 }
