@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -25,9 +25,9 @@ export default function Register() {
   // authStore.register() picks it up. /accept-invite already stashes it before
   // navigating here, but this covers the direct-link case.
   const inviteFromUrl = params.get('invite');
-  if (inviteFromUrl) {
-    setPendingInviteToken(inviteFromUrl);
-  }
+  useEffect(() => {
+    if (inviteFromUrl) setPendingInviteToken(inviteFromUrl);
+  }, [inviteFromUrl, setPendingInviteToken]);
 
   const { data: authConfig } = useQuery({
     queryKey: ['authConfig'],

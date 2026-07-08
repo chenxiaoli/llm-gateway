@@ -5,14 +5,14 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { previewInvitation, acceptInvitation } from '../api/invitations';
 import { getErrorMessage } from '../api/client';
-import { useAuthStore } from '../stores/authStore';
+import { useAuthStore, useAuthBootstrap } from '../stores/authStore';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Button } from '../components/ui/Button';
 import type { InvitationPreview } from '../types';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
-type Status = 'loading' | 'ok' | 'gone';
+type Status = 'loading' | 'ok' | 'gone' | 'error';
 
 /**
  * Public landing page for invitation links (/accept-invite?token=...).
@@ -38,6 +38,7 @@ export default function AcceptInvite() {
   const orgs = useAuthStore((s) => s.orgs);
   const applyAuthResponse = useAuthStore((s) => s.applyAuthResponse);
   const setPendingInviteToken = useAuthStore((s) => s.setPendingInviteToken);
+  const { isLoading } = useAuthBootstrap();
 
   const [preview, setPreview] = useState<InvitationPreview | null>(null);
   const [status, setStatus] = useState<Status>('loading');
@@ -58,15 +59,15 @@ export default function AcceptInvite() {
       })
       .catch((err) => {
         if (cancelled) return;
-        // 410 Gone (expired/revoked/already-used) and any other preview error
+        // 410 Gone (expired/revoked/already-used) and other preview errors
         // both render the "gone" UI — there's no useful preview to show.
         const code = (err as { response?: { status?: number } })?.response?.status;
         if (code === 410 || code === 404 || code === 400) {
           setStatus('gone');
         } else {
-          // Network/unknown error: still show gone so the user isn't stuck on
-          // a spinner forever; the gone copy explains the link is unusable.
-          setStatus('gone');
+          // Network/unknown error: distinct from gone — the link itself may be
+          // fine, the server just couldn't be reached.
+          setStatus('error');
         }
       });
     return () => {
@@ -74,10 +75,35 @@ export default function AcceptInvite() {
     };
   }, [token]);
 
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base-200">
         <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-base-200 px-4 py-10">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: EASE }}
+          className="max-w-md w-full p-8 card bg-base-100 shadow-xl"
+        >
+          <h1 className="text-xl font-semibold mb-2">{t('acceptInvite.error.title')}</h1>
+          <p className="text-sm text-base-content/60 mb-6">{t('acceptInvite.error.description')}</p>
+          <Link to="/login" className="btn btn-ghost btn-sm">{t('acceptInvite.gone.back')}</Link>
+        </motion.div>
       </div>
     );
   }
@@ -100,6 +126,10 @@ export default function AcceptInvite() {
   }
 
   const alreadyMember = orgs.some((o) => o.slug === preview.org_slug);
+  // Limbo users (zero orgs) clicking Decline would otherwise bounce back to
+  // /accept-invite via OnboardingRedirect if sent to `/`. Send them to
+  // /onboarding instead, acknowledging they still need to set up a workspace.
+  const declineHref = orgs.length === 0 ? '/onboarding' : '/';
 
   async function handleAccept() {
     if (accepting) return;
@@ -163,7 +193,7 @@ export default function AcceptInvite() {
             <Button onClick={handleAccept} loading={accepting} className="flex-1">
               {t('acceptInvite.accept')}
             </Button>
-            <Link to="/" className="btn btn-ghost flex-1">{t('acceptInvite.decline')}</Link>
+            <Link to={declineHref} className="btn btn-ghost flex-1">{t('acceptInvite.decline')}</Link>
           </div>
         ) : (
           <div className="flex gap-2">

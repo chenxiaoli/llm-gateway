@@ -1323,6 +1323,10 @@
       "title": "Invitation no longer valid",
       "description": "This link may have expired, been revoked, or already been used. Please request a new invitation.",
       "back": "Back to login"
+    },
+    "error": {
+      "title": "Couldn't load invitation",
+      "description": "We couldn't reach the server. Check your connection and try the link again."
     }
   }
 }
