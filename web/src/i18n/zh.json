@@ -56,6 +56,7 @@
     "pricingPolicies": "定价策略",
     "users": "用户",
     "members": "成员",
+    "invitations": "邀请",
     "settings": "设置",
     "orgSettings": "组织设置",
     "logs": "审计日志",
@@ -1327,6 +1328,45 @@
     "error": {
       "title": "无法加载邀请",
       "description": "无法连接到服务器，请检查网络后重试。"
+    }
+  },
+  "invitations": {
+    "title": "邀请",
+    "description": "生成邀请链接并管理待接受、已接受和已撤销的邀请",
+    "generate": {
+      "title": "生成邀请链接",
+      "role": "角色",
+      "submit": "生成"
+    },
+    "roles": {
+      "member": "成员",
+      "admin": "管理员"
+    },
+    "table": {
+      "link": "链接",
+      "role": "角色",
+      "status": "状态",
+      "created": "创建时间",
+      "actions": "操作"
+    },
+    "status": {
+      "pending": "待接受",
+      "accepted": "已接受",
+      "revoked": "已撤销",
+      "expired": "已过期"
+    },
+    "expiresInDays": "{{count}} 天后过期",
+    "expiresInOneDay": "1 天后过期",
+    "expired": "已过期",
+    "acceptedBy": "已被 {{user}} 接受",
+    "revoke": "撤销",
+    "confirmRevoke": "撤销此邀请？链接将立即失效。",
+    "empty": "暂无邀请",
+    "toasts": {
+      "created": "邀请链接已生成",
+      "createFailed": "生成邀请失败",
+      "revoked": "邀请已撤销",
+      "revokeFailed": "撤销邀请失败"
     }
   }
 }

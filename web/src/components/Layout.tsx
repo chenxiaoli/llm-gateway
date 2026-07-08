@@ -11,6 +11,7 @@ import {
   Users,
   UsersRound,
   UserPlus,
+  Mail,
   Settings,
   FileText,
   DollarSign,
@@ -75,6 +76,7 @@ export default function AppLayout() {
     { key: `/${slug}/admin/pricing-policies`, icon: DollarSign, label: t('sidebar.pricingPolicies') },
     { key: `/${slug}/admin/users`, icon: Users, label: t('sidebar.users') },
     { key: `/${slug}/members`, icon: UserPlus, label: t('sidebar.members') },
+    { key: `/${slug}/admin/invitations`, icon: Mail, label: t('sidebar.invitations') },
     { key: `/${slug}/admin/groups`, icon: UsersRound, label: t('groups.title') },
     { key: `/${slug}/admin/settings`, icon: Settings, label: t('sidebar.settings') },
     { key: `/${slug}/admin/logs`, icon: FileText, label: t('sidebar.logs') },
@@ -92,6 +94,7 @@ export default function AppLayout() {
     'pricing-policies': t('sidebar.pricingPolicies'),
     users: t('sidebar.users'),
     members: t('sidebar.members'),
+    invitations: t('sidebar.invitations'),
     settings: t('sidebar.settings'),
     logs: t('sidebar.logs'),
   };

@@ -27,6 +27,7 @@ import Providers from './pages/Providers';
 import ProviderDetail from './pages/ProviderDetail';
 import Users from './pages/Users';
 import Members from './pages/Members';
+import Invitations from './pages/Invitations';
 import OrgSettings from './pages/OrgSettings';
 import Groups from './pages/Groups';
 import AccountBalance from './pages/AccountBalance';
@@ -136,6 +137,7 @@ function App() {
               <Route path="admin/models" element={<Models />} />
               <Route path="admin/pricing-policies" element={<PricingPolicies />} />
               <Route path="admin/users" element={<Users />} />
+              <Route path="admin/invitations" element={<Invitations />} />
               <Route path="admin/groups" element={<Groups />} />
               <Route path="admin/users/:userId/balance" element={<AccountBalance />} />
               <Route path="admin/settings" element={<Settings />} />

@@ -56,6 +56,7 @@
     "pricingPolicies": "Pricing Policies",
     "users": "Users",
     "members": "Members",
+    "invitations": "Invitations",
     "settings": "Settings",
     "orgSettings": "Org Settings",
     "logs": "Audit Logs",
@@ -1327,6 +1328,45 @@
     "error": {
       "title": "Couldn't load invitation",
       "description": "We couldn't reach the server. Check your connection and try the link again."
+    }
+  },
+  "invitations": {
+    "title": "Invitations",
+    "description": "Generate invite links and manage pending, accepted, and revoked invitations",
+    "generate": {
+      "title": "Generate invite link",
+      "role": "Role",
+      "submit": "Generate"
+    },
+    "roles": {
+      "member": "Member",
+      "admin": "Admin"
+    },
+    "table": {
+      "link": "Link",
+      "role": "Role",
+      "status": "Status",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "status": {
+      "pending": "Pending",
+      "accepted": "Accepted",
+      "revoked": "Revoked",
+      "expired": "Expired"
+    },
+    "expiresInDays": "Expires in {{count}} days",
+    "expiresInOneDay": "Expires in 1 day",
+    "expired": "Expired",
+    "acceptedBy": "Accepted by {{user}}",
+    "revoke": "Revoke",
+    "confirmRevoke": "Revoke this invitation? The link will stop working immediately.",
+    "empty": "No invitations yet",
+    "toasts": {
+      "created": "Invitation link generated",
+      "createFailed": "Failed to generate invitation",
+      "revoked": "Invitation revoked",
+      "revokeFailed": "Failed to revoke invitation"
     }
   }
 }
