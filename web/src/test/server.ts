@@ -27,6 +27,7 @@ export const server = setupServer(
         },
       ],
       allow_registration: true,
+      impersonating: false,
     });
   }),
   http.post('*/api/v1/auth/login', () => {

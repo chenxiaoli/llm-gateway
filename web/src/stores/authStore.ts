@@ -12,6 +12,12 @@ interface AuthState {
   currentOrg: OrgSummary | null;
   orgs: OrgSummary[];
   isLoading: boolean;
+  /**
+   * True when the current membership is a temp/system-created row, i.e. a
+   * platform_admin is operating in an org they don't really belong to. Drives
+   * the ImpersonationBanner.
+   */
+  impersonating: boolean;
   login: (input: LoginRequest) => Promise<AuthResponse>;
   register: (input: RegisterRequest) => Promise<AuthResponse>;
   logout: () => void;
@@ -25,6 +31,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   currentOrg: null,
   orgs: [],
   isLoading: false,
+  impersonating: false,
 
   login: async (input: LoginRequest) => {
     set({ isLoading: true });
@@ -37,6 +44,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: { id: me.id, username: me.username, platform_role: me.platform_role },
         currentOrg: me.current_org,
         orgs: me.orgs,
+        // Login always lands the user in their own org — never impersonating.
+        impersonating: false,
         isLoading: false,
       });
       return resp;
@@ -57,6 +66,8 @@ export const useAuthStore = create<AuthState>((set) => ({
         user: { id: me.id, username: me.username, platform_role: me.platform_role },
         currentOrg: me.current_org,
         orgs: me.orgs,
+        // Register always assigns the user to a fresh default org — never impersonating.
+        impersonating: false,
         isLoading: false,
       });
       return resp;
@@ -69,7 +80,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: () => {
     clearToken();
     clearRefreshToken();
-    set({ user: null, currentOrg: null, orgs: [] });
+    set({ user: null, currentOrg: null, orgs: [], impersonating: false });
     window.location.href = '/login';
   },
 
@@ -81,6 +92,15 @@ export const useAuthStore = create<AuthState>((set) => ({
     setRefreshToken(resp.refresh_token);
     set({ currentOrg: org });
     queryClient.clear();
+    // switchOrg returns AuthResponse (no impersonating field), so re-fetch /me
+    // to learn whether the new current_org is a temp/system membership row.
+    const me = await getMe();
+    set({
+      user: { id: me.id, username: me.username, platform_role: me.platform_role },
+      currentOrg: me.current_org,
+      orgs: me.orgs,
+      impersonating: me.impersonating,
+    });
   },
 
   refreshOrgs: async () => {
@@ -89,6 +109,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       user: { id: me.id, username: me.username, platform_role: me.platform_role },
       currentOrg: me.current_org,
       orgs: me.orgs,
+      impersonating: me.impersonating,
     });
   },
 }));
@@ -136,7 +157,11 @@ export function useAuthBootstrap() {
   useEffect(() => {
     if (me && !useAuthStore.getState().user) {
       setUser({ id: me.id, username: me.username, platform_role: me.platform_role });
-      useAuthStore.setState({ currentOrg: me.current_org, orgs: me.orgs });
+      useAuthStore.setState({
+        currentOrg: me.current_org,
+        orgs: me.orgs,
+        impersonating: me.impersonating,
+      });
     }
   }, [me, setUser]);
 

@@ -78,6 +78,11 @@ pub struct MeResponse {
     pub current_org: Option<OrgSummary>,
     pub orgs: Vec<OrgSummary>,
     pub allow_registration: bool,
+    /// True when the current membership is a temp/system-created row, i.e.
+    /// the caller is a platform_admin operating in an org they don't really
+    /// belong to (see `membership_layer`'s impersonation path). Surfaced to
+    /// the UI so it can show an "platform admin mode" banner.
+    pub impersonating: bool,
 }
 
 #[derive(Serialize)]
@@ -372,6 +377,22 @@ pub async fn me(
     let (current_org, orgs) = current_membership(&state, &user).await?;
     let allow_reg = get_allow_registration(&state).await;
 
+    // Detect platform-admin impersonation: the membership row for the current
+    // org was created by `system` (the temp-membership path in
+    // `membership_layer`) rather than by a real user. The flag is only
+    // meaningful when a current org is selected.
+    let impersonating = match &current_org {
+        Some(org) => state
+            .storage
+            .get_member(&user.id, &org.id)
+            .await
+            .ok()
+            .flatten()
+            .map(|m| m.created_by.as_deref() == Some("system"))
+            .unwrap_or(false),
+        None => false,
+    };
+
     Ok(Json(MeResponse {
         id: user.id,
         username: user.username,
@@ -379,6 +400,7 @@ pub async fn me(
         current_org,
         orgs,
         allow_registration: allow_reg,
+        impersonating,
     }))
 }
 

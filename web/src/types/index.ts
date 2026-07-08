@@ -297,6 +297,12 @@ export interface MeResponse {
   current_org: OrgSummary | null;
   orgs: OrgSummary[];
   allow_registration: boolean;
+  /**
+   * True when the current membership is a temp/system-created row, indicating
+   * a platform_admin is operating in an org they don't really belong to. The
+   * UI surfaces an "platform admin mode" banner when this is set.
+   */
+  impersonating: boolean;
 }
 
 export interface AuthConfigResponse {

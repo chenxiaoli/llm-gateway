@@ -34,6 +34,7 @@ import { apiClient } from '../api/client';
 import { useTranslation } from 'react-i18next';
 import { Globe } from 'lucide-react';
 import { OrgSwitcher } from './OrgSwitcher';
+import { ImpersonationBanner } from './ImpersonationBanner';
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -45,6 +46,7 @@ export default function AppLayout() {
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
   const currentOrg = useAuthStore((s) => s.currentOrg);
+  const impersonating = useAuthStore((s) => s.impersonating);
   const logout = useAuthStore((s) => s.logout);
   const isAdmin = isAdminOrAbove(user, currentOrg);
   const { theme, toggleTheme } = useTheme();
@@ -115,6 +117,14 @@ export default function AppLayout() {
   }, [location.pathname]);
 
   const sidebarWidth = collapsed ? 'w-[68px]' : 'w-[232px]';
+
+  // When the impersonation banner is visible (fixed top-0 h-8), shift the
+  // fixed header, the mobile sidebar overlay, and the main content's top
+  // padding down by 32px so nothing overlaps. The desktop sidebar already
+  // spans top-0..bottom-0 but sits under the banner z-[60] < sidebar z-[100];
+  // it still needs to start below the banner so its logo row isn't hidden.
+  const topShift = impersonating ? 'top-8' : 'top-0';
+  const ptShift = impersonating ? 'pt-20' : 'pt-12';
 
   const breadcrumbSegment = location.pathname.replace(/^\/[^/]+\/(admin\/)?/, '');
 
@@ -217,14 +227,15 @@ export default function AppLayout() {
 
   return (
     <div className="flex min-h-screen bg-base-200">
+      <ImpersonationBanner />
       {/* ── Desktop Sidebar ── */}
-      <aside className={`hidden md:flex fixed left-0 top-0 bottom-0 z-[100] flex-col bg-base-100 border-r border-base-300/60 transition-all duration-300 overflow-hidden ${sidebarWidth}`}>
+      <aside className={`hidden md:flex fixed left-0 ${topShift} bottom-0 z-[100] flex-col bg-base-100 border-r border-base-300/60 transition-all duration-300 overflow-hidden ${sidebarWidth}`}>
         {sidebarContent}
       </aside>
 
       {/* ── Mobile Sidebar Overlay ── */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-[200] md:hidden">
+        <div className={`fixed inset-0 ${impersonating ? 'top-8' : 'top-0'} z-[200] md:hidden`}>
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
           <aside className="absolute left-0 top-0 bottom-0 w-[272px] flex flex-col bg-base-100 border-r border-base-300/60 overflow-hidden animate-fade-in">
             {/* Mobile close button */}
@@ -308,7 +319,7 @@ export default function AppLayout() {
       {/* ── Main content ── */}
       <div className={`flex min-h-screen flex-col transition-all duration-300 ${collapsed ? 'md:ml-[68px]' : 'md:ml-[232px]'}`}>
         {/* Header */}
-        <header className={`fixed top-0 z-40 shrink-0 bg-base-100/80 backdrop-blur-md border-b border-base-300/60 h-12 left-0 md:left-auto ${collapsed ? 'md:left-[68px]' : 'md:left-[232px]'} right-0`}>
+        <header className={`fixed ${topShift} z-40 shrink-0 bg-base-100/80 backdrop-blur-md border-b border-base-300/60 h-12 left-0 md:left-auto ${collapsed ? 'md:left-[68px]' : 'md:left-[232px]'} right-0`}>
           <div className="flex h-12 items-center justify-between px-4 md:px-6 gap-3 w-full">
             {/* Left: Mobile hamburger + Breadcrumb */}
             <div className="flex items-center gap-2 min-w-0">
@@ -405,7 +416,7 @@ export default function AppLayout() {
         </header>
 
         {/* Content */}
-        <main className="flex-1 p-4 md:p-6 overflow-y-auto pt-12 pb-8">
+        <main className={`flex-1 p-4 md:p-6 overflow-y-auto ${ptShift} pb-8`}>
           <div className="animate-fade-in-up" key={location.pathname}>
             <Outlet />
           </div>
