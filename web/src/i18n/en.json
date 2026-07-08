@@ -1304,5 +1304,25 @@
         "alreadyAccepted": "This invitation has already been accepted"
       }
     }
+  },
+  "acceptInvite": {
+    "title": "Join {{org}}",
+    "inviter": "Invite from {{user}}",
+    "role": "You'll join as {{role}}.",
+    "accept": "Accept",
+    "decline": "Decline",
+    "signUp": "Sign up to accept",
+    "logIn": "Log in",
+    "alreadyMember": "You're already a member of {{org}}.",
+    "goToOrg": "Go to {{org}}",
+    "errors": {
+      "invalidToken": "This invitation is no longer valid",
+      "alreadyAccepted": "This invitation has already been accepted"
+    },
+    "gone": {
+      "title": "Invitation no longer valid",
+      "description": "This link may have expired, been revoked, or already been used. Please request a new invitation.",
+      "back": "Back to login"
+    }
   }
 }

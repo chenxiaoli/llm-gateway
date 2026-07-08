@@ -11,6 +11,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Onboarding from './pages/Onboarding';
+import AcceptInvite from './pages/AcceptInvite';
 import Dashboard from './pages/Dashboard';
 import Account from './pages/Account';
 import ChangePassword from './pages/ChangePassword';
@@ -104,6 +105,7 @@ function App() {
         {/* User-scoped — no org prefix, no Layout */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/accept-invite" element={<AcceptInvite />} />
         <Route path="/onboarding" element={<Onboarding />} />
 
         {/* Org-scoped — wraps everything else */}

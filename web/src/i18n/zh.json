@@ -1304,5 +1304,25 @@
         "alreadyAccepted": "此邀请已被接受"
       }
     }
+  },
+  "acceptInvite": {
+    "title": "加入 {{org}}",
+    "inviter": "{{user}} 的邀请",
+    "role": "您将以 {{role}} 身份加入。",
+    "accept": "接受",
+    "decline": "拒绝",
+    "signUp": "注册以接受",
+    "logIn": "登录",
+    "alreadyMember": "您已经是 {{org}} 的成员。",
+    "goToOrg": "进入 {{org}}",
+    "errors": {
+      "invalidToken": "此邀请已失效",
+      "alreadyAccepted": "此邀请已被接受"
+    },
+    "gone": {
+      "title": "邀请已失效",
+      "description": "此链接可能已过期、被撤销或已被使用。请申请新的邀请。",
+      "back": "返回登录"
+    }
   }
 }

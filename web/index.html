@@ -13,6 +13,10 @@
     </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- no-referrer so invitation tokens in ?token=... don't leak via the
+         Referer header on outbound navigation (e.g. when the user clicks an
+         external link from /accept-invite). -->
+    <meta name="referrer" content="no-referrer" />
     <title>TokenVis</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

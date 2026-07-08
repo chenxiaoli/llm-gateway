@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
@@ -17,6 +17,17 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const register = useAuthStore((s) => s.register);
+  const setPendingInviteToken = useAuthStore((s) => s.setPendingInviteToken);
+  const [params] = useSearchParams();
+
+  // Belt-and-suspenders: if the visitor arrived via /register?invite=... (e.g.
+  // forwarded from /accept-invite), make sure the token is in the store so
+  // authStore.register() picks it up. /accept-invite already stashes it before
+  // navigating here, but this covers the direct-link case.
+  const inviteFromUrl = params.get('invite');
+  if (inviteFromUrl) {
+    setPendingInviteToken(inviteFromUrl);
+  }
 
   const { data: authConfig } = useQuery({
     queryKey: ['authConfig'],
