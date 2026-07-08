@@ -26,12 +26,11 @@ CREATE TABLE invitations (
     expires_at      TIMESTAMPTZ NOT NULL,
     accepted_at     TIMESTAMPTZ,
     accepted_by     TEXT REFERENCES users(id) ON DELETE SET NULL,
-    revoked_at      TIMESTAMPTZ,
-    CONSTRAINT invitations_expires_after_created CHECK (expires_at > created_at)
+    revoked_at      TIMESTAMPTZ
 );
 
 -- Speed up the admin "pending invitations" list. Partial index keeps it small
 -- even after the table accumulates accepted/expired history.
-CREATE INDEX invitations_org_pending_idx
+CREATE INDEX invitations_org_id_pending_idx
     ON invitations (org_id)
     WHERE accepted_at IS NULL AND revoked_at IS NULL;
