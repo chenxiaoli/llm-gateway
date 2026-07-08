@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { UserPlus, Users } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -25,8 +26,10 @@ function isForbiddenError(err: unknown): boolean {
 export default function Members() {
   const { t } = useTranslation();
   const reducedMotion = useReducedMotion();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const currentOrg = useAuthStore((s) => s.currentOrg);
+  const refreshOrgs = useAuthStore((s) => s.refreshOrgs);
   const { data: members, isLoading, error } = useMembers();
   const inviteMutation = useInviteMember();
   const roleMutation = useChangeMemberRole();
@@ -37,6 +40,8 @@ export default function Members() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteUsername, setInviteUsername] = useState('');
   const [inviteRole, setInviteRole] = useState<MemberRole>('member');
+  // Pending demotion: { member, nextRole } waiting on user confirm.
+  const [pendingDemote, setPendingDemote] = useState<{ member: Member; nextRole: MemberRole } | null>(null);
 
   const handleInviteSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,21 +59,44 @@ export default function Members() {
 
   const handleRoleChange = (m: Member, nextRole: MemberRole) => {
     if (nextRole === m.role) return;
-    // Confirm before demoting from owner.
+    // Demoting from owner needs confirmation; open the dialog instead of
+    // using window.confirm so the dark-theme styling is consistent with
+    // the other destructive actions on this page.
     if (m.role === 'owner' && nextRole !== 'owner') {
-      const label = t(`members.role.${nextRole}`);
-      if (!window.confirm(t('members.confirmDemote', { role: label }))) return;
+      setPendingDemote({ member: m, nextRole });
+      return;
     }
     roleMutation.mutate({ userId: m.user_id, role: nextRole });
   };
 
-  const handleRemove = (m: Member) => {
-    removeMutation.mutate(m.user_id);
-    // If the current user leaves, the backend invalidates their membership;
-    // the app will re-bootstrap on next navigation.
+  const confirmDemote = () => {
+    if (!pendingDemote) return;
+    roleMutation.mutate(
+      { userId: pendingDemote.member.user_id, role: pendingDemote.nextRole },
+      { onSettled: () => setPendingDemote(null) },
+    );
+  };
+
+  const handleRemove = async (m: Member) => {
+    const isSelf = m.user_id === user?.id;
+    await removeMutation.mutateAsync(m.user_id).catch(() => {
+      // Error toast is already shown by the hook; just bail.
+      return;
+    });
+    // Self-leave: backend invalidated the user's membership. Refresh the
+    // auth store so currentOrg reflects reality, then redirect. If the
+    // user has another org, refreshOrgs will land them there; otherwise
+    // the auth store's currentOrg becomes null and the route guard will
+    // send them to /login on next render.
+    if (isSelf) {
+      await refreshOrgs();
+      const next = useAuthStore.getState().currentOrg;
+      navigate(next ? `/${next.slug}/dashboard` : '/login', { replace: true });
+    }
   };
 
   const forbidden = !isLoading && error && isForbiddenError(error);
+  const roleInFlightFor = roleMutation.isPending ? roleMutation.variables?.userId : null;
 
   return (
     <div className="px-6 pb-8">
@@ -145,6 +173,7 @@ export default function Members() {
                         <Select
                           value={m.role}
                           size="sm"
+                          disabled={roleInFlightFor === m.user_id}
                           onChange={(value) => handleRoleChange(m, value as MemberRole)}
                           options={ROLE_OPTIONS.map((r) => ({ value: r, label: t(`members.role.${r}`) }))}
                         />
@@ -229,6 +258,17 @@ export default function Members() {
           </div>
         </form>
       </Modal>
+      {/* Demote-from-owner confirmation */}
+      <ConfirmDialog
+        open={pendingDemote !== null}
+        title={t('members.confirmDemote', { role: pendingDemote ? t(`members.role.${pendingDemote.nextRole}`) : '' })}
+        okText={t('common.confirm')}
+        variant="danger"
+        onConfirm={confirmDemote}
+        onCancel={() => setPendingDemote(null)}
+      >
+        {null}
+      </ConfirmDialog>
     </div>
   );
 }
