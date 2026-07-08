@@ -18,12 +18,18 @@ interface AuthState {
    * the ImpersonationBanner.
    */
   impersonating: boolean;
+  /**
+   * Stashed invitation token captured pre-auth (e.g. when an anonymous visitor
+   * clicks an invite link). The login/register flow consumes and clears it.
+   */
+  pendingInviteToken: string | null;
   login: (input: LoginRequest) => Promise<AuthResponse>;
   register: (input: RegisterRequest) => Promise<AuthResponse>;
   logout: () => void;
   setUser: (user: User) => void;
   setCurrentOrg: (org: OrgSummary) => Promise<void>;
   refreshOrgs: () => Promise<void>;
+  setPendingInviteToken: (t: string | null) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -32,6 +38,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   orgs: [],
   isLoading: false,
   impersonating: false,
+  pendingInviteToken: null,
 
   login: async (input: LoginRequest) => {
     set({ isLoading: true });
@@ -112,6 +119,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       impersonating: me.impersonating,
     });
   },
+
+  setPendingInviteToken: (t) => set({ pendingInviteToken: t }),
 }));
 
 /**
@@ -126,6 +135,16 @@ export function useCanCreateOrgCatalog(): boolean {
     || s.currentOrg?.role === 'owner'
     || s.user?.platform_role === 'platform_admin',
   );
+}
+
+/**
+ * True when the signed-in user has zero org memberships — i.e. they need to
+ * run the onboarding wizard (create their first org) or accept a pending
+ * invitation before they can do anything useful. Route guards bounce such
+ * users to /onboarding.
+ */
+export function useNeedsOnboarding(): boolean {
+  return useAuthStore((s) => s.user !== null && s.orgs.length === 0);
 }
 
 /**

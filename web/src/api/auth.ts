@@ -6,8 +6,20 @@ export async function login(input: LoginRequest): Promise<AuthResponse> {
   return data;
 }
 
-export async function register(input: RegisterRequest): Promise<AuthResponse> {
+export async function register(
+  input: RegisterRequest,
+  inviteToken?: string | null,
+): Promise<AuthResponse> {
   const { data } = await apiClient.post<AuthResponse>('/auth/register', input);
+  // If an invite token was stashed, immediately accept it after register.
+  // The accept response is itself an AuthResponse reflecting the joined org.
+  if (inviteToken) {
+    const { data: acceptData } = await apiClient.post<AuthResponse>(
+      '/api/v1/invitations/accept',
+      { token: inviteToken },
+    );
+    return acceptData;
+  }
   return data;
 }
 
