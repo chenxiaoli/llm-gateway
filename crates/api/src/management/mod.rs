@@ -8,6 +8,7 @@ pub mod providers;
 pub mod models;
 pub mod usage;
 pub mod logs;
+pub mod members;
 pub mod requests;
 pub mod users;
 pub mod settings;
@@ -251,6 +252,8 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
             "/admin/pricing-policies/{id}",
             get(pricing_policies::get).patch(pricing_policies::update).delete(pricing_policies::delete),
         )
+        // Members (admin)
+        .route("/members", get(members::list_members))
 }
 
 /// Sub-router that turns any unmatched `/api/v1/*` path into a 410 Gone.
