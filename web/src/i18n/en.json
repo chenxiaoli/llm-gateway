@@ -35,6 +35,7 @@
     "noResults": "No results found",
     "copy": "Copy",
     "copied": "Copied!",
+    "copyFailed": "Couldn't copy to clipboard",
     "close": "Close",
     "refresh": "Refresh",
     "test": "Test",
@@ -1359,8 +1360,10 @@
     "expiresInOneDay": "Expires in 1 day",
     "expired": "Expired",
     "acceptedBy": "Accepted by {{user}}",
+    "acceptedByUnknown": "Accepted",
     "revoke": "Revoke",
     "confirmRevoke": "Revoke this invitation? The link will stop working immediately.",
+    "confirmRevokeDescription": "The link will stop working immediately. This cannot be undone.",
     "empty": "No invitations yet",
     "toasts": {
       "created": "Invitation link generated",

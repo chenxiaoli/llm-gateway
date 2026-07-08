@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Copy } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '../lib/cn';
 
 interface CopyableInviteLinkProps {
@@ -27,8 +28,9 @@ export function CopyableInviteLink({ url, expiresAt, className }: CopyableInvite
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // navigator.clipboard may be unavailable (non-HTTPS / jsdom) — silently
-      // no-op so the button doesn't throw in tests.
+      // navigator.clipboard may be unavailable (non-HTTPS / browser permissions
+      // denied). Surface the failure so the user knows the copy didn't happen.
+      toast.error(t('common.copyFailed'));
     }
   }
 

@@ -88,7 +88,12 @@ export function ConfirmDialog({
                 style={{ maxWidth: 400 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <h3 className="text-[15px] font-semibold text-base-content mb-6">{title}</h3>
+                <h3 className="text-[15px] font-semibold text-base-content">{title}</h3>
+                {isControlled && children ? (
+                  <p className="text-sm text-base-content/60 mt-2 mb-6">{children}</p>
+                ) : (
+                  <div className="mb-6" />
+                )}
                 <div className="flex justify-end gap-2">
                   <Button variant="ghost" size="sm" onClick={close}>
                     {resolvedCancelText}

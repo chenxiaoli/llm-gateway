@@ -109,7 +109,7 @@ export default function Invitations() {
               options={roleOptions}
             />
           </div>
-          <Button onClick={() => createMut.mutate()} loading={createMut.isPending}>
+          <Button type="button" onClick={() => createMut.mutate()} loading={createMut.isPending}>
             {t('invitations.generate.submit')}
           </Button>
         </div>
@@ -158,7 +158,9 @@ export default function Invitations() {
                         <CopyableInviteLink url={inv.url} expiresAt={inv.expires_at} />
                       ) : status === 'accepted' ? (
                         <span className="text-sm text-base-content/70">
-                          {t('invitations.acceptedBy', { user: inv.accepted_by ?? '?' })}
+                          {inv.accepted_by
+                            ? t('invitations.acceptedBy', { user: inv.accepted_by })
+                            : t('invitations.acceptedByUnknown')}
                         </span>
                       ) : (
                         <code className="text-xs bg-base-200/60 px-2 py-1 rounded truncate max-w-[18rem] block text-base-content/40">
@@ -186,6 +188,7 @@ export default function Invitations() {
                     <td>
                       {isPending && (
                         <Button
+                          type="button"
                           variant="danger"
                           size="sm"
                           onClick={() => setPendingRevoke(inv)}
@@ -223,7 +226,7 @@ export default function Invitations() {
         onConfirm={confirmRevoke}
         onCancel={() => setPendingRevoke(null)}
       >
-        {null}
+        {t('invitations.confirmRevokeDescription')}
       </ConfirmDialog>
     </div>
   );
