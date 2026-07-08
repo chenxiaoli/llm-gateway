@@ -186,6 +186,7 @@ pub struct Provider {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderWithEndpoints {
     pub id: String,
+    pub owner_org_id: Option<String>,
     pub name: String,
     pub slug: String,
     pub endpoints: Option<std::collections::HashMap<String, String>>,
@@ -200,6 +201,7 @@ impl From<Provider> for ProviderWithEndpoints {
         let endpoints = p.endpoints.and_then(|e| serde_json::from_str(&e).ok());
         ProviderWithEndpoints {
             id: p.id,
+            owner_org_id: p.owner_org_id,
             name: p.name,
             slug: p.slug,
             endpoints,

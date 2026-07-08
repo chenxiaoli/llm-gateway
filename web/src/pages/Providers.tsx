@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Pencil, Trash2, Copy, Check, Globe, Zap, Radio, Layers, Shield } from 'lucide-react';
 import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider, useProviderModels, useUpdateProviderModels } from '../hooks/useProviders';
@@ -8,6 +8,8 @@ import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Drawer } from '../components/ui/Drawer';
 import { EndpointsEditor } from '../components/ui/EndpointsEditor';
+import { CatalogFilter, type CatalogScope } from '../components/CatalogFilter';
+import { useAuthStore } from '../stores/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Provider } from '../types';
 
@@ -562,6 +564,18 @@ export default function Providers() {
   const updateMutation = useUpdateProvider();
   const deleteMutation = useDeleteProvider();
 
+  const [scope, setScope] = useState<CatalogScope>('all');
+  const showOrgOption = useAuthStore(s => (s.currentOrg?.role === 'admin' || s.currentOrg?.role === 'owner') || s.user?.platform_role === 'platform_admin');
+
+  const visible = useMemo(() => {
+    if (!providers) return undefined;
+    return providers.filter(item => {
+      if (scope === 'all') return true;
+      if (scope === 'platform') return item.owner_org_id === null;
+      return item.owner_org_id !== null; // 'ours'
+    });
+  }, [providers, scope]);
+
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const [createEndpoints, setCreateEndpoints] = useState<Record<string, string>>({});
@@ -653,7 +667,7 @@ export default function Providers() {
     setDeletingProvider(null);
   };
 
-  const totalProviders = providers?.length ?? 0;
+  const totalProviders = visible?.length ?? 0;
 
   return (
     <div className="px-6 pb-8">
@@ -685,7 +699,9 @@ export default function Providers() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.92 }}
               transition={{ duration: 0.2 }}
+              className="flex items-center gap-3"
             >
+              <CatalogFilter value={scope} onChange={setScope} showOrgOption={showOrgOption} />
               <Button
                 icon={<Plus className="h-4 w-4" />}
                 size="sm"
@@ -699,7 +715,7 @@ export default function Providers() {
       </motion.div>
 
       {/* Stats */}
-      {totalProviders > 0 && <StatsBar providers={providers!} />}
+      {totalProviders > 0 && <StatsBar providers={visible!} />}
 
       {/* Content */}
       {isLoading ? (
@@ -718,7 +734,7 @@ export default function Providers() {
           variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.08 } } }}
           className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4"
         >
-          {providers!.map((provider, i) => (
+          {visible!.map((provider, i) => (
             <ProviderModule
               key={provider.id}
               provider={provider}

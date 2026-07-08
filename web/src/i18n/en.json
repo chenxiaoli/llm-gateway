@@ -1,4 +1,11 @@
 {
+  "catalog": {
+    "filter": {
+      "all": "All",
+      "platform": "Platform",
+      "ours": "Ours"
+    }
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

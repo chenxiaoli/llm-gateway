@@ -38,6 +38,7 @@ export interface UpdateKeyRequest {
 
 export interface Provider {
   id: string;
+  owner_org_id: string | null;
   name: string;
   slug: string;
   endpoints: Record<string, string> | null;
@@ -62,6 +63,7 @@ export interface UpdateProviderRequest {
 
 export interface Model {
   id: string;
+  owner_org_id: string | null;
   name: string;
   model_type?: string | null;
   pricing_policy_id?: string | null;
@@ -583,6 +585,7 @@ export interface SyncedModel {
 
 export interface PricingPolicy {
   id: string;
+  owner_org_id: string | null;
   name: string;
   billing_type: string;
   config: PricingConfig;

@@ -7,6 +7,7 @@ import type { Provider, ChannelModel } from '../types';
 
 const mockProvider: Provider = {
   id: 'prov-1',
+  owner_org_id: null,
   name: 'openai',
   slug: 'openai',
   endpoints: { openai: 'https://api.openai.com' } as Record<string, string>,

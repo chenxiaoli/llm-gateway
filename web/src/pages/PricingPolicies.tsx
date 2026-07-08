@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -6,10 +6,12 @@ import { DollarSign, Plus, Cpu, Globe, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { usePricingPolicies, useCreatePricingPolicy, useUpdatePricingPolicy, useDeletePricingPolicy } from '../hooks/usePricingPolicies';
 import { useCurrencyStore } from '../stores/currency';
+import { useAuthStore } from '../stores/authStore';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { CatalogFilter, type CatalogScope } from '../components/CatalogFilter';
 import { motion } from 'framer-motion';
 import type { PricingPolicyWithCounts } from '../types';
 import type { PricingConfig, TierConfig, ContextTier } from '../types';
@@ -595,6 +597,18 @@ export default function PricingPolicies() {
   const [isAdding, setIsAdding] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<PricingPolicyWithCounts | null>(null);
 
+  const [scope, setScope] = useState<CatalogScope>('all');
+  const showOrgOption = useAuthStore(s => (s.currentOrg?.role === 'admin' || s.currentOrg?.role === 'owner') || s.user?.platform_role === 'platform_admin');
+
+  const visible = useMemo(() => {
+    if (!policies) return undefined;
+    return policies.filter(item => {
+      if (scope === 'all') return true;
+      if (scope === 'platform') return item.owner_org_id === null;
+      return item.owner_org_id !== null; // 'ours'
+    });
+  }, [policies, scope]);
+
   const BILLING_TYPES: Record<string, string> = {
     per_token: t('pricingPolicies.billingTypes.perToken'),
     per_request: t('pricingPolicies.billingTypes.perRequest'),
@@ -604,7 +618,7 @@ export default function PricingPolicies() {
     hybrid: t('pricingPolicies.billingTypes.hybrid'),
   };
 
-  const total = policies?.length ?? 0;
+  const total = visible?.length ?? 0;
 
   if (isLoading) {
     return (
@@ -643,7 +657,11 @@ export default function PricingPolicies() {
           initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
+          className="flex items-center gap-3"
         >
+          {total > 0 && (
+            <CatalogFilter value={scope} onChange={setScope} showOrgOption={showOrgOption} />
+          )}
           <Button icon={<Plus className="h-4 w-4" />} onClick={() => setIsAdding(true)} size="sm">
             {t('pricingPolicies.addPolicy')}
           </Button>
@@ -683,7 +701,7 @@ export default function PricingPolicies() {
               </tr>
             </thead>
             <tbody>
-              {policies!.map((policy) => (
+              {visible!.map((policy) => (
                 <tr key={policy.id} className="border-b border-base-200 hover:bg-base-50">
                   <td className="font-mono font-medium">{policy.name}</td>
                   <td>
