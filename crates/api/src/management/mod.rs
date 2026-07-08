@@ -257,6 +257,10 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
             "/members",
             get(members::list_members).post(members::invite_member),
         )
+        .route(
+            "/members/{user_id}",
+            patch(members::change_member_role),
+        )
 }
 
 /// Sub-router that turns any unmatched `/api/v1/*` path into a 410 Gone.

@@ -255,3 +255,60 @@ async fn invite_member_409_if_already_member(pool: PgPool) {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::CONFLICT);
 }
+
+// =====================================================================
+// Task 3: change_member_role
+// =====================================================================
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn change_role_promotes_member_to_admin(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    seed_default_member(&pool, "u-frank", "frank", "member").await;
+    let app = build_app(common::make_state(pool));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/v1/default/members/u-frank")
+                .header("authorization", bearer(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::json!({"role": "admin"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_json(resp).await;
+    assert_eq!(body["role"], "admin");
+    assert_eq!(body["user_id"], "u-frank");
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn change_role_rejects_demoting_last_owner(pool: PgPool) {
+    // Seed only one owner in the org and try to demote them.
+    common::seed_admin_user(&pool).await;
+    let app = build_app(common::make_state(pool));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/v1/default/members/admin-1")
+                .header("authorization", bearer(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::json!({"role": "admin"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let body = body_json(resp).await;
+    let msg = body["error"]["message"].as_str().unwrap();
+    assert!(
+        msg.contains("last owner"),
+        "expected message to mention 'last owner', got: {msg}"
+    );
+}

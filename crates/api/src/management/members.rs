@@ -1,4 +1,4 @@
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use chrono::{DateTime, Utc};
@@ -44,6 +44,11 @@ fn parse_role(s: &str) -> Result<MemberRole, ApiError> {
 #[derive(Debug, Deserialize)]
 pub struct InviteRequest {
     pub username: String,
+    pub role: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChangeRoleRequest {
     pub role: String,
 }
 
@@ -130,4 +135,61 @@ pub async fn invite_member(
         StatusCode::CREATED,
         Json(build_response(saved, user.username)),
     ))
+}
+
+pub async fn change_member_role(
+    State(state): State<Arc<AppState>>,
+    ctx: OrgContext,
+    Path((_org_slug, user_id)): Path<(String, String)>,
+    Json(req): Json<ChangeRoleRequest>,
+) -> Result<Json<MemberResponse>, ApiError> {
+    if !can_administer(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
+
+    let existing = state
+        .storage
+        .get_member(&user_id, &ctx.org_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::NotFound(format!("member '{}' not found", user_id)))?;
+
+    let new_role = parse_role(&req.role)?;
+
+    // Last-owner guard: demoting the only owner would orphan the org.
+    if existing.role == MemberRole::Owner && new_role != MemberRole::Owner {
+        let owners = state
+            .storage
+            .count_owners(&ctx.org_id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+        if owners <= 1 {
+            return Err(ApiError::BadRequest(
+                "cannot remove or demote the last owner of an org".into(),
+            ));
+        }
+    }
+
+    state
+        .storage
+        .update_member_role(&user_id, &ctx.org_id, new_role)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Re-fetch to return the canonical row.
+    let updated = state
+        .storage
+        .get_member(&user_id, &ctx.org_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::NotFound(format!("member '{}' not found", user_id)))?;
+    let username = state
+        .storage
+        .get_user(&user_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .map(|u| u.username)
+        .unwrap_or_default();
+
+    Ok(Json(build_response(updated, username)))
 }
