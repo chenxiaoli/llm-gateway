@@ -10,7 +10,7 @@ use llm_gateway_auth::{
 };
 use llm_gateway_org::OrgContext;
 use llm_gateway_storage::{
-    CreateOrg, Member, MemberRole, MembershipSummary, PlatformRole, User,
+    CreateOrg, Member, MemberRole, MembershipSummary, PlatformRole, UpdateOrg, User,
 };
 
 use crate::error::ApiError;
@@ -708,6 +708,81 @@ pub async fn get_org(
         id: org.id,
         slug: org.slug,
         name: org.name,
+        role: ctx.member_role.as_str().to_string(),
+        group_id: ctx.group_id,
+    }))
+}
+
+/// PATCH /api/v1/{org_slug} — update the resolved org's name and/or slug.
+///
+/// Requires admin-or-above in the org (or platform_admin). Slug updates are
+/// validated against the same rules as `create_org`; duplicate slugs surface
+/// as 409 Conflict so callers can distinguish from validation failures.
+#[derive(Deserialize)]
+pub struct UpdateOrgRequest {
+    pub name: Option<String>,
+    pub slug: Option<String>,
+}
+
+pub async fn update_org(
+    State(state): State<Arc<AppState>>,
+    ctx: OrgContext,
+    Json(req): Json<UpdateOrgRequest>,
+) -> Result<Json<OrgSummary>, ApiError> {
+    if !llm_gateway_org::can_manage_org_settings(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
+
+    // Validate inputs when provided. Treat an empty/whitespace name as missing
+    // so callers can't accidentally blank it out.
+    let name = req
+        .name
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let slug = req.slug.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+
+    if name.is_none() && slug.is_none() {
+        return Err(ApiError::BadRequest(
+            "must provide at least one of 'name' or 'slug'".into(),
+        ));
+    }
+
+    if let Some(s) = &slug {
+        validate_org_slug(s).map_err(ApiError::BadRequest)?;
+    }
+
+    let org = state
+        .storage
+        .update_org(
+            &ctx.org_id,
+            UpdateOrg {
+                name: name.clone(),
+                slug: slug.clone(),
+            },
+        )
+        .await
+        // Map duplicate-slug storage errors to 409 Conflict. The storage trait
+        // returns `Box<dyn Error>`, so we string-sniff for the Postgres unique
+        // constraint name (`orgs_slug_key`) and common violation keywords —
+        // same approach as `create_org`.
+        .map_err(|e| {
+            let msg = e.to_string();
+            let lower = msg.to_lowercase();
+            if msg.contains("orgs_slug_key")
+                || lower.contains("duplicate")
+                || lower.contains("unique")
+            {
+                ApiError::Conflict("org slug already taken".into())
+            } else {
+                ApiError::Internal(msg)
+            }
+        })?;
+
+    Ok(Json(OrgSummary {
+        id: org.id,
+        slug: org.slug,
+        name: org.name,
+        // Role isn't affected by an org update — echo back the caller's role.
         role: ctx.member_role.as_str().to_string(),
         group_id: ctx.group_id,
     }))
