@@ -1,4 +1,5 @@
 use axum::extract::{Query, State};
+use axum::http::StatusCode;
 use axum::http::HeaderMap;
 use axum::Json;
 use serde::{Deserialize, Serialize};
@@ -786,6 +787,45 @@ pub async fn update_org(
         role: ctx.member_role.as_str().to_string(),
         group_id: ctx.group_id,
     }))
+}
+
+/// DELETE /api/v1/{org_slug} — hard-delete the resolved org.
+///
+/// Requires the org owner role (or platform_admin) AND a password re-check to
+/// guard against accidental or session-hijack deletion. The DB cascade removes
+/// members and other org-scoped rows.
+#[derive(Deserialize)]
+pub struct DeleteOrgRequest {
+    pub password: String,
+}
+
+pub async fn delete_org(
+    State(state): State<Arc<AppState>>,
+    ctx: OrgContext,
+    Json(req): Json<DeleteOrgRequest>,
+) -> Result<StatusCode, ApiError> {
+    if !llm_gateway_org::can_delete_org(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
+
+    let user = state
+        .storage
+        .get_user(&ctx.user_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::NotFound("user not found".into()))?;
+
+    if !verify_password(&req.password, &user.password) {
+        return Err(ApiError::Unauthorized);
+    }
+
+    state
+        .storage
+        .delete_org(&ctx.org_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]
