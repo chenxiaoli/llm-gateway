@@ -3122,6 +3122,16 @@ impl crate::Storage for PostgresStorage {
         Ok(())
     }
 
+    async fn delete_stale_impersonations(&self, cutoff: chrono::DateTime<chrono::Utc>) -> Result<u64, DbErr> {
+        let result = sqlx::query(
+            "DELETE FROM members WHERE created_by = 'system' AND last_seen < $1",
+        )
+        .bind(cutoff)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
     // ---- Settings (platform + org) ----
 
     async fn get_platform_setting(&self, key: &str) -> Result<Option<String>, DbErr> {

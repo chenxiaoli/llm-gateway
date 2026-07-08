@@ -7,6 +7,7 @@ pub mod proxy;
 pub mod workers;
 pub mod management;
 pub mod middleware;
+pub mod janitor;
 
 pub use crate::proxy::{ChannelRegistry, InMemoryChannelRegistry, ResolvedChannel, spawn_registry_refresh};
 use llm_gateway_ratelimit::RateLimiter;
