@@ -719,6 +719,13 @@ pub async fn get_org(
 /// Requires admin-or-above in the org (or platform_admin). Slug updates are
 /// validated against the same rules as `create_org`; duplicate slugs surface
 /// as 409 Conflict so callers can distinguish from validation failures.
+///
+/// **Slug rename caveat:** changing the slug invalidates any URL that embeds
+/// the old slug (frontend routes like `/{slug}/keys`, deep-linked bookmarks,
+/// external API clients using the slug in the path). The frontend's
+/// `OrgSwitcher` rewrites `currentOrg` on rename so in-app navigation
+/// survives, but anything caching the old slug will hit `org_resolve_layer`'s
+/// 404. Document this in the CHANGELOG when the rename flow ships.
 #[derive(Deserialize)]
 pub struct UpdateOrgRequest {
     pub name: Option<String>,
@@ -839,7 +846,19 @@ pub async fn delete_org(
         .storage
         .delete_org(&ctx.org_id)
         .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+        // Map the storage layer's "org not found" outcome to a clean 404.
+        // This happens deterministically when a concurrent DELETE won the
+        // race after we passed the password check; surfacing it as 500
+        // would leak the org id and report a server error for a benign
+        // lost race.
+        .map_err(|e| {
+            let msg = e.to_string().to_lowercase();
+            if msg.contains("not found") {
+                ApiError::NotFound("org".into())
+            } else {
+                ApiError::Internal(e.to_string())
+            }
+        })?;
 
     Ok(StatusCode::NO_CONTENT)
 }
