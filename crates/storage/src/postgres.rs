@@ -3658,4 +3658,146 @@ mod org_tests {
             .await
             .expect("cleanup user");
     }
+
+    /// Anti-shadowing check must NOT false-positive on names that are unique
+    /// across platform + org scopes. Confirms the SELECT-WHERE-owner_org_id IS NULL
+    /// predicate only matches platform-level rows.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn anti_shadowing_allows_unique_org_private_name(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+
+        // Owner user + org (required by FK on orgs.owner_id).
+        sqlx::query(
+            "INSERT INTO users (id, username, password, created_at, updated_at)
+             VALUES ('u-shadow-2', 'shadow2', 'x', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert owner user");
+        storage
+            .create_org(crate::types::CreateOrg {
+                id: "org-shadow-2".to_string(),
+                slug: "org-shadow-2".to_string(),
+                name: "Shadow Org 2".to_string(),
+                owner_id: "u-shadow-2".to_string(),
+            })
+            .await
+            .expect("create_org");
+
+        // Platform-level "gpt-4".
+        let platform = Model {
+            id: "m-platform-unique".to_string(),
+            name: "gpt-4".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: None,
+            created_at: chrono::Utc::now(),
+        };
+        storage
+            .create_model("org-shadow-2", &platform)
+            .await
+            .expect("seed platform model");
+
+        // Org-private "my-finetune" — different name, must succeed.
+        let org_private = Model {
+            id: "m-org-unique".to_string(),
+            name: "my-finetune".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: Some("org-shadow-2".to_string()),
+            created_at: chrono::Utc::now(),
+        };
+        let result = storage.create_model("org-shadow-2", &org_private).await;
+        assert!(
+            result.is_ok(),
+            "org-private model with unique name should succeed, got: {:?}",
+            result
+        );
+
+        // Cleanup.
+        sqlx::query("DELETE FROM models WHERE id IN ('m-platform-unique', 'm-org-unique')")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup models");
+        sqlx::query("DELETE FROM orgs WHERE id = 'org-shadow-2'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup org");
+        sqlx::query("DELETE FROM users WHERE id = 'u-shadow-2'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup user");
+    }
+
+    /// Platform-level entry CAN be created even if an org-private entry with the
+    /// same name already exists. The rule is directional: only org→platform
+    /// shadowing is forbidden. This matches the visibility filter
+    /// `(owner_org_id IS NULL OR owner_org_id = $1)` — platform rows are visible
+    /// to everyone, so the org-private entry simply becomes unreachable from the
+    /// creating org's perspective (acceptable; they asked for it).
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn anti_shadowing_allows_platform_to_shadow_org(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+
+        sqlx::query(
+            "INSERT INTO users (id, username, password, created_at, updated_at)
+             VALUES ('u-shadow-3', 'shadow3', 'x', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert owner user");
+        storage
+            .create_org(crate::types::CreateOrg {
+                id: "org-shadow-3".to_string(),
+                slug: "org-shadow-3".to_string(),
+                name: "Shadow Org 3".to_string(),
+                owner_id: "u-shadow-3".to_string(),
+            })
+            .await
+            .expect("create_org");
+
+        // Org-private first.
+        let org_private = Model {
+            id: "m-org-first".to_string(),
+            name: "shared-name".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: Some("org-shadow-3".to_string()),
+            created_at: chrono::Utc::now(),
+        };
+        storage
+            .create_model("org-shadow-3", &org_private)
+            .await
+            .expect("seed org-private model");
+
+        // Platform-level with same name — must succeed (directional rule).
+        let platform = Model {
+            id: "m-platform-second".to_string(),
+            name: "shared-name".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: None,
+            created_at: chrono::Utc::now(),
+        };
+        let result = storage.create_model("org-shadow-3", &platform).await;
+        assert!(
+            result.is_ok(),
+            "platform-level entry with same name as an org-private entry should succeed (rule is directional), got: {:?}",
+            result
+        );
+
+        // Cleanup.
+        sqlx::query("DELETE FROM models WHERE id IN ('m-org-first', 'm-platform-second')")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup models");
+        sqlx::query("DELETE FROM orgs WHERE id = 'org-shadow-3'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup org");
+        sqlx::query("DELETE FROM users WHERE id = 'u-shadow-3'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup user");
+    }
 }
