@@ -19,7 +19,7 @@ pub mod nats;
 use axum::extract::State;
 use axum::middleware::from_fn_with_state;
 use axum::response::IntoResponse;
-use axum::routing::{get, patch, post};
+use axum::routing::{any, get, patch, post};
 use axum::{Json, Router};
 use std::sync::Arc;
 
@@ -76,6 +76,32 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/api/v1/version", get(version))
         .route("/api/v1/admin/system-info", get(system_info))
         .route("/api/v1/admin/nats/status", get(nats::get_nats_status))
+        // --- Explicit 410 routes for single-segment legacy paths ---
+        //
+        // Pre-Phase-2 endpoints whose root lived directly at `/api/v1/<name>`
+        // (e.g. `/api/v1/keys`, `/api/v1/model-fallbacks`, `/api/v1/usage`)
+        // MUST return 410 Gone, but Axum's matchit treats these segments as
+        // valid captures for the `/{org_slug}` nest below, which causes the
+        // request to enter the middleware chain and fail at `auth_layer`
+        // with 401 before `legacy_gone` can run. The spec promises 410 here,
+        // not 401, so we register these three paths as literal routes
+        // *before* the `/{org_slug}` nest. Axum prioritizes literal segments
+        // over captures, so these win the match and route to `legacy_gone`
+        // for any HTTP method. Each root is registered twice — once for the
+        // bare path and once with a `{*rest}` catch-all — because paths
+        // like `/api/v1/keys/abc-123` would otherwise still be captured as
+        // `org_slug=keys, inner=abc-123` by the nest below.
+        //
+        // Do not delete these as "redundant" with the `.fallback` below:
+        // the fallback only sees paths that didn't match a route *or* a
+        // nest. The `/{org_slug}` nest IS a match (for any string), so
+        // single-segment legacy paths never reach the fallback.
+        .route("/api/v1/keys", any(legacy_gone))
+        .route("/api/v1/keys/{*rest}", any(legacy_gone))
+        .route("/api/v1/model-fallbacks", any(legacy_gone))
+        .route("/api/v1/model-fallbacks/{*rest}", any(legacy_gone))
+        .route("/api/v1/usage", any(legacy_gone))
+        .route("/api/v1/usage/{*rest}", any(legacy_gone))
         // --- Org-scoped routes (middleware chain applied) ---
         .nest("/api/v1/{org_slug}", org_scoped)
         // --- Legacy catch-all ---

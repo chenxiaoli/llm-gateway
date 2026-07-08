@@ -108,18 +108,31 @@ async fn test_unauthorized_access(pool: PgPool) {
 /// Pre-Phase-2 paths (no org slug in the URL) must return 410 Gone with a
 /// pointer to the new path, not a 404 or fall-through to the SPA.
 ///
-/// Uses a multi-segment legacy path because single-segment paths under
-/// `/api/v1/` (e.g. `/api/v1/keys`) are now ambiguous with the new
-/// `GET /api/v1/{org_slug}` endpoint added in Task 9 — Axum routes them to
-/// the org-scoped router, where they fail auth (401) before the legacy
-/// catch-all can return 410. Multi-segment paths like `/api/v1/admin/users`
-/// are unambiguous: the org-scoped router has no matching inner route, so
-/// they fall through to the legacy catch-all as intended.
+/// Covers both shapes:
+/// - **Multi-segment** (e.g. `/api/v1/admin/users`): unambiguous, falls
+///   through to the legacy catch-all via `.nest("/api/v1", legacy_router())`.
+/// - **Single-segment** (e.g. `/api/v1/keys`): registered as literal 410
+///   routes on the outer router so Axum's matchit doesn't capture them as
+///   `{org_slug}` (which would run auth_layer → 401 first). See
+///   `management_router` in `crates/api/src/management/mod.rs`.
+///
+/// Both unauthenticated AND authenticated requests must return 410 for the
+/// single-segment roots — an authenticated user hitting a legacy path should
+/// see the "moved" pointer, not a 401/403 that implies an authz failure.
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn legacy_path_returns_410_gone(pool: PgPool) {
+    // --- Single-segment legacy root, authenticated (must STILL be 410) ---
+    //
+    // Seed the admin first because the authenticated checks below need it;
+    // the unauthenticated checks don't, but seeding here is harmless and
+    // keeps the test self-contained.
+    common::seed_admin_user(&pool).await;
+    let admin = common::make_admin_token();
     let app = build_app(common::make_state(pool));
 
+    // --- Multi-segment legacy path ---
     let resp = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("GET")
@@ -137,6 +150,76 @@ async fn legacy_path_returns_410_gone(pool: PgPool) {
     .unwrap();
     assert_eq!(body["error"], "gone");
     assert_eq!(body["new_path"], "/api/v1/{org_slug}/admin/users");
+
+    // --- Single-segment legacy root, unauthenticated ---
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/keys")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::GONE);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["error"], "gone");
+
+    // --- Single-segment legacy sub-path, unauthenticated ---
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/keys/abc-123")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::GONE);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["error"], "gone");
+
+    // --- Single-segment legacy root, authenticated (must STILL be 410) ---
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/keys")
+                .header("authorization", bearer_token(&admin.token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::GONE);
+
+    // --- Same for model-fallbacks and usage ---
+    for path in ["/api/v1/model-fallbacks", "/api/v1/usage"] {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(path)
+                    .header("authorization", bearer_token(&admin.token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::GONE);
+    }
 }
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
