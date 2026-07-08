@@ -96,6 +96,12 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // the fallback only sees paths that didn't match a route *or* a
         // nest. The `/{org_slug}` nest IS a match (for any string), so
         // single-segment legacy paths never reach the fallback.
+        //
+        // Tradeoff: a slug collision is now possible. If an org is later
+        // created with `slug = "keys" | "model-fallbacks" | "usage"`, then
+        // `/api/v1/{that-slug}/...` would be absorbed by these literal
+        // routes (returning 410) rather than reaching the org-scoped
+        // handler. Reserved-word denylist on org creation is a future fix.
         .route("/api/v1/keys", any(legacy_gone))
         .route("/api/v1/keys/{*rest}", any(legacy_gone))
         .route("/api/v1/model-fallbacks", any(legacy_gone))
