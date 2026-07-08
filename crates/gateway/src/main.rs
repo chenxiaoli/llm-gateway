@@ -185,6 +185,10 @@ host = "0.0.0.0"
 port = 8080
 # IMPORTANT: Change this to a random 32-byte secret in production
 encryption_key = "change-me-32-byte-secret-here!"
+# Public-facing base URL used to construct invitation links and other
+# user-facing URLs. Set this to your production domain in deployed envs.
+# Defaults to http://localhost:5173 if omitted.
+# public_base_url = "https://your.domain"
 
 [auth]
 # IMPORTANT: Change this to a random JWT secret in production

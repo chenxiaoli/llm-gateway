@@ -110,17 +110,15 @@ pub async fn list_invitations(
             continue;
         }
         // Resolve accepted_by UUID → username for the response (frontend doesn't
-        // need raw user IDs).
+        // need raw user IDs). If the accepter was deleted (orphan FK), the
+        // lookup returns None and we surface null — not an empty string.
         let accepted_by_username: Option<String> = match &inv.accepted_by {
-            Some(uid) => Some(
-                state
-                    .storage
-                    .get_user(uid)
-                    .await
-                    .map_err(|e| ApiError::Internal(e.to_string()))?
-                    .map(|u| u.username)
-                    .unwrap_or_default(),
-            ),
+            Some(uid) => state
+                .storage
+                .get_user(uid)
+                .await
+                .map_err(|e| ApiError::Internal(e.to_string()))?
+                .map(|u| u.username),
             None => None,
         };
         out.push(InvitationResponse {
