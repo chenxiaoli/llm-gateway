@@ -1334,6 +1334,7 @@ name = "llm-gateway"
 version = "2.0.0"
 dependencies = [
  "axum",
+ "chrono",
  "llm-gateway-api",
  "llm-gateway-nats-publisher",
  "llm-gateway-ratelimit",

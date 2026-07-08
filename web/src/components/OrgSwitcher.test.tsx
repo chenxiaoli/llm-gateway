@@ -26,6 +26,21 @@ beforeEach(() => {
         orgs: [orgs.acme, orgs.personal],
       });
     }),
+    // setCurrentOrg re-fetches /auth/me after switchOrg to pick up the
+    // impersonating flag. Echo the most recently switched-to org back so
+    // the store's currentOrg tracks the switch.
+    http.get('*/api/v1/auth/me', () => {
+      const current = useAuthStore.getState().currentOrg ?? orgs.acme;
+      return HttpResponse.json({
+        id: 'u',
+        username: 'u',
+        platform_role: null,
+        current_org: current,
+        orgs: [orgs.acme, orgs.personal],
+        allow_registration: true,
+        impersonating: false,
+      });
+    }),
   );
   useAuthStore.setState({
     currentOrg: orgs.acme,

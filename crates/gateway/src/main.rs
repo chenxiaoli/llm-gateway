@@ -97,6 +97,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         system_info,
     });
 
+    // Spawn platform-admin impersonation janitor — reaps stale temp member
+    // rows (created_by='system') left behind by platform_admin visits. The
+    // 1-hour threshold is generous on purpose: the janitor is a safety net,
+    // not the primary exit signal — a stale row is an inconvenience, not a
+    // bug. Tick is 5 minutes.
+    {
+        let janitor_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+            interval.tick().await; // skip the immediate first tick
+            loop {
+                interval.tick().await;
+                match llm_gateway_api::janitor::cleanup_stale_impersonations(
+                    &janitor_state,
+                    chrono::Duration::hours(1),
+                )
+                .await
+                {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!(
+                        rows_removed = n,
+                        "janitor: reaped stale platform-admin temp member rows"
+                    ),
+                    Err(e) => tracing::warn!(
+                        error = %e,
+                        "janitor: cleanup_stale_impersonations failed"
+                    ),
+                }
+            }
+        });
+    }
+
     // Build router
     let app = axum::Router::new()
         // OpenAI compatible endpoints (now unified through proxy)

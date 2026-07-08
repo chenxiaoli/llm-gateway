@@ -1,4 +1,18 @@
 {
+  "catalog": {
+    "filter": {
+      "all": "All",
+      "platform": "Platform",
+      "ours": "Ours"
+    },
+    "noMatches": {
+      "title": "Nothing in this scope",
+      "description": "No entries match the current filter. Switch to All to see everything."
+    }
+  },
+  "impersonation": {
+    "banner": "Platform admin mode — viewing {{org}} as a temporary admin. Actions are logged under {{user}}."
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

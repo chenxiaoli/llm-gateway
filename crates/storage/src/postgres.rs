@@ -2200,10 +2200,13 @@ impl crate::Storage for PostgresStorage {
     }
 
     async fn set_provider_models(&self, viewer_org_id: &str, provider_id: &str, models: Vec<ProviderModel>) -> Result<(), DbErr> {
-        // Only delete rows visible to this viewer (platform + own org-private).
+        // Scope the DELETE to this org's rows only. The handler always supplies
+        // `owner_org_id = Some(ctx.org_id)` on input, so platform-level rows
+        // (owner_org_id IS NULL) are never created here and must never be
+        // deleted here either — otherwise an org admin could wipe platform-wide
+        // provider↔model mappings by calling PUT /admin/providers/{id}/models.
         sqlx::query(
-            "DELETE FROM provider_models WHERE provider_id = $1
-             AND (owner_org_id IS NULL OR owner_org_id = $2)",
+            "DELETE FROM provider_models WHERE provider_id = $1 AND owner_org_id = $2",
         )
         .bind(provider_id)
         .bind(viewer_org_id)
@@ -3064,7 +3067,7 @@ impl crate::Storage for PostgresStorage {
             "INSERT INTO members (user_id, org_id, role, group_id, created_by)
              VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT (user_id, org_id) DO UPDATE
-               SET role = EXCLUDED.role, group_id = EXCLUDED.group_id
+               SET role = EXCLUDED.role, group_id = EXCLUDED.group_id, created_by = EXCLUDED.created_by
              RETURNING user_id, org_id, role, group_id, created_by, created_at",
         )
         .bind(&member.user_id)
@@ -3111,6 +3114,25 @@ impl crate::Storage for PostgresStorage {
         .fetch_one(&self.pool)
         .await?;
         Ok(row.0)
+    }
+
+    async fn touch_member_last_seen(&self, user_id: &str, org_id: &str) -> Result<(), DbErr> {
+        sqlx::query("UPDATE members SET last_seen = NOW() WHERE user_id = $1 AND org_id = $2")
+            .bind(user_id)
+            .bind(org_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn delete_stale_impersonations(&self, cutoff: chrono::DateTime<chrono::Utc>) -> Result<u64, DbErr> {
+        let result = sqlx::query(
+            "DELETE FROM members WHERE created_by = 'system' AND last_seen < $1",
+        )
+        .bind(cutoff)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
     }
 
     // ---- Settings (platform + org) ----
@@ -3638,5 +3660,240 @@ mod org_tests {
             .execute(&storage.pool)
             .await
             .expect("cleanup user");
+    }
+
+    /// Anti-shadowing check must NOT false-positive on names that are unique
+    /// across platform + org scopes. Confirms the SELECT-WHERE-owner_org_id IS NULL
+    /// predicate only matches platform-level rows.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn anti_shadowing_allows_unique_org_private_name(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+
+        // Owner user + org (required by FK on orgs.owner_id).
+        sqlx::query(
+            "INSERT INTO users (id, username, password, created_at, updated_at)
+             VALUES ('u-shadow-2', 'shadow2', 'x', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert owner user");
+        storage
+            .create_org(crate::types::CreateOrg {
+                id: "org-shadow-2".to_string(),
+                slug: "org-shadow-2".to_string(),
+                name: "Shadow Org 2".to_string(),
+                owner_id: "u-shadow-2".to_string(),
+            })
+            .await
+            .expect("create_org");
+
+        // Platform-level "gpt-4".
+        let platform = Model {
+            id: "m-platform-unique".to_string(),
+            name: "gpt-4".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: None,
+            created_at: chrono::Utc::now(),
+        };
+        storage
+            .create_model("org-shadow-2", &platform)
+            .await
+            .expect("seed platform model");
+
+        // Org-private "my-finetune" — different name, must succeed.
+        let org_private = Model {
+            id: "m-org-unique".to_string(),
+            name: "my-finetune".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: Some("org-shadow-2".to_string()),
+            created_at: chrono::Utc::now(),
+        };
+        let result = storage.create_model("org-shadow-2", &org_private).await;
+        assert!(
+            result.is_ok(),
+            "org-private model with unique name should succeed, got: {:?}",
+            result
+        );
+
+        // Cleanup.
+        sqlx::query("DELETE FROM models WHERE id IN ('m-platform-unique', 'm-org-unique')")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup models");
+        sqlx::query("DELETE FROM orgs WHERE id = 'org-shadow-2'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup org");
+        sqlx::query("DELETE FROM users WHERE id = 'u-shadow-2'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup user");
+    }
+
+    /// Platform-level entry CAN be created even if an org-private entry with the
+    /// same name already exists. The rule is directional: only org→platform
+    /// shadowing is forbidden. This matches the visibility filter
+    /// `(owner_org_id IS NULL OR owner_org_id = $1)` — platform rows are visible
+    /// to everyone, so the org-private entry simply becomes unreachable from the
+    /// creating org's perspective (acceptable; they asked for it).
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn anti_shadowing_allows_platform_to_shadow_org(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+
+        sqlx::query(
+            "INSERT INTO users (id, username, password, created_at, updated_at)
+             VALUES ('u-shadow-3', 'shadow3', 'x', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert owner user");
+        storage
+            .create_org(crate::types::CreateOrg {
+                id: "org-shadow-3".to_string(),
+                slug: "org-shadow-3".to_string(),
+                name: "Shadow Org 3".to_string(),
+                owner_id: "u-shadow-3".to_string(),
+            })
+            .await
+            .expect("create_org");
+
+        // Org-private first.
+        let org_private = Model {
+            id: "m-org-first".to_string(),
+            name: "shared-name".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: Some("org-shadow-3".to_string()),
+            created_at: chrono::Utc::now(),
+        };
+        storage
+            .create_model("org-shadow-3", &org_private)
+            .await
+            .expect("seed org-private model");
+
+        // Platform-level with same name — must succeed (directional rule).
+        let platform = Model {
+            id: "m-platform-second".to_string(),
+            name: "shared-name".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: None,
+            created_at: chrono::Utc::now(),
+        };
+        let result = storage.create_model("org-shadow-3", &platform).await;
+        assert!(
+            result.is_ok(),
+            "platform-level entry with same name as an org-private entry should succeed (rule is directional), got: {:?}",
+            result
+        );
+
+        // Cleanup.
+        sqlx::query("DELETE FROM models WHERE id IN ('m-org-first', 'm-platform-second')")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup models");
+        sqlx::query("DELETE FROM orgs WHERE id = 'org-shadow-3'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup org");
+        sqlx::query("DELETE FROM users WHERE id = 'u-shadow-3'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup user");
+    }
+
+    /// Regression: an org admin calling `set_provider_models` must NOT be able
+    /// to delete platform-level (owner_org_id IS NULL) provider↔model rows.
+    /// The previous implementation's DELETE matched both `IS NULL` and `= $2`,
+    /// which let any org admin wipe platform-wide mappings by calling
+    /// PUT /admin/providers/{id}/models with whatever payload.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn set_provider_models_preserves_platform_rows(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+
+        // ── Seed: user, two orgs, provider, model, platform-level mapping ──
+        sqlx::query(
+            "INSERT INTO users (id, username, password, created_at, updated_at)
+             VALUES ('u-pm-1', 'pmuser', 'x', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert user");
+        for org_id in ["org-pm-alpha", "org-pm-beta"] {
+            storage
+                .create_org(crate::types::CreateOrg {
+                    id: org_id.to_string(),
+                    slug: org_id.to_string(),
+                    name: format!("{org_id} name"),
+                    owner_id: "u-pm-1".to_string(),
+                })
+                .await
+                .expect("create_org");
+        }
+        let provider = crate::types::Provider {
+            id: "prov-pm-1".to_string(),
+            owner_org_id: None,
+            name: "PM Provider".into(),
+            slug: "pm-prov".into(),
+            endpoints: None,
+            proxy_url: None,
+            enabled: true,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        storage.create_provider("org-pm-alpha", &provider).await.expect("create_provider");
+        let model = crate::types::Model {
+            id: "m-pm-1".to_string(),
+            name: "pm-model".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: None,
+            created_at: chrono::Utc::now(),
+        };
+        storage.create_model("org-pm-alpha", &model).await.expect("create_model");
+
+        // Platform-level provider↔model mapping (owner_org_id IS NULL).
+        sqlx::query(
+            "INSERT INTO provider_models (provider_id, model_id, owner_org_id, upstream_name, pricing_policy_id, created_at)
+             VALUES ('prov-pm-1', 'm-pm-1', NULL, NULL, NULL, NOW())",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("seed platform provider_model");
+
+        // ── Act: org-pm-beta "replaces" its mappings with an empty set ──
+        storage
+            .set_provider_models("org-pm-beta", "prov-pm-1", vec![])
+            .await
+            .expect("set_provider_models with empty list");
+
+        // ── Assert: platform-level row is still there ──
+        let surviving: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM provider_models
+             WHERE provider_id = 'prov-pm-1' AND owner_org_id IS NULL",
+        )
+        .fetch_one(&storage.pool)
+        .await
+        .expect("count platform rows");
+        assert_eq!(
+            surviving.0, 1,
+            "platform-level provider↔model mapping must survive an org-scoped set_provider_models call"
+        );
+
+        // Cleanup.
+        sqlx::query("DELETE FROM provider_models WHERE provider_id = 'prov-pm-1'")
+            .execute(&storage.pool).await.expect("cleanup provider_models");
+        sqlx::query("DELETE FROM models WHERE id = 'm-pm-1'")
+            .execute(&storage.pool).await.expect("cleanup model");
+        sqlx::query("DELETE FROM providers WHERE id = 'prov-pm-1'")
+            .execute(&storage.pool).await.expect("cleanup provider");
+        for org_id in ["org-pm-alpha", "org-pm-beta"] {
+            sqlx::query(&format!("DELETE FROM orgs WHERE id = '{org_id}'"))
+                .execute(&storage.pool).await.expect("cleanup org");
+        }
+        sqlx::query("DELETE FROM users WHERE id = 'u-pm-1'")
+            .execute(&storage.pool).await.expect("cleanup user");
     }
 }

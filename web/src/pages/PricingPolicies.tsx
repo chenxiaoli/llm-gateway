@@ -5,11 +5,15 @@ import { z } from 'zod';
 import { DollarSign, Plus, Cpu, Globe, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { usePricingPolicies, useCreatePricingPolicy, useUpdatePricingPolicy, useDeletePricingPolicy } from '../hooks/usePricingPolicies';
+import { useCatalogFilter } from '../hooks/useCatalogFilter';
 import { useCurrencyStore } from '../stores/currency';
+import { useCanCreateOrgCatalog } from '../stores/authStore';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { CatalogFilter, type CatalogScope } from '../components/CatalogFilter';
+import { CatalogNoMatches } from '../components/CatalogNoMatches';
 import { motion } from 'framer-motion';
 import type { PricingPolicyWithCounts } from '../types';
 import type { PricingConfig, TierConfig, ContextTier } from '../types';
@@ -595,6 +599,11 @@ export default function PricingPolicies() {
   const [isAdding, setIsAdding] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<PricingPolicyWithCounts | null>(null);
 
+  const [scope, setScope] = useState<CatalogScope>('all');
+  const showOrgOption = useCanCreateOrgCatalog();
+  const visible = useCatalogFilter(policies, scope);
+  const totalUnfiltered = policies?.length ?? 0;
+
   const BILLING_TYPES: Record<string, string> = {
     per_token: t('pricingPolicies.billingTypes.perToken'),
     per_request: t('pricingPolicies.billingTypes.perRequest'),
@@ -604,7 +613,7 @@ export default function PricingPolicies() {
     hybrid: t('pricingPolicies.billingTypes.hybrid'),
   };
 
-  const total = policies?.length ?? 0;
+  const total = visible?.length ?? 0;
 
   if (isLoading) {
     return (
@@ -643,7 +652,11 @@ export default function PricingPolicies() {
           initial={{ opacity: 0, scale: 0.92 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
+          className="flex items-center gap-3"
         >
+          {total > 0 && (
+            <CatalogFilter value={scope} onChange={setScope} showOrgOption={showOrgOption} />
+          )}
           <Button icon={<Plus className="h-4 w-4" />} onClick={() => setIsAdding(true)} size="sm">
             {t('pricingPolicies.addPolicy')}
           </Button>
@@ -651,23 +664,27 @@ export default function PricingPolicies() {
       </motion.div>
 
       {total === 0 ? (
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="flex flex-col items-center justify-center py-24 px-4"
-        >
-          <div className="w-16 h-16 rounded-2xl bg-base-200/60 flex items-center justify-center mb-6">
-            <DollarSign className="h-8 w-8 text-base-content/20" />
-          </div>
-          <h3 className="text-lg font-semibold text-base-content/60 mb-1.5">{t('pricingPolicies.empty.title')}</h3>
-          <p className="text-sm text-base-content/30 mb-6 text-center max-w-xs">
-            {t('pricingPolicies.empty.description')}
-          </p>
-          <Button variant="primary" size="sm" onClick={() => setIsAdding(true)}>
-            {t('pricingPolicies.empty.createFirst')}
-          </Button>
-        </motion.div>
+        totalUnfiltered === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="flex flex-col items-center justify-center py-24 px-4"
+          >
+            <div className="w-16 h-16 rounded-2xl bg-base-200/60 flex items-center justify-center mb-6">
+              <DollarSign className="h-8 w-8 text-base-content/20" />
+            </div>
+            <h3 className="text-lg font-semibold text-base-content/60 mb-1.5">{t('pricingPolicies.empty.title')}</h3>
+            <p className="text-sm text-base-content/30 mb-6 text-center max-w-xs">
+              {t('pricingPolicies.empty.description')}
+            </p>
+            <Button variant="primary" size="sm" onClick={() => setIsAdding(true)}>
+              {t('pricingPolicies.empty.createFirst')}
+            </Button>
+          </motion.div>
+        ) : (
+          <CatalogNoMatches />
+        )
       ) : (
         <div className="bg-base-100 rounded-xl border border-base-300 overflow-hidden">
           <table className="table">
@@ -683,7 +700,7 @@ export default function PricingPolicies() {
               </tr>
             </thead>
             <tbody>
-              {policies!.map((policy) => (
+              {visible!.map((policy) => (
                 <tr key={policy.id} className="border-b border-base-200 hover:bg-base-50">
                   <td className="font-mono font-medium">{policy.name}</td>
                   <td>

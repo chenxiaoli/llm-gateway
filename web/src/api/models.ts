@@ -10,6 +10,7 @@ export async function listAllModels(): Promise<ModelWithProvider[]> {
   }>>(`${orgPrefix()}/admin/models`);
   return data.map(item => ({
     id: item.model.id,
+    owner_org_id: item.model.owner_org_id,
     name: item.model.name,
     model_type: item.model.model_type,
     pricing_policy_id: item.model.pricing_policy_id,

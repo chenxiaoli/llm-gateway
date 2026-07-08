@@ -78,6 +78,11 @@ pub struct MeResponse {
     pub current_org: Option<OrgSummary>,
     pub orgs: Vec<OrgSummary>,
     pub allow_registration: bool,
+    /// True when the current membership is a temp/system-created row, i.e.
+    /// the caller is a platform_admin operating in an org they don't really
+    /// belong to (see `membership_layer`'s impersonation path). Surfaced to
+    /// the UI so it can show an "platform admin mode" banner.
+    pub impersonating: bool,
 }
 
 #[derive(Serialize)]
@@ -372,6 +377,27 @@ pub async fn me(
     let (current_org, orgs) = current_membership(&state, &user).await?;
     let allow_reg = get_allow_registration(&state).await;
 
+    // Detect platform-admin impersonation: the membership row for the current
+    // org was created by `system` (the temp-membership path in
+    // `membership_layer`) rather than by a real user. The flag is only
+    // meaningful when a current org is selected.
+    //
+    // Propagate storage errors as 500 rather than silently defaulting to
+    // `false`: failing closed here would hide the banner while the user is
+    // still operating in the impersonated org. Fail-closed belongs at the
+    // layer that *grants* access (membership_layer), not the layer that
+    // surfaces a warning.
+    let impersonating = match &current_org {
+        Some(org) => state
+            .storage
+            .get_member(&user.id, &org.id)
+            .await
+            .map_err(|e| ApiError::Internal(format!("member lookup failed: {e}")))?
+            .map(|m| m.created_by.as_deref() == Some("system"))
+            .unwrap_or(false),
+        None => false,
+    };
+
     Ok(Json(MeResponse {
         id: user.id,
         username: user.username,
@@ -379,6 +405,7 @@ pub async fn me(
         current_org,
         orgs,
         allow_registration: allow_reg,
+        impersonating,
     }))
 }
 

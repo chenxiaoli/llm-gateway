@@ -3,9 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { useAllModels, useCreateGlobalModel, useUpdateGlobalModel } from '../hooks/useModels';
 import { usePricingPolicies } from '../hooks/usePricingPolicies';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useCatalogFilter } from '../hooks/useCatalogFilter';
 import { useCurrencyStore } from '../stores/currency';
+import { useCanCreateOrgCatalog } from '../stores/authStore';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
+import { CatalogFilter, type CatalogScope } from '../components/CatalogFilter';
+import { CatalogNoMatches } from '../components/CatalogNoMatches';
 import { Plus, Cpu, Pencil, Sparkles, Radio } from 'lucide-react';
 import type { CreateGlobalModelRequest, ModelWithProvider, PricingPolicy } from '../types';
 import { motion } from 'framer-motion';
@@ -449,9 +453,14 @@ export default function Models() {
   const { data: policies } = usePricingPolicies();
   const reducedMotion = useReducedMotion();
 
-  const totalModels = models?.length ?? 0;
-  const activeModels = models?.filter(m => m.channel_names.length > 0).length ?? 0;
-  const totalPolicies = new Set(models?.map(m => m.pricing_policy_id).filter(Boolean)).size;
+  const [scope, setScope] = useState<CatalogScope>('all');
+  const showOrgOption = useCanCreateOrgCatalog();
+  const visible = useCatalogFilter(models, scope);
+  const totalUnfiltered = models?.length ?? 0;
+
+  const totalModels = visible?.length ?? 0;
+  const activeModels = visible?.filter(m => m.channel_names.length > 0).length ?? 0;
+  const totalPolicies = new Set(visible?.map(m => m.pricing_policy_id).filter(Boolean)).size;
 
   if (isLoading) {
     return (
@@ -496,13 +505,18 @@ export default function Models() {
             </p>
           </div>
 
-          <Button
-            icon={<Plus className="h-4 w-4" />}
-            onClick={() => setIsAdding(true)}
-            size="sm"
-          >
-            {t('models.addModel')}
-          </Button>
+          <div className="flex items-center gap-3">
+            {totalModels > 0 && (
+              <CatalogFilter value={scope} onChange={setScope} showOrgOption={showOrgOption} />
+            )}
+            <Button
+              icon={<Plus className="h-4 w-4" />}
+              onClick={() => setIsAdding(true)}
+              size="sm"
+            >
+              {t('models.addModel')}
+            </Button>
+          </div>
         </div>
 
         {/* Stats row */}
@@ -522,7 +536,11 @@ export default function Models() {
 
       {/* ── Grid ── */}
       {totalModels === 0 ? (
-        <EmptyState onAddClick={() => setIsAdding(true)} reducedMotion={reducedMotion} />
+        totalUnfiltered === 0 ? (
+          <EmptyState onAddClick={() => setIsAdding(true)} reducedMotion={reducedMotion} />
+        ) : (
+          <CatalogNoMatches />
+        )
       ) : (
         <motion.div
           initial="hidden"
@@ -530,7 +548,7 @@ export default function Models() {
           variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.05 } } }}
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
         >
-          {models!.map((model, i) => (
+          {visible!.map((model, i) => (
             <ModelCard
               key={model.id}
               model={model}

@@ -192,4 +192,89 @@ mod tests {
         // is best-effort — the storage round-trip test in Task 2 covers
         // the same code path with full assertions.)
     }
+
+    #[tokio::test]
+    async fn log_request_persists_actor_is_platform_admin_flag() {
+        // Phase 1 wired actor_is_platform_admin through every audit struct;
+        // this test confirms the value actually round-trips through postgres
+        // (so a future audit-write caller can trust the field isn't silently
+        // dropped).
+        use llm_gateway_storage::Protocol;
+
+        let url = match std::env::var("DATABASE_URL") {
+            Ok(u) => u,
+            Err(_) => return, // no DB available — exit silently
+        };
+
+        let storage: Arc<dyn Storage> = {
+            let s = llm_gateway_storage::postgres::PostgresStorage::new(&url)
+                .await
+                .expect("connect");
+            s.run_migrations().await.expect("migrate");
+            Arc::new(s)
+        };
+        let logger = AuditLogger::new(storage.clone());
+
+        // Ensure org_default + a synthetic api_key exist.
+        let pool = sqlx::PgPool::connect(&url).await.expect("pool");
+        sqlx::query(
+            "INSERT INTO api_keys (id, name, key_hash, enabled, org_id, created_at, updated_at) \
+             VALUES ('test-pa', 'pa', 'test-pa-hash', true, 'org_default', NOW(), NOW()) \
+             ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // We pass an explicit request_id so we can look the row up afterwards.
+        let request_id = format!("req-pa-{}", uuid::Uuid::new_v4());
+        let result = logger
+            .log_request(
+                "org_default",
+                true, // ← actor_is_platform_admin
+                "test-pa",
+                None,
+                "m",
+                "p",
+                None,
+                Protocol::Openai,
+                false,
+                "{}",
+                "{}",
+                200,
+                10,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(&request_id),
+                None,
+            )
+            .await;
+        assert!(result.is_ok(), "log_request failed: {:?}", result);
+
+        let persisted: bool = sqlx::query_scalar(
+            "SELECT actor_is_platform_admin FROM audit_logs WHERE request_id = $1",
+        )
+        .bind(&request_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert!(
+            persisted,
+            "actor_is_platform_admin should round-trip as true"
+        );
+
+        // Cleanup so the test is repeatable.
+        sqlx::query("DELETE FROM audit_logs WHERE request_id = $1")
+            .bind(&request_id)
+            .execute(&pool)
+            .await
+            .ok();
+    }
 }

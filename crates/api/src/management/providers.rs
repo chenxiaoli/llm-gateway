@@ -2,7 +2,7 @@ use axum::extract::{Path, State};
 use axum::Json;
 use std::sync::Arc;
 
-use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, OrgContext};
+use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, can_mutate_catalog_entry, OrgContext};
 use llm_gateway_storage::{CreateProvider as StorageCreateProvider, Provider, ProviderWithEndpoints, UpdateProvider as StorageUpdateProvider};
 
 use crate::error::ApiError;
@@ -111,11 +111,7 @@ pub async fn update_provider(
         .ok_or(ApiError::NotFound(format!("Provider '{}' not found", id)))?;
 
     // Ownership check before mutating.
-    if let Some(ref owner_org_id) = provider.owner_org_id {
-        if owner_org_id != &ctx.org_id || !can_create_org_catalog(&ctx) {
-            return Err(ApiError::Forbidden);
-        }
-    } else if !can_create_platform_catalog(&ctx) {
+    if !can_mutate_catalog_entry(&ctx, provider.owner_org_id.as_deref()) {
         return Err(ApiError::Forbidden);
     }
 
@@ -157,11 +153,7 @@ pub async fn delete_provider(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Provider '{}' not found", id)))?;
 
-    if let Some(ref owner_org_id) = provider.owner_org_id {
-        if owner_org_id != &ctx.org_id || !can_create_org_catalog(&ctx) {
-            return Err(ApiError::Forbidden);
-        }
-    } else if !can_create_platform_catalog(&ctx) {
+    if !can_mutate_catalog_entry(&ctx, provider.owner_org_id.as_deref()) {
         return Err(ApiError::Forbidden);
     }
 

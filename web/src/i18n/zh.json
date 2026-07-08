@@ -1,4 +1,18 @@
 {
+  "catalog": {
+    "filter": {
+      "all": "全部",
+      "platform": "平台",
+      "ours": "本组织"
+    },
+    "noMatches": {
+      "title": "当前筛选下无内容",
+      "description": "没有匹配当前过滤条件的条目。切回「全部」以查看所有内容。"
+    }
+  },
+  "impersonation": {
+    "banner": "平台管理员模式 — 正以临时管理员身份查看 {{org}}。所有操作将以 {{user}} 的身份记入审计日志。"
+  },
   "common": {
     "save": "保存",
     "cancel": "取消",
