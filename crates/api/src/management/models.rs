@@ -81,11 +81,7 @@ pub async fn update_model(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?;
 
-    if let Some(ref owner_org_id) = model.owner_org_id {
-        if owner_org_id != &ctx.org_id || !can_create_org_catalog(&ctx) {
-            return Err(ApiError::Forbidden);
-        }
-    } else if !can_create_platform_catalog(&ctx) {
+    if !llm_gateway_org::can_mutate_catalog_entry(&ctx, model.owner_org_id.as_deref()) {
         return Err(ApiError::Forbidden);
     }
 
@@ -115,11 +111,7 @@ pub async fn delete_model(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?;
 
-    if let Some(ref owner_org_id) = model.owner_org_id {
-        if owner_org_id != &ctx.org_id || !can_create_org_catalog(&ctx) {
-            return Err(ApiError::Forbidden);
-        }
-    } else if !can_create_platform_catalog(&ctx) {
+    if !llm_gateway_org::can_mutate_catalog_entry(&ctx, model.owner_org_id.as_deref()) {
         return Err(ApiError::Forbidden);
     }
 

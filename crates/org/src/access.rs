@@ -29,6 +29,26 @@ pub fn can_create_platform_catalog(ctx: &OrgContext) -> bool {
     ctx.is_platform_admin()
 }
 
+/// Returns true if the user may mutate a catalog entry with the given `owner_org_id`.
+///
+/// - `None` (platform-level entry): only platform admins.
+/// - `Some(org_id)` (org-private entry): admin/owner of that org, or platform admin.
+///
+/// Use this for create/update/delete on `providers`, `models`, and `pricing_policies`.
+/// Read paths do NOT call this — catalog visibility is filtered at the storage layer.
+pub fn can_mutate_catalog_entry(ctx: &OrgContext, entry_owner_org_id: Option<&str>) -> bool {
+    if ctx.is_platform_admin() {
+        return true;
+    }
+    match entry_owner_org_id {
+        None => false,
+        Some(entry_org) => {
+            entry_org == ctx.org_id
+                && matches!(ctx.member_role, MemberRole::Owner | MemberRole::Admin)
+        }
+    }
+}
+
 /// Used by channel-listing filter: members see channels in their group + ungrouped;
 /// admin/owner/platform_admin see everything.
 pub fn can_access_channel(ctx: &OrgContext, channel_group_id: Option<&str>) -> bool {
@@ -123,6 +143,70 @@ mod tests {
         assert!(can_access_channel(
             &ctx(MemberRole::Admin, None, None),
             Some("anything")
+        ));
+    }
+
+    #[test]
+    fn owner_can_mutate_own_org_private_entry() {
+        assert!(can_mutate_catalog_entry(
+            &ctx(MemberRole::Owner, None, None),
+            Some("o")
+        ));
+    }
+
+    #[test]
+    fn admin_can_mutate_own_org_private_entry() {
+        assert!(can_mutate_catalog_entry(
+            &ctx(MemberRole::Admin, None, None),
+            Some("o")
+        ));
+    }
+
+    #[test]
+    fn member_cannot_mutate_own_org_private_entry() {
+        assert!(!can_mutate_catalog_entry(
+            &ctx(MemberRole::Member, None, None),
+            Some("o")
+        ));
+    }
+
+    #[test]
+    fn owner_cannot_mutate_other_org_private_entry() {
+        assert!(!can_mutate_catalog_entry(
+            &ctx(MemberRole::Owner, None, None),
+            Some("other")
+        ));
+    }
+
+    #[test]
+    fn owner_cannot_mutate_platform_entry_without_platform_admin() {
+        assert!(!can_mutate_catalog_entry(
+            &ctx(MemberRole::Owner, None, None),
+            None
+        ));
+    }
+
+    #[test]
+    fn platform_admin_can_mutate_platform_entry() {
+        assert!(can_mutate_catalog_entry(
+            &ctx(MemberRole::Member, Some(PlatformRole::PlatformAdmin), None),
+            None
+        ));
+    }
+
+    #[test]
+    fn platform_admin_can_mutate_own_org_private_entry() {
+        assert!(can_mutate_catalog_entry(
+            &ctx(MemberRole::Member, Some(PlatformRole::PlatformAdmin), None),
+            Some("o")
+        ));
+    }
+
+    #[test]
+    fn platform_admin_can_mutate_other_org_private_entry() {
+        assert!(can_mutate_catalog_entry(
+            &ctx(MemberRole::Member, Some(PlatformRole::PlatformAdmin), None),
+            Some("other")
         ));
     }
 }
