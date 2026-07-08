@@ -3135,6 +3135,160 @@ impl crate::Storage for PostgresStorage {
         Ok(result.rows_affected())
     }
 
+    // ---- Invitations (Phase 3) ----
+
+    async fn create_invitation(
+        &self,
+        org_id: &str,
+        role: &MemberRole,
+        created_by: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Invitation, DbErr> {
+        // Owner is not assignable by invitation (DB CHECK excludes it), but
+        // guard here too so the error is friendly rather than a constraint violation.
+        let role_str = match role {
+            MemberRole::Owner => {
+                return Err(format!("cannot mint invitation for role 'owner' (org {org_id})").into());
+            }
+            MemberRole::Admin => "admin",
+            MemberRole::Member => "member",
+        };
+        let token = generate_invitation_token();
+        let row: PgInvitationRow = sqlx::query_as(
+            "INSERT INTO invitations (token, org_id, role, created_by, expires_at)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id::text, token, org_id, role, created_by, created_at, expires_at,
+                       accepted_at, accepted_by, revoked_at",
+        )
+        .bind(&token)
+        .bind(org_id)
+        .bind(role_str)
+        .bind(created_by)
+        .bind(expires_at)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(Invitation::from(row))
+    }
+
+    async fn get_invitation_by_token(&self, token: &str) -> Result<Option<Invitation>, DbErr> {
+        let row: Option<PgInvitationRow> = sqlx::query_as(
+            "SELECT id::text, token, org_id, role, created_by, created_at, expires_at,
+                    accepted_at, accepted_by, revoked_at
+             FROM invitations WHERE token = $1",
+        )
+        .bind(token)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(Invitation::from))
+    }
+
+    async fn list_invitations_for_org(&self, org_id: &str) -> Result<Vec<Invitation>, DbErr> {
+        let rows: Vec<PgInvitationRow> = sqlx::query_as(
+            "SELECT id::text, token, org_id, role, created_by, created_at, expires_at,
+                    accepted_at, accepted_by, revoked_at
+             FROM invitations WHERE org_id = $1 ORDER BY created_at DESC",
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(Invitation::from).collect())
+    }
+
+    async fn revoke_invitation(
+        &self,
+        org_id: &str,
+        invitation_id: &str,
+    ) -> Result<(), DbErr> {
+        // Compare `id::text` so any non-UUID string the caller passes simply
+        // matches nothing — no-op, no error. (For UPDATE row locks to use the
+        // PK index we'd need a real UUID; this is a low-frequency admin path.)
+        sqlx::query(
+            "UPDATE invitations SET revoked_at = COALESCE(revoked_at, NOW())
+             WHERE id::text = $1 AND org_id = $2",
+        )
+        .bind(invitation_id)
+        .bind(org_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn accept_invitation(
+        &self,
+        token: &str,
+        accepting_user_id: &str,
+    ) -> Result<Option<Member>, DbErr> {
+        // Single transaction: SELECT ... FOR UPDATE serializes concurrent
+        // accepts for the same token. Exactly one call hits the UPDATE;
+        // later callers see accepted_at IS NOT NULL and bail with None.
+        let mut tx = self.pool.begin().await?;
+
+        let row: Option<PgInvitationRow> = sqlx::query_as(
+            "SELECT id::text, token, org_id, role, created_by, created_at, expires_at,
+                    accepted_at, accepted_by, revoked_at
+             FROM invitations WHERE token = $1 FOR UPDATE",
+        )
+        .bind(token)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let Some(inv) = row else {
+            tx.rollback().await?;
+            return Ok(None);
+        };
+
+        let now = chrono::Utc::now();
+        let already_consumed = inv.accepted_at.is_some() || inv.revoked_at.is_some();
+        let expired = inv.expires_at < now;
+        if already_consumed || expired {
+            tx.rollback().await?;
+            return Ok(None);
+        }
+
+        let role = match MemberRole::parse(&inv.role) {
+            Some(r) => r,
+            None => {
+                tx.rollback().await?;
+                return Err(format!("invalid role in invitations row {}: {}", inv.id, inv.role).into());
+            }
+        };
+
+        // Upsert the membership. If the user is already a member of this org
+        // (e.g. they previously accepted a different invitation), update the
+        // role to the new invitation's role. PK is (user_id, org_id).
+        sqlx::query(
+            "INSERT INTO members (user_id, org_id, role, created_by)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (user_id, org_id) DO UPDATE SET role = EXCLUDED.role",
+        )
+        .bind(accepting_user_id)
+        .bind(&inv.org_id)
+        .bind(role.as_str())
+        .bind(accepting_user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "UPDATE invitations SET accepted_at = $2, accepted_by = $3 WHERE id::text = $1",
+        )
+        .bind(&inv.id)
+        .bind(now)
+        .bind(accepting_user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(Some(Member {
+            user_id: accepting_user_id.to_string(),
+            org_id: inv.org_id,
+            role,
+            group_id: None,
+            created_by: Some(accepting_user_id.to_string()),
+            created_at: now,
+        }))
+    }
+
     // ---- Settings (platform + org) ----
 
     async fn get_platform_setting(&self, key: &str) -> Result<Option<String>, DbErr> {
@@ -3255,6 +3409,56 @@ impl std::fmt::Display for OrgNotFound {
     }
 }
 impl std::error::Error for OrgNotFound {}
+
+// ---------------------------------------------------------------------------
+// Invitation helpers
+// ---------------------------------------------------------------------------
+
+/// Generate an opaque 32-byte invitation token, base64url-encoded without
+/// padding. 256 bits of entropy from the OS CSPRNG; the `invitations.token`
+/// column has a UNIQUE constraint so collisions would surface as a DB error
+/// (and at 2^256 the probability is not a practical concern).
+fn generate_invitation_token() -> String {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
+#[derive(sqlx::FromRow)]
+struct PgInvitationRow {
+    // Selected as `id::text` so we don't need sqlx's `uuid` feature enabled.
+    // The invitations.id column is UUID, but the rest of this crate talks to
+    // every other PK as TEXT — keep the boundary in String.
+    id: String,
+    token: String,
+    org_id: String,
+    role: String,
+    created_by: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    accepted_at: Option<chrono::DateTime<chrono::Utc>>,
+    accepted_by: Option<String>,
+    revoked_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<PgInvitationRow> for Invitation {
+    fn from(r: PgInvitationRow) -> Self {
+        Invitation {
+            id: r.id,
+            token: r.token,
+            org_id: r.org_id,
+            role: MemberRole::parse(&r.role).unwrap_or(MemberRole::Member),
+            created_by: r.created_by,
+            created_at: r.created_at,
+            expires_at: r.expires_at,
+            accepted_at: r.accepted_at,
+            accepted_by: r.accepted_by,
+            revoked_at: r.revoked_at,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -3895,5 +4099,153 @@ mod org_tests {
         }
         sqlx::query("DELETE FROM users WHERE id = 'u-pm-1'")
             .execute(&storage.pool).await.expect("cleanup user");
+    }
+}
+
+#[cfg(test)]
+mod invitation_tests {
+    use super::*;
+    use crate::Storage;
+
+    /// Helper: create a real Org row via the storage trait. Orgs.owner_id has
+    /// a deferred FK to users(id), so the owner must be inserted first; this
+    /// helper takes care of both. The slug/name are derived from `id` so the
+    /// caller can predict them without capturing the return value.
+    async fn make_test_org(storage: &PostgresStorage, id: &str, name: &str) -> crate::types::Org {
+        let owner_id = format!("owner-{id}");
+        sqlx::query(
+            "INSERT INTO users (id, username, password, created_at, updated_at)
+             VALUES ($1, $2, 'x', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        )
+        .bind(&owner_id)
+        .bind(&owner_id)
+        .execute(&storage.pool)
+        .await
+        .expect("insert owner user for org");
+        storage
+            .create_org(crate::types::CreateOrg {
+                id: id.to_string(),
+                slug: id.to_string(),
+                name: name.to_string(),
+                owner_id: owner_id.clone(),
+            })
+            .await
+            .expect("create_org")
+    }
+
+    /// Helper: create a real User row. `username` is used as the id and the
+    /// username column to keep the call sites short.
+    async fn make_test_user(storage: &PostgresStorage, username: &str) -> crate::types::User {
+        let now = chrono::Utc::now();
+        let user = crate::types::User {
+            id: username.to_string(),
+            username: username.to_string(),
+            password: "x".to_string(),
+            platform_role: None,
+            current_org_id: None,
+            enabled: true,
+            refresh_token: None,
+            created_at: now,
+            updated_at: now,
+        };
+        storage.create_user(&user).await.expect("create_user")
+    }
+
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn invitation_lifecycle_round_trip(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "acme", "Acme").await;
+        let inviter = make_test_user(&storage, "alice").await;
+        let now = chrono::Utc::now();
+
+        let invitation = storage
+            .create_invitation(
+                &org.id,
+                &crate::types::MemberRole::Admin,
+                &inviter.id,
+                now + chrono::Duration::days(7),
+            )
+            .await
+            .expect("mint");
+        assert!(invitation.accepted_at.is_none());
+        assert!(invitation.revoked_at.is_none());
+
+        let fetched = storage
+            .get_invitation_by_token(&invitation.token)
+            .await
+            .expect("get_by_token")
+            .expect("invitation present");
+        assert_eq!(fetched.id, invitation.id);
+
+        let pending = storage.list_invitations_for_org(&org.id).await.expect("list");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, invitation.id);
+
+        storage
+            .revoke_invitation(&org.id, &invitation.id)
+            .await
+            .expect("revoke");
+        let revoked = storage
+            .get_invitation_by_token(&invitation.token)
+            .await
+            .expect("get")
+            .expect("present");
+        assert!(revoked.revoked_at.is_some());
+    }
+
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn invitation_accept_creates_membership_and_marks_consumed(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "acme", "Acme").await;
+        let inviter = make_test_user(&storage, "alice").await;
+        let invitee = make_test_user(&storage, "bob").await;
+        let now = chrono::Utc::now();
+
+        let invitation = storage
+            .create_invitation(
+                &org.id,
+                &crate::types::MemberRole::Member,
+                &inviter.id,
+                now + chrono::Duration::days(7),
+            )
+            .await
+            .expect("mint");
+
+        let member = storage
+            .accept_invitation(&invitation.token, &invitee.id)
+            .await
+            .expect("accept")
+            .expect("invitation was consumable");
+        assert_eq!(member.user_id, invitee.id);
+        assert_eq!(member.org_id, org.id);
+        assert_eq!(member.role, crate::types::MemberRole::Member);
+
+        let second = storage
+            .accept_invitation(&invitation.token, &invitee.id)
+            .await
+            .expect("no db error");
+        assert!(second.is_none(), "second accept should be no-op");
+    }
+
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn invitation_token_entropy_is_unique(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "acme", "Acme").await;
+        let inviter = make_test_user(&storage, "alice").await;
+        let now = chrono::Utc::now();
+
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..1000 {
+            let inv = storage
+                .create_invitation(
+                    &org.id,
+                    &crate::types::MemberRole::Member,
+                    &inviter.id,
+                    now + chrono::Duration::days(7),
+                )
+                .await
+                .expect("mint");
+            assert!(seen.insert(inv.token), "duplicate token generated");
+        }
     }
 }
