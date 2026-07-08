@@ -1,13 +1,18 @@
-use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::extract::{Path, Query, State};
+use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
 use serde::Deserialize;
 use std::sync::Arc;
 
+use llm_gateway_auth::create_jwt;
 use llm_gateway_org::{can_administer, OrgContext};
-use llm_gateway_storage::{InvitationResponse, MemberRole};
+use llm_gateway_storage::{
+    AcceptInvitationRequest, InvitationPreview, InvitationResponse, MemberRole,
+};
 
+use crate::auth::{AuthResponse, OrgSummary, UserInfo};
 use crate::error::ApiError;
+use crate::extractors::require_auth;
 use crate::AppState;
 
 /// Invitation token lifetime. Kept short — these are typically shared
@@ -156,6 +161,124 @@ pub async fn revoke_invitation(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PreviewQuery {
+    pub token: String,
+}
+
+/// Single static "no longer valid" reason for any non-consumable token.
+/// Identical for invalid/expired/revoked/already-accepted to prevent
+/// enumeration via response-body differences.
+const INVITATION_GONE_REASON: &str = "This invitation is no longer valid.";
+
+/// GET /api/v1/invitations/preview?token=... — public (no auth).
+///
+/// Returns org metadata for the landing page. Any non-consumable token
+/// (invalid/expired/revoked/already-accepted) yields the same 410 body so
+/// the endpoint cannot be probed to enumerate valid tokens.
+pub async fn preview_invitation(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<PreviewQuery>,
+) -> Result<Json<InvitationPreview>, ApiError> {
+    let Some(inv) = state
+        .storage
+        .get_invitation_by_token(&q.token)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+    else {
+        return Err(ApiError::Gone(INVITATION_GONE_REASON.to_string()));
+    };
+
+    let now = chrono::Utc::now();
+    if inv.accepted_at.is_some() || inv.revoked_at.is_some() || inv.expires_at < now {
+        return Err(ApiError::Gone(INVITATION_GONE_REASON.to_string()));
+    }
+
+    let org = state
+        .storage
+        .get_org(&inv.org_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::Internal("invitation references missing org".into()))?;
+    let inviter = state
+        .storage
+        .get_user(&inv.created_by)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .map(|u| u.username)
+        .unwrap_or_default();
+
+    Ok(Json(InvitationPreview {
+        org_name: org.name,
+        org_slug: org.slug,
+        role: inv.role.as_str().to_string(),
+        inviter_username: inviter,
+        expires_at: inv.expires_at,
+    }))
+}
+
+/// POST /api/v1/invitations/accept — authed. Body `{ token }`.
+///
+/// Calls the storage-layer `accept_invitation` (transactional, single-use).
+/// Reissues the JWT with the new current_org and returns an `AuthResponse`
+/// mirroring login/switch_org so the frontend can drop-in replace.
+pub async fn accept_invitation(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(body): Json<AcceptInvitationRequest>,
+) -> Result<Json<AuthResponse>, ApiError> {
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+
+    let Some(member) = state
+        .storage
+        .accept_invitation(&body.token, &claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+    else {
+        return Err(ApiError::Gone(INVITATION_GONE_REASON.to_string()));
+    };
+
+    // Reload the user (their membership list just changed) and persist the
+    // current_org_id switch so subsequent requests default to the new org.
+    let mut user = state
+        .storage
+        .get_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::Unauthorized)?;
+    user.current_org_id = Some(member.org_id.clone());
+    user.updated_at = chrono::Utc::now();
+    user = state
+        .storage
+        .update_user(&user)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
+    let token = create_jwt(&user.id, &member.org_id, platform_role_str, &state.jwt_secret)
+        .map_err(ApiError::Internal)?;
+
+    let memberships = state
+        .storage
+        .list_orgs_for_user(&user.id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let orgs: Vec<OrgSummary> = memberships.into_iter().map(Into::into).collect();
+    let current_org = orgs
+        .iter()
+        .find(|o| o.id == member.org_id)
+        .cloned()
+        .ok_or_else(|| ApiError::Internal("just-joined org not in membership list".into()))?;
+
+    Ok(Json(AuthResponse {
+        token,
+        refresh_token: user.refresh_token.clone().unwrap_or_default(),
+        user: UserInfo::from(&user),
+        current_org,
+        orgs,
+    }))
 }
 
 #[cfg(test)]
@@ -434,5 +557,275 @@ mod tests {
             after.revoked_at.is_none(),
             "org A invitation must not be revoked by org B admin"
         );
+    }
+
+    // --- Task 5: public preview + transactional accept ---
+
+    /// Helper: mint an invitation directly via storage with a configurable
+    /// expiry. Used by the preview tests so we can backdate or forward-date
+    /// without going through the handler (which always uses +7d).
+    async fn mint_invitation(
+        storage: &PostgresStorage,
+        org_id: &str,
+        created_by: &str,
+        role: MemberRole,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> llm_gateway_storage::Invitation {
+        storage
+            .create_invitation(org_id, &role, created_by, expires_at)
+            .await
+            .expect("mint_invitation")
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn preview_returns_metadata_for_valid_pending_token(pool: sqlx::PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let org = make_org(&storage, "acme").await;
+        // make_org creates an owner user "owner-acme"; use them as inviter.
+        let state = make_state(storage.clone());
+        let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
+        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Admin, expires_at)
+            .await;
+
+        let resp = preview_invitation(
+            State(state),
+            Query(PreviewQuery {
+                token: inv.token.clone(),
+            }),
+        )
+        .await
+        .expect("preview ok");
+
+        let body = resp.0;
+        assert_eq!(body.org_name, "acme");
+        assert_eq!(body.org_slug, "acme");
+        assert_eq!(body.role, "admin");
+        assert_eq!(body.inviter_username, "owner-acme");
+        // Postgres stores microsecond precision; the round-trip can shed up to
+        // 1us of sub-microsecond precision, so compare with a tolerance
+        // rather than exact equality.
+        let delta = (body.expires_at - expires_at).num_nanoseconds().unwrap();
+        assert!(delta.abs() < 2_000, "expires_at drifted by {delta} ns");
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn preview_returns_410_for_expired(pool: sqlx::PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let org = make_org(&storage, "acme").await;
+        let state = make_state(storage.clone());
+        let past = chrono::Utc::now() - chrono::Duration::hours(1);
+        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Member, past).await;
+
+        let err = preview_invitation(
+            State(state),
+            Query(PreviewQuery {
+                token: inv.token.clone(),
+            }),
+        )
+        .await
+        .expect_err("expired token -> 410");
+
+        match err {
+            ApiError::Gone(msg) => assert!(!msg.is_empty()),
+            other => panic!("expected Gone, got {other:?}"),
+        }
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn preview_returns_410_for_revoked(pool: sqlx::PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let org = make_org(&storage, "acme").await;
+        let state = make_state(storage.clone());
+        let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
+        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Member, expires_at)
+            .await;
+        storage
+            .revoke_invitation(&org.id, &inv.id)
+            .await
+            .expect("revoke");
+
+        let err = preview_invitation(
+            State(state),
+            Query(PreviewQuery {
+                token: inv.token.clone(),
+            }),
+        )
+        .await
+        .expect_err("revoked -> 410");
+
+        assert!(matches!(err, ApiError::Gone(_)), "got {err:?}");
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn preview_returns_410_for_already_accepted(pool: sqlx::PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let org = make_org(&storage, "acme").await;
+        make_user(&storage, "bob").await;
+        let state = make_state(storage.clone());
+        let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
+        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Member, expires_at)
+            .await;
+        storage
+            .accept_invitation(&inv.token, "bob")
+            .await
+            .expect("accept")
+            .expect("consumable");
+
+        let err = preview_invitation(
+            State(state),
+            Query(PreviewQuery {
+                token: inv.token.clone(),
+            }),
+        )
+        .await
+        .expect_err("accepted -> 410");
+
+        assert!(matches!(err, ApiError::Gone(_)), "got {err:?}");
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn preview_returns_410_for_invalid_token(pool: sqlx::PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let _org = make_org(&storage, "acme").await;
+        let state = make_state(storage.clone());
+
+        // Sanity: body shape for invalid matches the body shape for expired.
+        let err_invalid = preview_invitation(
+            State(state.clone()),
+            Query(PreviewQuery {
+                token: "nonexistent".into(),
+            }),
+        )
+        .await
+        .expect_err("invalid -> 410");
+        let past = chrono::Utc::now() - chrono::Duration::hours(1);
+        let org2 = make_org(&storage, "omega").await;
+        let inv = mint_invitation(&storage, &org2.id, "owner-omega", MemberRole::Member, past)
+            .await;
+        let err_expired = preview_invitation(
+            State(state),
+            Query(PreviewQuery {
+                token: inv.token.clone(),
+            }),
+        )
+        .await
+        .expect_err("expired -> 410");
+
+        let gone_msg = |e: ApiError| match e {
+            ApiError::Gone(m) => m,
+            other => panic!("expected Gone, got {other:?}"),
+        };
+        assert_eq!(gone_msg(err_invalid), gone_msg(err_expired));
+    }
+
+    /// Build an Authorization header carrying a fresh JWT for `user_id`
+    /// against `org_id`, signed with the test jwt_secret ("test").
+    fn auth_header(user_id: &str, org_id: &str) -> HeaderMap {
+        let token = llm_gateway_auth::create_jwt(user_id, org_id, None, "test")
+            .expect("create_jwt");
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "authorization",
+            format!("Bearer {token}").parse().expect("header value"),
+        );
+        headers
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn accept_creates_membership_and_reissues_jwt(pool: sqlx::PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let org = make_org(&storage, "acme").await;
+        // invitee is the caller; not yet a member of acme.
+        make_user(&storage, "carol").await;
+        let state = make_state(storage.clone());
+
+        let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
+        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Admin, expires_at)
+            .await;
+
+        let resp = accept_invitation(
+            State(state.clone()),
+            auth_header("carol", &org.id),
+            Json(AcceptInvitationRequest {
+                token: inv.token.clone(),
+            }),
+        )
+        .await
+        .expect("accept ok");
+        let body = resp.0;
+
+        // New JWT, non-empty.
+        assert!(!body.token.is_empty(), "token populated");
+        // current_org points at the inviting org.
+        assert_eq!(body.current_org.id, org.id);
+        assert_eq!(body.current_org.role, "admin");
+        // orgs list contains the inviting org.
+        assert!(
+            body.orgs.iter().any(|o| o.id == org.id),
+            "inviting org present in orgs list"
+        );
+        // User identity echoed.
+        assert_eq!(body.user.id, "carol");
+
+        // current_org_id was persisted on the user row.
+        let reloaded = storage.get_user("carol").await.unwrap().unwrap();
+        assert_eq!(reloaded.current_org_id.as_deref(), Some(org.id.as_str()));
+
+        // Membership row exists.
+        let member = storage.get_member("carol", &org.id).await.unwrap();
+        assert!(member.is_some(), "membership row created");
+        assert_eq!(member.unwrap().role, MemberRole::Admin);
+
+        // Invitation row is marked accepted.
+        let after = storage
+            .get_invitation_by_token(&inv.token)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(after.accepted_at.is_some());
+        assert_eq!(after.accepted_by.as_deref(), Some("carol"));
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn accept_returns_410_for_consumed_token(pool: sqlx::PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let org = make_org(&storage, "acme").await;
+        make_user(&storage, "carol").await;
+        make_user(&storage, "dave").await;
+        let state = make_state(storage.clone());
+
+        let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
+        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Member, expires_at)
+            .await;
+
+        // Carol accepts first.
+        let _ = accept_invitation(
+            State(state.clone()),
+            auth_header("carol", &org.id),
+            Json(AcceptInvitationRequest {
+                token: inv.token.clone(),
+            }),
+        )
+        .await
+        .expect("first accept ok");
+
+        // Dave tries the same token -> 410.
+        let result = accept_invitation(
+            State(state),
+            auth_header("dave", &org.id),
+            Json(AcceptInvitationRequest {
+                token: inv.token.clone(),
+            }),
+        )
+        .await;
+
+        let err = match result {
+            Ok(_) => panic!("second accept should fail with 410, got Ok"),
+            Err(e) => e,
+        };
+        assert!(matches!(err, ApiError::Gone(_)), "got {err:?}");
+        // Dave never became a member.
+        let dave_member = storage.get_member("dave", &org.id).await.unwrap();
+        assert!(dave_member.is_none(), "dave must not be a member");
     }
 }

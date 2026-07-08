@@ -74,6 +74,18 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // not on a single org scoped by path.
         .route("/api/v1/orgs", get(auth::list_orgs).post(auth::create_org))
         .route("/api/v1/me/current-org", post(auth::switch_org))
+        // Public invitation preview + authed accept. These are global (not
+        // under /{org_slug}/) because the token itself identifies the org —
+        // the acceptor may not yet be a member of the inviting org, so the
+        // org-resolve + membership middleware chain would reject them.
+        .route(
+            "/api/v1/invitations/preview",
+            get(invitations::preview_invitation),
+        )
+        .route(
+            "/api/v1/invitations/accept",
+            post(invitations::accept_invitation),
+        )
         // Version + system info + NATS status (global platform-level).
         .route("/api/v1/version", get(version))
         .route("/api/v1/admin/system-info", get(system_info))
