@@ -90,6 +90,40 @@ export const server = setupServer(
   http.get('*/api/v1/test-org/admin/users', () => {
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
+  http.get('*/api/v1/test-org/members', () => {
+    return HttpResponse.json([
+      {
+        user_id: 'user-1',
+        username: 'admin',
+        role: 'owner',
+        group_id: null,
+        joined_at: '2026-01-01T00:00:00Z',
+      },
+    ]);
+  }),
+  http.post('*/api/v1/test-org/members', async ({ request }) => {
+    const body = (await request.json()) as { username?: string; role?: string };
+    return HttpResponse.json({
+      user_id: 'invited-1',
+      username: body.username ?? 'newuser',
+      role: body.role ?? 'member',
+      group_id: null,
+      joined_at: new Date().toISOString(),
+    });
+  }),
+  http.patch('*/api/v1/test-org/members/*', async ({ request }) => {
+    const body = (await request.json()) as { role?: string };
+    return HttpResponse.json({
+      user_id: 'user-1',
+      username: 'admin',
+      role: body.role ?? 'member',
+      group_id: null,
+      joined_at: '2026-01-01T00:00:00Z',
+    });
+  }),
+  http.delete('*/api/v1/test-org/members/*', () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
   http.get('*/api/v1/test-org/admin/settings', () => {
     return HttpResponse.json({
       allow_registration: true,

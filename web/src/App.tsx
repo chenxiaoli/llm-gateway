@@ -23,6 +23,7 @@ import PricingPolicies from './pages/PricingPolicies';
 import Providers from './pages/Providers';
 import ProviderDetail from './pages/ProviderDetail';
 import Users from './pages/Users';
+import Members from './pages/Members';
 import Groups from './pages/Groups';
 import AccountBalance from './pages/AccountBalance';
 import Settings from './pages/Settings';
@@ -87,6 +88,7 @@ function App() {
               <Route path="model-fallbacks" element={<ModelFallbacks />} />
               <Route path="models" element={<ConsoleModels />} />
               <Route path="usage" element={<Usage />} />
+              <Route path="members" element={<Members />} />
               <Route path="account" element={<Account />} />
               <Route path="change-password" element={<ChangePassword />} />
             </Route>

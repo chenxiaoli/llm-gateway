@@ -228,6 +228,18 @@ export interface OrgSummary {
   group_id: string | null;
 }
 
+// --- Members ---
+
+export type MemberRole = 'owner' | 'admin' | 'member';
+
+export interface Member {
+  user_id: string;
+  username: string;
+  role: MemberRole;
+  group_id: string | null;
+  joined_at: string; // ISO timestamp
+}
+
 // --- Groups ---
 
 export interface Group {
