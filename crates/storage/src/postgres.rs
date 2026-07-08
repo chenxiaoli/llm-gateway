@@ -3113,6 +3113,15 @@ impl crate::Storage for PostgresStorage {
         Ok(row.0)
     }
 
+    async fn touch_member_last_seen(&self, user_id: &str, org_id: &str) -> Result<(), DbErr> {
+        sqlx::query("UPDATE members SET last_seen = NOW() WHERE user_id = $1 AND org_id = $2")
+            .bind(user_id)
+            .bind(org_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     // ---- Settings (platform + org) ----
 
     async fn get_platform_setting(&self, key: &str) -> Result<Option<String>, DbErr> {

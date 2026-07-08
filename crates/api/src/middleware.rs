@@ -118,6 +118,13 @@ pub async fn membership_layer(
             .and_then(PlatformRole::parse),
         group_id: member.group_id,
     };
+
+    // Bump last_seen (cheap write; runs once per request).
+    // Failures here are non-fatal — log and continue.
+    if let Err(e) = state.storage.touch_member_last_seen(&claims.sub, &org.id).await {
+        tracing::warn!(error = %e, "failed to update members.last_seen");
+    }
+
     req.extensions_mut().insert(ctx);
 
     Ok(next.run(req).await)

@@ -171,3 +171,50 @@ async fn membership_layer_403s_non_member(pool: PgPool) {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 }
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn membership_layer_updates_last_seen(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    let state = common::make_state(pool.clone());
+
+    // Capture last_seen before the request. seed_admin_user inserts admin-1
+    // with last_seen=NOW() (default from the migration), so we sleep briefly
+    // to guarantee the post-request timestamp will differ.
+    let before: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
+        "SELECT last_seen FROM members WHERE user_id = 'admin-1' AND org_id = $1",
+    )
+    .bind(common::TEST_ORG)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let app = Router::new()
+        .route("/{org_slug}/probe", get(|| async { "ok" }))
+        .layer(from_fn_with_state(state.clone(), membership_layer))
+        .layer(from_fn_with_state(state.clone(), org_resolve_layer))
+        .layer(from_fn_with_state(state, auth_layer));
+
+    let token = common::make_admin_token().token;
+    let _ = app
+        .oneshot(
+            Request::builder()
+                .uri("/default/probe")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let after: chrono::DateTime<chrono::Utc> = sqlx::query_scalar(
+        "SELECT last_seen FROM members WHERE user_id = 'admin-1' AND org_id = $1",
+    )
+    .bind(common::TEST_ORG)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert!(after > before, "last_seen should advance: before={before:?} after={after:?}");
+}

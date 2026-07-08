@@ -185,6 +185,7 @@ pub trait Storage: Send + Sync {
     async fn update_member_role(&self, user_id: &str, org_id: &str, role: MemberRole) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_member(&self, user_id: &str, org_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn count_owners(&self, org_id: &str) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
+    async fn touch_member_last_seen(&self, user_id: &str, org_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     // ---- Settings split ----
     async fn get_platform_setting(&self, key: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
