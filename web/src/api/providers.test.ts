@@ -34,7 +34,7 @@ beforeEach(() => {
 describe('providers API', () => {
   it('listProviders fetches all providers', async () => {
     server.use(
-      http.get('*/api/v1/admin/providers', () => {
+      http.get('*/api/v1/test-org/admin/providers', () => {
         return HttpResponse.json([mockProvider]);
       }),
     );
@@ -47,7 +47,7 @@ describe('providers API', () => {
 
   it('createProvider sends POST and returns provider', async () => {
     server.use(
-      http.post('*/api/v1/admin/providers', async ({ request }) => {
+      http.post('*/api/v1/test-org/admin/providers', async ({ request }) => {
         const body = await request.json() as Record<string, unknown>;
         expect(body.name).toBe('anthropic');
         return HttpResponse.json({
@@ -71,7 +71,7 @@ describe('providers API', () => {
 
   it('updateProvider sends PATCH', async () => {
     server.use(
-      http.patch('*/api/v1/admin/providers/prov-1', async ({ request }) => {
+      http.patch('*/api/v1/test-org/admin/providers/prov-1', async ({ request }) => {
         const body = await request.json() as Record<string, unknown>;
         expect(body.enabled).toBe(false);
         return HttpResponse.json({ ...mockProvider, enabled: false });
@@ -85,7 +85,7 @@ describe('providers API', () => {
   it('deleteProvider sends DELETE', async () => {
     let deleted = false;
     server.use(
-      http.delete('*/api/v1/admin/providers/prov-1', () => {
+      http.delete('*/api/v1/test-org/admin/providers/prov-1', () => {
         deleted = true;
         return new HttpResponse(null, { status: 204 });
       }),
@@ -97,7 +97,7 @@ describe('providers API', () => {
 
   it('listProviders returns empty array when no providers', async () => {
     server.use(
-      http.get('*/api/v1/admin/providers', () => {
+      http.get('*/api/v1/test-org/admin/providers', () => {
         return HttpResponse.json([]);
       }),
     );
@@ -110,7 +110,7 @@ describe('providers API', () => {
 describe('channel models API', () => {
   it('listChannelModels fetches channel models for provider', async () => {
     server.use(
-      http.get('*/api/v1/admin/providers/prov-1/channel-models', () => {
+      http.get('*/api/v1/test-org/admin/providers/prov-1/channel-models', () => {
         return HttpResponse.json([mockChannelModel]);
       }),
     );
@@ -123,7 +123,7 @@ describe('channel models API', () => {
 
   it('createChannelModel sends POST and returns channel model', async () => {
     server.use(
-      http.post('*/api/v1/admin/providers/prov-1/channel-models', async ({ request }) => {
+      http.post('*/api/v1/test-org/admin/providers/prov-1/channel-models', async ({ request }) => {
         const body = await request.json() as Record<string, unknown>;
         expect(body.channel_id).toBe('ch-1');
         expect(body.model_id).toBe('mod-1');
@@ -145,7 +145,7 @@ describe('channel models API', () => {
 
   it('updateChannelModel sends PATCH', async () => {
     server.use(
-      http.patch('*/api/v1/admin/channel-models/cm-1', async ({ request }) => {
+      http.patch('*/api/v1/test-org/admin/channel-models/cm-1', async ({ request }) => {
         const body = await request.json() as Record<string, unknown>;
         expect(body.upstream_model_name).toBe('new-deploy-name');
         expect(body.enabled).toBe(false);
@@ -168,7 +168,7 @@ describe('channel models API', () => {
   it('deleteChannelModel sends DELETE', async () => {
     let deleted = false;
     server.use(
-      http.delete('*/api/v1/admin/channel-models/cm-1', () => {
+      http.delete('*/api/v1/test-org/admin/channel-models/cm-1', () => {
         deleted = true;
         return new HttpResponse(null, { status: 204 });
       }),
@@ -180,7 +180,7 @@ describe('channel models API', () => {
 
   it('listChannelModels returns empty array when no mappings', async () => {
     server.use(
-      http.get('*/api/v1/admin/providers/prov-1/channel-models', () => {
+      http.get('*/api/v1/test-org/admin/providers/prov-1/channel-models', () => {
         return HttpResponse.json([]);
       }),
     );

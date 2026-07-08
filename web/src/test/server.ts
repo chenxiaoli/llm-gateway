@@ -81,16 +81,16 @@ export const server = setupServer(
       refresh_token: 'new-test-refresh-jwt-token',
     });
   }),
-  http.get('*/api/v1/keys', () => {
+  http.get('*/api/v1/test-org/keys', () => {
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
-  http.get('*/api/v1/providers', () => {
+  http.get('*/api/v1/test-org/admin/providers', () => {
     return HttpResponse.json([]);
   }),
-  http.get('*/api/v1/users', () => {
+  http.get('*/api/v1/test-org/admin/users', () => {
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
-  http.get('*/api/v1/settings', () => {
+  http.get('*/api/v1/test-org/admin/settings', () => {
     return HttpResponse.json({
       allow_registration: true,
       server_host: 'http://localhost:8080',
@@ -98,7 +98,7 @@ export const server = setupServer(
       audit_log_response: true,
     });
   }),
-  http.patch('*/api/v1/settings', () => {
+  http.patch('*/api/v1/test-org/admin/settings', () => {
     return HttpResponse.json({
       allow_registration: true,
       server_host: 'http://localhost:8080',
@@ -106,26 +106,10 @@ export const server = setupServer(
       audit_log_response: true,
     });
   }),
-  http.get('*/api/v1/admin/settings', () => {
-    return HttpResponse.json({
-      allow_registration: true,
-      server_host: 'http://localhost:8080',
-      audit_log_request: true,
-      audit_log_response: true,
-    });
-  }),
-  http.patch('*/api/v1/admin/settings', () => {
-    return HttpResponse.json({
-      allow_registration: true,
-      server_host: 'http://localhost:8080',
-      audit_log_request: true,
-      audit_log_response: true,
-    });
-  }),
-  http.get('*/api/v1/usage', () => {
+  http.get('*/api/v1/test-org/usage', () => {
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
-  http.get('*/api/v1/logs', () => {
+  http.get('*/api/v1/test-org/admin/logs', () => {
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
   http.get('*/api/v1/version', () => {

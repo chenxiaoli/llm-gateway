@@ -1,13 +1,11 @@
 use axum::extract::{Path, State};
-use axum::http::HeaderMap;
 use axum::Json;
 use std::sync::Arc;
 
-use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, resolve_org_context};
+use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, OrgContext};
 use llm_gateway_storage::{CreateProvider as StorageCreateProvider, Provider, ProviderWithEndpoints, UpdateProvider as StorageUpdateProvider};
 
 use crate::error::ApiError;
-use crate::extractors::require_auth;
 use crate::AppState;
 
 /// Generate slug from provider name
@@ -24,12 +22,9 @@ fn make_slug(name: &str) -> String {
 
 pub async fn create_provider(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Json(input): Json<StorageCreateProvider>,
 ) -> Result<Json<ProviderWithEndpoints>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     // Decide ownership: explicit body value wins, otherwise non-platform-admin
     // callers get an org-private entry; platform_admin defaults to platform-level.
     let owner_org_id = input.owner_org_id.clone().or_else(|| {
@@ -75,11 +70,8 @@ pub async fn create_provider(
 
 pub async fn list_providers(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
 ) -> Result<Json<Vec<ProviderWithEndpoints>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let providers = state
         .storage
         .list_providers(&ctx.org_id)
@@ -92,12 +84,9 @@ pub async fn list_providers(
 
 pub async fn get_provider(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<Json<ProviderWithEndpoints>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let provider = state
         .storage
         .get_provider(&ctx.org_id, &id)
@@ -110,13 +99,10 @@ pub async fn get_provider(
 
 pub async fn update_provider(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
     Json(input): Json<StorageUpdateProvider>,
 ) -> Result<Json<ProviderWithEndpoints>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let mut provider = state
         .storage
         .get_provider(&ctx.org_id, &id)
@@ -161,12 +147,9 @@ pub async fn update_provider(
 
 pub async fn delete_provider(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let provider = state
         .storage
         .get_provider(&ctx.org_id, &id)

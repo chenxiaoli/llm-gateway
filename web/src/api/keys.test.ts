@@ -33,7 +33,7 @@ beforeEach(() => {
 describe('keys API', () => {
   it('listKeys fetches all keys', async () => {
     server.use(
-      http.get('*/api/v1/keys', () => {
+      http.get('*/api/v1/test-org/keys', () => {
         return HttpResponse.json([mockKey]);
       }),
     );
@@ -46,7 +46,7 @@ describe('keys API', () => {
 
   it('createKey sends POST and returns new key', async () => {
     server.use(
-      http.post('*/api/v1/keys', async ({ request }) => {
+      http.post('*/api/v1/test-org/keys', async ({ request }) => {
         const body = await request.json() as Record<string, unknown>;
         expect(body.name).toBe('new-key');
         return HttpResponse.json(mockCreateResponse);
@@ -60,7 +60,7 @@ describe('keys API', () => {
 
   it('updateKey sends PATCH with partial data', async () => {
     server.use(
-      http.patch('*/api/v1/keys/key-1', async ({ request }) => {
+      http.patch('*/api/v1/test-org/keys/key-1', async ({ request }) => {
         const body = await request.json() as Record<string, unknown>;
         expect(body.enabled).toBe(false);
         return HttpResponse.json({ ...mockKey, enabled: false });
@@ -74,7 +74,7 @@ describe('keys API', () => {
   it('deleteKey sends DELETE', async () => {
     let deleted = false;
     server.use(
-      http.delete('*/api/v1/keys/key-1', () => {
+      http.delete('*/api/v1/test-org/keys/key-1', () => {
         deleted = true;
         return new HttpResponse(null, { status: 204 });
       }),
@@ -86,7 +86,7 @@ describe('keys API', () => {
 
   it('listKeys returns empty array when no keys', async () => {
     server.use(
-      http.get('*/api/v1/keys', () => {
+      http.get('*/api/v1/test-org/keys', () => {
         return HttpResponse.json([]);
       }),
     );

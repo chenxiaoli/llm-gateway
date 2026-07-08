@@ -1,5 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { server } from './server';
+import { useAuthStore } from '../stores/authStore';
+import type { OrgSummary } from '../types';
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -16,5 +18,17 @@ Object.defineProperty(window, 'matchMedia', {
 });
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeEach(() => {
+  // Seed a current org so orgPrefix() resolves to /api/v1/test-org in all tests.
+  // Individual tests can override via useAuthStore.setState({ currentOrg: ... }).
+  const org: OrgSummary = {
+    id: 'org-1',
+    slug: 'test-org',
+    name: 'Test Org',
+    role: 'admin',
+    group_id: null,
+  };
+  useAuthStore.setState({ currentOrg: org });
+});
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());

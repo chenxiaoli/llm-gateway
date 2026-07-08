@@ -8,6 +8,7 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
+import { useAuthStore } from '../stores/authStore';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -19,6 +20,7 @@ export default function ChangePassword() {
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
   const [changingPw, setChangingPw] = useState(false);
+  const slug = useAuthStore((s) => s.currentOrg?.slug);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +36,7 @@ export default function ChangePassword() {
     try {
       await changePassword({ current_password: currentPw, new_password: newPw });
       toast.success(t('auth.successChanged'));
-      navigate('/console/account');
+      navigate(slug ? `/${slug}/account` : '/login');
     } catch (err) {
       toast.error(getErrorMessage(err, t('auth.errorChange')));
     } finally {
@@ -114,7 +116,7 @@ export default function ChangePassword() {
             <Button type="submit" loading={changingPw} className="flex-1">
               {t('auth.updatePassword')}
             </Button>
-            <Button type="button" variant="ghost" onClick={() => navigate('/console/account')}>
+            <Button type="button" variant="ghost" onClick={() => navigate(slug ? `/${slug}/account` : '/login')}>
               {t('common.cancel')}
             </Button>
           </div>

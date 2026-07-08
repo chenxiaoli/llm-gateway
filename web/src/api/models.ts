@@ -1,13 +1,13 @@
-import { adminApiClient } from './client';
+import { apiClient, orgPrefix } from './client';
 import type { Model, ModelWithProvider, CreateGlobalModelRequest, UpdateModelRequest } from '../types';
 
 export async function listAllModels(): Promise<ModelWithProvider[]> {
-  const { data } = await adminApiClient.get<Array<{
+  const { data } = await apiClient.get<Array<{
     model: Model;
     pricing_policy_name: string | null;
     channel_ids: string[];
     channel_names: string[];
-  }>>('/models');
+  }>>(`${orgPrefix()}/admin/models`);
   return data.map(item => ({
     id: item.model.id,
     name: item.model.name,
@@ -21,15 +21,15 @@ export async function listAllModels(): Promise<ModelWithProvider[]> {
 }
 
 export async function createGlobalModel(input: CreateGlobalModelRequest): Promise<Model> {
-  const { data } = await adminApiClient.post<Model>('/models', input);
+  const { data } = await apiClient.post<Model>(`${orgPrefix()}/admin/models`, input);
   return data;
 }
 
 export async function updateModel(modelName: string, input: UpdateModelRequest): Promise<Model> {
-  const { data } = await adminApiClient.patch<Model>(`/models/${modelName}`, input);
+  const { data } = await apiClient.patch<Model>(`${orgPrefix()}/admin/models/${modelName}`, input);
   return data;
 }
 
 export async function deleteModel(modelName: string): Promise<void> {
-  await adminApiClient.delete(`/models/${modelName}`);
+  await apiClient.delete(`${orgPrefix()}/admin/models/${modelName}`);
 }

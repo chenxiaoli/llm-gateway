@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 fn build_app(state: Arc<AppState>) -> axum::Router {
-    management::management_router().with_state(state)
+    management::management_router(state.clone()).with_state(state)
 }
 
 fn bearer_token(token: &str) -> String {

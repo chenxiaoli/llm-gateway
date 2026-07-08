@@ -42,6 +42,19 @@ pub fn can_access_channel(ctx: &OrgContext, channel_group_id: Option<&str>) -> b
     }
 }
 
+/// Generic admin check: org Owner/Admin OR platform_admin.
+///
+/// Prefer the more specific `can_*` helpers (e.g. `can_manage_channels`,
+/// `can_manage_org_settings`) when the policy is named — they make the intent
+/// of the call site self-documenting and stay accurate if the policy for that
+/// surface diverges from the generic admin rule in a later phase. Use this
+/// helper only when the check is truly "is this user an admin-like actor for
+/// the migrated surface that used to be gated on `require_platform_admin`".
+pub fn can_administer(ctx: &OrgContext) -> bool {
+    matches!(ctx.member_role, MemberRole::Owner | MemberRole::Admin)
+        || ctx.is_platform_admin()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -49,6 +62,7 @@ mod tests {
 
     fn ctx(role: MemberRole, platform: Option<PlatformRole>, group_id: Option<&str>) -> OrgContext {
         OrgContext {
+            user_id: "u".into(),
             org_id: "o".into(),
             member_role: role,
             platform_role: platform,

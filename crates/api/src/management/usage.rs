@@ -1,14 +1,12 @@
 use axum::extract::{Query, State};
-use axum::http::HeaderMap;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use llm_gateway_org::{can_manage_channels, resolve_org_context};
+use llm_gateway_org::{can_manage_channels, OrgContext};
 use llm_gateway_storage::{units_to_usd, ChannelUsageSummaryRecord, PaginatedResponse, PaginationParams, UsageFilter, UsageRecord, UsageSummaryRecord};
 
 use crate::error::ApiError;
-use crate::extractors::require_auth;
 use crate::AppState;
 
 // --- JSON response wrappers with f64 cost fields ---
@@ -91,18 +89,15 @@ pub struct UsageQuery {
 
 pub async fn get_usage(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Query(query): Query<UsageQuery>,
 ) -> Result<Json<PaginatedResponse<UsageRecordResponse>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let (page, page_size) = query.pagination.normalized();
     let mut filter = query.filter;
 
     // Members see only their own usage rows; admins/platform_admin see all rows in the org.
     if !can_manage_channels(&ctx) {
-        filter.user_id = Some(claims.sub);
+        filter.user_id = Some(ctx.user_id.clone());
     }
 
     let result = state
@@ -127,16 +122,13 @@ pub struct UsageSummaryQuery {
 
 pub async fn get_usage_summary(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Query(query): Query<UsageSummaryQuery>,
 ) -> Result<Json<Vec<UsageSummaryResponse>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let mut filter = query.filter;
 
     if !can_manage_channels(&ctx) {
-        filter.user_id = Some(claims.sub);
+        filter.user_id = Some(ctx.user_id.clone());
     }
 
     let records = state
@@ -175,16 +167,13 @@ impl From<ChannelUsageSummaryRecord> for ChannelUsageSummaryResponse {
 
 pub async fn get_channel_usage_summary(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Query(query): Query<UsageSummaryQuery>,
 ) -> Result<Json<Vec<ChannelUsageSummaryResponse>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let mut filter = query.filter;
 
     if !can_manage_channels(&ctx) {
-        filter.user_id = Some(claims.sub);
+        filter.user_id = Some(ctx.user_id.clone());
     }
 
     let records = state
@@ -212,16 +201,13 @@ pub struct DailyUsageResponse {
 
 pub async fn get_daily_usage(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Query(query): Query<UsageSummaryQuery>,
 ) -> Result<Json<Vec<DailyUsageResponse>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let mut filter = query.filter;
 
     if !can_manage_channels(&ctx) {
-        filter.user_id = Some(claims.sub);
+        filter.user_id = Some(ctx.user_id.clone());
     }
 
     let records = state

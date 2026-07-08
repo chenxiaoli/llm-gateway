@@ -36,7 +36,8 @@ export default function Register() {
     setLoading(true);
     try {
       await register({ username, password });
-      navigate('/console/dashboard');
+      const slug = useAuthStore.getState().currentOrg?.slug;
+      navigate(slug ? `/${slug}/dashboard` : '/login');
     } catch (err) {
       toast.error(getErrorMessage(err, t('auth.errorRegister')));
     } finally {
@@ -107,7 +108,7 @@ export default function Register() {
 
           <p className="text-center text-sm text-base-content/50 mt-5">
             {t('auth.hasAccount')}{' '}
-            <Link to="/console/login" className="link link-primary">{t('auth.signInLink')}</Link>
+            <Link to="/login" className="link link-primary">{t('auth.signInLink')}</Link>
           </p>
         </div>
       </div>

@@ -1,13 +1,11 @@
 use axum::extract::{Path, Query, State};
-use axum::http::HeaderMap;
 use axum::Json;
-use llm_gateway_org::{can_manage_channels, resolve_org_context};
+use llm_gateway_org::{can_manage_channels, OrgContext};
 use llm_gateway_storage::{CreateGroup, DeleteGroupResult, Group, PaginatedResponse, PaginationParams, UpdateGroup};
 use serde::Serialize;
 use std::sync::Arc;
 
 use crate::error::ApiError;
-use crate::extractors::require_auth;
 use crate::AppState;
 
 #[derive(Serialize)]
@@ -33,11 +31,9 @@ impl From<Group> for GroupResponse {
 
 pub async fn list_groups(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<PaginatedResponse<GroupResponse>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     let (page, page_size) = pagination.normalized();
     let result = state
         .storage
@@ -54,11 +50,9 @@ pub async fn list_groups(
 
 pub async fn get_group(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<Json<GroupResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     let group = state
         .storage
         .get_group(&ctx.org_id, &id)
@@ -70,11 +64,9 @@ pub async fn get_group(
 
 pub async fn create_group(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Json(input): Json<CreateGroup>,
 ) -> Result<Json<GroupResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -99,12 +91,10 @@ pub async fn create_group(
 
 pub async fn update_group(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
     Json(input): Json<UpdateGroup>,
 ) -> Result<Json<GroupResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -126,11 +116,9 @@ pub async fn update_group(
 
 pub async fn delete_group(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<Json<DeleteGroupResult>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }

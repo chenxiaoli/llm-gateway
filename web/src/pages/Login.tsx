@@ -28,7 +28,8 @@ export default function Login() {
     setLoading(true);
     try {
       await login({ username, password });
-      navigate('/console/dashboard');
+      const slug = useAuthStore.getState().currentOrg?.slug;
+      navigate(slug ? `/${slug}/dashboard` : '/login');
     } catch (err) {
       toast.error(getErrorMessage(err, t('auth.errorInvalid')));
     } finally {
@@ -80,7 +81,7 @@ export default function Login() {
           {authConfig?.allow_registration && (
             <p className="text-center text-sm text-base-content/50 mt-5">
               {t('auth.noAccount')}{' '}
-              <Link to="/console/register" className="link link-primary">{t('auth.createOne')}</Link>
+              <Link to="/register" className="link link-primary">{t('auth.createOne')}</Link>
             </p>
           )}
         </div>

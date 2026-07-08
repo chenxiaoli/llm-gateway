@@ -1466,10 +1466,12 @@ name = "llm-gateway-org"
 version = "2.0.0"
 dependencies = [
  "async-trait",
+ "axum",
  "llm-gateway-auth",
  "llm-gateway-storage",
  "serde",
  "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]

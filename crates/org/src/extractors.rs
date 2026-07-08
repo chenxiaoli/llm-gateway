@@ -1,5 +1,9 @@
 use crate::error::OrgError;
 use crate::types::{OrgContext, PlatformRole};
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use llm_gateway_auth::JwtClaims;
 use llm_gateway_storage::Storage;
 
@@ -44,9 +48,80 @@ pub async fn resolve_org_context(
         .and_then(PlatformRole::parse);
 
     Ok(OrgContext {
+        user_id: claims.sub.clone(),
         org_id,
         member_role: member.role,
         platform_role,
         group_id: member.group_id,
     })
+}
+
+/// Axum extractor for [`OrgContext`].
+///
+/// Pulls the context out of request extensions, where the membership middleware
+/// (Phase 2 `membership_layer`) injects it after the JWT + membership lookup.
+/// Handlers can therefore declare `ctx: OrgContext` as a parameter and receive
+/// the pre-resolved context without re-running the storage lookup.
+///
+/// If the extension is missing we fail with 500 — the middleware chain is
+/// misconfigured (e.g. a route mounted without `membership_layer`), and that's
+/// a programmer error rather than a client error.
+impl<S> FromRequestParts<S> for OrgContext
+where
+    S: Send + Sync,
+{
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<OrgContext>()
+            .cloned()
+            .ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "OrgContext missing from request extensions — middleware chain misconfigured",
+                )
+                    .into_response()
+            })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{MemberRole, OrgContext};
+    use axum::http::Request;
+
+    #[tokio::test]
+    async fn extracts_org_context_from_extensions() {
+        let ctx = OrgContext {
+            user_id: "u".into(),
+            org_id: "org_default".into(),
+            member_role: MemberRole::Owner,
+            platform_role: None,
+            group_id: None,
+        };
+        let req: Request<()> = Request::default();
+        let (mut parts, body) = req.into_parts();
+        parts.extensions.insert(ctx.clone());
+        // Body is unused — `from_request_parts` only inspects `Parts`.
+        let _ = body;
+
+        let extracted = OrgContext::from_request_parts(&mut parts, &())
+            .await
+            .expect("OrgContext should be in extensions");
+
+        assert_eq!(extracted.org_id, ctx.org_id);
+        assert_eq!(extracted.member_role, ctx.member_role);
+    }
+
+    #[tokio::test]
+    async fn rejects_when_missing_from_extensions() {
+        let req: Request<()> = Request::default();
+        let (mut parts, _body) = req.into_parts();
+
+        let result = OrgContext::from_request_parts(&mut parts, &()).await;
+        assert!(result.is_err());
+    }
 }

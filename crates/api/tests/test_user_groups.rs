@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 fn build_app(state: Arc<AppState>) -> axum::Router {
-    management::management_router().with_state(state)
+    management::management_router(state.clone()).with_state(state)
 }
 
 fn bearer_token(token: &str) -> String {
@@ -49,7 +49,7 @@ async fn test_create_group_succeeds(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/admin/groups")
+                .uri("/api/v1/default/admin/groups")
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "engineering"}).to_string()))
@@ -80,7 +80,7 @@ async fn test_duplicate_group_name_returns_409(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/admin/groups")
+                .uri("/api/v1/default/admin/groups")
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "engineering"}).to_string()))
@@ -96,7 +96,7 @@ async fn test_duplicate_group_name_returns_409(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/admin/groups")
+                .uri("/api/v1/default/admin/groups")
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "engineering"}).to_string()))
@@ -121,7 +121,7 @@ async fn test_list_groups_returns_all(pool: PgPool) {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri("/api/v1/admin/groups")
+                    .uri("/api/v1/default/admin/groups")
                     .header("authorization", bearer_token(admin_token))
                     .header("content-type", "application/json")
                     .body(Body::from(json!({"name": name}).to_string()))
@@ -138,7 +138,7 @@ async fn test_list_groups_returns_all(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/admin/groups?page=1&page_size=20")
+                .uri("/api/v1/default/admin/groups?page=1&page_size=20")
                 .header("authorization", bearer_token(admin_token))
                 .body(Body::empty())
                 .unwrap(),
@@ -168,7 +168,7 @@ async fn test_delete_group_clears_user_channel_references(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/admin/groups")
+                .uri("/api/v1/default/admin/groups")
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "engineering"}).to_string()))
@@ -189,7 +189,7 @@ async fn test_delete_group_clears_user_channel_references(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(&format!("/api/v1/admin/groups/{}", group_id))
+                .uri(&format!("/api/v1/default/admin/groups/{}", group_id))
                 .header("authorization", bearer_token(admin_token))
                 .body(Body::empty())
                 .unwrap(),
@@ -234,7 +234,7 @@ async fn test_update_user_group_id_assigns_group(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/admin/groups")
+                .uri("/api/v1/default/admin/groups")
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"name": "engineering"}).to_string()))
@@ -252,7 +252,7 @@ async fn test_update_user_group_id_assigns_group(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(&format!("/api/v1/admin/users/{}", user_id))
+                .uri(&format!("/api/v1/default/admin/users/{}", user_id))
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"group_id": group_id}).to_string()))
@@ -294,7 +294,7 @@ async fn test_update_user_group_id_nonexistent_returns_400(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(&format!("/api/v1/admin/users/{}", user_id))
+                .uri(&format!("/api/v1/default/admin/users/{}", user_id))
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"group_id": "nonexistent-group-id"}).to_string()))
@@ -334,7 +334,7 @@ async fn test_update_user_clear_group_id_with_null(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(&format!("/api/v1/admin/users/{}", user_id))
+                .uri(&format!("/api/v1/default/admin/users/{}", user_id))
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"group_id": null}).to_string()))

@@ -30,3 +30,8 @@ export async function changePassword(input: ChangePasswordRequest): Promise<User
   const { data } = await apiClient.post<User>('/auth/change-password', input);
   return data;
 }
+
+export async function switchOrg(orgSlug: string): Promise<AuthResponse> {
+  const { data } = await apiClient.post<AuthResponse>('/me/current-org', { org_slug: orgSlug });
+  return data;
+}
