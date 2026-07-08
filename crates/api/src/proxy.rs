@@ -745,7 +745,13 @@ async fn process_sse_stream(
         request_headers: Some(audit_params.request_headers),
         response_headers: Some(audit_params.response_headers),
         org_id: audit_params.org_id.clone(),
-        actor_is_platform_admin: false, // api_keys don't carry platform role
+        // Proxy auth is API-key based, so OrgContext.platform_role is never
+        // available here — every proxy audit event is actor_is_platform_admin
+        // = false by design. Future management-API audit paths (if added)
+        // SHOULD populate this from
+        // `org_ctx.platform_role == Some(PlatformRole::PlatformAdmin)`.
+        // (Same rationale applies to the three other AuditTask sites below.)
+        actor_is_platform_admin: false,
         routes,
     };
     dispatch_audit_task(&state, task).await;
