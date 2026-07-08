@@ -211,7 +211,7 @@ pub async fn login(
     // They get a token with no `current_org_id` claim and the frontend
     // bounces them to the onboarding wizard. The token's missing org claim
     // means org-scoped routes will reject them at authz time — they can
-    // only hit platform-level endpoints (`/me`, `/orgs`, `/me/onboarding`)
+    // only hit platform-level endpoints (`/auth/me`, `/orgs`, `/auth/me/onboarding`)
     // until they create or join an org.
     let current_org_id_arg = current_org.as_ref().map(|o| o.id.as_str());
 
@@ -394,7 +394,7 @@ pub struct OnboardingStatus {
     pub needs_onboarding: bool,
 }
 
-/// GET /api/v1/me/onboarding — quick probe the frontend uses to decide
+/// GET /api/v1/auth/me/onboarding — quick probe the frontend uses to decide
 /// whether to redirect the user to the onboarding wizard.
 ///
 /// Returns `{ needs_onboarding: true }` when the caller has zero org
@@ -428,11 +428,17 @@ pub async fn me_balance(
 
     // Limbo users have no current org and therefore no account. Return 404
     // rather than 500 — the frontend treats this as "no balance yet" and
-    // the wizard routes them to create/join an org first.
+    // the wizard routes them to create/join an org first. The message names
+    // the real cause (no current org / onboarding incomplete) rather than
+    // "account not found" — the account genuinely doesn't exist yet, but
+    // the user row does; the misleading shape would send a frontend
+    // debugger looking for a missing user.
     let current_org_id = claims
         .current_org_id
         .as_deref()
-        .ok_or_else(|| ApiError::NotFound("Account not found".to_string()))?;
+        .ok_or_else(|| {
+            ApiError::NotFound("no current org — complete onboarding".to_string())
+        })?;
 
     let account = state
         .storage
@@ -696,9 +702,10 @@ fn validate_org_slug(slug: &str) -> Result<(), String> {
 ///   stay in the context they were working in. They can switch later via
 ///   `/me/current-org`.
 /// - Returns `AuthResponse` (not `OrgSummary`) so the client receives the
-///   fresh token + full membership list. No frontend callers existed for
-///   the old `OrgSummary` shape when this was changed, so the response
-///   shape change is non-breaking.
+///   fresh token + full membership list. Phase 3 ships this before the
+///   Task 7 frontend callers land, so there are momentarily no frontend
+///   consumers of the old `OrgSummary` shape — but those callers are
+///   coming, and will be written against this new shape.
 pub async fn create_org(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -1016,7 +1023,7 @@ mod tests {
         assert!(validate_org_slug("usage-team").is_ok());
     }
 
-    // ─── Phase 3: integration tests for register / create_org / me/onboarding ───
+    // ─── Phase 3: integration tests for register / create_org / auth/me/onboarding ───
     //
     // These tests need a real Postgres pool (migrations + state). They live
     // inline in this module rather than under `crates/api/tests/` so they can
@@ -1288,7 +1295,7 @@ mod tests {
 
     #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
     async fn me_onboarding_returns_true_for_limbo_user(pool: PgPool) {
-        // Register → GET /api/v1/me/onboarding → { needs_onboarding: true }.
+        // Register → GET /api/v1/auth/me/onboarding → { needs_onboarding: true }.
         let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
         let app = build_router(storage);
         let resp = post_json(
@@ -1301,7 +1308,7 @@ mod tests {
         let body = body_json(resp).await;
         let token = body["token"].as_str().unwrap().to_string();
 
-        let resp = get_authed(&app, "/api/v1/me/onboarding", &token).await;
+        let resp = get_authed(&app, "/api/v1/auth/me/onboarding", &token).await;
         assert_eq!(resp.status(), axum::http::StatusCode::OK);
         let body = body_json(resp).await;
         assert_eq!(body["needs_onboarding"], true);
@@ -1309,7 +1316,7 @@ mod tests {
 
     #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
     async fn me_onboarding_returns_false_once_user_has_org(pool: PgPool) {
-        // Register → create_org → GET /api/v1/me/onboarding → { needs_onboarding: false }.
+        // Register → create_org → GET /api/v1/auth/me/onboarding → { needs_onboarding: false }.
         let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
         let app = build_router(storage);
         let resp = post_json(
@@ -1335,7 +1342,7 @@ mod tests {
         let body = body_json(resp).await;
         let token = body["token"].as_str().unwrap().to_string();
 
-        let resp = get_authed(&app, "/api/v1/me/onboarding", &token).await;
+        let resp = get_authed(&app, "/api/v1/auth/me/onboarding", &token).await;
         assert_eq!(resp.status(), axum::http::StatusCode::OK);
         let body = body_json(resp).await;
         assert_eq!(body["needs_onboarding"], false);
