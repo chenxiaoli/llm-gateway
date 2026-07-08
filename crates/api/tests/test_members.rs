@@ -76,6 +76,20 @@ fn member_token(user_id: &str) -> String {
     llm_gateway_auth::create_jwt(user_id, common::TEST_ORG, None, common::TEST_JWT_SECRET).unwrap()
 }
 
+/// Insert a user that exists but has no membership in any org (for invite tests).
+async fn seed_user_no_membership(pool: &PgPool, user_id: &str, username: &str) {
+    sqlx::query(
+        r#"INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, created_at, updated_at)
+           VALUES ($1, $2, 'x', NULL, NULL, true, NOW(), NOW())
+           ON CONFLICT (id) DO NOTHING"#,
+    )
+    .bind(user_id)
+    .bind(username)
+    .execute(pool)
+    .await
+    .expect("seed user no membership");
+}
+
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn list_members_returns_only_current_org_members(pool: PgPool) {
     common::seed_admin_user(&pool).await;
@@ -161,4 +175,83 @@ async fn list_members_forbidden_for_plain_member(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+}
+
+// =====================================================================
+// Task 2: invite_member
+// =====================================================================
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn invite_member_adds_existing_user(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    seed_user_no_membership(&pool, "u-dave", "dave").await;
+    let app = build_app(common::make_state(pool));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/default/members")
+                .header("authorization", bearer(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"username": "dave", "role": "member"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let body = body_json(resp).await;
+    assert_eq!(body["username"], "dave");
+    assert_eq!(body["role"], "member");
+    assert_eq!(body["user_id"], "u-dave");
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn invite_member_404_for_unknown_user(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    let app = build_app(common::make_state(pool));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/default/members")
+                .header("authorization", bearer(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"username": "ghost", "role": "member"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn invite_member_409_if_already_member(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    seed_default_member(&pool, "u-eve", "eve", "member").await;
+    let app = build_app(common::make_state(pool));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/default/members")
+                .header("authorization", bearer(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"username": "eve", "role": "member"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
 }

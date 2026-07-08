@@ -253,7 +253,10 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
             get(pricing_policies::get).patch(pricing_policies::update).delete(pricing_policies::delete),
         )
         // Members (admin)
-        .route("/members", get(members::list_members))
+        .route(
+            "/members",
+            get(members::list_members).post(members::invite_member),
+        )
 }
 
 /// Sub-router that turns any unmatched `/api/v1/*` path into a 410 Gone.

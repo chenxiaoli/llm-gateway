@@ -1,9 +1,12 @@
 use axum::extract::State;
+use axum::http::StatusCode;
 use axum::Json;
 use chrono::{DateTime, Utc};
+use serde::Deserialize;
 use std::sync::Arc;
 
 use llm_gateway_org::{can_administer, OrgContext};
+use llm_gateway_storage::MemberRole;
 
 use crate::error::ApiError;
 use crate::AppState;
@@ -29,6 +32,19 @@ fn build_response(member: llm_gateway_storage::Member, username: String) -> Memb
         group_id: member.group_id,
         joined_at: member.created_at,
     }
+}
+
+// --- Role parsing ---
+
+fn parse_role(s: &str) -> Result<MemberRole, ApiError> {
+    MemberRole::parse(s)
+        .ok_or_else(|| ApiError::BadRequest(format!("unknown role: {s}")))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InviteRequest {
+    pub username: String,
+    pub role: String,
 }
 
 pub async fn list_members(
@@ -65,4 +81,53 @@ pub async fn list_members(
         out.push(build_response(m, username));
     }
     Ok(Json(out))
+}
+
+pub async fn invite_member(
+    State(state): State<Arc<AppState>>,
+    ctx: OrgContext,
+    Json(req): Json<InviteRequest>,
+) -> Result<(StatusCode, Json<MemberResponse>), ApiError> {
+    if !can_administer(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
+
+    let user = state
+        .storage
+        .get_user_by_username(&req.username)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::NotFound(format!("user '{}' not found", req.username)))?;
+
+    // Conflict if already a member.
+    if state
+        .storage
+        .get_member(&user.id, &ctx.org_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .is_some()
+    {
+        return Err(ApiError::Conflict("user is already a member".into()));
+    }
+
+    let role = parse_role(&req.role)?;
+    let now = chrono::Utc::now();
+    let member = llm_gateway_storage::Member {
+        user_id: user.id.clone(),
+        org_id: ctx.org_id.clone(),
+        role,
+        group_id: None,
+        created_by: Some(ctx.user_id.clone()),
+        created_at: now,
+    };
+    let saved = state
+        .storage
+        .upsert_member(member)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(build_response(saved, user.username)),
+    ))
 }
