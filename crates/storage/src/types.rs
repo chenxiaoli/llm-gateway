@@ -1200,6 +1200,11 @@ pub struct ServerConfig {
     pub host: String,
     pub port: u16,
     pub encryption_key: String,
+    /// Public-facing base URL the frontend is served at (no trailing slash).
+    /// Used to build invitation links etc. Defaults to
+    /// `http://localhost:5173` when unset.
+    #[serde(default)]
+    pub public_base_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

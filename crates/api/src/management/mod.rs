@@ -9,6 +9,7 @@ pub mod models;
 pub mod usage;
 pub mod logs;
 pub mod members;
+pub mod invitations;
 pub mod requests;
 pub mod users;
 pub mod settings;
@@ -20,7 +21,7 @@ pub mod nats;
 use axum::extract::State;
 use axum::middleware::from_fn_with_state;
 use axum::response::IntoResponse;
-use axum::routing::{any, get, patch, post};
+use axum::routing::{any, delete, get, patch, post};
 use axum::{Json, Router};
 use std::sync::Arc;
 
@@ -266,6 +267,12 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
             "/members/{user_id}",
             patch(members::change_member_role).delete(members::remove_member),
         )
+        // Invitations (admin-only) — list/mint/revoke.
+        .route(
+            "/invitations",
+            get(invitations::list_invitations).post(invitations::create_invitation),
+        )
+        .route("/invitations/{id}", delete(invitations::revoke_invitation))
 }
 
 /// Sub-router that turns any unmatched `/api/v1/*` path into a 410 Gone.

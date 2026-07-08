@@ -95,6 +95,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         nats_publisher: Some(nats_publisher),
         registry,
         system_info,
+        public_base_url: config
+            .server
+            .public_base_url
+            .clone()
+            .unwrap_or_else(|| "http://localhost:5173".to_string()),
     });
 
     // Spawn platform-admin impersonation janitor — reaps stale temp member

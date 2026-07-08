@@ -50,6 +50,7 @@ pub fn make_state(pool: PgPool) -> Arc<AppState> {
             upstream_timeout_secs: 30,
             audit_retention_days: Some(90),
         },
+        public_base_url: "http://localhost:5173".to_string(),
     })
 }
 
