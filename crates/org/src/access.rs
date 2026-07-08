@@ -34,8 +34,12 @@ pub fn can_create_platform_catalog(ctx: &OrgContext) -> bool {
 /// - `None` (platform-level entry): only platform admins.
 /// - `Some(org_id)` (org-private entry): admin/owner of that org, or platform admin.
 ///
-/// Use this for create/update/delete on `providers`, `models`, and `pricing_policies`.
-/// Read paths do NOT call this — catalog visibility is filtered at the storage layer.
+/// Use this for update/delete on existing `providers`, `models`, and
+/// `pricing_policies` rows. Create handlers do NOT call this — they must
+/// decide the new row's `owner_org_id` (where to attach) before they can
+/// evaluate permission, so they keep the inline three-branch check.
+/// Read paths do NOT call this — catalog visibility is filtered at the
+/// storage layer.
 pub fn can_mutate_catalog_entry(ctx: &OrgContext, entry_owner_org_id: Option<&str>) -> bool {
     if ctx.is_platform_admin() {
         return true;

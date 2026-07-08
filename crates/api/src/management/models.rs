@@ -2,7 +2,7 @@ use axum::extract::{Path, State};
 use axum::Json;
 use std::sync::Arc;
 
-use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, OrgContext};
+use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, can_mutate_catalog_entry, OrgContext};
 use llm_gateway_storage::{Model, ProviderModel, ProviderModelInfo, UpdateModel};
 
 use crate::error::ApiError;
@@ -81,7 +81,7 @@ pub async fn update_model(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?;
 
-    if !llm_gateway_org::can_mutate_catalog_entry(&ctx, model.owner_org_id.as_deref()) {
+    if !can_mutate_catalog_entry(&ctx, model.owner_org_id.as_deref()) {
         return Err(ApiError::Forbidden);
     }
 
@@ -111,7 +111,7 @@ pub async fn delete_model(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?;
 
-    if !llm_gateway_org::can_mutate_catalog_entry(&ctx, model.owner_org_id.as_deref()) {
+    if !can_mutate_catalog_entry(&ctx, model.owner_org_id.as_deref()) {
         return Err(ApiError::Forbidden);
     }
 

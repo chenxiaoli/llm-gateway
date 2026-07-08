@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use std::sync::Arc;
 
-use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, OrgContext};
+use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, can_mutate_catalog_entry, OrgContext};
 use llm_gateway_storage::{CreatePricingPolicy, PricingPolicy, PricingPolicyWithCounts, UpdatePricingPolicy};
 
 use crate::error::ApiError;
@@ -91,7 +91,7 @@ pub async fn delete(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Pricing policy '{}' not found", id)))?;
 
-    if !llm_gateway_org::can_mutate_catalog_entry(&ctx, existing.owner_org_id.as_deref()) {
+    if !can_mutate_catalog_entry(&ctx, existing.owner_org_id.as_deref()) {
         return Err(ApiError::Forbidden);
     }
 
@@ -117,7 +117,7 @@ pub async fn update(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Pricing policy '{}' not found", id)))?;
 
-    if !llm_gateway_org::can_mutate_catalog_entry(&ctx, existing.owner_org_id.as_deref()) {
+    if !can_mutate_catalog_entry(&ctx, existing.owner_org_id.as_deref()) {
         return Err(ApiError::Forbidden);
     }
 
