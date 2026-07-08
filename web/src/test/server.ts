@@ -124,6 +124,19 @@ export const server = setupServer(
   http.delete('*/api/v1/test-org/members/*', () => {
     return new HttpResponse(null, { status: 204 });
   }),
+  http.patch('*/api/v1/test-org', async ({ request }) => {
+    const body = (await request.json()) as { name?: string; slug?: string };
+    return HttpResponse.json({
+      id: 'org-1',
+      slug: body.slug ?? 'test-org',
+      name: body.name ?? 'Test Org',
+      role: 'admin',
+      group_id: null,
+    });
+  }),
+  http.delete('*/api/v1/test-org', () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
   http.get('*/api/v1/test-org/admin/settings', () => {
     return HttpResponse.json({
       allow_registration: true,

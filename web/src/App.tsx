@@ -24,6 +24,7 @@ import Providers from './pages/Providers';
 import ProviderDetail from './pages/ProviderDetail';
 import Users from './pages/Users';
 import Members from './pages/Members';
+import OrgSettings from './pages/OrgSettings';
 import Groups from './pages/Groups';
 import AccountBalance from './pages/AccountBalance';
 import Settings from './pages/Settings';
@@ -89,6 +90,7 @@ function App() {
               <Route path="models" element={<ConsoleModels />} />
               <Route path="usage" element={<Usage />} />
               <Route path="members" element={<Members />} />
+              <Route path="settings" element={<OrgSettings />} />
               <Route path="account" element={<Account />} />
               <Route path="change-password" element={<ChangePassword />} />
             </Route>

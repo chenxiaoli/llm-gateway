@@ -43,6 +43,7 @@
     "users": "用户",
     "members": "成员",
     "settings": "设置",
+    "orgSettings": "组织设置",
     "logs": "审计日志",
     "collapse": "收起",
     "expand": "展开侧边栏"
@@ -895,6 +896,37 @@
       "removed": "成员已移除",
       "removeFailed": "移除成员失败"
     }
+  },
+  "orgSettings": {
+    "title": "组织设置",
+    "description": "重命名或删除本组织",
+    "general": {
+      "sectionTitle": "通用",
+      "name": "组织名称",
+      "namePlaceholder": "例如：Acme Inc.",
+      "slug": "组织 Slug",
+      "slugHint": "小写字母、数字和连字符，3-64 个字符。",
+      "save": "保存更改",
+      "readOnlyNotice": "仅管理员可更改组织设置。"
+    },
+    "danger": {
+      "sectionTitle": "危险操作",
+      "warning": "删除本组织将永久移除所有密钥、通道、用量历史和审计日志。此操作不可撤销。",
+      "confirmLabel": "输入组织 slug 以确认",
+      "confirmPlaceholder": "输入组织 slug",
+      "passwordLabel": "您的密码",
+      "passwordPlaceholder": "输入您的密码",
+      "delete": "删除本组织",
+      "deleteConfirm": "这将永久删除该组织及其所有数据。确定继续？"
+    },
+    "toasts": {
+      "updated": "组织已更新",
+      "updateFailed": "更新组织失败",
+      "deleted": "组织已删除",
+      "deleteFailed": "删除组织失败",
+      "wrongPassword": "密码错误"
+    },
+    "forbidden": "你没有权限查看组织设置。"
   },
   "groups": {
     "title": "分组",

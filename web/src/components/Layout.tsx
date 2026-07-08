@@ -62,6 +62,7 @@ export default function AppLayout() {
     { key: `/${slug}/model-fallbacks`, icon: ArrowRightLeft, label: t('sidebar.modelFallbacks') },
     { key: `/${slug}/models`, icon: SquareStack, label: t('sidebar.models') },
     { key: `/${slug}/usage`, icon: BarChart3, label: t('sidebar.usage') },
+    { key: `/${slug}/settings`, icon: Settings, label: t('sidebar.orgSettings') },
   ];
 
   const adminItems = [
