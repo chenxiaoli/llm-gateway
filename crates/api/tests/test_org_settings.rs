@@ -220,6 +220,27 @@ async fn update_org_rejects_duplicate_slug(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn update_org_rejects_empty_name(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    let app = build_app(common::make_state(pool));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/v1/default")
+                .header("authorization", bearer(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::json!({"name": "  "}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn update_org_forbidden_for_member(pool: PgPool) {
     common::seed_admin_user(&pool).await;
     seed_default_member(&pool, "u-plain", "plain", "member").await;

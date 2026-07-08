@@ -734,13 +734,29 @@ pub async fn update_org(
         return Err(ApiError::Forbidden);
     }
 
-    // Validate inputs when provided. Treat an empty/whitespace name as missing
-    // so callers can't accidentally blank it out.
-    let name = req
-        .name
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
-    let slug = req.slug.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    // Validate inputs. An explicitly-empty name (after trim) is rejected
+    // rather than silently treated as missing — the caller asked to blank
+    // something out, which we don't allow.
+    let name = match req.name {
+        Some(s) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                return Err(ApiError::BadRequest("name must not be empty".into()));
+            }
+            Some(trimmed.to_string())
+        }
+        None => None,
+    };
+    let slug = match req.slug {
+        Some(s) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                return Err(ApiError::BadRequest("slug must not be empty".into()));
+            }
+            Some(trimmed.to_string())
+        }
+        None => None,
+    };
 
     if name.is_none() && slug.is_none() {
         return Err(ApiError::BadRequest(
