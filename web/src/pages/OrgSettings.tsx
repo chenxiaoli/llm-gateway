@@ -84,8 +84,12 @@ export default function OrgSettings() {
         name: nameChanged ? nextName : undefined,
         slug: slugChanged ? nextSlug : undefined,
       });
-      // setCurrentOrg persists + clears React Query cache; the role stays the
-      // same per the backend contract.
+      // After a slug rename, the JWT in localStorage still encodes the old
+      // org context — so we route through setCurrentOrg (which POSTs to
+      // /auth/select-org, rotates the token, persists it, and clears the
+      // React Query cache) rather than just setState-ing currentOrg. The
+      // extra round-trip is the price of keeping the token consistent with
+      // the new slug. Role is unchanged per the backend contract.
       await setCurrentOrg({
         id: updated.id,
         slug: updated.slug,
@@ -93,10 +97,10 @@ export default function OrgSettings() {
         role: updated.role,
         group_id: updated.group_id,
       });
-      // Keep the orgs list in sync so OrgRouteGuard and OrgSwitcher recognise
-      // the new slug. setCurrentOrg only updates `currentOrg`; without this
-      // patch, navigating to /${newSlug}/settings would redirect because the
-      // stale `orgs` array still holds the old slug.
+      // setCurrentOrg only updates `currentOrg`; patch the orgs list too so
+      // OrgRouteGuard and OrgSwitcher recognise the new slug. Without this,
+      // navigating to /${newSlug}/settings would redirect because the stale
+      // `orgs` array still holds the old slug.
       const prevOrgs = useAuthStore.getState().orgs;
       useAuthStore.setState({
         orgs: prevOrgs.map((o) =>
