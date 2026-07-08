@@ -198,6 +198,38 @@ async fn update_org_rejects_invalid_slug(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn update_org_rejects_reserved_slug(pool: PgPool) {
+    // Renaming to a slug that collides with a literal-410 legacy route
+    // (keys, model-fallbacks, usage) would make the org unreachable — every
+    // /{slug}/... request would be absorbed by the 410 handlers.
+    common::seed_admin_user(&pool).await;
+    let admin = common::make_admin_token();
+
+    for reserved in ["keys", "model-fallbacks", "usage"] {
+        let app = build_app(common::make_state(pool.clone()));
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method("PATCH")
+                    .uri("/api/v1/default")
+                    .header("authorization", bearer(&admin.token))
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "slug": reserved }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::BAD_REQUEST,
+            "slug '{reserved}' should be rejected as reserved"
+        );
+    }
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn update_org_rejects_duplicate_slug(pool: PgPool) {
     common::seed_admin_user(&pool).await;
     seed_other_org(&pool).await;

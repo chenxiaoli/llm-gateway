@@ -287,7 +287,12 @@ export interface MeResponse {
   id: string;
   username: string;
   platform_role: 'platform_admin' | null;
-  current_org: OrgSummary;
+  /**
+   * null when the user has no memberships (e.g. just self-left their last
+   * org). The auth store treats null as "no current org" and route guards
+   * bounce the user to /login.
+   */
+  current_org: OrgSummary | null;
   orgs: OrgSummary[];
   allow_registration: boolean;
 }

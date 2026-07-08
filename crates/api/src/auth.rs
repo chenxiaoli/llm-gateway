@@ -73,7 +73,9 @@ pub struct MeResponse {
     pub id: String,
     pub username: String,
     pub platform_role: Option<String>,
-    pub current_org: OrgSummary,
+    /// null when the user has no memberships (e.g. just self-left their last
+    /// org). Callers (frontend `refreshOrgs`) treat null as "send to /login".
+    pub current_org: Option<OrgSummary>,
     pub orgs: Vec<OrgSummary>,
     pub allow_registration: bool,
 }
@@ -151,10 +153,13 @@ async fn store_refresh_token(state: &AppState, user: &User, refresh_jwt: &str) -
 ///
 /// Returns `Internal("user has no org membership")` if the user has zero
 /// memberships — every authenticated user must belong to at least one org.
+/// Resolve the user's current org + full membership list. Returns
+/// `current_org = None` if the user has zero memberships; callers that need
+/// a real org (login/register/refresh) handle that via [`require_membership`].
 async fn current_membership(
     state: &AppState,
     user: &User,
-) -> Result<(OrgSummary, Vec<OrgSummary>), ApiError> {
+) -> Result<(Option<OrgSummary>, Vec<OrgSummary>), ApiError> {
     let memberships = state
         .storage
         .list_orgs_for_user(&user.id)
@@ -165,11 +170,11 @@ async fn current_membership(
         .iter()
         .find(|m| Some(&m.org.id) == user.current_org_id.as_ref())
         .or_else(|| memberships.first())
-        .ok_or_else(|| ApiError::Internal("user has no org membership".to_string()))?
-        .clone();
+        .cloned()
+        .map(Into::into);
 
     let orgs: Vec<OrgSummary> = memberships.into_iter().map(Into::into).collect();
-    Ok((current.into(), orgs))
+    Ok((current, orgs))
 }
 
 pub async fn login(
@@ -194,6 +199,13 @@ pub async fn login(
     }
 
     let (current_org, orgs) = current_membership(&state, &user).await?;
+    // Login requires at least one membership — the access token carries a
+    // single org_id, so we can't issue one without a target. This branch
+    // should be unreachable in normal flow (users always belong to ≥1 org),
+    // but we fail loudly rather than silently issuing a useless token.
+    let current_org = current_org.ok_or_else(|| {
+        ApiError::Internal("user has no org membership".to_string())
+    })?;
 
     let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
     let token = create_jwt(&user.id, &current_org.id, platform_role_str, &state.jwt_secret)
@@ -320,6 +332,11 @@ pub async fn register(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let (current_org, orgs) = current_membership(&state, &user).await?;
+    // Register always assigns the new user to a default org above, so this
+    // should never be None — but match login's contract just in case.
+    let current_org = current_org.ok_or_else(|| {
+        ApiError::Internal("user has no org membership".to_string())
+    })?;
 
     let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
     let token = create_jwt(&user.id, &current_org.id, platform_role_str, &state.jwt_secret)
@@ -451,6 +468,9 @@ pub async fn refresh(
 
     // Resolve current org so the new access token carries it.
     let (current_org, _orgs) = current_membership(&state, &user).await?;
+    let current_org = current_org.ok_or_else(|| {
+        ApiError::Internal("user has no org membership".to_string())
+    })?;
 
     // Issue new access token
     let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
@@ -595,6 +615,13 @@ pub async fn list_orgs(
     ))
 }
 
+/// Slugs that collide with the literal-410 legacy routes in
+/// `management::management_router` (`keys`, `model-fallbacks`, `usage`).
+/// If an org took one of these slugs, every request under
+/// `/api/v1/{slug}/...` would be absorbed by the 410 handlers and the org
+/// would be effectively unusable. Reject up-front at validation time.
+const RESERVED_SLUGS: [&str; 3] = ["keys", "model-fallbacks", "usage"];
+
 /// Validate an org slug against the same rule as the DB CHECK constraint:
 /// `^[a-z0-9-]{3,64}$` (lowercase letters, digits, hyphens; 3-64 chars).
 fn validate_org_slug(slug: &str) -> Result<(), String> {
@@ -606,6 +633,9 @@ fn validate_org_slug(slug: &str) -> Result<(), String> {
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
     {
         return Err("Slug can only contain lowercase letters, digits, and hyphens".into());
+    }
+    if RESERVED_SLUGS.contains(&slug) {
+        return Err(format!("Slug '{slug}' is reserved"));
     }
     Ok(())
 }
@@ -883,5 +913,17 @@ mod tests {
         assert!(validate_org_slug("my_org").is_err());        // underscore
         assert!(validate_org_slug("my org").is_err());        // space
         assert!(validate_org_slug("").is_err());              // empty
+    }
+
+    #[test]
+    fn validate_org_slug_rejects_reserved() {
+        // Slugs that collide with literal-410 legacy routes would make the
+        // org unreachable; reject at validation time.
+        assert!(validate_org_slug("keys").is_err());
+        assert!(validate_org_slug("model-fallbacks").is_err());
+        assert!(validate_org_slug("usage").is_err());
+        // Sanity: close-but-not-exact slugs are fine.
+        assert!(validate_org_slug("keys-prod").is_ok());
+        assert!(validate_org_slug("usage-team").is_ok());
     }
 }
