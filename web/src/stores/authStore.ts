@@ -94,6 +94,20 @@ export const useAuthStore = create<AuthState>((set) => ({
 }));
 
 /**
+ * True when the current user may attach a catalog entry to the current org
+ * (admin/owner of the org, or a platform_admin). Parallel to the backend
+ * `can_create_org_catalog` helper in crates/org/src/access.rs — keep the
+ * two in sync if the policy diverges.
+ */
+export function useCanCreateOrgCatalog(): boolean {
+  return useAuthStore((s) =>
+    s.currentOrg?.role === 'admin'
+    || s.currentOrg?.role === 'owner'
+    || s.user?.platform_role === 'platform_admin',
+  );
+}
+
+/**
  * Hook to bootstrap auth state on app load.
  * Call once in App — fetches /auth/me if a token exists.
  */

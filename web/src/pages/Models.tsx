@@ -1,13 +1,15 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAllModels, useCreateGlobalModel, useUpdateGlobalModel } from '../hooks/useModels';
 import { usePricingPolicies } from '../hooks/usePricingPolicies';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { useCatalogFilter } from '../hooks/useCatalogFilter';
 import { useCurrencyStore } from '../stores/currency';
-import { useAuthStore } from '../stores/authStore';
+import { useCanCreateOrgCatalog } from '../stores/authStore';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { CatalogFilter, type CatalogScope } from '../components/CatalogFilter';
+import { CatalogNoMatches } from '../components/CatalogNoMatches';
 import { Plus, Cpu, Pencil, Sparkles, Radio } from 'lucide-react';
 import type { CreateGlobalModelRequest, ModelWithProvider, PricingPolicy } from '../types';
 import { motion } from 'framer-motion';
@@ -452,16 +454,9 @@ export default function Models() {
   const reducedMotion = useReducedMotion();
 
   const [scope, setScope] = useState<CatalogScope>('all');
-  const showOrgOption = useAuthStore(s => (s.currentOrg?.role === 'admin' || s.currentOrg?.role === 'owner') || s.user?.platform_role === 'platform_admin');
-
-  const visible = useMemo(() => {
-    if (!models) return undefined;
-    return models.filter(item => {
-      if (scope === 'all') return true;
-      if (scope === 'platform') return item.owner_org_id === null;
-      return item.owner_org_id !== null; // 'ours'
-    });
-  }, [models, scope]);
+  const showOrgOption = useCanCreateOrgCatalog();
+  const visible = useCatalogFilter(models, scope);
+  const totalUnfiltered = models?.length ?? 0;
 
   const totalModels = visible?.length ?? 0;
   const activeModels = visible?.filter(m => m.channel_names.length > 0).length ?? 0;
@@ -541,7 +536,11 @@ export default function Models() {
 
       {/* ── Grid ── */}
       {totalModels === 0 ? (
-        <EmptyState onAddClick={() => setIsAdding(true)} reducedMotion={reducedMotion} />
+        totalUnfiltered === 0 ? (
+          <EmptyState onAddClick={() => setIsAdding(true)} reducedMotion={reducedMotion} />
+        ) : (
+          <CatalogNoMatches />
+        )
       ) : (
         <motion.div
           initial="hidden"

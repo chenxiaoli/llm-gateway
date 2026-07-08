@@ -4,6 +4,10 @@
       "all": "全部",
       "platform": "平台",
       "ours": "本组织"
+    },
+    "noMatches": {
+      "title": "当前筛选下无内容",
+      "description": "没有匹配当前过滤条件的条目。切回「全部」以查看所有内容。"
     }
   },
   "common": {

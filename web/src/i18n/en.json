@@ -4,6 +4,10 @@
       "all": "All",
       "platform": "Platform",
       "ours": "Ours"
+    },
+    "noMatches": {
+      "title": "Nothing in this scope",
+      "description": "No entries match the current filter. Switch to All to see everything."
     }
   },
   "common": {

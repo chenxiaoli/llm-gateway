@@ -1,15 +1,17 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Pencil, Trash2, Copy, Check, Globe, Zap, Radio, Layers, Shield } from 'lucide-react';
 import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider, useProviderModels, useUpdateProviderModels } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
 import { usePricingPolicies } from '../hooks/usePricingPolicies';
+import { useCatalogFilter } from '../hooks/useCatalogFilter';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Drawer } from '../components/ui/Drawer';
 import { EndpointsEditor } from '../components/ui/EndpointsEditor';
 import { CatalogFilter, type CatalogScope } from '../components/CatalogFilter';
-import { useAuthStore } from '../stores/authStore';
+import { CatalogNoMatches } from '../components/CatalogNoMatches';
+import { useCanCreateOrgCatalog } from '../stores/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Provider } from '../types';
 
@@ -565,16 +567,9 @@ export default function Providers() {
   const deleteMutation = useDeleteProvider();
 
   const [scope, setScope] = useState<CatalogScope>('all');
-  const showOrgOption = useAuthStore(s => (s.currentOrg?.role === 'admin' || s.currentOrg?.role === 'owner') || s.user?.platform_role === 'platform_admin');
-
-  const visible = useMemo(() => {
-    if (!providers) return undefined;
-    return providers.filter(item => {
-      if (scope === 'all') return true;
-      if (scope === 'platform') return item.owner_org_id === null;
-      return item.owner_org_id !== null; // 'ours'
-    });
-  }, [providers, scope]);
+  const showOrgOption = useCanCreateOrgCatalog();
+  const visible = useCatalogFilter(providers, scope);
+  const totalUnfiltered = providers?.length ?? 0;
 
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
@@ -726,7 +721,11 @@ export default function Providers() {
           </div>
         </div>
       ) : totalProviders === 0 ? (
-        <EmptyState onAddClick={() => setCreateOpen(true)} />
+        totalUnfiltered === 0 ? (
+          <EmptyState onAddClick={() => setCreateOpen(true)} />
+        ) : (
+          <CatalogNoMatches />
+        )
       ) : (
         <motion.div
           initial="hidden"
