@@ -15,11 +15,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (Slack, etc.); the first user to present the token joins the org.
 - `/accept-invite?token=...` landing page renders invite metadata for logged-out
   visitors (Sign up / Log in) and logged-in users (Accept / Decline).
-- `GET /api/v1/auth/me/onboarding` returns whether the current session is in the
-  limbo state (`{ org_count, has_current_org }`) so the SPA can redirect to
-  `/onboarding` without round-tripping the full `me` payload.
-- `POST /api/v1/auth/orgs` now reissues the access token. Auto-switches
-  `current_org` only for users in the limbo state.
+- `GET /api/v1/auth/me/onboarding` returns `{ needs_onboarding: bool }` so the
+  SPA can detect limbo users (signed in, zero org memberships) without
+  round-tripping the full `me` payload.
+- `POST /api/v1/orgs` reissues the access token with the caller's effective
+  current org. Auto-switches `current_org` only when the caller was in the
+  limbo state (preserves the working context of users adding a second org).
 
 ### Changed
 - `POST /api/v1/auth/register` no longer auto-assigns a default-org membership.
