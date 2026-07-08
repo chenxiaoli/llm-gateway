@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useAuthStore, useAuthBootstrap } from './stores/authStore';
 import { getToken } from './api/client';
 import { isAdminOrAbove } from './lib/auth';
@@ -9,6 +10,7 @@ import { LegacyRedirect } from './components/LegacyRedirect';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
 import Account from './pages/Account';
 import ChangePassword from './pages/ChangePassword';
@@ -61,9 +63,33 @@ function RequireAdmin() {
   return <Outlet />;
 }
 
+/**
+ * Limbo-user redirect: any authenticated user with zero org memberships who
+ * is NOT already on /onboarding or /accept-invite gets bounced to /onboarding.
+ * Mounted at the router root (outside <Routes>) so it can observe every
+ * location change. This is the global safety net — the per-card flows in
+ * Onboarding.tsx are responsible for navigating away after a success.
+ */
+function OnboardingRedirect() {
+  const user = useAuthStore((s) => s.user);
+  const orgs = useAuthStore((s) => s.orgs);
+  const location = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!user || orgs.length > 0) return;
+    const path = location.pathname;
+    const onAllowedPath = path === '/onboarding' || path.startsWith('/accept-invite');
+    if (!onAllowedPath) {
+      navigate('/onboarding', { replace: true });
+    }
+  }, [user, orgs, location.pathname, navigate]);
+  return null;
+}
+
 function App() {
   return (
     <BrowserRouter>
+      <OnboardingRedirect />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/docs" element={<DocsLayout />}>
@@ -77,6 +103,7 @@ function App() {
         {/* User-scoped — no org prefix, no Layout */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/onboarding" element={<Onboarding />} />
 
         {/* Org-scoped — wraps everything else */}
         <Route path="/:orgSlug" element={<Layout />}>

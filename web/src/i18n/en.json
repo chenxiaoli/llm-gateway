@@ -1276,5 +1276,32 @@
     "footer": {
       "brand": "TokenVis"
     }
+  },
+  "onboarding": {
+    "title": "Set up your workspace",
+    "subtitle": "Create a new org or join one you've been invited to.",
+    "create": {
+      "title": "Create an org",
+      "subtitle": "1 minute form",
+      "name": "Org name",
+      "namePlaceholder": "e.g., Acme Inc.",
+      "slug": "Slug",
+      "slugPlaceholder": "e.g., acme",
+      "slugHint": "Lowercase letters, digits, and hyphens. 3-64 chars.",
+      "submit": "Create",
+      "errors": {
+        "slugTaken": "That slug is taken, try another"
+      }
+    },
+    "join": {
+      "title": "Have an invite?",
+      "subtitle": "Paste the link or token",
+      "tokenLabel": "Invitation link or token",
+      "tokenPlaceholder": "Paste your invitation link or token",
+      "submit": "Join",
+      "errors": {
+        "invalidToken": "This invitation is no longer valid"
+      }
+    }
   }
 }

@@ -26,6 +26,16 @@ interface AuthState {
   pendingInviteToken: string | null;
   login: (input: LoginRequest) => Promise<AuthResponse>;
   register: (input: RegisterRequest) => Promise<AuthResponse>;
+  /**
+   * Apply an AuthResponse received outside the login/register flow — namely
+   * from POST /orgs (onboarding create branch) and POST /invitations/accept
+   * (onboarding join branch). Mirrors the login/register pattern: persists
+   * the fresh tokens, then re-fetches /auth/me to populate user + currentOrg
+   * + orgs + impersonating in one coherent state update. The extra round-trip
+   * is intentional — it avoids drift between the partial AuthResponse shape
+   * and the full MeResponse (e.g. impersonating is not on AuthResponse).
+   */
+  applyAuthResponse: (resp: AuthResponse) => Promise<void>;
   logout: () => void;
   setUser: (user: User) => void;
   setCurrentOrg: (org: OrgSummary) => Promise<void>;
@@ -89,6 +99,21 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ pendingInviteToken: null });
       }
     }
+  },
+
+  applyAuthResponse: async (resp: AuthResponse) => {
+    setToken(resp.token);
+    setRefreshToken(resp.refresh_token);
+    const me = await getMe();
+    set({
+      user: { id: me.id, username: me.username, platform_role: me.platform_role },
+      currentOrg: me.current_org,
+      orgs: me.orgs,
+      // Onboarding (create or join) always produces a real membership — never
+      // a temp/system impersonation row.
+      impersonating: false,
+      isLoading: false,
+    });
   },
 
   logout: () => {

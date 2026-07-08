@@ -1276,5 +1276,32 @@
     "footer": {
       "brand": "TokenVis"
     }
+  },
+  "onboarding": {
+    "title": "设置您的工作区",
+    "subtitle": "创建新组织或加入您被邀请的组织。",
+    "create": {
+      "title": "创建组织",
+      "subtitle": "1 分钟表单",
+      "name": "组织名称",
+      "namePlaceholder": "例如：Acme Inc.",
+      "slug": "Slug",
+      "slugPlaceholder": "例如：acme",
+      "slugHint": "小写字母、数字和连字符。3-64 个字符。",
+      "submit": "创建",
+      "errors": {
+        "slugTaken": "该 Slug 已被占用，请更换一个"
+      }
+    },
+    "join": {
+      "title": "有邀请？",
+      "subtitle": "粘贴链接或令牌",
+      "tokenLabel": "邀请链接或令牌",
+      "tokenPlaceholder": "粘贴您的邀请链接或令牌",
+      "submit": "加入",
+      "errors": {
+        "invalidToken": "此邀请已失效"
+      }
+    }
   }
 }
