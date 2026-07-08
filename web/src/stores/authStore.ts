@@ -19,8 +19,9 @@ interface AuthState {
    */
   impersonating: boolean;
   /**
-   * Stashed invitation token captured pre-auth (e.g. when an anonymous visitor
-   * clicks an invite link). The login/register flow consumes and clears it.
+   * Stashed invitation token captured pre-auth (e.g. by the /accept-invite page,
+   * Task 9). Consumed by register(); cleared after use regardless of outcome so a
+   * stale token can't loop.
    */
   pendingInviteToken: string | null;
   login: (input: LoginRequest) => Promise<AuthResponse>;
@@ -64,8 +65,9 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   register: async (input: RegisterRequest) => {
     set({ isLoading: true });
+    const inviteToken = useAuthStore.getState().pendingInviteToken;
     try {
-      const resp = await apiRegister(input);
+      const resp = await apiRegister(input, inviteToken);
       setToken(resp.token);
       setRefreshToken(resp.refresh_token);
       const me = await getMe();
@@ -81,6 +83,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (err) {
       set({ isLoading: false });
       throw err;
+    } finally {
+      // Clear regardless of outcome so a stale token can't loop.
+      if (inviteToken) {
+        set({ pendingInviteToken: null });
+      }
     }
   },
 
