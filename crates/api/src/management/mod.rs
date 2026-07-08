@@ -67,6 +67,7 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/api/v1/auth/config", get(auth::auth_config))
         .route("/api/v1/auth/me", get(auth::me))
         .route("/api/v1/auth/me/balance", get(auth::me_balance))
+        .route("/api/v1/me/onboarding", get(auth::me_onboarding))
         .route("/api/v1/auth/refresh", post(auth::refresh))
         .route("/api/v1/auth/change-password", post(auth::change_password))
         // Orgs (authenticated) — list/create/switch membership context.

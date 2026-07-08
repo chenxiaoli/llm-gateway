@@ -111,7 +111,7 @@ async fn seed_other_org(pool: &PgPool) {
 
 /// Make a plain-member JWT (no platform role) for the given user id.
 fn member_token(user_id: &str) -> String {
-    llm_gateway_auth::create_jwt(user_id, common::TEST_ORG, None, common::TEST_JWT_SECRET).unwrap()
+    llm_gateway_auth::create_jwt(user_id, Some(common::TEST_ORG), None, common::TEST_JWT_SECRET).unwrap()
 }
 
 // =====================================================================

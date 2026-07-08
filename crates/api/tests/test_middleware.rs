@@ -157,7 +157,7 @@ async fn membership_layer_403s_non_member(pool: PgPool) {
         .layer(from_fn_with_state(state, auth_layer));
 
     let token =
-        llm_gateway_auth::create_jwt("outsider-1", common::TEST_ORG, None, common::TEST_JWT_SECRET)
+        llm_gateway_auth::create_jwt("outsider-1", Some(common::TEST_ORG), None, common::TEST_JWT_SECRET)
             .unwrap();
     let resp = app
         .oneshot(

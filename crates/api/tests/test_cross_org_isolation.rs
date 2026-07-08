@@ -83,7 +83,7 @@ async fn cross_org_access_is_rejected_with_403(pool: PgPool) {
     // find no row, and 403.
     let token = llm_gateway_auth::create_jwt(
         "outsider-1",
-        common::TEST_ORG,
+        Some(common::TEST_ORG),
         None,
         common::TEST_JWT_SECRET,
     )

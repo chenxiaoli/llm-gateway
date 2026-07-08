@@ -41,10 +41,15 @@ async fn test_register_first_user_becomes_admin(pool: PgPool) {
         &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
+    // Phase 3: first user is platform_admin BUT in limbo (no org yet).
+    // They must complete the onboarding wizard to get a real org.
     assert_eq!(body["user"]["platform_role"], "platform_admin");
-    assert_eq!(body["current_org"]["id"], "org_default");
-    assert!(body["orgs"].is_array());
-    assert!(body["orgs"].as_array().unwrap().len() >= 1);
+    assert!(
+        body["current_org"].is_null(),
+        "expected current_org null, got {}",
+        body["current_org"]
+    );
+    assert!(body["orgs"].as_array().unwrap().is_empty());
     assert!(body["token"].is_string());
 }
 
@@ -87,9 +92,10 @@ async fn test_register_second_user_becomes_regular(pool: PgPool) {
         &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
+    // Phase 3: second user is also in limbo.
     assert_eq!(body["user"]["platform_role"], serde_json::Value::Null);
-    assert_eq!(body["current_org"]["id"], "org_default");
-    assert!(body["orgs"].as_array().unwrap().len() >= 1);
+    assert!(body["current_org"].is_null());
+    assert!(body["orgs"].as_array().unwrap().is_empty());
     assert!(body["token"].is_string());
 }
 
@@ -299,9 +305,9 @@ async fn test_auth_me_returns_user_info_when_authenticated(pool: PgPool) {
     .unwrap();
     assert_eq!(me_body["username"], "testuser");
     assert!(me_body["id"].is_string());
-    assert!(me_body["current_org"]["role"].is_string());
-    assert!(me_body["current_org"]["id"] == "org_default");
-    assert!(me_body["orgs"].as_array().unwrap().len() >= 1);
+    // Phase 3: limbo user has no current_org and no memberships.
+    assert!(me_body["current_org"].is_null());
+    assert!(me_body["orgs"].as_array().unwrap().is_empty());
 }
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]

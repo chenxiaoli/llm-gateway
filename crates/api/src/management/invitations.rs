@@ -282,7 +282,7 @@ pub async fn accept_invitation(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
-    let token = create_jwt(&user.id, &member.org_id, platform_role_str, &state.jwt_secret)
+    let token = create_jwt(&user.id, Some(&member.org_id), platform_role_str, &state.jwt_secret)
         .map_err(ApiError::Internal)?;
 
     let memberships = state
@@ -301,7 +301,7 @@ pub async fn accept_invitation(
         token,
         refresh_token: user.refresh_token.clone().unwrap_or_default(),
         user: UserInfo::from(&user),
-        current_org,
+        current_org: Some(current_org),
         orgs,
     }))
 }
@@ -756,7 +756,7 @@ mod tests {
     /// Build an Authorization header carrying a fresh JWT for `user_id`
     /// against `org_id`, signed with the test jwt_secret ("test").
     fn auth_header(user_id: &str, org_id: &str) -> HeaderMap {
-        let token = llm_gateway_auth::create_jwt(user_id, org_id, None, "test")
+        let token = llm_gateway_auth::create_jwt(user_id, Some(org_id), None, "test")
             .expect("create_jwt");
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -791,9 +791,14 @@ mod tests {
 
         // New JWT, non-empty.
         assert!(!body.token.is_empty(), "token populated");
-        // current_org points at the inviting org.
-        assert_eq!(body.current_org.id, org.id);
-        assert_eq!(body.current_org.role, "admin");
+        // current_org points at the inviting org. Phase 3 made this Optional
+        // on AuthResponse — accept_invitation always sets it.
+        let current_org = body
+            .current_org
+            .as_ref()
+            .expect("accept_invitation should set current_org");
+        assert_eq!(current_org.id, org.id);
+        assert_eq!(current_org.role, "admin");
         // orgs list contains the inviting org.
         assert!(
             body.orgs.iter().any(|o| o.id == org.id),

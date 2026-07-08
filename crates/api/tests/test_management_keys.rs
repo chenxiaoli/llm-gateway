@@ -342,11 +342,15 @@ async fn test_register_first_user_is_admin(pool: PgPool) {
         &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
-    // Phase 1 multi-tenant: "first user is admin" now means (a) the user has
-    // platform_role=platform_admin and (b) their auto-membership in the
-    // default org has role=owner.
+    // Phase 3: first user is platform_admin but in limbo (no org yet).
+    // The "owner" membership is granted once they complete the onboarding
+    // wizard by creating or joining an org.
     assert_eq!(body["user"]["platform_role"], "platform_admin");
-    assert_eq!(body["current_org"]["role"], "owner");
+    assert!(
+        body["current_org"].is_null(),
+        "limbo user should have null current_org, got {}",
+        body["current_org"]
+    );
     assert!(body["token"].is_string());
 }
 
