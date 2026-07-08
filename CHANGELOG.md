@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added — Phase 3: Wizard-gated signup + invitations
+
+- Wizard-first signup: brand-new users land at `/onboarding` and create or join
+  an org before reaching any org-scoped UI. Pre-existing users are unaffected.
+- Generic single-use magic-link invitations. Org admins can mint a 7-day
+  invitation URL at `/{org_slug}/admin/invitations` and share it out-of-band
+  (Slack, etc.); the first user to present the token joins the org.
+- `/accept-invite?token=...` landing page renders invite metadata for logged-out
+  visitors (Sign up / Log in) and logged-in users (Accept / Decline).
+- `GET /api/v1/auth/me/onboarding` returns whether the current session is in the
+  limbo state (`{ org_count, has_current_org }`) so the SPA can redirect to
+  `/onboarding` without round-tripping the full `me` payload.
+- `POST /api/v1/auth/orgs` now reissues the access token. Auto-switches
+  `current_org` only for users in the limbo state.
+
+### Changed
+- `POST /api/v1/auth/register` no longer auto-assigns a default-org membership.
+  Brand-new users have `current_org_id = NULL` and `orgs = []` until they
+  complete the onboarding wizard.
+
+### Removed
+- The "default org" bootstrap on first-user signup (was a Phase 1 holdover).
+  The migration-time default org still exists for pre-Phase-3 data.
+
 ## [2.0.0] - 2026-07-07
 
 Phase 1 of SaaS multi-tenant support. The schema now models organizations (tenants) as first-class entities; existing single-tenant deployments continue to work — every existing row is moved into a default `org_default` tenant, and the API surface for the default org is unchanged. Future phases will expose org switching and per-org admin surfaces in the UI.
