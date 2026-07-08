@@ -312,3 +312,100 @@ async fn change_role_rejects_demoting_last_owner(pool: PgPool) {
         "expected message to mention 'last owner', got: {msg}"
     );
 }
+
+// =====================================================================
+// Task 4: remove_member
+// =====================================================================
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn remove_member_succeeds_for_admin(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    seed_default_member(&pool, "u-grace", "grace", "member").await;
+    let app = build_app(common::make_state(pool));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/v1/default/members/u-grace")
+                .header("authorization", bearer(&admin.token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    // Verify the membership row is actually gone via the listing endpoint.
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/default/members")
+                .header("authorization", bearer(&admin.token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_json(resp).await;
+    let still_present = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|m| m["user_id"] == "u-grace");
+    assert!(
+        !still_present,
+        "u-grace must no longer be in the member listing"
+    );
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn remove_member_rejects_last_owner(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    let app = build_app(common::make_state(pool));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/v1/default/members/admin-1")
+                .header("authorization", bearer(&admin.token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let body = body_json(resp).await;
+    let msg = body["error"]["message"].as_str().unwrap();
+    assert!(
+        msg.contains("last owner"),
+        "expected message to mention 'last owner', got: {msg}"
+    );
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn remove_member_can_self_remove(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    seed_default_member(&pool, "u-heidi", "heidi", "member").await;
+    let app = build_app(common::make_state(pool));
+    let tok = member_token("u-heidi");
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/v1/default/members/u-heidi")
+                .header("authorization", bearer(&tok))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+}

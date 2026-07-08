@@ -193,3 +193,44 @@ pub async fn change_member_role(
 
     Ok(Json(build_response(updated, username)))
 }
+
+pub async fn remove_member(
+    State(state): State<Arc<AppState>>,
+    ctx: OrgContext,
+    Path((_org_slug, user_id)): Path<(String, String)>,
+) -> Result<StatusCode, ApiError> {
+    // Self-leave is allowed for any member; removing another requires admin+.
+    let is_self = ctx.user_id == user_id;
+    if !is_self && !can_administer(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
+
+    let existing = state
+        .storage
+        .get_member(&user_id, &ctx.org_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::NotFound(format!("member '{}' not found", user_id)))?;
+
+    // Last-owner guard: removing the only owner would orphan the org.
+    if existing.role == MemberRole::Owner {
+        let owners = state
+            .storage
+            .count_owners(&ctx.org_id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+        if owners <= 1 {
+            return Err(ApiError::BadRequest(
+                "cannot remove or demote the last owner of an org".into(),
+            ));
+        }
+    }
+
+    state
+        .storage
+        .delete_member(&user_id, &ctx.org_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
