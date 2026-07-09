@@ -39,6 +39,8 @@ Phase 5 closes both gaps with a single coherent theme: **make org-level rate-lim
 | Budget scope | Stored only (no enforcement) | Default + real enforcement; drop budget entirely |
 | Architecture | Typed `defaults` endpoints, generic kv storage | Generic kv pass-through; dedicated `org_defaults` table |
 | Org-default fetch strategy | Per-request storage read | TTL cache (correctness risk on policy change) |
+| Rate-limit bucketing | Per-key (collapse model dimension via `""`) | Per-(key, model); per-key-only via limiter refactor |
+| Audit logging | Deferred to future work (no management-action audit surface exists today) | Bolt on a one-off `org_defaults.update` audit row |
 | Counting semantics | Count request on dispatch, regardless of upstream outcome | Count only successful upstream; count after upstream |
 
 ## Architecture
@@ -51,7 +53,7 @@ At request time, after auth resolves the `ApiKey` and `org_id`:
 effective_rpm = api_key.rate_limit ?? org.default_rate_limit_rpm ?? None
 ```
 
-`None` → unlimited (no rate-limiter call). `Some(n)` → call `RateLimiter::check_and_increment(api_key.id, model_id, Some(n), None, None)`. On `false`, return 429.
+`None` → unlimited (no rate-limiter call). `Some(n)` → call `RateLimiter::check_and_increment(api_key.id, "", Some(n), None, None)` (empty model string = per-key bucket). On `false`, return 429.
 
 ### Component boundaries
 
@@ -114,7 +116,7 @@ Fields are `number | null`. `null` = "not set" (unlimited RPM / no budget).
 
 **200 OK** returns the updated object (same shape as GET).
 
-**Audit:** each successful PUT writes one row to `audit_logs` with `action = "org_defaults.update"`, `actor` = caller user id, `org_id` = target org, `metadata` JSON containing both old and new values. Follows existing audit pattern.
+**Audit:** _Deferred to future work._ Building a management-action audit surface is its own concern — no existing handler in `crates/api/src/management/` writes audit rows today (only proxy traffic does, via NATS). A future phase should add a uniform management-action audit API and backfill it across all existing handlers, not bolt one on here for `org_defaults.update` alone.
 
 ### Error responses
 
@@ -145,22 +147,32 @@ When `api_key.rate_limit.is_none()`, fetch `org.default_rate_limit_rpm` via a di
 
 When `api_key.rate_limit.is_some()`, skip the org-default fetch entirely — the per-key value wins.
 
+### Bucketing semantic
+
+`check_and_increment` takes `(key_id, model, rpm_limit, tpm_limit, input_tokens)` — `key_id` and `model` are both bucketing keys. For Phase 5 we pass `model = ""` so the bucket collapses to **per-key RPM** (one counter per `api_key.id`, regardless of which model the client requested). This matches what `api_keys.rate_limit` intuitively means ("this key can do N RPM total", not "N RPM × number of distinct models").
+
+The `client_requested_model` string parsed at `proxy_inner:949` is NOT used as a bucketing key — that would let a caller escape the limit by varying model strings. Per-model limits are a separate concern (see `key_model_rate_limits` in Non-Goals).
+
 ### Enforcement code (pseudo-code)
 
 ```rust
-let effective_rpm = api_key.rate_limit
-    .or_else(|| async {
-        storage.get_org_setting(&org_id, "default_rate_limit_rpm")
-            .await.ok().flatten()
-            .and_then(|s| s.parse::<i64>().ok())
-    }).await;
+// api_key.rate_limit is Some(n) → use it. Otherwise fall back to org default.
+let effective_rpm = match api_key.rate_limit {
+    Some(n) => Some(n),
+    None => storage.get_org_setting(&api_key.org_id, "default_rate_limit_rpm")
+        .await
+        .ok().flatten()
+        .and_then(|s| s.parse::<i64>().ok()),
+};
 
 if let Some(rpm) = effective_rpm {
     let allowed = state.rate_limiter
-        .check_and_increment(&api_key.id, &model_id, Some(rpm), None, None)
+        .check_and_increment(&api_key.id, "", Some(rpm), None, None)
         .await;
     if !allowed {
-        return ApiError::RateLimited.into_response();  // 429 + Retry-After
+        return Err(ApiError::RateLimited {                  // 429 + Retry-After
+            retry_after_secs: state.system_info.rate_limit_window_secs,
+        });
     }
 }
 ```
@@ -247,7 +259,6 @@ New keys under `orgSettings.defaults.*` added to both `en.json` and `zh.json`:
 - `PUT` validation: RPM < 1 → 400; budget < 0 → 400; non-integer → 400
 - `PUT` as non-admin member → 403
 - `GET`/`PUT` as non-member → 404
-- Audit row written on PUT
 
 ### Proxy integration (`crates/api/tests/phase5_enforcement.rs` — new file)
 
@@ -290,4 +301,5 @@ Under `## [Unreleased] → Added`:
 3. **Hard org-level ceilings** (sum across keys) — explicitly out of scope per "default only" decision.
 4. **Rate-limit response body enrichment** — current body is plain `"Rate limit exceeded"`. Could carry `retry_after`, `limit`, `remaining` for parity with industry conventions. Future enhancement.
 5. **Redis-backed distributed rate limiter** — current `RateLimiter` is in-memory per-node. In a multi-node deployment, two nodes would each see half the traffic and apply the limit independently (effectively doubling throughput). Phase 5 ships as-is; multi-node correctness is a future infra item.
-6. **Audit log UI** for `org_defaults.update` events — backend writes them in Phase 5; surfacing in the audit log viewer is polish.
+6. **Management-action audit logging** — no handler in `crates/api/src/management/` currently writes audit rows; only proxy traffic is audited (via NATS). A future phase should add a uniform management-action audit API, backfill it across all existing handlers (`update_org`, `update_key`, `update_member_roles`, etc.), AND surface `org_defaults.update`. Bolt-on audit for just `org_defaults.update` would be inconsistent.
+7. **Audit log UI** for any future management-action events — depends on (6).
