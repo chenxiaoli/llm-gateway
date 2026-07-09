@@ -188,6 +188,15 @@ pub struct SwitchOrgRequest {
     pub org_id: Option<String>,
 }
 
+/// Phase 4: body for `POST /api/v1/auth/me/email`. Lets an already-authenticated
+/// user set or change their own email. Used by pre-Phase-4 legacy accounts that
+/// have no email yet (the EmailBanner surfaces this flow) and by any user who
+/// wants to change their address.
+#[derive(Deserialize)]
+pub struct SetMyEmailRequest {
+    pub email: String,
+}
+
 #[derive(Deserialize)]
 pub struct CreateOrgRequest {
     pub slug: String,
@@ -824,6 +833,123 @@ pub async fn me(
         email: user.email.clone(),
         email_verified_at: user.email_verified_at.map(|t| t.to_rfc3339()),
         requires_email_verification: user.requires_email_verification,
+    }))
+}
+
+/// POST /api/v1/auth/me/email — authenticated.
+///
+/// Lets a logged-in user set or change their email. Used by:
+///   - Pre-Phase-4 legacy users who never had an email (the EmailBanner
+///     surfaces this flow).
+///   - Users who want to change their email after initial setup.
+///
+/// The endpoint sets the email without flipping
+/// `requires_email_verification` — existing users aren't gated by the
+/// post-signup verification flow, so they can keep using the platform
+/// while the new email is pending verification. They DO get a fresh
+/// verification email so they can confirm the new address.
+///
+/// Returns 409 `email_in_use` if another user already owns the email;
+/// 400 on malformed input.
+pub async fn set_my_email(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(input): Json<SetMyEmailRequest>,
+) -> Result<Json<MeResponse>, ApiError> {
+    validate_email(&input.email).map_err(ApiError::BadRequest)?;
+    let email = input.email.trim().to_lowercase();
+
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let user = state
+        .storage
+        .get_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::Unauthorized)?;
+
+    // Reject duplicates up front — case-insensitive (we just lowercased).
+    if let Some(existing) = state
+        .storage
+        .get_user_by_email(&email)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+    {
+        if existing.id != user.id {
+            return Err(ApiError::EmailInUse);
+        }
+    }
+
+    // Set the email. verified_at=None because the new address isn't verified
+    // yet; pass through the existing requires_email_verification flag (we do
+    // NOT flip it to true — see the docstring).
+    let updated = state
+        .storage
+        .set_user_email(&user.id, &email, None, user.requires_email_verification)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Mint a verification token + dispatch the email. Best-effort: if the
+    // dispatch fails after the row is committed, the user can still request
+    // a resend via /auth/resend-verification.
+    let verification = state
+        .storage
+        .create_email_verification(
+            &updated.id,
+            &email,
+            chrono::Utc::now() + chrono::Duration::hours(EMAIL_VERIFICATION_TTL_HOURS),
+        )
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let verification_url = format!(
+        "{}/verify-email/{}",
+        state.public_base_url.trim_end_matches('/'),
+        verification.token
+    );
+    let ctx = VerificationCtx {
+        username: updated.username.clone(),
+        recipient_email: email.clone(),
+        verification_url,
+        expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
+        public_base_url: state.public_base_url.clone(),
+    };
+    match state.templates.render_verification(ctx) {
+        Ok(msg) => {
+            dispatch_with_retry(
+                state.mailer.clone(),
+                msg,
+                "verification email (me/email)".into(),
+            );
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "failed to render verification email (me/email); dispatch skipped");
+        }
+    }
+
+    // Build the fresh MeResponse. Mirror `me`'s impersonation detection —
+    // hardcoded `false` would hide the platform-admin-mode banner.
+    let (current_org, orgs) = current_membership(&state, &updated).await?;
+    let impersonating = match &current_org {
+        Some(org) => state
+            .storage
+            .get_member(&updated.id, &org.id)
+            .await
+            .map_err(|e| ApiError::Internal(format!("member lookup failed: {e}")))?
+            .map(|m| m.created_by.as_deref() == Some("system"))
+            .unwrap_or(false),
+        None => false,
+    };
+
+    Ok(Json(MeResponse {
+        id: updated.id,
+        username: updated.username,
+        platform_role: updated.platform_role.as_ref().map(|p| p.as_str().to_string()),
+        current_org,
+        orgs,
+        allow_registration: get_allow_registration(&state).await,
+        impersonating,
+        email: updated.email.clone(),
+        email_verified_at: updated.email_verified_at.map(|t| t.to_rfc3339()),
+        requires_email_verification: updated.requires_email_verification,
     }))
 }
 

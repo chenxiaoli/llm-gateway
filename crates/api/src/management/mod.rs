@@ -68,6 +68,11 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/api/v1/auth/me", get(auth::me))
         .route("/api/v1/auth/me/balance", get(auth::me_balance))
         .route("/api/v1/auth/me/onboarding", get(auth::me_onboarding))
+        // Phase 4: authenticated user sets/changes their own email. Existing
+        // users aren't gated by the post-signup verification flow — the flag
+        // is NOT flipped, they keep using the platform while the new address
+        // is pending verification.
+        .route("/api/v1/auth/me/email", post(auth::set_my_email))
         .route("/api/v1/auth/refresh", post(auth::refresh))
         .route("/api/v1/auth/change-password", post(auth::change_password))
         // Phase 4: email verification — public (no auth required) so the
