@@ -14,6 +14,21 @@ pub enum ApiError {
     Gone(String),
     UpstreamError(u16, String),
     Internal(String),
+
+    // --- Phase 4: typed variants carrying a stable error code ---
+    // Frontend branches on the `code` field; keep codes in sync with the spec
+    // Section 8.2. Each variant maps to a fixed HTTP status + code + message.
+    EmailRequired,              // 400 email_required
+    EmailInUse,                 // 409 email_in_use
+    EmailMismatchRegister,      // 400 email_mismatch (register via invite)
+    EmailMismatchAccept,        // 403 email_mismatch (accept invite)
+    EmailNotVerified,           // 403 email_not_verified (login gate)
+    EmailVerificationRequired,  // 403 email_verification_required (accept gate)
+    VerificationExpired,        // 410 verification_expired
+    VerificationNotFound,       // 404 verification_not_found
+    ResetExpired,               // 410 reset_expired
+    ResetConsumed,              // 410 reset_consumed
+    ResetNotFound,              // 404 reset_not_found
 }
 
 impl From<llm_gateway_org::OrgError> for ApiError {
@@ -34,22 +49,80 @@ impl From<llm_gateway_org::OrgError> for ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let (status, message) = match &self {
-            ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized"),
-            ApiError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden"),
-            ApiError::RateLimited => (StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded"),
-            ApiError::PaymentRequired => (StatusCode::PAYMENT_REQUIRED, "Insufficient balance"),
-            ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str()),
-            ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
-            ApiError::Conflict(msg) => (StatusCode::CONFLICT, msg.as_str()),
-            ApiError::Gone(msg) => (StatusCode::GONE, msg.as_str()),
+        // (status, message, code) — code is a short stable string the frontend
+        // can branch on. None for legacy variants keeps the existing JSON shape.
+        // No explicit type annotation: the message borrows from `self` for the
+        // String-carrying variants (NotFound, BadRequest, etc.), so we let the
+        // compiler infer a single common `&str` lifetime across all arms.
+        let (status, message, code) = match &self {
+            ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized", None),
+            ApiError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden", None),
+            ApiError::RateLimited => (StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded", None),
+            ApiError::PaymentRequired => (StatusCode::PAYMENT_REQUIRED, "Insufficient balance", None),
+            ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str(), None),
+            ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str(), None),
+            ApiError::Conflict(msg) => (StatusCode::CONFLICT, msg.as_str(), None),
+            ApiError::Gone(msg) => (StatusCode::GONE, msg.as_str(), None),
             ApiError::UpstreamError(code, msg) => (
                 StatusCode::from_u16(*code).unwrap_or(StatusCode::BAD_GATEWAY),
                 msg.as_str(),
+                None,
             ),
-            ApiError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str()),
+            ApiError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.as_str(), None),
+
+            ApiError::EmailRequired => (StatusCode::BAD_REQUEST, "Email is required", Some("email_required")),
+            ApiError::EmailInUse => (StatusCode::CONFLICT, "Email is already in use", Some("email_in_use")),
+            ApiError::EmailMismatchRegister => (
+                StatusCode::BAD_REQUEST,
+                "Email does not match the invitation recipient",
+                Some("email_mismatch"),
+            ),
+            ApiError::EmailMismatchAccept => (
+                StatusCode::FORBIDDEN,
+                "This invitation was sent to a different address",
+                Some("email_mismatch"),
+            ),
+            ApiError::EmailNotVerified => (
+                StatusCode::FORBIDDEN,
+                "Please verify your email before logging in",
+                Some("email_not_verified"),
+            ),
+            ApiError::EmailVerificationRequired => (
+                StatusCode::FORBIDDEN,
+                "Verify your email first",
+                Some("email_verification_required"),
+            ),
+            ApiError::VerificationExpired => (
+                StatusCode::GONE,
+                "This verification link has expired",
+                Some("verification_expired"),
+            ),
+            ApiError::VerificationNotFound => (
+                StatusCode::NOT_FOUND,
+                "Verification token not found",
+                Some("verification_not_found"),
+            ),
+            ApiError::ResetExpired => (
+                StatusCode::GONE,
+                "This password reset link has expired",
+                Some("reset_expired"),
+            ),
+            ApiError::ResetConsumed => (
+                StatusCode::GONE,
+                "This password reset link has already been used",
+                Some("reset_consumed"),
+            ),
+            ApiError::ResetNotFound => (
+                StatusCode::NOT_FOUND,
+                "Password reset token not found",
+                Some("reset_not_found"),
+            ),
         };
-        let body = json!({ "error": { "message": message, "type": status.as_u16() } });
+        let body = if let Some(c) = code {
+            json!({ "error": { "message": message, "type": status.as_u16(), "code": c } })
+        } else {
+            json!({ "error": { "message": message, "type": status.as_u16() } })
+        };
         (status, axum::Json(body)).into_response()
     }
 }

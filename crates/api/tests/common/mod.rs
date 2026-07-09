@@ -2,6 +2,8 @@ use llm_gateway_storage::postgres::PostgresStorage;
 use llm_gateway_storage::Storage;
 use llm_gateway_auth::create_jwt;
 use llm_gateway_api::{AppState, ChannelRegistry, ResolvedChannel, SystemInfo};
+use llm_gateway_email::noop::NoopMailer;
+use llm_gateway_email::templates::TemplateRegistry;
 use llm_gateway_ratelimit::RateLimiter;
 use sqlx::postgres::PgPool;
 use std::sync::Arc;
@@ -51,6 +53,11 @@ pub fn make_state(pool: PgPool) -> Arc<AppState> {
             audit_retention_days: Some(90),
         },
         public_base_url: "http://localhost:5173".to_string(),
+        mailer: Arc::new(NoopMailer::new()),
+        templates: Arc::new(
+            TemplateRegistry::load("noreply@test.local".to_string(), "Test".to_string())
+                .expect("load templates"),
+        ),
     })
 }
 
@@ -83,6 +90,20 @@ pub async fn seed_admin_user(pool: &PgPool) {
     .execute(pool)
     .await
     .expect("seed admin member");
+}
+
+/// Mark a user's email as verified, bypassing the verification gate so
+/// /auth/login succeeds. Tests that don't care about the verification
+/// flow call this after registration; tests that DO care leave the user
+/// un-verified and assert the login gate.
+pub async fn mark_user_verified(pool: &PgPool, username: &str) {
+    sqlx::query(
+        "UPDATE users SET email_verified_at = NOW() WHERE username = $1",
+    )
+    .bind(username)
+    .execute(pool)
+    .await
+    .expect("mark user verified");
 }
 
 /// Insert (or replace) a regular test member with the given id and an

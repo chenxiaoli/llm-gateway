@@ -37,6 +37,7 @@ const pendingInvitation: Invitation = {
   token: 'tok-pending',
   url: 'https://app.example.com/accept-invite?token=tok-pending',
   role: 'member',
+  recipient_email: 'pending@example.com',
   created_at: '2026-07-01T00:00:00Z',
   expires_at: isoDaysFromNow(5),
   accepted_at: null,
@@ -49,6 +50,7 @@ const acceptedInvitation: Invitation = {
   token: 'tok-accepted',
   url: 'https://app.example.com/accept-invite?token=tok-accepted',
   role: 'admin',
+  recipient_email: 'accepted@example.com',
   created_at: '2026-07-01T00:00:00Z',
   expires_at: isoDaysFromNow(3),
   accepted_at: '2026-07-05T00:00:00Z',
@@ -61,6 +63,7 @@ const revokedInvitation: Invitation = {
   token: 'tok-revoked',
   url: 'https://app.example.com/accept-invite?token=tok-revoked',
   role: 'member',
+  recipient_email: 'revoked@example.com',
   created_at: '2026-07-01T00:00:00Z',
   expires_at: isoDaysFromNow(7),
   accepted_at: null,
@@ -88,17 +91,18 @@ describe('Invitations admin page', () => {
     });
   });
 
-  it('generate flow: clicking Generate POSTs with the selected role and refreshes the list', async () => {
-    let createdRole: string | undefined;
+  it('generate flow: clicking Generate POSTs with role + recipient_email and refreshes the list', async () => {
+    let createdBody: { role?: string; recipient_email?: string } | undefined;
     server.use(
       http.get('*/api/v1/acme/invitations', () => HttpResponse.json([])),
       http.post('*/api/v1/acme/invitations', async ({ request }) => {
-        const body = (await request.json()) as { role: string };
-        createdRole = body.role;
+        const body = (await request.json()) as { role: string; recipient_email: string };
+        createdBody = body;
         return HttpResponse.json({
           ...pendingInvitation,
           id: 'inv-new',
           role: body.role,
+          recipient_email: body.recipient_email,
         });
       }),
     );
@@ -113,12 +117,60 @@ describe('Invitations admin page', () => {
     // Switch role to admin via the Select
     await userEvent.selectOptions(screen.getByRole('combobox'), 'admin');
 
+    // Fill the recipient email (Phase 4: required field)
+    await userEvent.type(screen.getByLabelText(/Recipient email/i), 'alice@example.com');
+
     // Click Generate
     await userEvent.click(screen.getByRole('button', { name: 'Generate' }));
 
     await waitFor(() => {
-      expect(createdRole).toBe('admin');
+      expect(createdBody?.role).toBe('admin');
+      expect(createdBody?.recipient_email).toBe('alice@example.com');
     });
+  });
+
+  it('email required: Generate button stays disabled until recipient email is filled', async () => {
+    server.use(
+      http.get('*/api/v1/acme/invitations', () => HttpResponse.json([])),
+    );
+
+    renderWithProviders(<Invitations />, { route: ROUTE });
+
+    await waitFor(() => {
+      expect(screen.getByText('No invitations yet')).toBeInTheDocument();
+    });
+
+    // The email field is required — left empty, the button must be disabled.
+    const emailInput = screen.getByLabelText(/Recipient email/i);
+    expect(emailInput).toBeRequired();
+
+    const generateBtn = screen.getByRole('button', { name: 'Generate' });
+    expect(generateBtn).toBeDisabled();
+
+    // Typing a plausibly-valid email enables the button.
+    await userEvent.type(emailInput, 'alice@example.com');
+    await waitFor(() => {
+      expect(generateBtn).not.toBeDisabled();
+    });
+  });
+
+  it('recipient column: shows the Recipient header + the email for each row', async () => {
+    server.use(
+      http.get('*/api/v1/acme/invitations', () =>
+        HttpResponse.json([pendingInvitation, acceptedInvitation]),
+      ),
+    );
+
+    renderWithProviders(<Invitations />, { route: ROUTE });
+
+    // Column header appears.
+    await waitFor(() => {
+      expect(screen.getByRole('columnheader', { name: 'Recipient' })).toBeInTheDocument();
+    });
+
+    // Each row's recipient email renders.
+    expect(screen.getByText('pending@example.com')).toBeInTheDocument();
+    expect(screen.getByText('accepted@example.com')).toBeInTheDocument();
   });
 
   it('list rendering: pending, accepted, revoked rows show the correct status', async () => {

@@ -94,7 +94,57 @@
     "errorRegister": "Registration failed",
     "successChanged": "Password changed",
     "updateAccountPassword": "Update your account password",
-    "registrationDisabled": "Registration is currently disabled"
+    "registrationDisabled": "Registration is currently disabled",
+    "email": "Email",
+    "emailInUse": "That email is already in use.",
+    "emailMismatch": "Email does not match the invitation.",
+    "emailRequired": "Email is required.",
+    "emailNotVerifiedMessage": "Please verify your email before logging in.",
+    "verificationSent": "Verification email sent.",
+    "resendVerification": "Resend verification email",
+    "forgotPassword": "Forgot password?"
+  },
+  "verify_email": {
+    "verifying": "Verifying your email…",
+    "verified_title": "Email verified",
+    "verified_body": "Your email address has been verified. You can now log in.",
+    "continue_to_login": "Continue to login",
+    "expired_title": "Link expired or invalid",
+    "expired_body": "This verification link is no longer valid. You can request a new one from the login page.",
+    "error_title": "Something went wrong",
+    "retry": "Try again"
+  },
+  "check_email": {
+    "title": "Check your email",
+    "body": "We sent a verification email to {{email}}. Click the link inside to verify your address.",
+    "resend": "Resend email",
+    "go_to_login": "Go to login",
+    "resent": "Verification email resent."
+  },
+  "forgot_password": {
+    "title": "Reset your password",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "submit": "Send reset link",
+    "sentTitle": "Check your email",
+    "sentBody": "If an account exists for {{email}}, we've sent a reset link. The link expires in 1 hour.",
+    "backToLogin": "Back to login"
+  },
+  "reset_password": {
+    "loading": "Checking link…",
+    "validTitle": "Set a new password",
+    "passwordLabel": "New password",
+    "confirmLabel": "Confirm new password",
+    "submit": "Update password",
+    "updated": "Password updated",
+    "updatedBody": "Redirecting to login…",
+    "expiredTitle": "Link expired or invalid",
+    "expiredBody": "This password reset link is no longer valid. Please request a new one.",
+    "requestNew": "Request new link",
+    "errorTitle": "Something went wrong",
+    "retry": "Try again",
+    "consumed": "This link has already been used.",
+    "genericError": "Something went wrong. Please try again."
   },
   "toasts": {
     "keyCreated": "API key created",
@@ -1311,6 +1361,10 @@
     "title": "Join {{org}}",
     "inviter": "Invite from {{user}}",
     "role": "You'll join as {{role}}.",
+    "sentTo": "Sent to {{email}}",
+    "emailMismatch": "This invitation was sent to {{email}}. Sign out and sign back in with that address to accept.",
+    "emailMissing": "You need to add {{email}} to your account before you can accept this invitation.",
+    "emailUnverified": "Verify your email first, then come back to accept.",
     "accept": "Accept",
     "decline": "Decline",
     "signUp": "Sign up to accept",
@@ -1319,7 +1373,9 @@
     "goToOrg": "Go to {{org}}",
     "errors": {
       "invalidToken": "This invitation is no longer valid",
-      "alreadyAccepted": "This invitation has already been accepted"
+      "alreadyAccepted": "This invitation has already been accepted",
+      "emailMismatch": "Your email doesn't match the invitation recipient",
+      "emailVerificationRequired": "Verify your email first"
     },
     "gone": {
       "title": "Invitation no longer valid",
@@ -1337,6 +1393,8 @@
     "generate": {
       "title": "Generate invite link",
       "role": "Role",
+      "recipientEmail": "Recipient email",
+      "recipientEmailPlaceholder": "alice@example.com",
       "submit": "Generate"
     },
     "roles": {
@@ -1346,6 +1404,7 @@
     "table": {
       "link": "Link",
       "role": "Role",
+      "recipient": "Recipient",
       "status": "Status",
       "created": "Created",
       "actions": "Actions"
@@ -1366,10 +1425,29 @@
     "confirmRevokeDescription": "The link will stop working immediately. This cannot be undone.",
     "empty": "No invitations yet",
     "toasts": {
-      "created": "Invitation link generated",
+      "createdTo": "Invitation sent to {{email}}",
       "createFailed": "Failed to generate invitation",
       "revoked": "Invitation revoked",
       "revokeFailed": "Failed to revoke invitation"
+    },
+    "errors": {
+      "emailInUse": "That email already has an account"
     }
+  },
+  "emailBanner": {
+    "message": "Add an email to receive invitations and reset your password.",
+    "addAction": "Add email",
+    "dismiss": "Dismiss"
+  },
+  "addEmailModal": {
+    "title": "Add your email",
+    "body": "We'll send a verification link to this address. You can keep using TokenVis while it's pending verification.",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "submit": "Send verification",
+    "cancel": "Cancel",
+    "success": "Verification email sent — check your inbox.",
+    "errorInUse": "That email is already in use.",
+    "errorGeneric": "Something went wrong. Please try again."
   }
 }

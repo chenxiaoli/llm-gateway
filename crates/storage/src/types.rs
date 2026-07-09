@@ -100,6 +100,9 @@ pub struct MembershipSummary {
 // --- Invitations (Phase 3) ---
 
 /// One row of the `invitations` table. Used internally by the storage trait.
+///
+/// Phase 4: `recipient_email` binds the invitation to a specific email. Old
+/// generic-token rows (Phase 3) had NULL here; the migration revokes them.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Invitation {
     pub id: String,
@@ -107,6 +110,7 @@ pub struct Invitation {
     pub org_id: String,
     pub role: MemberRole,
     pub created_by: String,
+    pub recipient_email: Option<String>,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub accepted_at: Option<DateTime<Utc>>,
@@ -114,20 +118,59 @@ pub struct Invitation {
     pub revoked_at: Option<DateTime<Utc>>,
 }
 
-/// Request body for `POST /api/v1/{org_slug}/invitations`.
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct CreateInvitationRequest {
-    pub role: String, // "member" | "admin"
+/// One row of the `email_verifications` table. The `token` is the lookup
+/// key the user clicks in their email; `consumed_at IS NULL` means "still
+/// usable". `email` is denormalized from `users.email` so the row records
+/// *what* was being verified at mint time.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct EmailVerification {
+    pub id: String,
+    pub token: String,
+    pub user_id: String,
+    pub email: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub consumed_at: Option<DateTime<Utc>>,
+}
+
+/// One row of the `password_resets` table. Same shape as
+/// `EmailVerification` minus the denormalized `email`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PasswordReset {
+    pub id: String,
+    pub token: String,
+    pub user_id: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub consumed_at: Option<DateTime<Utc>>,
+}
+
+/// Result of an atomic password-reset attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasswordResetOutcome {
+    /// Token was valid; password was updated; reset row was marked consumed.
+    Success,
+    /// No row matched the token.
+    NotFound,
+    /// Token had already been consumed.
+    Consumed,
+    /// Token had expired.
+    Expired,
 }
 
 /// Response for invitation mint/list endpoints. The URL is constructed
 /// server-side so the frontend doesn't need to know the public base URL.
+///
+/// Phase 4: `recipient_email` is surfaced so the admin list can show whom the
+/// invitation was sent to (Task 11). It's Option only for legacy rows — new
+/// rows always carry a recipient per `create_invitation`'s required body field.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct InvitationResponse {
     pub id: String,
     pub token: String,
     pub url: String,
     pub role: String,
+    pub recipient_email: Option<String>,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub accepted_at: Option<DateTime<Utc>>,
@@ -154,6 +197,7 @@ pub struct InvitationPreview {
     pub org_slug: String,
     pub role: String,
     pub inviter_username: String,
+    pub recipient_email: Option<String>,
     pub expires_at: DateTime<Utc>,
 }
 
@@ -890,6 +934,11 @@ pub struct User {
     pub refresh_token: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    // Phase 4: email + verification + password-change tracking.
+    pub email: Option<String>,
+    pub email_verified_at: Option<DateTime<Utc>>,
+    pub requires_email_verification: bool,
+    pub password_changed_at: DateTime<Utc>,
 }
 
 // TODO(Task 5/8): migrate alongside User — drop role/group_id fields once
@@ -1193,6 +1242,8 @@ pub struct AppConfig {
     pub upstream: UpstreamConfig,
     pub audit: AuditConfig,
     pub nats: Option<NatsConfig>,
+    #[serde(default)]
+    pub email: EmailConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1244,4 +1295,47 @@ pub struct NatsConfig {
     /// Takes precedence over `token` when set.
     #[serde(default)]
     pub credentials_file: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EmailConfig {
+    /// "smtp" | "file" | "noop"
+    #[serde(default = "default_email_transport")]
+    pub transport: String,
+    #[serde(default = "default_email_from_address")]
+    pub from_address: String,
+    #[serde(default = "default_email_from_name")]
+    pub from_name: String,
+    /// Used when transport = "file"
+    #[serde(default = "default_email_file_output_dir")]
+    pub file_output_dir: String,
+    /// SMTP-specific — required when transport = "smtp"
+    pub smtp_host: Option<String>,
+    pub smtp_port: Option<u16>,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<String>,
+    #[serde(default = "default_email_smtp_use_tls")]
+    pub smtp_use_tls: bool,
+}
+
+fn default_email_transport() -> String { "file".into() }
+fn default_email_from_address() -> String { "noreply@example.com".into() }
+fn default_email_from_name() -> String { "LLM Gateway".into() }
+fn default_email_file_output_dir() -> String { "./dev-emails".into() }
+fn default_email_smtp_use_tls() -> bool { true }
+
+impl Default for EmailConfig {
+    fn default() -> Self {
+        Self {
+            transport: default_email_transport(),
+            from_address: default_email_from_address(),
+            from_name: default_email_from_name(),
+            file_output_dir: default_email_file_output_dir(),
+            smtp_host: None,
+            smtp_port: None,
+            smtp_username: None,
+            smtp_password: None,
+            smtp_use_tls: default_email_smtp_use_tls(),
+        }
+    }
 }

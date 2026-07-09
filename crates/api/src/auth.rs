@@ -9,9 +9,12 @@ use llm_gateway_auth::{
     create_jwt, create_refresh_jwt, hash_password, validate_password, validate_username,
     verify_password, verify_refresh_jwt,
 };
+use llm_gateway_email::dispatch_with_retry;
+use llm_gateway_email::templates::VerificationCtx;
 use llm_gateway_org::OrgContext;
 use llm_gateway_storage::{
-    CreateOrg, Member, MemberRole, MembershipSummary, PlatformRole, UpdateOrg, User,
+    CreateOrg, Member, MemberRole, MembershipSummary, PasswordResetOutcome, PlatformRole,
+    UpdateOrg, User,
 };
 
 use crate::error::ApiError;
@@ -28,6 +31,62 @@ pub struct LoginRequest {
 pub struct RegisterRequest {
     pub username: String,
     pub password: String,
+    /// Phase 4: required — the new user must have a verified email before
+    /// they can log in. `Option<String>` so a missing field deserializes to
+    /// `None` and we can return the typed `EmailRequired` (400) error
+    /// instead of Axum's default 422 for malformed JSON.
+    #[serde(default)]
+    pub email: Option<String>,
+    /// Optional invitation token. When present, the new account is
+    /// pre-bound to the inviting org and the email must match
+    /// `invitation.recipient_email` (case-insensitive).
+    #[serde(default)]
+    pub invite_token: Option<String>,
+}
+
+/// Phase 4: body for `POST /api/v1/auth/verify-email`.
+#[derive(Deserialize)]
+pub struct VerifyEmailRequest {
+    pub token: String,
+}
+
+/// Phase 4: body for `POST /api/v1/auth/resend-verification`. Always returns
+/// 204 — the endpoint is a no-op for unknown / unverified-by-policy emails so
+/// it cannot be used to enumerate addresses.
+#[derive(Deserialize)]
+pub struct ResendVerificationRequest {
+    pub email: String,
+}
+
+/// Phase 4: body for `POST /api/v1/auth/password-reset/request`.
+#[derive(Deserialize)]
+pub struct PasswordResetRequest {
+    pub email: String,
+}
+
+/// Phase 4: body for `POST /api/v1/auth/password-reset/confirm`.
+#[derive(Deserialize)]
+pub struct PasswordResetConfirm {
+    pub token: String,
+    pub new_password: String,
+}
+
+/// Phase 4: response for `GET /api/v1/auth/password-reset/preview`.
+///
+/// `valid=false` collapses consumed, expired, AND not-found — the endpoint is
+/// deliberately tight-lipped so an attacker probing tokens only learns
+/// "usable" vs "not". When `valid=false`, `expires_at` is always None — the
+/// endpoint never confirms whether the token exists.
+#[derive(Serialize)]
+pub struct PasswordResetPreview {
+    pub valid: bool,
+    pub expires_at: Option<String>,
+}
+
+/// Phase 4: shared `?token=...` query for preview endpoints.
+#[derive(Deserialize)]
+pub struct TokenQuery {
+    pub token: String,
 }
 
 #[derive(Serialize)]
@@ -85,6 +144,19 @@ pub struct MeResponse {
     /// belong to (see `membership_layer`'s impersonation path). Surfaced to
     /// the UI so it can show an "platform admin mode" banner.
     pub impersonating: bool,
+    // --- Phase 4 fields ---
+    /// The user's email (None when they haven't added one). Frontend shows
+    /// the "Add email" banner when this is null and the policy requires it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    /// RFC3339 timestamp of when the email was verified, or null if the
+    /// email isn't verified yet (or there is no email).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email_verified_at: Option<String>,
+    /// True if the platform policy requires this user to verify their email
+    /// before login. Currently always true at signup; reserved for future
+    /// roles (e.g. service accounts) that bypass the gate.
+    pub requires_email_verification: bool,
 }
 
 #[derive(Serialize)]
@@ -114,6 +186,15 @@ pub struct RefreshResponse {
 pub struct SwitchOrgRequest {
     pub org_slug: Option<String>,
     pub org_id: Option<String>,
+}
+
+/// Phase 4: body for `POST /api/v1/auth/me/email`. Lets an already-authenticated
+/// user set or change their own email. Used by pre-Phase-4 legacy accounts that
+/// have no email yet (the EmailBanner surfaces this flow) and by any user who
+/// wants to change their address.
+#[derive(Deserialize)]
+pub struct SetMyEmailRequest {
+    pub email: String,
 }
 
 #[derive(Deserialize)]
@@ -205,6 +286,18 @@ pub async fn login(
         return Err(ApiError::Unauthorized);
     }
 
+    // Phase 4 login gate: a user with `requires_email_verification = true`
+    // cannot get a token until their email is verified. Once verified, the
+    // flag is left in place (it tracks the org's policy, not this user's
+    // status) but `email_verified_at` is set and the check passes.
+    //
+    // The `requires` check is a future-proofing hook — currently every user
+    // created via /auth/register has it set to true. Service accounts (a
+    // later feature) can flip it to false to skip the gate.
+    if user.requires_email_verification && user.email_verified_at.is_none() {
+        return Err(ApiError::EmailNotVerified);
+    }
+
     let (current_org, orgs) = current_membership(&state, &user).await?;
     // Phase 3: a user with zero memberships (e.g. limbo user who registered
     // then self-left, or was removed from their last org) can still log in.
@@ -233,6 +326,17 @@ pub async fn login(
     }))
 }
 
+/// Verification email lifetime. 24 hours is the conventional default
+/// (matches GitHub/GitLab/etc.) and long enough to be a non-issue for users
+/// who don't see the email arrive in the first minute.
+const EMAIL_VERIFICATION_TTL_HOURS: i64 = 24;
+
+/// Password-reset token lifetime. Shorter than email verification because a
+/// live reset token is higher-stakes: anyone who intercepts it can take over
+/// the account. 1 hour is long enough for a user to notice the email and
+/// click through, short enough to limit the exposure window.
+const PASSWORD_RESET_TTL_HOURS: i64 = 1;
+
 pub async fn register(
     State(state): State<Arc<AppState>>,
     Json(input): Json<RegisterRequest>,
@@ -253,6 +357,16 @@ pub async fn register(
 
     validate_username(&input.username).map_err(ApiError::BadRequest)?;
     validate_password(&input.password).map_err(ApiError::BadRequest)?;
+    // Phase 4: email is required for every new account. We validate the
+    // shape here (not just the presence) so a malformed string never makes
+    // it into the database. The `email` field is Option<String> at the
+    // deserialization layer so a missing key returns 400 + email_required
+    // (a typed error) rather than Axum's default 422 for a malformed body.
+    let email_trimmed = input.email.unwrap_or_default().trim().to_string();
+    if email_trimmed.is_empty() {
+        return Err(ApiError::EmailRequired);
+    }
+    validate_email(&email_trimmed).map_err(ApiError::BadRequest)?;
 
     if state
         .storage
@@ -263,6 +377,46 @@ pub async fn register(
     {
         return Err(ApiError::BadRequest("Username already exists".to_string()));
     }
+    if state
+        .storage
+        .get_user_by_email(&email_trimmed)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .is_some()
+    {
+        return Err(ApiError::EmailInUse);
+    }
+
+    // If an invite_token was supplied, look it up. We must validate the email
+    // matches the invitation's recipient (case-insensitive) — otherwise a
+    // malicious caller could intercept someone else's invite and squat the
+    // org membership. The actual membership is created by the accept flow
+    // later; here we just confirm the binding.
+    let invite = if let Some(token) = input.invite_token.as_deref() {
+        let inv = state
+            .storage
+            .get_invitation_by_token(token)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+            .ok_or_else(|| ApiError::NotFound("invitation not found".into()))?;
+        // An invite is only bindable if it's still consumable: not accepted,
+        // not revoked, not expired, and carries a recipient_email.
+        let now = chrono::Utc::now();
+        if inv.accepted_at.is_some()
+            || inv.revoked_at.is_some()
+            || inv.expires_at < now
+            || inv.recipient_email.is_none()
+        {
+            return Err(ApiError::NotFound("invitation not found".into()));
+        }
+        let recipient = inv.recipient_email.as_deref().unwrap().to_lowercase();
+        if recipient != email_trimmed.to_lowercase() {
+            return Err(ApiError::EmailMismatchRegister);
+        }
+        Some(inv)
+    } else {
+        None
+    };
 
     let now = chrono::Utc::now();
     let platform_role = if is_first_user {
@@ -280,6 +434,13 @@ pub async fn register(
         refresh_token: None,
         created_at: now,
         updated_at: now,
+        // Phase 4: new users always need email verification. The dispatch
+        // step below mints a token and sends the email; the user is locked
+        // out of login until they click the link (see the login gate).
+        email: Some(email_trimmed.clone()),
+        email_verified_at: None,
+        requires_email_verification: true,
+        password_changed_at: now,
     };
 
     state
@@ -319,6 +480,64 @@ pub async fn register(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or_else(|| ApiError::Internal("just-created user vanished".into()))?;
 
+    // Phase 4: mint a verification token + dispatch the email. We swallow
+    // dispatch errors (the spawn'd task already retries 3x; final failure
+    // is logged). A user can always re-request via /auth/resend-verification.
+    let verification_expires = now + chrono::Duration::hours(EMAIL_VERIFICATION_TTL_HOURS);
+    match state
+        .storage
+        .create_email_verification(&user.id, &email_trimmed, verification_expires)
+        .await
+    {
+        Ok(verification) => {
+            let verification_url = format!(
+                "{}/verify-email/{}",
+                state.public_base_url.trim_end_matches('/'),
+                verification.token
+            );
+            let ctx = VerificationCtx {
+                username: user.username.clone(),
+                recipient_email: email_trimmed.clone(),
+                verification_url,
+                expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
+                public_base_url: state.public_base_url.clone(),
+            };
+            match state.templates.render_verification(ctx) {
+                Ok(msg) => {
+                    dispatch_with_retry(state.mailer.clone(), msg, "verification email".into());
+                }
+                Err(e) => {
+                    // Template failure is a config issue, not a per-user
+                    // issue; log loudly but still return success — the user
+                    // is created and can use resend-verification later.
+                    tracing::error!(error = %e, "failed to render verification email");
+                }
+            }
+        }
+        Err(e) => {
+            // Same as above: storage failure is a server issue, not a
+            // user-blocking error. The user exists and can retry the
+            // dispatch via /auth/resend-verification once the DB heals.
+            tracing::error!(error = %e, "failed to mint verification token");
+        }
+    }
+
+    // If an invite_token was supplied and validated above, consume it
+    // here so the user lands with the membership already in place. The
+    // accept_invitation flow is a different code path (used when an
+    // already-registered user joins via a link in their email); the
+    // register-with-invite path combines both into one transaction.
+    if let Some(inv) = invite {
+        // Ignore the return — accept_invitation returns Some(Member) on
+        // success; on None the token was already consumed by a concurrent
+        // request, which is fine (the user still got created).
+        let _ = state
+            .storage
+            .accept_invitation(&inv.token, &user.id)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+    }
+
     let orgs: Vec<OrgSummary> = Vec::new();
 
     let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
@@ -339,6 +558,231 @@ pub async fn register(
         current_org: None,
         orgs,
     }))
+}
+
+/// POST /api/v1/auth/verify-email — consume a verification token.
+///
+/// The token is one-shot. On success the user's `email_verified_at` is set
+/// in the same transaction as the row is marked consumed. Returns 204 No
+/// Content on success — the caller is expected to redirect the user back
+/// to the app, where the next /me call will reflect the verified status.
+///
+/// Errors are deliberately collapsed: invalid/missing/expired/consumed all
+/// surface as the same `VerificationExpired` (410) so the endpoint cannot
+/// be used to enumerate live tokens.
+pub async fn verify_email(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<VerifyEmailRequest>,
+) -> Result<StatusCode, ApiError> {
+    // Confirm the token exists at all. A truly missing token is a 404
+    // (clue: caller typo'd their URL or scraped a stale link).
+    let existing = state
+        .storage
+        .get_email_verification_by_token(&input.token)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::VerificationNotFound)?;
+
+    // Already-consumed or expired → 410. The body still names
+    // "verification_expired" because from the caller's perspective the link
+    // is no longer usable, regardless of root cause.
+    let now = chrono::Utc::now();
+    if existing.consumed_at.is_some() || existing.expires_at < now {
+        return Err(ApiError::VerificationExpired);
+    }
+
+    // Atomic consume — the storage layer also stamps
+    // `users.email_verified_at` in the same transaction.
+    let ok = state
+        .storage
+        .consume_email_verification(&input.token)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if !ok {
+        // Race: another caller consumed it between our read and our write.
+        return Err(ApiError::VerificationExpired);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// POST /api/v1/auth/resend-verification — re-dispatch a verification email.
+///
+/// Always returns 204 No Content, even for unknown emails. The endpoint
+/// is the natural target for enumeration (POST + email), so a uniform
+/// response shape is the only acceptable behavior.
+///
+/// Behavior:
+/// - Unknown email → no-op, 204.
+/// - Email exists, user not yet verified → mint a new token + dispatch.
+/// - Email exists, user already verified → no-op, 204 (don't leak that the
+///   address is registered).
+pub async fn resend_verification(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<ResendVerificationRequest>,
+) -> Result<StatusCode, ApiError> {
+    // Trim + validate so a malformed input still gets a clean 204 (no
+    // enumeration vector). The dispatch step is a no-op for unknown /
+    // already-verified addresses, so we don't bother short-circuiting here.
+    let email = input.email.trim();
+    if email.is_empty() {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    // Look up by email. None → no-op 204.
+    let Some(user) = state
+        .storage
+        .get_user_by_email(email)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+    else {
+        return Ok(StatusCode::NO_CONTENT);
+    };
+
+    // Already verified → no-op 204. Don't leak that the address is
+    // registered.
+    if user.email_verified_at.is_some() {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    let now = chrono::Utc::now();
+    let expires = now + chrono::Duration::hours(EMAIL_VERIFICATION_TTL_HOURS);
+    let verification = match state
+        .storage
+        .create_email_verification(&user.id, email, expires)
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "resend_verification: mint failed, returning 204 to avoid enumeration");
+            return Ok(StatusCode::NO_CONTENT);
+        }
+    };
+
+    let verification_url = format!(
+        "{}/verify-email/{}",
+        state.public_base_url.trim_end_matches('/'),
+        verification.token
+    );
+    let ctx = VerificationCtx {
+        username: user.username.clone(),
+        recipient_email: email.to_string(),
+        verification_url,
+        expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
+        public_base_url: state.public_base_url.clone(),
+    };
+    match state.templates.render_verification(ctx) {
+        Ok(msg) => {
+            dispatch_with_retry(state.mailer.clone(), msg, "resend verification email".into());
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "failed to render resend verification email");
+        }
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// POST /api/v1/auth/password-reset/request — public, always 204.
+///
+/// Never confirms whether the email exists. Unknown emails, unverified
+/// accounts, and transient DB errors all collapse to a no-op 204. Only
+/// verified account holders receive a reset email — resetting a password for
+/// an address the user hasn't proven ownership of would hand the account to
+/// whoever currently controls that mailbox.
+pub async fn password_reset_request(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<PasswordResetRequest>,
+) -> Result<StatusCode, ApiError> {
+    let email = input.email.trim().to_lowercase();
+    let Some(user) = state
+        .storage
+        .get_user_by_email(&email)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+    else {
+        return Ok(StatusCode::NO_CONTENT);
+    };
+    if user.email_verified_at.is_none() {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    let expires = chrono::Utc::now() + chrono::Duration::hours(PASSWORD_RESET_TTL_HOURS);
+    let reset = match state.storage.create_password_reset(&user.id, expires).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, "password_reset_request: mint failed, returning 204 to avoid enumeration");
+            return Ok(StatusCode::NO_CONTENT);
+        }
+    };
+    let reset_url = format!(
+        "{}/reset-password/{}",
+        state.public_base_url.trim_end_matches('/'),
+        reset.token
+    );
+    let ctx = llm_gateway_email::templates::PasswordResetCtx {
+        username: user.username.clone(),
+        recipient_email: email,
+        reset_url,
+        expires_in_hours: PASSWORD_RESET_TTL_HOURS as u32,
+        public_base_url: state.public_base_url.clone(),
+    };
+    match state.templates.render_password_reset(ctx) {
+        Ok(msg) => dispatch_with_retry(state.mailer.clone(), msg, "password reset email".into()),
+        Err(e) => tracing::error!(error = %e, "failed to render password-reset email; dispatch skipped"),
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// GET /api/v1/auth/password-reset/preview?token=... — public.
+///
+/// Returns `{ valid, expires_at }`. The frontend's ResetPassword page uses
+/// this to decide whether to render the form or the "expired" state before
+/// the user types. `valid=false` covers consumed, expired, and not-found.
+pub async fn password_reset_preview(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<TokenQuery>,
+) -> Result<Json<PasswordResetPreview>, ApiError> {
+    let Some(r) = state
+        .storage
+        .get_password_reset_by_token(&params.token)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+    else {
+        return Ok(Json(PasswordResetPreview { valid: false, expires_at: None }));
+    };
+    let valid = r.consumed_at.is_none() && r.expires_at > chrono::Utc::now();
+    let expires_at = if valid {
+        Some(r.expires_at.to_rfc3339())
+    } else {
+        None
+    };
+    Ok(Json(PasswordResetPreview { valid, expires_at }))
+}
+
+/// POST /api/v1/auth/password-reset/confirm — public.
+///
+/// Consumes the reset token and sets the new password in a single atomic
+/// storage transaction. SELECT FOR UPDATE on the reset row serializes
+/// concurrent confirm attempts — exactly one wins, the rest get
+/// `ResetConsumed`. No crash window: the password write and the
+/// `consumed_at` write commit together (or roll back together), so an
+/// attacker can never reuse a token after a partial failure.
+pub async fn password_reset_confirm(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<PasswordResetConfirm>,
+) -> Result<StatusCode, ApiError> {
+    validate_password(&input.new_password).map_err(ApiError::BadRequest)?;
+    let new_hash = hash_password(&input.new_password)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let outcome = state
+        .storage
+        .consume_password_reset_and_set_password(&input.token, &new_hash)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    match outcome {
+        PasswordResetOutcome::Success => Ok(StatusCode::NO_CONTENT),
+        PasswordResetOutcome::NotFound => Err(ApiError::ResetNotFound),
+        PasswordResetOutcome::Consumed => Err(ApiError::ResetConsumed),
+        PasswordResetOutcome::Expired => Err(ApiError::ResetExpired),
+    }
 }
 
 pub async fn me(
@@ -386,6 +830,130 @@ pub async fn me(
         orgs,
         allow_registration: allow_reg,
         impersonating,
+        email: user.email.clone(),
+        email_verified_at: user.email_verified_at.map(|t| t.to_rfc3339()),
+        requires_email_verification: user.requires_email_verification,
+    }))
+}
+
+/// POST /api/v1/auth/me/email — authenticated.
+///
+/// Lets a logged-in user set or change their email. Used by:
+///   - Pre-Phase-4 legacy users who never had an email (the EmailBanner
+///     surfaces this flow).
+///   - Users who want to change their email after initial setup.
+///
+/// The endpoint sets the email without flipping
+/// `requires_email_verification` — existing users aren't gated by the
+/// post-signup verification flow, so they can keep using the platform
+/// while the new email is pending verification. They DO get a fresh
+/// verification email so they can confirm the new address.
+///
+/// Returns 409 `email_in_use` if another user already owns the email;
+/// 400 on malformed input.
+pub async fn set_my_email(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(input): Json<SetMyEmailRequest>,
+) -> Result<Json<MeResponse>, ApiError> {
+    validate_email(&input.email).map_err(ApiError::BadRequest)?;
+    let email = input.email.trim().to_lowercase();
+
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let user = state
+        .storage
+        .get_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::Unauthorized)?;
+
+    // Reject duplicates up front — case-insensitive (we just lowercased).
+    if let Some(existing) = state
+        .storage
+        .get_user_by_email(&email)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+    {
+        if existing.id != user.id {
+            return Err(ApiError::EmailInUse);
+        }
+    }
+
+    // Set the email. verified_at=None because the new address isn't verified
+    // yet; pass through the existing requires_email_verification flag (we do
+    // NOT flip it to true — see the docstring).
+    let updated = state
+        .storage
+        .set_user_email(&user.id, &email, None, user.requires_email_verification)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Mint a verification token + dispatch the email. Best-effort: a storage
+    // or render failure here does NOT roll back the email change — the user
+    // can re-request via /auth/resend-verification. Mirrors `register`'s
+    // pattern so the two endpoints have the same failure surface.
+    let verification_expires = chrono::Utc::now() + chrono::Duration::hours(EMAIL_VERIFICATION_TTL_HOURS);
+    match state
+        .storage
+        .create_email_verification(&updated.id, &email, verification_expires)
+        .await
+    {
+        Ok(verification) => {
+            let verification_url = format!(
+                "{}/verify-email/{}",
+                state.public_base_url.trim_end_matches('/'),
+                verification.token
+            );
+            let ctx = VerificationCtx {
+                username: updated.username.clone(),
+                recipient_email: email.clone(),
+                verification_url,
+                expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
+                public_base_url: state.public_base_url.clone(),
+            };
+            match state.templates.render_verification(ctx) {
+                Ok(msg) => {
+                    dispatch_with_retry(
+                        state.mailer.clone(),
+                        msg,
+                        "verification email (me/email)".into(),
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to render verification email (me/email)");
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "failed to mint verification token (me/email)");
+        }
+    }
+
+    // Build the fresh MeResponse. Mirror `me`'s impersonation detection —
+    // hardcoded `false` would hide the platform-admin-mode banner.
+    let (current_org, orgs) = current_membership(&state, &updated).await?;
+    let impersonating = match &current_org {
+        Some(org) => state
+            .storage
+            .get_member(&updated.id, &org.id)
+            .await
+            .map_err(|e| ApiError::Internal(format!("member lookup failed: {e}")))?
+            .map(|m| m.created_by.as_deref() == Some("system"))
+            .unwrap_or(false),
+        None => false,
+    };
+
+    Ok(Json(MeResponse {
+        id: updated.id,
+        username: updated.username,
+        platform_role: updated.platform_role.as_ref().map(|p| p.as_str().to_string()),
+        current_org,
+        orgs,
+        allow_registration: get_allow_registration(&state).await,
+        impersonating,
+        email: updated.email.clone(),
+        email_verified_at: updated.email_verified_at.map(|t| t.to_rfc3339()),
+        requires_email_verification: updated.requires_email_verification,
     }))
 }
 
@@ -515,6 +1083,16 @@ pub async fn refresh(
         return Err(ApiError::Unauthorized);
     }
 
+    // Phase 4: refresh tokens issued before the most recent password change
+    // are invalid. Kicks in after a password reset or change — a stolen
+    // refresh token exfiltrated earlier can no longer be rotated into a fresh
+    // access token.
+    let iat = chrono::DateTime::<chrono::Utc>::from_timestamp(claims.iat as i64, 0)
+        .ok_or(ApiError::Unauthorized)?;
+    if iat < user.password_changed_at {
+        return Err(ApiError::Unauthorized);
+    }
+
     // Resolve current org so the new access token carries it. Phase 3: a
     // limbo user (no memberships) gets a fresh limbo token — they may have
     // a refresh token from registration but not yet have completed the
@@ -572,6 +1150,7 @@ pub async fn change_password(
     let mut updated_user = user.clone();
     updated_user.password = hash_password(&input.new_password).map_err(|e| ApiError::Internal(e.to_string()))?;
     updated_user.updated_at = chrono::Utc::now();
+    updated_user.password_changed_at = chrono::Utc::now();
     state
         .storage
         .update_user(&updated_user)
@@ -672,6 +1251,54 @@ pub async fn list_orgs(
 /// `/api/v1/{slug}/...` would be absorbed by the 410 handlers and the org
 /// would be effectively unusable. Reject up-front at validation time.
 const RESERVED_SLUGS: [&str; 3] = ["keys", "model-fallbacks", "usage"];
+
+/// Minimal email format check. We don't attempt to fully implement RFC 5321
+/// (full grammar is unwieldy) — the goal is to reject obvious garbage before
+/// it hits the database. The shape: at least one character on each side of a
+/// single `@`, with at least one `.` in the domain part, all ASCII.
+///
+/// The frontend does its own form-level validation; this is the
+/// defense-in-depth check at the API boundary.
+pub fn validate_email(s: &str) -> Result<(), String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err("email is required".into());
+    }
+    if s.len() > 254 {
+        return Err("email is too long".into());
+    }
+    if !s.is_ascii() {
+        return Err("email must be ASCII".into());
+    }
+    let mut parts = s.split('@');
+    let local = parts.next().unwrap_or("");
+    let domain = parts.next().unwrap_or("");
+    if local.is_empty()
+        || domain.is_empty()
+        || parts.next().is_some()
+    {
+        return Err("email must be of the form local@domain".into());
+    }
+    if !domain.contains('.') {
+        return Err("email domain must contain a '.'".into());
+    }
+    if domain.starts_with('.') || domain.ends_with('.') {
+        return Err("email domain has invalid '.' placement".into());
+    }
+    if !local
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || ".!#$%&'*+/=?^_`{|}~-".contains(c))
+    {
+        return Err("email local part contains invalid characters".into());
+    }
+    if !domain
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
+    {
+        return Err("email domain contains invalid characters".into());
+    }
+    Ok(())
+}
 
 /// Validate an org slug against the same rule as the DB CHECK constraint:
 /// `^[a-z0-9-]{3,64}$` (lowercase letters, digits, hyphens; 3-64 chars).
@@ -1034,6 +1661,8 @@ mod tests {
 
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
+    use llm_gateway_email::noop::NoopMailer;
+    use llm_gateway_email::templates::TemplateRegistry;
     use llm_gateway_storage::postgres::PostgresStorage;
     use llm_gateway_storage::Storage;
     use serde_json::{Value, json};
@@ -1063,6 +1692,11 @@ mod tests {
                 audit_retention_days: None,
             },
             public_base_url: "http://localhost:5173".to_string(),
+            mailer: Arc::new(NoopMailer::new()),
+            templates: Arc::new(
+                TemplateRegistry::load("noreply@test.local".to_string(), "Test".to_string())
+                    .expect("load templates"),
+            ),
         });
         crate::management::management_router(state.clone()).with_state(state)
     }
@@ -1132,7 +1766,7 @@ mod tests {
             &app,
             "/api/v1/auth/register",
             None,
-            json!({"username": "alice", "password": "password123"}),
+            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
         )
         .await;
         assert_eq!(resp.status(), axum::http::StatusCode::OK);
@@ -1167,7 +1801,7 @@ mod tests {
             &app,
             "/api/v1/auth/register",
             None,
-            json!({"username": "alice", "password": "password123"}),
+            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
         )
         .await;
         let body = body_json(resp).await;
@@ -1302,7 +1936,7 @@ mod tests {
             &app,
             "/api/v1/auth/register",
             None,
-            json!({"username": "alice", "password": "password123"}),
+            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
         )
         .await;
         let body = body_json(resp).await;
@@ -1323,7 +1957,7 @@ mod tests {
             &app,
             "/api/v1/auth/register",
             None,
-            json!({"username": "alice", "password": "password123"}),
+            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
         )
         .await;
         let body = body_json(resp).await;

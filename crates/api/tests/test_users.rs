@@ -31,7 +31,7 @@ async fn register_user(
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": username, "password": password}).to_string(),
+                    json!({"username": username, "password": password, "email": format!("{username}@example.com")}).to_string(),
                 ))
                 .unwrap(),
         )

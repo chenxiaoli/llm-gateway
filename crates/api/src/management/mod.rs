@@ -68,8 +68,34 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/api/v1/auth/me", get(auth::me))
         .route("/api/v1/auth/me/balance", get(auth::me_balance))
         .route("/api/v1/auth/me/onboarding", get(auth::me_onboarding))
+        // Phase 4: authenticated user sets/changes their own email. Existing
+        // users aren't gated by the post-signup verification flow — the flag
+        // is NOT flipped, they keep using the platform while the new address
+        // is pending verification.
+        .route("/api/v1/auth/me/email", post(auth::set_my_email))
         .route("/api/v1/auth/refresh", post(auth::refresh))
         .route("/api/v1/auth/change-password", post(auth::change_password))
+        // Phase 4: email verification — public (no auth required) so the
+        // link in the welcome email works before the user can log in.
+        .route("/api/v1/auth/verify-email", post(auth::verify_email))
+        .route(
+            "/api/v1/auth/resend-verification",
+            post(auth::resend_verification),
+        )
+        // Phase 4: password reset — public so users can reset before they
+        // can log in. /request always returns 204 to avoid email enumeration.
+        .route(
+            "/api/v1/auth/password-reset/request",
+            post(auth::password_reset_request),
+        )
+        .route(
+            "/api/v1/auth/password-reset/preview",
+            get(auth::password_reset_preview),
+        )
+        .route(
+            "/api/v1/auth/password-reset/confirm",
+            post(auth::password_reset_confirm),
+        )
         // Orgs (authenticated) — list/create/switch membership context.
         // These are global: they operate on the user's set of memberships,
         // not on a single org scoped by path.

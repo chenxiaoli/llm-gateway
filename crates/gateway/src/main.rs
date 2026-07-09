@@ -78,6 +78,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Init rate limiter
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.window_size_secs));
 
+    // Init email subsystem
+    let templates = Arc::new(
+        llm_gateway_email::templates::TemplateRegistry::load(
+            config.email.from_address.clone(),
+            config.email.from_name.clone(),
+        )
+        .map_err(|e| format!("failed to load email templates: {e}"))?,
+    );
+
+    let mailer: Arc<dyn llm_gateway_email::Mailer> = match config.email.transport.as_str() {
+        "noop" => Arc::new(llm_gateway_email::noop::NoopMailer::new()),
+        "file" => {
+            std::fs::create_dir_all(&config.email.file_output_dir)
+                .map_err(|e| format!("creating email output dir {}: {e}", config.email.file_output_dir))?;
+            Arc::new(llm_gateway_email::file::FileMailer::new(
+                &config.email.file_output_dir,
+                config.email.from_address.clone(),
+                config.email.from_name.clone(),
+            ))
+        }
+        "smtp" => {
+            let host = config.email.smtp_host.clone()
+                .ok_or_else(|| "[email] smtp_host is required when transport = \"smtp\"".to_string())?;
+            let port = config.email.smtp_port.unwrap_or(587);
+            let cfg = llm_gateway_email::smtp::SmtpMailerConfig {
+                host: host.clone(),
+                port,
+                username: config.email.smtp_username.clone(),
+                password: config.email.smtp_password.clone(),
+                use_tls: config.email.smtp_use_tls,
+                from_address: config.email.from_address.clone(),
+                from_name: config.email.from_name.clone(),
+            };
+            Arc::new(
+                llm_gateway_email::smtp::SmtpMailer::new(cfg)
+                    .map_err(|e| format!("constructing SMTP mailer for {host}: {e}"))?,
+            )
+        }
+        other => return Err(format!("unknown [email] transport: {other}").into()),
+    };
+
     // App state
     let system_info = SystemInfo {
         server_bind_address: format!("{}:{}", config.server.host, config.server.port),
@@ -100,6 +141,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .public_base_url
             .clone()
             .unwrap_or_else(|| "http://localhost:5173".to_string()),
+        mailer,
+        templates,
     });
 
     // Spawn platform-admin impersonation janitor — reaps stale temp member

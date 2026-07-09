@@ -452,6 +452,11 @@ struct PgUserRow {
     refresh_token: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
+    // Phase 4:
+    email: Option<String>,
+    email_verified_at: Option<chrono::DateTime<chrono::Utc>>,
+    requires_email_verification: bool,
+    password_changed_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl From<PgUserRow> for User {
@@ -466,6 +471,10 @@ impl From<PgUserRow> for User {
             refresh_token: r.refresh_token,
             created_at: r.created_at,
             updated_at: r.updated_at,
+            email: r.email,
+            email_verified_at: r.email_verified_at,
+            requires_email_verification: r.requires_email_verification,
+            password_changed_at: r.password_changed_at,
         }
     }
 }
@@ -1921,8 +1930,10 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, refresh_token, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            "INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                                created_at, updated_at,
+                                email, email_verified_at, requires_email_verification, password_changed_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
         )
         .bind(&user.id)
         .bind(&user.username)
@@ -1933,6 +1944,10 @@ impl crate::Storage for PostgresStorage {
         .bind(&user.refresh_token)
         .bind(user.created_at)
         .bind(user.updated_at)
+        .bind(&user.email)
+        .bind(user.email_verified_at)
+        .bind(user.requires_email_verification)
+        .bind(user.password_changed_at)
         .execute(&self.pool)
         .await?;
         Ok(user.clone())
@@ -1940,7 +1955,10 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_user(&self, id: &str) -> Result<Option<User>, DbErr> {
         let row: Option<PgUserRow> = sqlx::query_as(
-            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token, created_at, updated_at FROM users WHERE id = $1",
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                    created_at, updated_at,
+                    email, email_verified_at, requires_email_verification, password_changed_at
+             FROM users WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -1950,7 +1968,10 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_user_by_username(&self, username: &str) -> Result<Option<User>, DbErr> {
         let row: Option<PgUserRow> = sqlx::query_as(
-            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token, created_at, updated_at FROM users WHERE username = $1",
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                    created_at, updated_at,
+                    email, email_verified_at, requires_email_verification, password_changed_at
+             FROM users WHERE username = $1",
         )
         .bind(username)
         .fetch_optional(&self.pool)
@@ -1960,7 +1981,9 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_users(&self, org_id: &str) -> Result<Vec<User>, DbErr> {
         let rows: Vec<PgUserRow> = sqlx::query_as(
-            "SELECT u.id, u.username, u.password, u.platform_role, u.current_org_id, u.enabled, u.refresh_token, u.created_at, u.updated_at
+            "SELECT u.id, u.username, u.password, u.platform_role, u.current_org_id, u.enabled, u.refresh_token,
+                    u.created_at, u.updated_at,
+                    u.email, u.email_verified_at, u.requires_email_verification, u.password_changed_at
              FROM users u
              JOIN members m ON m.user_id = u.id
              WHERE m.org_id = $1
@@ -2008,7 +2031,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn update_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "UPDATE users SET username = $1, password = $2, platform_role = $3, current_org_id = $4, enabled = $5, refresh_token = $6, updated_at = $7 WHERE id = $8",
+            "UPDATE users SET username = $1, password = $2, platform_role = $3, current_org_id = $4, enabled = $5, refresh_token = $6, password_changed_at = $7, updated_at = $8 WHERE id = $9",
         )
         .bind(&user.username)
         .bind(&user.password)
@@ -2016,6 +2039,7 @@ impl crate::Storage for PostgresStorage {
         .bind(&user.current_org_id)
         .bind(user.enabled)
         .bind(&user.refresh_token)
+        .bind(&user.password_changed_at)
         .bind(user.updated_at)
         .bind(&user.id)
         .execute(&self.pool)
@@ -3142,6 +3166,7 @@ impl crate::Storage for PostgresStorage {
         org_id: &str,
         role: &MemberRole,
         created_by: &str,
+        recipient_email: &str,
         expires_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<Invitation, DbErr> {
         // Owner is not assignable by invitation (DB CHECK excludes it), but
@@ -3155,15 +3180,16 @@ impl crate::Storage for PostgresStorage {
         };
         let token = generate_invitation_token();
         let row: PgInvitationRow = sqlx::query_as(
-            "INSERT INTO invitations (token, org_id, role, created_by, expires_at)
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING id::text, token, org_id, role, created_by, created_at, expires_at,
+            "INSERT INTO invitations (token, org_id, role, created_by, recipient_email, expires_at)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING id::text, token, org_id, role, created_by, recipient_email, created_at, expires_at,
                        accepted_at, accepted_by, revoked_at",
         )
         .bind(&token)
         .bind(org_id)
         .bind(role_str)
         .bind(created_by)
+        .bind(recipient_email)
         .bind(expires_at)
         .fetch_one(&self.pool)
         .await?;
@@ -3172,7 +3198,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_invitation_by_token(&self, token: &str) -> Result<Option<Invitation>, DbErr> {
         let row: Option<PgInvitationRow> = sqlx::query_as(
-            "SELECT id::text, token, org_id, role, created_by, created_at, expires_at,
+            "SELECT id::text, token, org_id, role, created_by, recipient_email, created_at, expires_at,
                     accepted_at, accepted_by, revoked_at
              FROM invitations WHERE token = $1",
         )
@@ -3184,7 +3210,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_invitations_for_org(&self, org_id: &str) -> Result<Vec<Invitation>, DbErr> {
         let rows: Vec<PgInvitationRow> = sqlx::query_as(
-            "SELECT id::text, token, org_id, role, created_by, created_at, expires_at,
+            "SELECT id::text, token, org_id, role, created_by, recipient_email, created_at, expires_at,
                     accepted_at, accepted_by, revoked_at
              FROM invitations WHERE org_id = $1 ORDER BY created_at DESC",
         )
@@ -3224,7 +3250,7 @@ impl crate::Storage for PostgresStorage {
         let mut tx = self.pool.begin().await?;
 
         let row: Option<PgInvitationRow> = sqlx::query_as(
-            "SELECT id::text, token, org_id, role, created_by, created_at, expires_at,
+            "SELECT id::text, token, org_id, role, created_by, recipient_email, created_at, expires_at,
                     accepted_at, accepted_by, revoked_at
              FROM invitations WHERE token = $1 FOR UPDATE",
         )
@@ -3287,6 +3313,194 @@ impl crate::Storage for PostgresStorage {
             created_by: Some(accepting_user_id.to_string()),
             created_at: now,
         }))
+    }
+
+    // ---- Phase 4: users by email ----
+
+    async fn get_user_by_email(&self, email: &str) -> Result<Option<User>, DbErr> {
+        let row: Option<PgUserRow> = sqlx::query_as(
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                    created_at, updated_at,
+                    email, email_verified_at, requires_email_verification, password_changed_at
+             FROM users WHERE LOWER(email) = LOWER($1)",
+        )
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(User::from))
+    }
+
+    async fn set_user_email(
+        &self,
+        user_id: &str,
+        email: &str,
+        verified_at: Option<chrono::DateTime<chrono::Utc>>,
+        requires_email_verification: bool,
+    ) -> Result<User, DbErr> {
+        sqlx::query(
+            "UPDATE users SET email = $1, email_verified_at = $2, requires_email_verification = $3,
+                              updated_at = NOW()
+             WHERE id = $4",
+        )
+        .bind(email)
+        .bind(verified_at)
+        .bind(requires_email_verification)
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+        // Re-read for the response — there is no RETURNING on User (PgUserRow
+        // is 13 fields, simpler to refetch than maintain a separate shape).
+        let row = self
+            .get_user(user_id)
+            .await?
+            .ok_or_else(|| format!("user {user_id} disappeared after set_user_email"))?;
+        Ok(row)
+    }
+
+    // ---- Phase 4: email_verifications ----
+
+    async fn create_email_verification(
+        &self,
+        user_id: &str,
+        email: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<EmailVerification, DbErr> {
+        let token = generate_invitation_token(); // 32-byte base64url; reuse helper
+        let row: PgEmailVerificationRow = sqlx::query_as(
+            "INSERT INTO email_verifications (token, user_id, email, expires_at)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id::text, token, user_id, email, created_at, expires_at, consumed_at",
+        )
+        .bind(&token)
+        .bind(user_id)
+        .bind(email)
+        .bind(expires_at)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(EmailVerification::from(row))
+    }
+
+    async fn get_email_verification_by_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<EmailVerification>, DbErr> {
+        let row: Option<PgEmailVerificationRow> = sqlx::query_as(
+            "SELECT id::text, token, user_id, email, created_at, expires_at, consumed_at
+             FROM email_verifications WHERE token = $1",
+        )
+        .bind(token)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(EmailVerification::from))
+    }
+
+    async fn consume_email_verification(&self, token: &str) -> Result<bool, DbErr> {
+        let mut tx = self.pool.begin().await?;
+        let row: Option<PgEmailVerificationRow> = sqlx::query_as(
+            "SELECT id::text, token, user_id, email, created_at, expires_at, consumed_at
+             FROM email_verifications WHERE token = $1 FOR UPDATE",
+        )
+        .bind(token)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let Some(row) = row else {
+            tx.rollback().await?;
+            return Ok(false);
+        };
+        if row.consumed_at.is_some() || row.expires_at < chrono::Utc::now() {
+            tx.rollback().await?;
+            return Ok(false);
+        }
+
+        // Mark consumed in the same txn as the user update so we never get a
+        // half-applied state.
+        sqlx::query("UPDATE email_verifications SET consumed_at = NOW() WHERE id::text = $1")
+            .bind(&row.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE users SET email_verified_at = NOW(), requires_email_verification = FALSE WHERE id = $1")
+            .bind(&row.user_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(true)
+    }
+
+    // ---- Phase 4: password_resets ----
+
+    async fn create_password_reset(
+        &self,
+        user_id: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<PasswordReset, DbErr> {
+        let token = generate_invitation_token();
+        let row: PgPasswordResetRow = sqlx::query_as(
+            "INSERT INTO password_resets (token, user_id, expires_at)
+             VALUES ($1, $2, $3)
+             RETURNING id::text, token, user_id, created_at, expires_at, consumed_at",
+        )
+        .bind(&token)
+        .bind(user_id)
+        .bind(expires_at)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(PasswordReset::from(row))
+    }
+
+    async fn get_password_reset_by_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<PasswordReset>, DbErr> {
+        let row: Option<PgPasswordResetRow> = sqlx::query_as(
+            "SELECT id::text, token, user_id, created_at, expires_at, consumed_at
+             FROM password_resets WHERE token = $1",
+        )
+        .bind(token)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(PasswordReset::from))
+    }
+
+    async fn consume_password_reset_and_set_password(
+        &self,
+        token: &str,
+        new_password_hash: &str,
+    ) -> Result<PasswordResetOutcome, DbErr> {
+        let mut tx = self.pool.begin().await?;
+        let row: Option<PgPasswordResetRow> = sqlx::query_as(
+            "SELECT id::text, token, user_id, created_at, expires_at, consumed_at
+             FROM password_resets WHERE token = $1 FOR UPDATE",
+        )
+        .bind(token)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(row) = row else {
+            tx.rollback().await?;
+            return Ok(PasswordResetOutcome::NotFound);
+        };
+        if row.consumed_at.is_some() {
+            tx.rollback().await?;
+            return Ok(PasswordResetOutcome::Consumed);
+        }
+        if row.expires_at < chrono::Utc::now() {
+            tx.rollback().await?;
+            return Ok(PasswordResetOutcome::Expired);
+        }
+        sqlx::query("UPDATE password_resets SET consumed_at = NOW() WHERE id::text = $1")
+            .bind(&row.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            "UPDATE users SET password = $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $2",
+        )
+        .bind(new_password_hash)
+        .bind(&row.user_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(PasswordResetOutcome::Success)
     }
 
     // ---- Settings (platform + org) ----
@@ -3436,6 +3650,7 @@ struct PgInvitationRow {
     org_id: String,
     role: String,
     created_by: String,
+    recipient_email: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     expires_at: chrono::DateTime<chrono::Utc>,
     accepted_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -3451,11 +3666,60 @@ impl From<PgInvitationRow> for Invitation {
             org_id: r.org_id,
             role: MemberRole::parse(&r.role).unwrap_or(MemberRole::Member),
             created_by: r.created_by,
+            recipient_email: r.recipient_email,
             created_at: r.created_at,
             expires_at: r.expires_at,
             accepted_at: r.accepted_at,
             accepted_by: r.accepted_by,
             revoked_at: r.revoked_at,
+        }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct PgEmailVerificationRow {
+    id: String,
+    token: String,
+    user_id: String,
+    email: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    consumed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<PgEmailVerificationRow> for EmailVerification {
+    fn from(r: PgEmailVerificationRow) -> Self {
+        EmailVerification {
+            id: r.id,
+            token: r.token,
+            user_id: r.user_id,
+            email: r.email,
+            created_at: r.created_at,
+            expires_at: r.expires_at,
+            consumed_at: r.consumed_at,
+        }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct PgPasswordResetRow {
+    id: String,
+    token: String,
+    user_id: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    consumed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<PgPasswordResetRow> for PasswordReset {
+    fn from(r: PgPasswordResetRow) -> Self {
+        PasswordReset {
+            id: r.id,
+            token: r.token,
+            user_id: r.user_id,
+            created_at: r.created_at,
+            expires_at: r.expires_at,
+            consumed_at: r.consumed_at,
         }
     }
 }
@@ -4147,6 +4411,10 @@ mod invitation_tests {
             refresh_token: None,
             created_at: now,
             updated_at: now,
+            email: None,
+            email_verified_at: None,
+            requires_email_verification: false,
+            password_changed_at: now,
         };
         storage.create_user(&user).await.expect("create_user")
     }
@@ -4163,12 +4431,17 @@ mod invitation_tests {
                 &org.id,
                 &crate::types::MemberRole::Admin,
                 &inviter.id,
+                "alice@example.com",
                 now + chrono::Duration::days(7),
             )
             .await
             .expect("mint");
         assert!(invitation.accepted_at.is_none());
         assert!(invitation.revoked_at.is_none());
+        assert_eq!(
+            invitation.recipient_email.as_deref(),
+            Some("alice@example.com")
+        );
 
         let fetched = storage
             .get_invitation_by_token(&invitation.token)
@@ -4206,6 +4479,7 @@ mod invitation_tests {
                 &org.id,
                 &crate::types::MemberRole::Member,
                 &inviter.id,
+                "bob@example.com",
                 now + chrono::Duration::days(7),
             )
             .await
@@ -4235,17 +4509,180 @@ mod invitation_tests {
         let now = chrono::Utc::now();
 
         let mut seen = std::collections::HashSet::new();
-        for _ in 0..1000 {
+        for i in 0..1000 {
             let inv = storage
                 .create_invitation(
                     &org.id,
                     &crate::types::MemberRole::Member,
                     &inviter.id,
+                    &format!("invitee-{i}@example.com"),
                     now + chrono::Duration::days(7),
                 )
                 .await
                 .expect("mint");
             assert!(seen.insert(inv.token), "duplicate token generated");
         }
+    }
+}
+
+#[cfg(test)]
+mod phase4_tests {
+    use crate::Storage;
+
+    /// Helper: build a User literal with all 13 fields populated. Used by the
+    /// phase4 round-trip tests so adding a new column later is one place to
+    /// update. The 4 Phase 4 fields default sensibly for non-email flows.
+    fn mk_user(id: &str, uname: &str, email: &str) -> crate::types::User {
+        let now = chrono::Utc::now();
+        crate::types::User {
+            id: id.into(),
+            username: uname.into(),
+            password: "x".into(),
+            platform_role: None,
+            current_org_id: None,
+            enabled: true,
+            refresh_token: None,
+            created_at: now,
+            updated_at: now,
+            email: Some(email.into()),
+            email_verified_at: None,
+            requires_email_verification: true,
+            password_changed_at: now,
+        }
+    }
+
+    /// A user with an email AND a verification mints → store → lookup →
+    /// consume → email_verified_at flips and the row is marked consumed.
+    /// Single end-to-end test for the verification lifecycle.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn email_verification_round_trip(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let user = mk_user("u-evt", "evt", "evt@example.com");
+        storage.create_user(&user).await.expect("create_user");
+
+        let verification = storage
+            .create_email_verification(
+                &user.id,
+                &user.email.as_deref().unwrap(),
+                chrono::Utc::now() + chrono::Duration::hours(24),
+            )
+            .await
+            .expect("mint");
+        assert!(verification.consumed_at.is_none());
+        assert_eq!(verification.user_id, user.id);
+
+        let fetched = storage
+            .get_email_verification_by_token(&verification.token)
+            .await
+            .expect("get")
+            .expect("present");
+        assert_eq!(fetched.id, verification.id);
+        assert_eq!(fetched.email, "evt@example.com");
+
+        // Consume succeeds the first time.
+        let consumed = storage
+            .consume_email_verification(&verification.token)
+            .await
+            .expect("consume");
+        assert!(consumed, "first consume should succeed");
+        // The user's email_verified_at is now set, requires_email_verification = false.
+        let after = storage
+            .get_user(&user.id)
+            .await
+            .expect("get_user")
+            .expect("user present");
+        assert!(after.email_verified_at.is_some());
+        assert!(!after.requires_email_verification);
+
+        // Second consume is a no-op (returns false; row already consumed).
+        let second = storage
+            .consume_email_verification(&verification.token)
+            .await
+            .expect("consume again");
+        assert!(!second, "second consume must return false");
+    }
+
+    /// Atomic password reset round trip: mint → Success outcome writes the
+    /// new hash + bumps `password_changed_at`; a second consume is `Consumed`.
+    /// Exercises `consume_password_reset_and_set_password` end-to-end so the
+    /// legacy non-atomic path stays out of the test loop.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn password_reset_round_trip(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let user = mk_user("u-prt", "prt", "prt@example.com");
+        storage.create_user(&user).await.expect("create_user");
+
+        let reset = storage
+            .create_password_reset(&user.id, chrono::Utc::now() + chrono::Duration::hours(1))
+            .await
+            .expect("mint");
+        assert!(reset.consumed_at.is_none());
+
+        let fetched = storage
+            .get_password_reset_by_token(&reset.token)
+            .await
+            .expect("get")
+            .expect("present");
+        assert_eq!(fetched.id, reset.id);
+
+        let before = storage
+            .get_user(&user.id)
+            .await
+            .expect("get")
+            .expect("user")
+            .password_changed_at;
+
+        let outcome = storage
+            .consume_password_reset_and_set_password(&reset.token, "new-hash")
+            .await
+            .expect("consume");
+        assert_eq!(
+            matches!(outcome, crate::types::PasswordResetOutcome::Success),
+            true,
+            "first consume should be Success (got {outcome:?})"
+        );
+
+        let after = storage
+            .get_user(&user.id)
+            .await
+            .expect("get")
+            .expect("user");
+        assert_eq!(
+            after.password, "new-hash",
+            "consume must write the new password hash atomically"
+        );
+        assert!(
+            after.password_changed_at > before,
+            "password_changed_at must advance after consume (before={before}, after={})",
+            after.password_changed_at
+        );
+
+        let second = storage
+            .consume_password_reset_and_set_password(&reset.token, "ignored")
+            .await
+            .expect("consume again");
+        assert!(
+            matches!(second, crate::types::PasswordResetOutcome::Consumed),
+            "second consume must be Consumed (got {second:?})"
+        );
+    }
+
+    /// Case-insensitive uniqueness on users.email (the migration defines
+    /// the partial unique index as `LOWER(email)`). Inserting two rows
+    /// whose emails differ only by case must fail the second insert.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn email_unique_index(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        storage
+            .create_user(&mk_user("u3", "alpha", "dup@example.com"))
+            .await
+            .expect("first insert");
+        let err = storage
+            .create_user(&mk_user("u4", "beta", "DUP@example.com"))
+            .await;
+        assert!(
+            err.is_err(),
+            "expected unique violation on case-insensitive duplicate email, got Ok"
+        );
     }
 }

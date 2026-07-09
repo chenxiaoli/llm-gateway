@@ -94,7 +94,57 @@
     "errorRegister": "注册失败",
     "successChanged": "密码已修改",
     "updateAccountPassword": "更新您的账户密码",
-    "registrationDisabled": "注册功能已禁用"
+    "registrationDisabled": "注册功能已禁用",
+    "email": "邮箱",
+    "emailInUse": "该邮箱已被使用。",
+    "emailMismatch": "邮箱与邀请不匹配。",
+    "emailRequired": "邮箱为必填项。",
+    "emailNotVerifiedMessage": "登录前请先验证邮箱。",
+    "verificationSent": "验证邮件已发送。",
+    "resendVerification": "重新发送验证邮件",
+    "forgotPassword": "忘记密码？"
+  },
+  "verify_email": {
+    "verifying": "正在验证您的邮箱…",
+    "verified_title": "邮箱已验证",
+    "verified_body": "您的邮箱已通过验证，现在可以登录了。",
+    "continue_to_login": "前往登录",
+    "expired_title": "链接已过期或无效",
+    "expired_body": "此验证链接已���效。您可以在登录页面申请一个新的链接。",
+    "error_title": "出现问题",
+    "retry": "重试"
+  },
+  "check_email": {
+    "title": "请查看您的邮箱",
+    "body": "我们已向 {{email}} 发送了一封验证邮件。请点击邮件中的链接以验证您的邮箱。",
+    "resend": "重新发送邮件",
+    "go_to_login": "前往登录",
+    "resent": "验证邮件已重新发送。"
+  },
+  "forgot_password": {
+    "title": "重置密码",
+    "emailLabel": "邮箱",
+    "emailPlaceholder": "you@example.com",
+    "submit": "发送重置链接",
+    "sentTitle": "请查收邮件",
+    "sentBody": "如果存在该邮箱对应的账户，我们已发送重置链接。链接有效期为 1 小时。",
+    "backToLogin": "返回登录"
+  },
+  "reset_password": {
+    "loading": "正在校验链接…",
+    "validTitle": "设置新密码",
+    "passwordLabel": "新密码",
+    "confirmLabel": "确认新密码",
+    "submit": "更新密码",
+    "updated": "密码已更新",
+    "updatedBody": "正在跳转到登录页…",
+    "expiredTitle": "链接已失效",
+    "expiredBody": "此密码重置链接已失效，请重新申请。",
+    "requestNew": "申请新链接",
+    "errorTitle": "出错了",
+    "retry": "重试",
+    "consumed": "此链接已被使用。",
+    "genericError": "出错了，请重试。"
   },
   "toasts": {
     "keyCreated": "API 密钥已创建",
@@ -1311,6 +1361,10 @@
     "title": "加入 {{org}}",
     "inviter": "{{user}} 的邀请",
     "role": "您将以 {{role}} 身份加入。",
+    "sentTo": "发送至 {{email}}",
+    "emailMismatch": "此邀请发送至 {{email}}。请退出后使用该邮箱重新登录以接受。",
+    "emailMissing": "您需要先将 {{email}} 添加到您的账户，然后才能接受此邀请。",
+    "emailUnverified": "请先验证邮箱，再返回接受邀请。",
     "accept": "接受",
     "decline": "拒绝",
     "signUp": "注册以接受",
@@ -1319,7 +1373,9 @@
     "goToOrg": "进入 {{org}}",
     "errors": {
       "invalidToken": "此邀请已失效",
-      "alreadyAccepted": "此邀请已被接受"
+      "alreadyAccepted": "此邀请已被接受",
+      "emailMismatch": "您的邮箱与邀请收件人不匹配",
+      "emailVerificationRequired": "请先验证您的邮箱"
     },
     "gone": {
       "title": "邀请已失效",
@@ -1337,6 +1393,8 @@
     "generate": {
       "title": "生成邀请链接",
       "role": "角色",
+      "recipientEmail": "收件人邮箱",
+      "recipientEmailPlaceholder": "alice@example.com",
       "submit": "生成"
     },
     "roles": {
@@ -1346,6 +1404,7 @@
     "table": {
       "link": "链接",
       "role": "角色",
+      "recipient": "收件人",
       "status": "状态",
       "created": "创建时间",
       "actions": "操作"
@@ -1366,10 +1425,29 @@
     "confirmRevokeDescription": "链接将立即失效，此操作无法撤销。",
     "empty": "暂无邀请",
     "toasts": {
-      "created": "邀请链接已生成",
+      "createdTo": "邀请已发送至 {{email}}",
       "createFailed": "生成邀请失败",
       "revoked": "邀请已撤销",
       "revokeFailed": "撤销邀请失败"
+    },
+    "errors": {
+      "emailInUse": "该邮箱已注册账户"
     }
+  },
+  "emailBanner": {
+    "message": "添加邮箱以接收邀请和重置密码。",
+    "addAction": "添加邮箱",
+    "dismiss": "忽略"
+  },
+  "addEmailModal": {
+    "title": "添加邮箱",
+    "body": "我们将向此地址发送验证链接。在验证完成前，您可以继续使用 TokenVis。",
+    "emailLabel": "邮箱",
+    "emailPlaceholder": "you@example.com",
+    "submit": "发送验证邮件",
+    "cancel": "取消",
+    "success": "验证邮件已发送，请查收。",
+    "errorInUse": "该邮箱已被使用。",
+    "errorGeneric": "出错了，请重试。"
   }
 }

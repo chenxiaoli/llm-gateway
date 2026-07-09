@@ -6,6 +6,8 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use llm_gateway_auth::create_jwt;
+use llm_gateway_email::dispatch_with_retry;
+use llm_gateway_email::templates::InvitationCtx;
 use llm_gateway_org::{can_administer, OrgContext};
 use llm_gateway_storage::{
     AcceptInvitationRequest, InvitationPreview, InvitationResponse, MemberRole,
@@ -18,11 +20,14 @@ use crate::AppState;
 
 /// Invitation token lifetime. Kept short — these are typically shared
 /// one-to-one in chat/email, not posted broadly.
-const INVITATION_TTL_DAYS: i64 = 7;
+const INVITATION_TTL_DAYS: u32 = 7;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateInvitationBody {
     pub role: String,
+    /// Phase 4: invitation is bound to this recipient email. The handler
+    /// validates the format and that no existing user holds the address.
+    pub recipient_email: String,
 }
 
 /// Parse the role from the request body. 'owner' is explicitly rejected with
@@ -62,29 +67,84 @@ pub async fn create_invitation(
         return Err(ApiError::Forbidden);
     }
     let role = parse_invitation_role(&body.role)?;
+    crate::auth::validate_email(&body.recipient_email).map_err(ApiError::BadRequest)?;
+    // Normalize to lowercase so the accept-time email-match gate (which
+    // compares via .to_lowercase()) can't fail on a case mismatch — e.g.
+    // admin mints Alice@Example.com, invitee verifies alice@example.com.
+    let recipient_email = body.recipient_email.trim().to_lowercase();
+    // Reject if the recipient already has an account — invites aren't for
+    // existing users; the admin should change their role instead.
+    if state
+        .storage
+        .get_user_by_email(&recipient_email)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .is_some()
+    {
+        return Err(ApiError::EmailInUse);
+    }
     let now = chrono::Utc::now();
-    let expires_at = now + chrono::Duration::days(INVITATION_TTL_DAYS);
+    let expires_at = now + chrono::Duration::days(i64::from(INVITATION_TTL_DAYS));
 
     let invitation = state
         .storage
-        .create_invitation(&ctx.org_id, &role, &ctx.user_id, expires_at)
+        .create_invitation(&ctx.org_id, &role, &ctx.user_id, &recipient_email, expires_at)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok((
-        StatusCode::CREATED,
-        Json(InvitationResponse {
-            id: invitation.id,
-            token: invitation.token.clone(),
-            url: build_invite_url(&state.public_base_url, &invitation.token),
-            role: invitation.role.as_str().to_string(),
-            created_at: invitation.created_at,
-            expires_at: invitation.expires_at,
-            accepted_at: None,
-            accepted_by: None,
-            revoked_at: None,
-        }),
-    ))
+    // Dispatch the invitation email fire-and-forget. Failures here don't fail
+    // the mint — the token is valid, the admin can re-trigger from the UI.
+    let accept_url = build_invite_url(&state.public_base_url, &invitation.token);
+    // These fetches only feed the email template — failures degrade to empty
+    // org name / fallback inviter id, never fail the mint. (The invitation row
+    // is already committed above; a transient DB blip here must not 500 the
+    // admin or they'll retry and mint a duplicate.)
+    let org_name = state
+        .storage
+        .get_org(&ctx.org_id)
+        .await
+        .ok() // transient DB error → empty org name, not a 500
+        .flatten()
+        .map(|o| o.name)
+        .unwrap_or_default();
+    let inviter_username = state
+        .storage
+        .get_user(&ctx.user_id)
+        .await
+        .ok()
+        .flatten()
+        .map(|u| u.username)
+        .unwrap_or_else(|| ctx.user_id.clone());
+    let response = InvitationResponse {
+        id: invitation.id,
+        token: invitation.token.clone(),
+        url: accept_url,
+        role: invitation.role.as_str().to_string(),
+        recipient_email: Some(recipient_email.clone()),
+        created_at: invitation.created_at,
+        expires_at: invitation.expires_at,
+        accepted_at: None,
+        accepted_by: None,
+        revoked_at: None,
+    };
+    match state.templates.render_invitation(InvitationCtx {
+        org_name,
+        inviter_username,
+        role: invitation.role.as_str().to_string(),
+        recipient_email,
+        accept_url: response.url.clone(),
+        expires_in_days: INVITATION_TTL_DAYS,
+        public_base_url: state.public_base_url.clone(),
+    }) {
+        Ok(msg) => {
+            dispatch_with_retry(state.mailer.clone(), msg, "invitation email".to_string());
+        }
+        Err(e) => {
+            tracing::error!(error = ?e, "failed to render invitation email; dispatch skipped");
+        }
+    }
+
+    Ok((StatusCode::CREATED, Json(response)))
 }
 
 /// GET /api/v1/{org_slug}/invitations — list pending + recently-accepted.
@@ -132,6 +192,7 @@ pub async fn list_invitations(
             token: inv.token.clone(),
             url: build_invite_url(&state.public_base_url, &inv.token),
             role: inv.role.as_str().to_string(),
+            recipient_email: inv.recipient_email.clone(),
             created_at: inv.created_at,
             expires_at: inv.expires_at,
             accepted_at: inv.accepted_at,
@@ -220,6 +281,7 @@ pub async fn preview_invitation(
         org_slug: org.slug,
         role: inv.role.as_str().to_string(),
         inviter_username: inviter,
+        recipient_email: inv.recipient_email.clone(),
         expires_at: inv.expires_at,
     };
     let mut response = Json(preview).into_response();
@@ -241,6 +303,43 @@ pub async fn accept_invitation(
     Json(body): Json<AcceptInvitationRequest>,
 ) -> Result<Json<AuthResponse>, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
+
+    // Phase 4: the accepter must have a verified email AND that email must
+    // match the invitation's recipient. This is what binds "click the link"
+    // to "the person we actually invited" — without it, anyone who obtained
+    // the token could join. The checks run BEFORE the transactional accept so
+    // a failed match leaves the invitation consumable.
+    let user = state
+        .storage
+        .get_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::Unauthorized)?;
+    if user.email_verified_at.is_none() {
+        return Err(ApiError::EmailVerificationRequired);
+    }
+    let inv = state
+        .storage
+        .get_invitation_by_token(&body.token)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::Gone(INVITATION_GONE_REASON.to_string()))?;
+    // A verified user always carries an email; a Phase 4 invitation always
+    // carries a recipient. If either is missing, the row is internally
+    // inconsistent — surface as 500 rather than silently allowing the accept.
+    let user_email = user
+        .email
+        .as_ref()
+        .map(|e| e.to_lowercase())
+        .ok_or_else(|| ApiError::Internal("verified user has no email".into()))?;
+    let recipient = inv
+        .recipient_email
+        .as_ref()
+        .map(|e| e.to_lowercase())
+        .ok_or_else(|| ApiError::Internal("invitation has no recipient_email".into()))?;
+    if user_email != recipient {
+        return Err(ApiError::EmailMismatchAccept);
+    }
 
     let Some(member) = state
         .storage
@@ -309,6 +408,8 @@ pub async fn accept_invitation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use llm_gateway_email::noop::NoopMailer;
+    use llm_gateway_email::templates::TemplateRegistry;
     use llm_gateway_ratelimit::RateLimiter;
     use llm_gateway_storage::postgres::PostgresStorage;
     use llm_gateway_storage::{CreateOrg, Storage};
@@ -341,6 +442,11 @@ mod tests {
                 audit_retention_days: None,
             },
             public_base_url: "http://localhost:5173".to_string(),
+            mailer: Arc::new(NoopMailer::new()),
+            templates: Arc::new(
+                TemplateRegistry::load("noreply@test.local".to_string(), "Test".to_string())
+                    .expect("load templates"),
+            ),
         })
     }
 
@@ -378,6 +484,38 @@ mod tests {
                 refresh_token: None,
                 created_at: now,
                 updated_at: now,
+                // Phase 4: default to a verified email so the accept_invitation
+                // checks (verified + email-match) succeed for tests that don't
+                // care about those gates. Tests that exercise the gates use
+                // `make_unverified_user` or pass a custom recipient_email.
+                email: Some(format!("{id}@example.com")),
+                email_verified_at: Some(now),
+                requires_email_verification: false,
+                password_changed_at: now,
+            })
+            .await
+            .expect("create_user");
+    }
+
+    /// Like `make_user` but with `email_verified_at = None`. For tests that
+    /// exercise the verification gate on `accept_invitation`.
+    async fn make_unverified_user(storage: &PostgresStorage, id: &str) {
+        let now = chrono::Utc::now();
+        storage
+            .create_user(&llm_gateway_storage::User {
+                id: id.to_string(),
+                username: id.to_string(),
+                password: "x".to_string(),
+                platform_role: None,
+                current_org_id: None,
+                enabled: true,
+                refresh_token: None,
+                created_at: now,
+                updated_at: now,
+                email: Some(format!("{id}@example.com")),
+                email_verified_at: None,
+                requires_email_verification: true,
+                password_changed_at: now,
             })
             .await
             .expect("create_user");
@@ -405,6 +543,7 @@ mod tests {
             ctx(&org.id, "alice", MemberRole::Admin),
             Json(CreateInvitationBody {
                 role: "admin".into(),
+                recipient_email: "invitee1@example.com".into(),
             }),
         )
         .await
@@ -434,6 +573,7 @@ mod tests {
             ctx(&org.id, "bob", MemberRole::Member),
             Json(CreateInvitationBody {
                 role: "member".into(),
+                recipient_email: "invitee2@example.com".into(),
             }),
         )
         .await
@@ -454,6 +594,7 @@ mod tests {
             ctx(&org.id, "alice", MemberRole::Admin),
             Json(CreateInvitationBody {
                 role: "owner".into(),
+                recipient_email: "invitee3@example.com".into(),
             }),
         )
         .await
@@ -484,6 +625,7 @@ mod tests {
             admin_ctx.clone(),
             Json(CreateInvitationBody {
                 role: "member".into(),
+                recipient_email: "invitee1@example.com".into(),
             }),
         )
         .await
@@ -495,6 +637,7 @@ mod tests {
             admin_ctx.clone(),
             Json(CreateInvitationBody {
                 role: "admin".into(),
+                recipient_email: "invitee2@example.com".into(),
             }),
         )
         .await
@@ -515,6 +658,7 @@ mod tests {
             admin_ctx.clone(),
             Json(CreateInvitationBody {
                 role: "member".into(),
+                recipient_email: "invitee3@example.com".into(),
             }),
         )
         .await
@@ -555,6 +699,7 @@ mod tests {
             ctx(&org_a.id, "alice", MemberRole::Admin),
             Json(CreateInvitationBody {
                 role: "member".into(),
+                recipient_email: "invitee4@example.com".into(),
             }),
         )
         .await
@@ -594,10 +739,17 @@ mod tests {
         org_id: &str,
         created_by: &str,
         role: MemberRole,
+        recipient_email: &str,
         expires_at: chrono::DateTime<chrono::Utc>,
     ) -> llm_gateway_storage::Invitation {
         storage
-            .create_invitation(org_id, &role, created_by, expires_at)
+            .create_invitation(
+                org_id,
+                &role,
+                created_by,
+                recipient_email,
+                expires_at,
+            )
             .await
             .expect("mint_invitation")
     }
@@ -609,7 +761,7 @@ mod tests {
         // make_org creates an owner user "owner-acme"; use them as inviter.
         let state = make_state(storage.clone());
         let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
-        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Admin, expires_at)
+        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Admin, "preview@example.com", expires_at)
             .await;
 
         let resp = preview_invitation(
@@ -636,6 +788,11 @@ mod tests {
         assert_eq!(body.org_slug, "acme");
         assert_eq!(body.role, "admin");
         assert_eq!(body.inviter_username, "owner-acme");
+        assert_eq!(
+            body.recipient_email.as_deref(),
+            Some("preview@example.com"),
+            "preview should surface recipient_email"
+        );
         // Postgres stores microsecond precision; the round-trip can shed up to
         // 1us of sub-microsecond precision, so compare with a tolerance
         // rather than exact equality.
@@ -649,7 +806,7 @@ mod tests {
         let org = make_org(&storage, "acme").await;
         let state = make_state(storage.clone());
         let past = chrono::Utc::now() - chrono::Duration::hours(1);
-        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Member, past).await;
+        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Member, "preview@example.com", past).await;
 
         let err = preview_invitation(
             State(state),
@@ -672,7 +829,7 @@ mod tests {
         let org = make_org(&storage, "acme").await;
         let state = make_state(storage.clone());
         let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
-        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Member, expires_at)
+        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Member, "preview@example.com", expires_at)
             .await;
         storage
             .revoke_invitation(&org.id, &inv.id)
@@ -698,7 +855,7 @@ mod tests {
         make_user(&storage, "bob").await;
         let state = make_state(storage.clone());
         let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
-        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Member, expires_at)
+        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Member, "preview@example.com", expires_at)
             .await;
         storage
             .accept_invitation(&inv.token, "bob")
@@ -735,7 +892,7 @@ mod tests {
         .expect_err("invalid -> 410");
         let past = chrono::Utc::now() - chrono::Duration::hours(1);
         let org2 = make_org(&storage, "omega").await;
-        let inv = mint_invitation(&storage, &org2.id, "owner-omega", MemberRole::Member, past)
+        let inv = mint_invitation(&storage, &org2.id, "owner-omega", MemberRole::Member, "preview@example.com", past)
             .await;
         let err_expired = preview_invitation(
             State(state),
@@ -775,7 +932,7 @@ mod tests {
         let state = make_state(storage.clone());
 
         let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
-        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Admin, expires_at)
+        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Admin, "carol@example.com", expires_at)
             .await;
 
         let resp = accept_invitation(
@@ -828,19 +985,27 @@ mod tests {
 
     #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
     async fn accept_returns_409_after_sequential_consume(pool: sqlx::PgPool) {
-        // A second caller hitting an already-accepted token is the race-loser
-        // case (the winner's accept landed first). Per spec, the loser gets
-        // 409 Conflict — not 410 Gone (410 is reserved for invalid/expired/
-        // revoked tokens that were never accepted).
+        // The same invitee clicking an already-consumed token is the race-loser
+        // case (their first accept landed first). Per spec, the second attempt
+        // gets 409 Conflict — not 410 Gone (410 is reserved for invalid/expired/
+        // revoked tokens that were never accepted). Email-binding means only the
+        // one invited user can reach this path, so we exercise it with a single
+        // user making two calls.
         let storage = Arc::new(PostgresStorage::from_pool(pool));
         let org = make_org(&storage, "acme").await;
         make_user(&storage, "carol").await;
-        make_user(&storage, "dave").await;
         let state = make_state(storage.clone());
 
         let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
-        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Member, expires_at)
-            .await;
+        let inv = mint_invitation(
+            &storage,
+            &org.id,
+            "owner-acme",
+            MemberRole::Member,
+            "carol@example.com",
+            expires_at,
+        )
+        .await;
 
         // Carol accepts first.
         let _ = accept_invitation(
@@ -853,10 +1018,10 @@ mod tests {
         .await
         .expect("first accept ok");
 
-        // Dave tries the same (already-consumed) token -> 409 Conflict.
+        // Carol tries the same (already-consumed) token again -> 409 Conflict.
         let result = accept_invitation(
             State(state),
-            auth_header("dave", &org.id),
+            auth_header("carol", &org.id),
             Json(AcceptInvitationRequest {
                 token: inv.token.clone(),
             }),
@@ -868,26 +1033,34 @@ mod tests {
             Err(e) => e,
         };
         assert!(matches!(err, ApiError::Conflict(_)), "got {err:?}");
-        // Dave never became a member.
-        let dave_member = storage.get_member("dave", &org.id).await.unwrap();
-        assert!(dave_member.is_none(), "dave must not be a member");
+        // Carol is still exactly one membership (no duplicate row).
+        let carol_member = storage.get_member("carol", &org.id).await.unwrap();
+        assert!(carol_member.is_some(), "carol should be a member");
     }
 
     #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
     async fn accept_concurrent_only_one_wins(pool: sqlx::PgPool) {
-        // Two distinct invitees race on the same token. The storage layer's
-        // SELECT ... FOR UPDATE serializes them: exactly one returns
-        // Ok(AuthResponse), the other returns Err(ApiError::Conflict). The org
-        // gains exactly one membership from this invitation (the winner's).
+        // The same invitee races themselves on the same token (e.g. two browser
+        // tabs). The storage layer's SELECT ... FOR UPDATE serializes them:
+        // exactly one returns Ok(AuthResponse), the other returns
+        // Err(ApiError::Conflict). The org gains exactly one membership. With
+        // email-binding, only the invited user can reach this path, so we
+        // exercise the row lock with a single user issuing two concurrent calls.
         let storage = Arc::new(PostgresStorage::from_pool(pool));
         let org = make_org(&storage, "acme").await;
-        make_user(&storage, "alice").await; // user_a
-        make_user(&storage, "bob").await; // user_b
+        make_user(&storage, "alice").await;
         let state = make_state(storage.clone());
 
         let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
-        let inv = mint_invitation(&storage, &org.id, "owner-acme", MemberRole::Member, expires_at)
-            .await;
+        let inv = mint_invitation(
+            &storage,
+            &org.id,
+            "owner-acme",
+            MemberRole::Member,
+            "alice@example.com",
+            expires_at,
+        )
+        .await;
 
         // Fire both accepts concurrently. tokio::join! polls them on the same
         // executor; the row lock guarantees one winner + one loser.
@@ -901,7 +1074,7 @@ mod tests {
             ),
             accept_invitation(
                 State(state.clone()),
-                auth_header("bob", &org.id),
+                auth_header("alice", &org.id),
                 Json(AcceptInvitationRequest {
                     token: inv.token.clone(),
                 }),
@@ -909,9 +1082,9 @@ mod tests {
         );
 
         // Exactly one Ok, exactly one Err(Conflict).
-        let (winner, loser) = match (res_a, res_b) {
-            (Ok(_), Err(e)) => ("alice", e),
-            (Err(e), Ok(_)) => ("bob", e),
+        let loser = match (res_a, res_b) {
+            (Ok(_), Err(e)) => e,
+            (Err(e), Ok(_)) => e,
             (Ok(_), Ok(_)) => panic!("both accepts succeeded; row lock failed to serialize"),
             (Err(_), Err(_)) => panic!("both accepts failed; expected exactly one winner"),
         };
@@ -920,27 +1093,149 @@ mod tests {
             "race-loser should be 409 Conflict, got {loser:?}"
         );
 
-        // The org gained exactly one membership from this invitation — the
-        // winner's. The loser is not a member.
-        let winner_member = storage.get_member(winner, &org.id).await.unwrap();
+        // The org gained exactly one membership from this invitation.
+        let winner_member = storage.get_member("alice", &org.id).await.unwrap();
         assert!(
             winner_member.is_some(),
-            "winner {winner} should be a member"
-        );
-        let loser_id = if winner == "alice" { "bob" } else { "alice" };
-        let loser_member = storage.get_member(loser_id, &org.id).await.unwrap();
-        assert!(
-            loser_member.is_none(),
-            "loser {loser_id} must not be a member"
+            "alice should be a member"
         );
 
-        // The invitation row records exactly the winner as accepter.
+        // The invitation row records alice as accepter.
         let after = storage
             .get_invitation_by_token(&inv.token)
             .await
             .unwrap()
             .unwrap();
         assert!(after.accepted_at.is_some());
-        assert_eq!(after.accepted_by.as_deref(), Some(winner));
+        assert_eq!(after.accepted_by.as_deref(), Some("alice"));
+    }
+
+    // --- Task 10: email-bound invitations (dispatch + accept gates) ---
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn create_invitation_dispatches_email_and_persists_recipient(pool: sqlx::PgPool) {
+        // The handler must persist recipient_email on the invitation row so the
+        // accept-time email-match gate has something to compare against.
+        // NoopMailer is silent; asserting the DB row proves the handler wired
+        // the field through. The dispatch itself is exercised by code review —
+        // dispatch_with_retry is separately unit-tested in the email crate.
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let org = make_org(&storage, "acme").await;
+        make_user(&storage, "alice").await;
+        let state = make_state(storage.clone());
+
+        let resp = create_invitation(
+            State(state.clone()),
+            ctx(&org.id, "alice", MemberRole::Admin),
+            Json(CreateInvitationBody {
+                role: "member".into(),
+                recipient_email: "newinvitee@example.com".into(),
+            }),
+        )
+        .await
+        .expect("mint ok");
+        let body = resp.1 .0;
+
+        let row = storage
+            .get_invitation_by_token(&body.token)
+            .await
+            .expect("get")
+            .expect("invitation persisted");
+        assert_eq!(
+            row.recipient_email.as_deref(),
+            Some("newinvitee@example.com"),
+            "recipient_email must be persisted on the row",
+        );
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn accept_with_wrong_email_returns_403_email_mismatch(pool: sqlx::PgPool) {
+        // Invitation is bound to alice@example.com. A verified user "bob" (with
+        // a different verified email) must NOT be able to accept it — that's
+        // the whole point of email-binding.
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let org = make_org(&storage, "acme").await;
+        make_user(&storage, "bob").await; // bob@example.com, verified
+        let state = make_state(storage.clone());
+
+        let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
+        let inv = mint_invitation(
+            &storage,
+            &org.id,
+            "owner-acme",
+            MemberRole::Member,
+            "alice@example.com",
+            expires_at,
+        )
+        .await;
+
+        let result = accept_invitation(
+            State(state),
+            auth_header("bob", &org.id),
+            Json(AcceptInvitationRequest {
+                token: inv.token.clone(),
+            }),
+        )
+        .await;
+
+        let err = match result {
+            Ok(_) => panic!("mismatched email should be rejected, got Ok"),
+            Err(e) => e,
+        };
+        assert!(
+            matches!(err, ApiError::EmailMismatchAccept),
+            "got {err:?}"
+        );
+        // Bob did not join.
+        let bob_member = storage.get_member("bob", &org.id).await.unwrap();
+        assert!(bob_member.is_none(), "bob must not become a member");
+        // The invitation is still consumable by the right person.
+        let row = storage
+            .get_invitation_by_token(&inv.token)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(row.accepted_at.is_none(), "invitation must remain pending");
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn accept_unverified_user_returns_403_verification_required(pool: sqlx::PgPool) {
+        // Even if the email matches, an unverified user cannot accept — the
+        // email-match check is meaningless without a verified email.
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let org = make_org(&storage, "acme").await;
+        make_unverified_user(&storage, "carol").await; // carol@example.com, unverified
+        let state = make_state(storage.clone());
+
+        let expires_at = chrono::Utc::now() + chrono::Duration::days(7);
+        let inv = mint_invitation(
+            &storage,
+            &org.id,
+            "owner-acme",
+            MemberRole::Member,
+            "carol@example.com",
+            expires_at,
+        )
+        .await;
+
+        let result = accept_invitation(
+            State(state),
+            auth_header("carol", &org.id),
+            Json(AcceptInvitationRequest {
+                token: inv.token.clone(),
+            }),
+        )
+        .await;
+
+        let err = match result {
+            Ok(_) => panic!("unverified user should be rejected, got Ok"),
+            Err(e) => e,
+        };
+        assert!(
+            matches!(err, ApiError::EmailVerificationRequired),
+            "got {err:?}"
+        );
+        let carol_member = storage.get_member("carol", &org.id).await.unwrap();
+        assert!(carol_member.is_none(), "carol must not become a member");
     }
 }

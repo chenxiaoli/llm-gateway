@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 llm-gateway-api = { path = "../api" }
 llm-gateway-storage = { path = "../storage" }
+llm-gateway-email = { workspace = true }
 llm-gateway-ratelimit = { path = "../ratelimit" }
 llm-gateway-nats-publisher = { path = "../nats-publisher" }
 tokio = { workspace = true }

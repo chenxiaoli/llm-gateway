@@ -89,6 +89,15 @@ CREATE UNIQUE INDEX users_email_unique_idx
 ALTER TABLE invitations
     ADD COLUMN recipient_email TEXT;
 
+-- Data migration FIRST: revoke all pending Phase 3 invitations (no
+-- recipient_email). Must run before the CHECK constraint is added or the
+-- ADD CONSTRAINT would reject the existing rows.
+UPDATE invitations
+SET revoked_at = NOW()
+WHERE accepted_at IS NULL
+  AND revoked_at IS NULL
+  AND recipient_email IS NULL;
+
 ALTER TABLE invitations
     ADD CONSTRAINT invitations_pending_need_recipient
     CHECK (
@@ -96,13 +105,6 @@ ALTER TABLE invitations
         OR revoked_at IS NOT NULL
         OR recipient_email IS NOT NULL
     );
-
--- Data migration: revoke all pending Phase 3 invitations (no recipient_email).
-UPDATE invitations
-SET revoked_at = NOW()
-WHERE accepted_at IS NULL
-  AND revoked_at IS NULL
-  AND recipient_email IS NULL;
 ```
 
 The `CHECK` constraint enforces "going forward, every pending invitation must have a recipient_email". Accepted/revoked rows are grandfathered (the constraint allows them through the `OR` arms). The data migration revokes the existing pending rows so the constraint can be added cleanly.
@@ -531,8 +533,10 @@ All errors are JSON: `{error: "<code>", message: "..."}`.
 | `email_not_verified` | 403 | Login attempt with `requires_email_verification=TRUE` and `email_verified_at IS NULL` |
 | `email_verification_required` | 403 | Accept invite while logged-in user's email is unverified |
 | `verification_expired` | 410 | Verify-email with expired or already-consumed token |
+| `verification_not_found` | 404 | Verify-email with token that doesn't match any row |
 | `reset_expired` | 410 | Password-reset confirm with expired token |
 | `reset_consumed` | 410 | Password-reset confirm with already-used token |
+| `reset_not_found` | 404 | Password-reset confirm with token that doesn't match any row |
 
 ### 8.3 Rate limits
 

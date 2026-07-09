@@ -1,10 +1,19 @@
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
- * Phase 3 happy-path E2E: wizard-gated signup + single-use invitations.
+ * Phase 3/4 happy-path E2E: wizard-gated signup + single-use invitations.
+ *
+ * Phase 4 update: invitations are now email-bound. Each Generate requires a
+ * recipient_email, invitees must sign up WITH that email, and a verify-email
+ * step is inserted before any login (Phase 4's verification gate would
+ * otherwise 403 the login with `email_not_verified`).
  *
  * These tests assume a running backend on :8080 (per playwright.config.ts
- * `baseURL`) and a pre-seeded admin user — same convention as `app.spec.ts`:
+ * `baseURL`) with `[email] transport = "file"` so verification emails land in
+ * `./dev-emails` as .eml files we can scrape, and a pre-seeded admin user —
+ * same convention as `app.spec.ts`:
  *
  *   username: admin
  *   password: admin123456
@@ -14,12 +23,13 @@ import { test, expect, type BrowserContext, type Page } from '@playwright/test';
  * the username-unique constraint. We suffix with a timestamp.
  *
  * Route reference (post Phase 2.1 URL migration):
- *   /login, /register, /onboarding, /accept-invite
- *   /{org_slug}/dashboard, /{org_slug}/admin/invitations
+ *   /login, /register, /check-email, /verify-email/:token, /onboarding,
+ *   /accept-invite, /{org_slug}/dashboard, /{org_slug}/admin/invitations
  */
 
 const ADMIN_USER = 'admin';
 const ADMIN_PASS = 'admin123456';
+const DEV_EMAIL_DIR = path.resolve(__dirname, '../../dev-emails');
 
 // Per-run suffix keeps these tests re-runnable against a shared seed DB
 // without tripping the username-unique constraint. `process.env.E2E_RUN_TAG`
@@ -41,17 +51,60 @@ async function loginAs(page: Page, username: string, password: string) {
   await page.getByRole('button', { name: 'Sign In' }).click();
 }
 
-test.describe('Phase 3: wizard + invitations', () => {
-  test('signup → wizard → create org → land in dashboard', async ({ page }) => {
-    const username = `alice_${RUN_TAG}`;
+/**
+ * Read the most recent .eml file in ./dev-emails whose body contains `to`.
+ * Used to scrape the email-verification token after a fresh signup.
+ */
+async function readLatestEmailTo(to: string): Promise<string> {
+  const files = fs
+    .readdirSync(DEV_EMAIL_DIR)
+    .map((name) => ({
+      name,
+      mtime: fs.statSync(path.join(DEV_EMAIL_DIR, name)).mtimeMs,
+    }))
+    .sort((a, b) => b.mtime - a.mtime);
+  for (const f of files) {
+    const content = fs.readFileSync(path.join(DEV_EMAIL_DIR, f.name), 'utf8');
+    if (content.includes(to)) return content;
+  }
+  throw new Error(`no email found in ${DEV_EMAIL_DIR} addressed to ${to}`);
+}
 
-    // 1. Register — lands at /onboarding (limbo state, no org yet).
+/**
+ * Phase 4 helper: complete the verify-email step for a freshly-registered
+ * user by scraping the token from the .eml addressed to `email` and visiting
+ * /verify-email/:token. Resolves once the "Email verified" success panel is
+ * visible.
+ */
+async function verifyEmail(page: Page, email: string) {
+  const body = await readLatestEmailTo(email);
+  const token = body.match(/\/verify-email\/([A-Za-z0-9_-]+)/)![1];
+  await page.goto(`/verify-email/${token}`);
+  await expect(page.getByText('Email verified')).toBeVisible({ timeout: 10000 });
+}
+
+test.describe('Phase 3: wizard + invitations', () => {
+  test('signup -> wizard -> create org -> land in dashboard', async ({ page }) => {
+    const username = `alice_${RUN_TAG}`;
+    const email = `alice+${RUN_TAG}@example.com`;
+
+    // 1. Register — Phase 4 gates login on email verification, so signup
+    //    lands at /check-email (not /onboarding).
     await page.goto('/register');
     await page.getByPlaceholder('Username').fill(username);
+    await page.getByPlaceholder('Email').fill(email);
     await page.getByPlaceholder('Password').fill('password123');
-    await page.getByPlaceholder('Confirm password').fill('password123');
+    await page.getByPlaceholder('Confirm Password').fill('password123');
     await page.getByRole('button', { name: 'Register' }).click();
 
+    await expect(page).toHaveURL(/\/check-email$/);
+
+    // Verify email, then log in — now lands at /onboarding (limbo state, no org).
+    await verifyEmail(page, email);
+    await page.goto('/login');
+    await page.getByPlaceholder('Username').fill(username);
+    await page.getByPlaceholder('Password').fill('password123');
+    await page.getByRole('button', { name: 'Sign In' }).click();
     await expect(page).toHaveURL(/\/onboarding$/);
 
     // 2. Create an org via the wizard.
@@ -63,7 +116,9 @@ test.describe('Phase 3: wizard + invitations', () => {
     await expect(page).toHaveURL(new RegExp(`/${orgSlug}/dashboard$`));
   });
 
-  test('admin mints invite → second user signs up via link → both in same org', async ({ browser }) => {
+  test('admin mints invite -> second user signs up via link -> both in same org', async ({ browser }) => {
+    const recipientEmail = `bob+${RUN_TAG}@example.com`;
+
     // ---- Admin session: log in, generate an invitation, capture its URL ----
     const adminCtx: BrowserContext = await browser.newContext();
     const adminPage: Page = await adminCtx.newPage();
@@ -76,7 +131,8 @@ test.describe('Phase 3: wizard + invitations', () => {
     await adminPage.goto(`/${adminSlug}/admin/invitations`);
     await expect(adminPage.getByRole('heading', { name: 'Invitations' })).toBeVisible();
 
-    // Generate button is in the "Generate invite link" card.
+    // Phase 4: invitation is email-bound — fill recipient_email before Generate.
+    await adminPage.getByPlaceholder('alice@example.com').fill(recipientEmail);
     await adminPage.getByRole('button', { name: 'Generate', exact: true }).click();
 
     // The pending invitation row renders the link inside a <code> element
@@ -101,12 +157,23 @@ test.describe('Phase 3: wizard + invitations', () => {
 
     const inviteeUsername = `bob_${RUN_TAG}`;
     await inviteePage.getByPlaceholder('Username').fill(inviteeUsername);
+    // Phase 4: invitee must sign up WITH the recipient email (preview
+    // pre-fills it; we refill explicitly for robustness).
+    await inviteePage.getByPlaceholder('Email').fill(recipientEmail);
     await inviteePage.getByPlaceholder('Password').fill('password123');
-    await inviteePage.getByPlaceholder('Confirm password').fill('password123');
+    await inviteePage.getByPlaceholder('Confirm Password').fill('password123');
     await inviteePage.getByRole('button', { name: 'Register' }).click();
 
-    // Accepting via the register form auto-joins the org and lands in its
-    // dashboard.
+    // Phase 4: register-time accept grants membership, but the user still
+    // must verify email before login is allowed — lands at /check-email.
+    await expect(inviteePage).toHaveURL(/\/check-email$/);
+    await verifyEmail(inviteePage, recipientEmail);
+
+    // Log in — should land in the admin's org (already a member).
+    await inviteePage.goto('/login');
+    await inviteePage.getByPlaceholder('Username').fill(inviteeUsername);
+    await inviteePage.getByPlaceholder('Password').fill('password123');
+    await inviteePage.getByRole('button', { name: 'Sign In' }).click();
     await expect(inviteePage).toHaveURL(new RegExp(`/${adminSlug}/dashboard$`));
 
     await adminCtx.close();
@@ -114,7 +181,9 @@ test.describe('Phase 3: wizard + invitations', () => {
   });
 
   test('logged-in user accepts invite via /accept-invite', async ({ browser }) => {
-    // Admin mints a fresh invite.
+    const recipientEmail = `carol+${RUN_TAG}@example.com`;
+
+    // Admin mints a fresh invite bound to carol's email.
     const adminCtx = await browser.newContext();
     const adminPage = await adminCtx.newPage();
     await loginAs(adminPage, ADMIN_USER, ADMIN_PASS);
@@ -122,31 +191,41 @@ test.describe('Phase 3: wizard + invitations', () => {
     expect(adminSlug).toBeTruthy();
 
     await adminPage.goto(`/${adminSlug}/admin/invitations`);
+    await adminPage.getByPlaceholder('alice@example.com').fill(recipientEmail);
     await adminPage.getByRole('button', { name: 'Generate', exact: true }).click();
     const linkCell = adminPage.locator('code').filter({ hasText: /\/accept-invite\?token=/ }).first();
     await expect(linkCell).toBeVisible({ timeout: 10000 });
     const inviteUrl = (await linkCell.innerText()).trim();
 
-    // Third user signs up *first* (no invite), lands in their own org via
-    // the wizard, then visits the invite URL while logged in and accepts.
+    // Third user signs up *first* with the recipient email, creates her own
+    // throwaway org, then visits the invite URL while logged in and accepts.
     const userCtx = await browser.newContext();
     const userPage = await userCtx.newPage();
     const username = `carol_${RUN_TAG}`;
 
     await userPage.goto('/register');
     await userPage.getByPlaceholder('Username').fill(username);
+    await userPage.getByPlaceholder('Email').fill(recipientEmail);
     await userPage.getByPlaceholder('Password').fill('password123');
-    await userPage.getByPlaceholder('Confirm password').fill('password123');
+    await userPage.getByPlaceholder('Confirm Password').fill('password123');
     await userPage.getByRole('button', { name: 'Register' }).click();
+    await expect(userPage).toHaveURL(/\/check-email$/);
+    await verifyEmail(userPage, recipientEmail);
+
+    // Log in, then create her own throwaway org so she's no longer in limbo.
+    await userPage.goto('/login');
+    await userPage.getByPlaceholder('Username').fill(username);
+    await userPage.getByPlaceholder('Password').fill('password123');
+    await userPage.getByRole('button', { name: 'Sign In' }).click();
     await expect(userPage).toHaveURL(/\/onboarding$/);
 
-    // Create her own throwaway org so she's no longer in limbo.
     await userPage.getByPlaceholder('e.g., Acme Inc.').fill(`Carol ${RUN_TAG}`);
     await userPage.getByPlaceholder('e.g., acme').fill(`carol-${RUN_TAG}`);
     await userPage.getByRole('button', { name: 'Create', exact: true }).click();
     await expect(userPage).toHaveURL(new RegExp(`/carol-${RUN_TAG}/dashboard$`));
 
-    // Now visit the invite while logged in — should see Accept / Decline.
+    // Now visit the invite while logged in — email matches + is verified, so
+    // the Accept button is offered.
     await userPage.goto(inviteUrl);
     await expect(userPage.getByRole('heading', { name: /Join / })).toBeVisible();
     await expect(userPage.getByRole('button', { name: 'Accept', exact: true })).toBeVisible();

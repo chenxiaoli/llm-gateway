@@ -195,11 +195,15 @@ pub trait Storage: Send + Sync {
 
     /// Mint a new invitation token. The storage layer generates the token and
     /// returns the inserted row. Expiry is provided by the caller.
+    ///
+    /// Phase 4: `recipient_email` binds the invitation to a specific email;
+    /// the DB CHECK constraint requires it for any pending row.
     async fn create_invitation(
         &self,
         org_id: &str,
         role: &MemberRole,
         created_by: &str,
+        recipient_email: &str,
         expires_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<Invitation, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -236,6 +240,87 @@ pub trait Storage: Send + Sync {
         token: &str,
         accepting_user_id: &str,
     ) -> Result<Option<Member>, Box<dyn std::error::Error + Send + Sync>>;
+
+    // ---- Phase 4: users by email ----
+
+    /// Look up a user by their (case-insensitive) email address. Returns
+    /// None when the email column is NULL or no row matches. Callers
+    /// (login, password-reset) treat None and "no row" identically.
+    async fn get_user_by_email(
+        &self,
+        email: &str,
+    ) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Set the user's email + verification metadata. `verified_at = None`
+    /// + `requires = true` means the user must click the verification link
+    /// before they can log in. Used by both register and
+    /// `POST /auth/me/email`.
+    async fn set_user_email(
+        &self,
+        user_id: &str,
+        email: &str,
+        verified_at: Option<chrono::DateTime<chrono::Utc>>,
+        requires_email_verification: bool,
+    ) -> Result<User, Box<dyn std::error::Error + Send + Sync>>;
+
+    // ---- Phase 4: email_verifications ----
+
+    /// Mint a fresh verification token. The token is the lookup key for
+    /// the user-facing email link. Expiry is typically 24 hours.
+    async fn create_email_verification(
+        &self,
+        user_id: &str,
+        email: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<EmailVerification, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Look up by token. Returns None if no row matches (including expired /
+    /// consumed — the caller decides semantics).
+    async fn get_email_verification_by_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<EmailVerification>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Atomically mark the verification consumed AND set
+    /// `users.email_verified_at = NOW()`. Returns `true` on success or
+    /// `false` if the row is missing / already consumed / expired. Both
+    /// writes happen in a single transaction so a partial state (consumed
+    /// but user not verified) is impossible.
+    async fn consume_email_verification(
+        &self,
+        token: &str,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
+
+    // ---- Phase 4: password_resets ----
+
+    /// Mint a fresh password-reset token. Expiry is typically 1 hour
+    /// (shorter than email_verifications — resets are higher-stakes).
+    async fn create_password_reset(
+        &self,
+        user_id: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<PasswordReset, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Look up by token. Returns None if no row matches.
+    async fn get_password_reset_by_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<PasswordReset>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Atomic password reset: SELECT FOR UPDATE the reset row, check
+    /// consumed/expired, then in the same tx UPDATE password_resets SET
+    /// consumed_at = NOW() AND UPDATE users SET password =
+    /// $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $user_id.
+    ///
+    /// Returns the outcome — `Success` only if both writes committed.
+    /// `NotFound` / `Consumed` / `Expired` let the caller map to the right
+    /// typed error without a separate pre-check (eliminating the race window
+    /// between get-then-act).
+    async fn consume_password_reset_and_set_password(
+        &self,
+        token: &str,
+        new_password_hash: &str,
+    ) -> Result<PasswordResetOutcome, Box<dyn std::error::Error + Send + Sync>>;
 
     // ---- Settings split ----
     async fn get_platform_setting(&self, key: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;

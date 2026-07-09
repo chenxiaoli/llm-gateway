@@ -12,11 +12,17 @@ import { Select } from '../components/ui/Select';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { CopyableInviteLink } from '../components/CopyableInviteLink';
+import { getErrorMessage } from '../api/client';
 import type { Invitation } from '../types';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 type InviteRole = 'member' | 'admin';
+
+// Minimal client-side email shape check. The backend does the rigorous
+// validation; this just keeps the Generate button disabled until the field
+// looks plausibly like an email so we don't fire obviously-bad requests.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function Invitations() {
   // Source org slug from the auth store (matches useMembers pattern) rather
@@ -27,6 +33,7 @@ export default function Invitations() {
   const qc = useQueryClient();
 
   const [role, setRole] = useState<InviteRole>('member');
+  const [recipientEmail, setRecipientEmail] = useState('');
   const [pendingRevoke, setPendingRevoke] = useState<Invitation | null>(null);
 
   const queryKey = ['invitations', orgSlug];
@@ -36,13 +43,25 @@ export default function Invitations() {
     enabled: !!orgSlug,
   });
 
+  const emailValid = EMAIL_RE.test(recipientEmail.trim());
+
   const createMut = useMutation({
-    mutationFn: () => createInvitation(orgSlug, { role }),
+    mutationFn: () => createInvitation(orgSlug, { role, recipient_email: recipientEmail.trim() }),
     onSuccess: () => {
-      toast.success(t('invitations.toasts.created'));
+      toast.success(t('invitations.toasts.createdTo', { email: recipientEmail.trim() }));
+      setRecipientEmail('');
       qc.invalidateQueries({ queryKey });
     },
-    onError: () => toast.error(t('invitations.toasts.createFailed')),
+    onError: (err) => {
+      const code = (err as { response?: { status?: number; data?: { error?: { code?: string } } } })
+        ?.response?.data?.error?.code;
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 409 && code === 'email_in_use') {
+        toast.error(t('invitations.errors.emailInUse'));
+      } else {
+        toast.error(getErrorMessage(err, t('invitations.toasts.createFailed')));
+      }
+    },
   });
 
   const revokeMut = useMutation({
@@ -109,7 +128,30 @@ export default function Invitations() {
               options={roleOptions}
             />
           </div>
-          <Button type="button" onClick={() => createMut.mutate()} loading={createMut.isPending}>
+          <div className="flex-1 max-w-xs">
+            <label
+              htmlFor="invitation-recipient-email"
+              className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5 block"
+            >
+              {t('invitations.generate.recipientEmail')}
+            </label>
+            <input
+              id="invitation-recipient-email"
+              type="email"
+              value={recipientEmail}
+              onChange={(e) => setRecipientEmail(e.target.value)}
+              placeholder={t('invitations.generate.recipientEmailPlaceholder')}
+              required
+              autoComplete="email"
+              className="input input-bordered w-full"
+            />
+          </div>
+          <Button
+            type="button"
+            onClick={() => createMut.mutate()}
+            loading={createMut.isPending}
+            disabled={!emailValid}
+          >
             {t('invitations.generate.submit')}
           </Button>
         </div>
@@ -135,6 +177,9 @@ export default function Invitations() {
                 </th>
                 <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">
                   {t('invitations.table.role')}
+                </th>
+                <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">
+                  {t('invitations.table.recipient')}
                 </th>
                 <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">
                   {t('invitations.table.status')}
@@ -170,6 +215,15 @@ export default function Invitations() {
                     </td>
                     <td>
                       <span className="text-sm text-base-content/70">{t(`invitations.roles.${inv.role}`)}</span>
+                    </td>
+                    <td>
+                      {inv.recipient_email ? (
+                        <code className="text-xs font-mono text-base-content/60 break-all">
+                          {inv.recipient_email}
+                        </code>
+                      ) : (
+                        <span className="text-xs text-base-content/30">—</span>
+                      )}
                     </td>
                     <td>
                       <span className={

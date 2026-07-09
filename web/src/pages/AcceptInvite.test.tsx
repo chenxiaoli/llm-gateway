@@ -24,6 +24,8 @@ const authedUser: User = {
   id: 'user-1',
   username: 'alice',
   platform_role: null,
+  email: 'alice@example.com',
+  email_verified_at: '2026-01-01T00:00:00Z',
 };
 
 const invitingOrg: OrgSummary = {
@@ -39,6 +41,7 @@ const previewBody = {
   org_slug: 'acme',
   role: 'member',
   inviter_username: 'inviter',
+  recipient_email: 'alice@example.com',
   expires_at: '2026-12-31T00:00:00Z',
 };
 
@@ -85,6 +88,27 @@ function seedLoggedInAlreadyMember() {
     user: authedUser,
     currentOrg: invitingOrg,
     orgs: [invitingOrg],
+    impersonating: false,
+    pendingInviteToken: null,
+  });
+}
+
+function seedLoggedInMismatchedEmail() {
+  useAuthStore.setState({
+    user: { ...authedUser, email: 'bob@example.com' },
+    currentOrg: null,
+    orgs: [],
+    impersonating: false,
+    pendingInviteToken: null,
+  });
+}
+
+function seedLoggedInUnverifiedEmail() {
+  // Same email as the preview's recipient, but unverified.
+  useAuthStore.setState({
+    user: { ...authedUser, email_verified_at: null },
+    currentOrg: null,
+    orgs: [],
     impersonating: false,
     pendingInviteToken: null,
   });
@@ -184,6 +208,36 @@ describe('AcceptInvite page', () => {
       '/acme/dashboard',
     );
     // Accept/Decline buttons should NOT be present for already-members.
+    expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
+  });
+
+  it('logged in: mismatched email shows mismatch notice and no Accept button', async () => {
+    seedLoggedInMismatchedEmail();
+    server.use(
+      http.get('*/api/v1/invitations/preview', () => HttpResponse.json(previewBody)),
+    );
+
+    renderWithProviders(<AcceptInvite />, { route: '/accept-invite?token=abc123' });
+
+    // Mismatch notice mentions the invitation's recipient email.
+    await waitFor(() => {
+      expect(screen.getByText(/This invitation was sent to alice@example\.com/)).toBeInTheDocument();
+    });
+    // No Accept button — they can't take this invitation with this account.
+    expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
+  });
+
+  it('logged in: unverified email shows verify-first notice and no Accept button', async () => {
+    seedLoggedInUnverifiedEmail();
+    server.use(
+      http.get('*/api/v1/invitations/preview', () => HttpResponse.json(previewBody)),
+    );
+
+    renderWithProviders(<AcceptInvite />, { route: '/accept-invite?token=abc123' });
+
+    await waitFor(() => {
+      expect(screen.getByText('Verify your email first, then come back to accept.')).toBeInTheDocument();
+    });
     expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument();
   });
 });
