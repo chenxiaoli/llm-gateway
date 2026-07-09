@@ -121,8 +121,14 @@ mod tests {
         };
         let msg = r.render_verification(ctx).unwrap();
         assert_eq!(msg.to, "alice@example.com");
-        assert!(msg.text_body.contains("TOKEN"));
-        assert!(msg.html_body.unwrap().contains("TOKEN"));
+        assert_eq!(msg.subject, "Verify your email");
+        assert!(msg.text_body.contains("alice"), "username missing from text_body");
+        assert!(msg.text_body.contains("TOKEN"), "verification_url missing from text_body");
+        assert!(msg.text_body.contains("24 hours"), "expires_in_hours missing from text_body");
+        let html = msg.html_body.unwrap();
+        assert!(html.contains("alice"));
+        assert!(html.contains("TOKEN"));
+        assert!(html.contains("24 hours"));
     }
 
     #[test]
@@ -140,6 +146,11 @@ mod tests {
         let msg = r.render_invitation(ctx).unwrap();
         assert_eq!(msg.to, "alice@example.com");
         assert!(msg.subject.contains("Acme"));
+        assert!(msg.text_body.contains("bob"), "inviter_username missing from text_body");
+        assert!(msg.text_body.contains("Acme"), "org_name missing from text_body");
+        assert!(msg.text_body.contains("member"), "role missing from text_body");
+        assert!(msg.text_body.contains("TOKEN"), "accept_url missing from text_body");
+        assert!(msg.text_body.contains("7 days"), "expires_in_days missing from text_body");
     }
 
     #[test]
@@ -154,6 +165,9 @@ mod tests {
         };
         let msg = r.render_password_reset(ctx).unwrap();
         assert_eq!(msg.to, "alice@example.com");
+        assert_eq!(msg.subject, "Reset your password");
+        assert!(msg.text_body.contains("alice"));
         assert!(msg.text_body.contains("TOKEN"));
+        assert!(msg.text_body.contains("1 hours"), "expires_in_hours missing from text_body");
     }
 }
