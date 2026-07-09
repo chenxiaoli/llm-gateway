@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { AlertTriangle, Building2 } from 'lucide-react';
@@ -11,6 +11,7 @@ import { updateOrg, deleteOrg } from '../api/orgs';
 import { getErrorMessage } from '../api/client';
 import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { useGetOrgDefaults, useUpdateOrgDefaults } from '../hooks/useOrgDefaults';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -243,6 +244,9 @@ export default function OrgSettings() {
           </form>
         </motion.section>
 
+        {/* Defaults section — admin can edit; member is read-only. */}
+        <DefaultsSection canEdit={canEdit} />
+
         {/* Danger zone — owner-only. Hidden entirely for non-owners. */}
         {canDelete && (
           <motion.section
@@ -319,5 +323,134 @@ export default function OrgSettings() {
         onCancel={() => setConfirmOpen(false)}
       />
     </div>
+  );
+}
+
+function DefaultsSection({ canEdit }: { canEdit: boolean }) {
+  const { t } = useTranslation();
+  const reducedMotion = useReducedMotion();
+  const { data, isLoading, isError } = useGetOrgDefaults();
+  const updateDefaults = useUpdateOrgDefaults();
+
+  // Local state mirrors the loaded values; initialized once data arrives.
+  const [rpm, setRpm] = useState<string>('');
+  const [budget, setBudget] = useState<string>('');
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    if (data && !hydrated) {
+      setRpm(data.default_rate_limit_rpm?.toString() ?? '');
+      setBudget(data.default_budget_monthly_usd?.toString() ?? '');
+      setHydrated(true);
+    }
+  }, [data, hydrated]);
+
+  if (isLoading) {
+    return (
+      <motion.section
+        initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="rounded-xl border border-base-300 bg-base-100 p-6 mt-6"
+      >
+        <div className="text-base-content/60">Loading…</div>
+      </motion.section>
+    );
+  }
+
+  if (isError) {
+    return (
+      <motion.section
+        initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: EASE }}
+        className="rounded-xl border border-base-300 bg-base-100 p-6 mt-6"
+      >
+        <div className="text-error">Failed to load defaults.</div>
+      </motion.section>
+    );
+  }
+
+  const rpmNum = rpm === '' ? null : parseInt(rpm, 10);
+  const budgetNum = budget === '' ? null : parseFloat(budget);
+  const dirty =
+    (rpmNum ?? null) !== (data?.default_rate_limit_rpm ?? null) ||
+    (budgetNum ?? null) !== (data?.default_budget_monthly_usd ?? null);
+
+  const onSave = async () => {
+    await updateDefaults.mutateAsync({
+      default_rate_limit_rpm: rpmNum !== null && !Number.isNaN(rpmNum) ? rpmNum : null,
+      default_budget_monthly_usd: budgetNum !== null && !Number.isNaN(budgetNum) ? budgetNum : null,
+    });
+  };
+
+  return (
+    <motion.section
+      initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: EASE }}
+      className="rounded-xl border border-base-300 bg-base-100 p-6 mt-6"
+    >
+      <h2 className="text-xl font-semibold mb-1">{t('orgSettings.defaults.title')}</h2>
+      <p className="text-sm text-base-content/60 mb-4">{t('orgSettings.defaults.description')}</p>
+
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="org-default-rpm" className="block text-sm mb-1">
+            {t('orgSettings.defaults.rateLimitLabel')}
+          </label>
+          <input
+            id="org-default-rpm"
+            type="number"
+            min="1"
+            placeholder="Unlimited"
+            disabled={!canEdit || updateDefaults.isPending}
+            value={rpm}
+            onChange={(e) => setRpm(e.target.value)}
+            className={INPUT_CLASS}
+          />
+          <p className="text-xs text-base-content/50 mt-1">{t('orgSettings.defaults.rateLimitHelp')}</p>
+        </div>
+
+        <div>
+          <label htmlFor="org-default-budget" className="block text-sm mb-1">
+            {t('orgSettings.defaults.budgetLabel')}
+          </label>
+          <input
+            id="org-default-budget"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="No budget"
+            disabled={!canEdit || updateDefaults.isPending}
+            value={budget}
+            onChange={(e) => setBudget(e.target.value)}
+            className={INPUT_CLASS}
+          />
+          <p className="text-xs text-base-content/50 mt-1">{t('orgSettings.defaults.budgetHelp')}</p>
+        </div>
+      </div>
+
+      {canEdit && (
+        <div className="flex justify-end gap-2 mt-4">
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setRpm(data?.default_rate_limit_rpm?.toString() ?? '');
+              setBudget(data?.default_budget_monthly_usd?.toString() ?? '');
+            }}
+            disabled={!dirty || updateDefaults.isPending}
+          >
+            {t('orgSettings.defaults.cancel')}
+          </Button>
+          <Button
+            onClick={onSave}
+            disabled={!dirty || updateDefaults.isPending}
+          >
+            {t('orgSettings.defaults.save')}
+          </Button>
+        </div>
+      )}
+    </motion.section>
   );
 }
