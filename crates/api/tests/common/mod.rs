@@ -159,3 +159,116 @@ pub fn make_member_token(user_id: &str) -> TestUser {
     // Alias for make_user_token; kept separate to communicate intent.
     make_user_token(user_id)
 }
+
+// ─── Phase 5: org-defaults test helpers ──────────────────────────────────
+//
+// These helpers seed a *fresh* org (not org_default) with a unique slug so
+// each `#[sqlx::test]` case starts from a clean slate — no leakage between
+// tests via the shared org_default row. They return a JWT that carries the
+// new org as `current_org_id`, which is what `org_resolve_layer` +
+// `membership_layer` need to let the request through.
+
+use axum::Router as AxumRouter;
+
+/// Seed a fresh org with a unique slug and an owner user. Returns the
+/// owner's JWT and the new org's slug.
+///
+/// The `app` argument is accepted to match the call shape used by the
+/// Phase 5 tests but is not currently needed (seeding is pure SQL). Kept
+/// in the signature so the tests' helper calls read symmetrically.
+pub async fn seed_org_with_admin(
+    pool: &PgPool,
+    _app: &AxumRouter,
+) -> (String, String) {
+    let tag = uuid::Uuid::new_v4().to_string();
+    let slug = format!("o-{}", &tag.replace('-', "").to_lowercase()[..12]);
+    let org_id = format!("org-{tag}");
+    let user_id = format!("u-{tag}");
+
+    sqlx::query(
+        r#"INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, created_at, updated_at)
+           VALUES ($1, $2, 'x', NULL, NULL, true, NOW(), NOW())"#,
+    )
+    .bind(&user_id)
+    .bind(&user_id)
+    .execute(pool)
+    .await
+    .expect("seed admin user");
+
+    // Insert the org AFTER the user so the orgs.owner_id FK is satisfied.
+    sqlx::query(
+        r#"INSERT INTO orgs (id, slug, name, owner_id, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, NOW(), NOW())"#,
+    )
+    .bind(&org_id)
+    .bind(&slug)
+    .bind(format!("Org {tag}"))
+    .bind(&user_id)
+    .execute(pool)
+    .await
+    .expect("seed org");
+
+    // Backfill current_org_id now that the org exists (FK is deferred-ish in
+    // practice but keeping the user insert above clean avoids ordering pain).
+    sqlx::query("UPDATE users SET current_org_id = $1 WHERE id = $2")
+        .bind(&org_id)
+        .bind(&user_id)
+        .execute(pool)
+        .await
+        .expect("set current_org_id");
+
+    sqlx::query(
+        r#"INSERT INTO members (user_id, org_id, role, created_by, created_at)
+           VALUES ($1, $2, 'owner', $1, NOW())"#,
+    )
+    .bind(&user_id)
+    .bind(&org_id)
+    .execute(pool)
+    .await
+    .expect("seed owner member");
+
+    let token =
+        llm_gateway_auth::create_jwt(&user_id, Some(&org_id), None, TEST_JWT_SECRET).unwrap();
+    (token, slug)
+}
+
+/// Seed a plain `member` role user in the org identified by `slug`. Returns
+/// that member's JWT. The org + its owner must already exist (seed via
+/// `seed_org_with_admin` first).
+pub async fn seed_member_in_org(
+    pool: &PgPool,
+    _app: &AxumRouter,
+    slug: &str,
+) -> String {
+    let org_id: String = sqlx::query_scalar("SELECT id FROM orgs WHERE slug = $1")
+        .bind(slug)
+        .fetch_one(pool)
+        .await
+        .expect("org exists by slug");
+
+    let tag = uuid::Uuid::new_v4().to_string();
+    let user_id = format!("m-{tag}");
+
+    sqlx::query(
+        r#"INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, created_at, updated_at)
+           VALUES ($1, $2, 'x', NULL, $3, true, NOW(), NOW())"#,
+    )
+    .bind(&user_id)
+    .bind(&user_id)
+    .bind(&org_id)
+    .execute(pool)
+    .await
+    .expect("seed member user");
+
+    sqlx::query(
+        r#"INSERT INTO members (user_id, org_id, role, created_by, created_at)
+           VALUES ($1, $2, 'member', $1, NOW())"#,
+    )
+    .bind(&user_id)
+    .bind(&org_id)
+    .execute(pool)
+    .await
+    .expect("seed member row");
+
+    llm_gateway_auth::create_jwt(&user_id, Some(&org_id), None, TEST_JWT_SECRET).unwrap()
+}

@@ -985,7 +985,7 @@ pub async fn me_onboarding(
     }))
 }
 
-use llm_gateway_storage::{units_to_usd, TransactionResponse};
+use llm_gateway_storage::{opt_units_to_usd, opt_usd_to_units, units_to_usd, TransactionResponse};
 
 pub async fn me_balance(
     State(state): State<Arc<AppState>>,
@@ -1485,6 +1485,34 @@ pub struct UpdateOrgRequest {
     pub slug: Option<String>,
 }
 
+/// Body for `PUT /api/v1/{org_slug}/defaults` (Phase 5).
+///
+/// Both fields are optional: a JSON `null` clears that key, and omitting the
+/// field entirely (when the client uses `serde(default)`) leaves it untouched.
+/// The wire shape is USD (float); the storage layer holds integer subunits.
+#[derive(Debug, Deserialize)]
+pub struct UpdateOrgDefaultsRequest {
+    pub default_rate_limit_rpm: Option<i64>,
+    /// USD (float). Converted to/from subunits at the API boundary.
+    pub default_budget_monthly_usd: Option<f64>,
+}
+
+/// Response for `GET`/`PUT /api/v1/{org_slug}/defaults` (Phase 5).
+#[derive(Debug, Serialize)]
+pub struct OrgDefaultsResponse {
+    pub default_rate_limit_rpm: Option<i64>,
+    pub default_budget_monthly_usd: Option<f64>,
+}
+
+impl From<llm_gateway_storage::types::OrgDefaults> for OrgDefaultsResponse {
+    fn from(d: llm_gateway_storage::types::OrgDefaults) -> Self {
+        Self {
+            default_rate_limit_rpm: d.default_rate_limit_rpm,
+            default_budget_monthly_usd: opt_units_to_usd(d.default_budget_monthly_usd),
+        }
+    }
+}
+
 pub async fn update_org(
     State(state): State<Arc<AppState>>,
     ctx: OrgContext,
@@ -1563,6 +1591,78 @@ pub async fn update_org(
         role: ctx.member_role.as_str().to_string(),
         group_id: ctx.group_id,
     }))
+}
+
+/// GET /api/v1/{org_slug}/defaults — read org-wide default settings.
+///
+/// Available to any member of the org (membership is enforced upstream by
+/// `membership_layer` before this handler runs). Defaults that were never set
+/// surface as `null`.
+pub async fn get_org_defaults(
+    State(state): State<Arc<AppState>>,
+    ctx: OrgContext,
+) -> Result<Json<OrgDefaultsResponse>, ApiError> {
+    let defaults = state
+        .storage
+        .get_org_defaults(&ctx.org_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(Json(OrgDefaultsResponse::from(defaults)))
+}
+
+/// PUT /api/v1/{org_slug}/defaults — write org-wide default settings.
+///
+/// Requires admin-or-above in the org (or platform_admin). Both fields are
+/// optional at the wire level: `null` clears that key, and the typed
+/// validation rejects `rpm < 1` and `budget < 0`. The handler reads back
+/// committed state so the response reflects exactly what was persisted
+/// (including when one field was cleared and the other left untouched).
+pub async fn update_org_defaults(
+    State(state): State<Arc<AppState>>,
+    ctx: OrgContext,
+    Json(input): Json<UpdateOrgDefaultsRequest>,
+) -> Result<Json<OrgDefaultsResponse>, ApiError> {
+    if !llm_gateway_org::can_manage_org_settings(&ctx) {
+        return Err(ApiError::Forbidden);
+    }
+
+    // Validate. RPM must be a positive integer when present; budget must be
+    // non-negative. Zero RPM is meaningless (it would block every request)
+    // and a negative budget is nonsensical.
+    if let Some(rpm) = input.default_rate_limit_rpm {
+        if rpm < 1 {
+            return Err(ApiError::BadRequest(
+                "default_rate_limit_rpm must be >= 1".into(),
+            ));
+        }
+    }
+    if let Some(budget) = input.default_budget_monthly_usd {
+        if budget < 0.0 {
+            return Err(ApiError::BadRequest(
+                "default_budget_monthly_usd must be >= 0".into(),
+            ));
+        }
+    }
+
+    let new_defaults = llm_gateway_storage::types::OrgDefaults {
+        default_rate_limit_rpm: input.default_rate_limit_rpm,
+        default_budget_monthly_usd: opt_usd_to_units(input.default_budget_monthly_usd),
+    };
+
+    state
+        .storage
+        .set_org_defaults(&ctx.org_id, &new_defaults)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Read-back so the response reflects committed state (and converts the
+    // integer subunits back to the USD float wire shape uniformly).
+    let fresh = state
+        .storage
+        .get_org_defaults(&ctx.org_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(Json(OrgDefaultsResponse::from(fresh)))
 }
 
 /// DELETE /api/v1/{org_slug} — hard-delete the resolved org.

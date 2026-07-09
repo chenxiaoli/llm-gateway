@@ -173,6 +173,12 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
                 .patch(auth::update_org)
                 .delete(auth::delete_org),
         )
+        // Org-wide defaults (Phase 5). GET = member+, PUT = admin+. The kv
+        // rows live in org_settings; these handlers are the typed facade.
+        .route(
+            "/defaults",
+            get(auth::get_org_defaults).put(auth::update_org_defaults),
+        )
         // Keys (authenticated)
         .route("/keys", post(keys::create_key).get(keys::list_keys))
         .route(
