@@ -77,6 +77,20 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/v1/auth/resend-verification",
             post(auth::resend_verification),
         )
+        // Phase 4: password reset — public so users can reset before they
+        // can log in. /request always returns 204 to avoid email enumeration.
+        .route(
+            "/api/v1/auth/password-reset/request",
+            post(auth::password_reset_request),
+        )
+        .route(
+            "/api/v1/auth/password-reset/preview",
+            get(auth::password_reset_preview),
+        )
+        .route(
+            "/api/v1/auth/password-reset/confirm",
+            post(auth::password_reset_confirm),
+        )
         // Orgs (authenticated) — list/create/switch membership context.
         // These are global: they operate on the user's set of memberships,
         // not on a single org scoped by path.

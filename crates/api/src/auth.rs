@@ -57,6 +57,36 @@ pub struct ResendVerificationRequest {
     pub email: String,
 }
 
+/// Phase 4: body for `POST /api/v1/auth/password-reset/request`.
+#[derive(Deserialize)]
+pub struct PasswordResetRequest {
+    pub email: String,
+}
+
+/// Phase 4: body for `POST /api/v1/auth/password-reset/confirm`.
+#[derive(Deserialize)]
+pub struct PasswordResetConfirm {
+    pub token: String,
+    pub new_password: String,
+}
+
+/// Phase 4: response for `GET /api/v1/auth/password-reset/preview`.
+///
+/// `valid=false` collapses consumed, expired, AND not-found — the endpoint is
+/// deliberately tight-lipped so an attacker probing tokens only learns
+/// "usable" vs "not".
+#[derive(Serialize)]
+pub struct PasswordResetPreview {
+    pub valid: bool,
+    pub expires_at: Option<String>,
+}
+
+/// Phase 4: shared `?token=...` query for preview endpoints.
+#[derive(Deserialize)]
+pub struct TokenQuery {
+    pub token: String,
+}
+
 #[derive(Serialize)]
 pub struct AuthResponse {
     pub token: String,
@@ -289,6 +319,12 @@ pub async fn login(
 /// (matches GitHub/GitLab/etc.) and long enough to be a non-issue for users
 /// who don't see the email arrive in the first minute.
 const EMAIL_VERIFICATION_TTL_HOURS: i64 = 24;
+
+/// Password-reset token lifetime. Shorter than email verification because a
+/// live reset token is higher-stakes: anyone who intercepts it can take over
+/// the account. 1 hour is long enough for a user to notice the email and
+/// click through, short enough to limit the exposure window.
+const PASSWORD_RESET_TTL_HOURS: i64 = 1;
 
 pub async fn register(
     State(state): State<Arc<AppState>>,
@@ -634,6 +670,132 @@ pub async fn resend_verification(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// POST /api/v1/auth/password-reset/request — public, always 204.
+///
+/// Never confirms whether the email exists. Unknown emails, unverified
+/// accounts, and transient DB errors all collapse to a no-op 204. Only
+/// verified account holders receive a reset email — resetting a password for
+/// an address the user hasn't proven ownership of would hand the account to
+/// whoever currently controls that mailbox.
+pub async fn password_reset_request(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<PasswordResetRequest>,
+) -> Result<StatusCode, ApiError> {
+    let email = input.email.trim().to_lowercase();
+    let Some(user) = state
+        .storage
+        .get_user_by_email(&email)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+    else {
+        return Ok(StatusCode::NO_CONTENT);
+    };
+    if user.email_verified_at.is_none() {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    let expires = chrono::Utc::now() + chrono::Duration::hours(PASSWORD_RESET_TTL_HOURS);
+    let reset = match state.storage.create_password_reset(&user.id, expires).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e, "password_reset_request: mint failed, returning 204 to avoid enumeration");
+            return Ok(StatusCode::NO_CONTENT);
+        }
+    };
+    let reset_url = format!(
+        "{}/reset-password/{}",
+        state.public_base_url.trim_end_matches('/'),
+        reset.token
+    );
+    let ctx = llm_gateway_email::templates::PasswordResetCtx {
+        username: user.username.clone(),
+        recipient_email: email,
+        reset_url,
+        expires_in_hours: PASSWORD_RESET_TTL_HOURS as u32,
+        public_base_url: state.public_base_url.clone(),
+    };
+    match state.templates.render_password_reset(ctx) {
+        Ok(msg) => dispatch_with_retry(state.mailer.clone(), msg, "password reset email".into()),
+        Err(e) => tracing::error!(error = %e, "failed to render password-reset email; dispatch skipped"),
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// GET /api/v1/auth/password-reset/preview?token=... — public.
+///
+/// Returns `{ valid, expires_at }`. The frontend's ResetPassword page uses
+/// this to decide whether to render the form or the "expired" state before
+/// the user types. `valid=false` covers consumed, expired, and not-found.
+pub async fn password_reset_preview(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<TokenQuery>,
+) -> Result<Json<PasswordResetPreview>, ApiError> {
+    let Some(r) = state
+        .storage
+        .get_password_reset_by_token(&params.token)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+    else {
+        return Ok(Json(PasswordResetPreview { valid: false, expires_at: None }));
+    };
+    let valid = r.consumed_at.is_none() && r.expires_at > chrono::Utc::now();
+    Ok(Json(PasswordResetPreview {
+        valid,
+        expires_at: Some(r.expires_at.to_rfc3339()),
+    }))
+}
+
+/// POST /api/v1/auth/password-reset/confirm — public.
+///
+/// Consumes the reset token and sets the new password via two storage calls
+/// (there's no combined method). A crash between them leaves the user with
+/// the new password and a still-consumable token that, on retry, would set
+/// the SAME password again — benign. `consume_password_reset` bumps
+/// `users.password_changed_at`, invalidating pre-reset refresh tokens.
+pub async fn password_reset_confirm(
+    State(state): State<Arc<AppState>>,
+    Json(input): Json<PasswordResetConfirm>,
+) -> Result<StatusCode, ApiError> {
+    validate_password(&input.new_password).map_err(ApiError::BadRequest)?;
+    let r = state
+        .storage
+        .get_password_reset_by_token(&input.token)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::ResetNotFound)?;
+    if r.consumed_at.is_some() {
+        return Err(ApiError::ResetConsumed);
+    }
+    if r.expires_at < chrono::Utc::now() {
+        return Err(ApiError::ResetExpired);
+    }
+    let mut user = state
+        .storage
+        .get_user(&r.user_id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::Internal("reset token references missing user".into()))?;
+    user.password =
+        hash_password(&input.new_password).map_err(|e| ApiError::Internal(e.to_string()))?;
+    user.updated_at = chrono::Utc::now();
+    state
+        .storage
+        .update_user(&user)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let ok = state
+        .storage
+        .consume_password_reset(&input.token)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    if !ok {
+        // Race: another request consumed the token between our read and our
+        // consume. The password is already updated; surface the race so the
+        // frontend routes the user to login instead of offering a retry.
+        return Err(ApiError::ResetConsumed);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn me(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
@@ -811,6 +973,16 @@ pub async fn refresh(
         return Err(ApiError::Unauthorized);
     }
 
+    // Phase 4: refresh tokens issued before the most recent password change
+    // are invalid. Kicks in after a password reset or change — a stolen
+    // refresh token exfiltrated earlier can no longer be rotated into a fresh
+    // access token.
+    let iat = chrono::DateTime::<chrono::Utc>::from_timestamp(claims.iat as i64, 0)
+        .ok_or(ApiError::Unauthorized)?;
+    if iat < user.password_changed_at {
+        return Err(ApiError::Unauthorized);
+    }
+
     // Resolve current org so the new access token carries it. Phase 3: a
     // limbo user (no memberships) gets a fresh limbo token — they may have
     // a refresh token from registration but not yet have completed the
@@ -868,6 +1040,7 @@ pub async fn change_password(
     let mut updated_user = user.clone();
     updated_user.password = hash_password(&input.new_password).map_err(|e| ApiError::Internal(e.to_string()))?;
     updated_user.updated_at = chrono::Utc::now();
+    updated_user.password_changed_at = chrono::Utc::now();
     state
         .storage
         .update_user(&updated_user)
