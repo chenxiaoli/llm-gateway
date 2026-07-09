@@ -1,6 +1,6 @@
 //! SMTP-backed `Mailer` using `lettre::AsyncSmtpTransport<Tokio1Executor>`.
 
-use crate::{EmailError, EmailMessage, Mailer};
+use crate::{parse_mailbox, EmailError, EmailMessage, Mailer};
 use lettre::message::header::ContentType;
 use lettre::message::{MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
@@ -13,8 +13,8 @@ pub struct SmtpMailer {
     from_name: String,
 }
 
-/// Configuration for the SMTP mailer. Construct via [`SmtpMailerConfig::from_config`]
-/// or directly in tests.
+/// Configuration for the SMTP mailer. Construct directly, or wire it from
+/// the gateway's `EmailConfig` in `crates/gateway` (Task 6).
 #[derive(Debug, Clone)]
 pub struct SmtpMailerConfig {
     pub host: String,
@@ -52,18 +52,14 @@ impl SmtpMailer {
 #[async_trait::async_trait]
 impl Mailer for SmtpMailer {
     async fn send(&self, msg: EmailMessage) -> Result<(), EmailError> {
-        let from = format!("{} <{}>", self.from_name, self.from_address)
-            .parse()
-            .map_err(|e: lettre::address::AddressError| EmailError::InvalidAddress(e.to_string()))?;
-        let to = msg
-            .to
-            .parse()
-            .map_err(|e: lettre::address::AddressError| EmailError::InvalidAddress(e.to_string()))?;
-        let email = Message::builder()
-            .from(from)
-            .to(to)
-            .subject(&msg.subject)
-            .multipart(
+        let from = parse_mailbox(&self.from_name, &self.from_address)?;
+        let to = parse_mailbox("", &msg.to)?;
+        let builder = Message::builder().from(from).to(to).subject(&msg.subject);
+        // When no HTML is provided, send a single text/plain body. Sending
+        // an empty text/html alternative can cause some clients to render
+        // nothing.
+        let email = match msg.html_body.as_deref() {
+            Some(html) => builder.multipart(
                 MultiPart::alternative()
                     .singlepart(
                         SinglePart::builder()
@@ -73,11 +69,20 @@ impl Mailer for SmtpMailer {
                     .singlepart(
                         SinglePart::builder()
                             .header(ContentType::TEXT_HTML)
-                            .body(msg.html_body.unwrap_or_default()),
+                            .body(html.to_string()),
                     ),
-            )
-            .map_err(|e| EmailError::Smtp(e.to_string()))?;
-        self.transport.send(email).await.map_err(|e| EmailError::Smtp(e.to_string()))?;
+            )?,
+            None => {
+                builder.multipart(
+                    MultiPart::mixed().singlepart(
+                        SinglePart::builder()
+                            .header(ContentType::TEXT_PLAIN)
+                            .body(msg.text_body),
+                    ),
+                )?
+            }
+        };
+        self.transport.send(email).await?;
         Ok(())
     }
 }

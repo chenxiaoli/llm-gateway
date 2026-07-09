@@ -2,7 +2,7 @@
 //! file under a configured directory. Filename includes timestamp + recipient
 //! so tests can grep for the token.
 
-use crate::{EmailError, EmailMessage, Mailer};
+use crate::{parse_mailbox, EmailError, EmailMessage, Mailer};
 use lettre::message::Mailbox;
 use lettre::{AsyncFileTransport, AsyncTransport, Tokio1Executor};
 use std::path::PathBuf;
@@ -28,23 +28,14 @@ impl FileMailer {
 impl Mailer for FileMailer {
     async fn send(&self, msg: EmailMessage) -> Result<(), EmailError> {
         let transport = AsyncFileTransport::<Tokio1Executor>::new(&self.out_dir);
-        let from: Mailbox = format!("{} <{}>", self.from_name, self.from_address)
-            .parse()
-            .map_err(|e: lettre::address::AddressError| EmailError::InvalidAddress(e.to_string()))?;
-        let to: Mailbox = msg
-            .to
-            .parse()
-            .map_err(|e: lettre::address::AddressError| EmailError::InvalidAddress(e.to_string()))?;
+        let from: Mailbox = parse_mailbox(&self.from_name, &self.from_address)?;
+        let to: Mailbox = parse_mailbox("", &msg.to)?;
         let email = lettre::Message::builder()
             .from(from)
             .to(to)
             .subject(&msg.subject)
-            .body(msg.text_body)
-            .map_err(|e| EmailError::File(e.to_string()))?;
-        transport
-            .send(email)
-            .await
-            .map_err(|e| EmailError::File(e.to_string()))?;
+            .body(msg.text_body)?;
+        transport.send(email).await?;
         Ok(())
     }
 }

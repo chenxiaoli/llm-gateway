@@ -73,6 +73,20 @@ pub trait Mailer: Send + Sync {
     async fn send(&self, msg: EmailMessage) -> Result<(), EmailError>;
 }
 
+/// Parse a `"Name <addr@host>"` pair into a `lettre::Mailbox`. An empty
+/// `name` is treated as if the address were written alone (`"addr@host>"`),
+/// which is the canonical form lettre's parser accepts.
+pub(crate) fn parse_mailbox(name: &str, address: &str) -> Result<lettre::message::Mailbox, EmailError> {
+    use lettre::message::Mailbox;
+    let s = if name.is_empty() {
+        address.to_string()
+    } else {
+        format!("{name} <{address}>")
+    };
+    s.parse::<Mailbox>()
+        .map_err(|e: lettre::address::AddressError| EmailError::InvalidAddress(e.to_string()))
+}
+
 /// Fire-and-forget dispatch with 3-attempt exponential backoff (1s → 2s → 4s).
 ///
 /// Spawns a tokio task; never blocks the caller. On total failure, logs an
