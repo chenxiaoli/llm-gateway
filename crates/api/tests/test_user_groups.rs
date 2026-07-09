@@ -27,7 +27,7 @@ async fn register_admin(app: &axum::Router) -> Value {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "admin", "password": "password123"}).to_string(),
+                    json!({"username": "admin", "password": "password123", "email": "admin@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -219,7 +219,7 @@ async fn test_update_user_group_id_assigns_group(pool: PgPool) {
                 .method("POST")
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
-                .body(Body::from(json!({"username": "regular", "password": "password123"}).to_string()))
+                .body(Body::from(json!({"username": "regular", "password": "password123", "email": "regular@example.com"}).to_string()))
                 .unwrap(),
         )
         .await
@@ -280,7 +280,7 @@ async fn test_update_user_group_id_nonexistent_returns_400(pool: PgPool) {
                 .method("POST")
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
-                .body(Body::from(json!({"username": "regular", "password": "password123"}).to_string()))
+                .body(Body::from(json!({"username": "regular", "password": "password123", "email": "regular@example.com"}).to_string()))
                 .unwrap(),
         )
         .await
@@ -319,7 +319,7 @@ async fn test_update_user_clear_group_id_with_null(pool: PgPool) {
                 .method("POST")
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
-                .body(Body::from(json!({"username": "regular", "password": "password123"}).to_string()))
+                .body(Body::from(json!({"username": "regular", "password": "password123", "email": "regular@example.com"}).to_string()))
                 .unwrap(),
         )
         .await

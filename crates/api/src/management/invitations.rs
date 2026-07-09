@@ -23,6 +23,9 @@ const INVITATION_TTL_DAYS: i64 = 7;
 #[derive(Debug, Deserialize)]
 pub struct CreateInvitationBody {
     pub role: String,
+    /// Phase 4: invitation is bound to this recipient email. The handler
+    /// validates the format and that no existing user holds the address.
+    pub recipient_email: String,
 }
 
 /// Parse the role from the request body. 'owner' is explicitly rejected with
@@ -62,12 +65,24 @@ pub async fn create_invitation(
         return Err(ApiError::Forbidden);
     }
     let role = parse_invitation_role(&body.role)?;
+    crate::auth::validate_email(&body.recipient_email).map_err(ApiError::BadRequest)?;
+    // Reject if the recipient already has an account — invites aren't for
+    // existing users; the admin should change their role instead.
+    if state
+        .storage
+        .get_user_by_email(&body.recipient_email)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .is_some()
+    {
+        return Err(ApiError::EmailInUse);
+    }
     let now = chrono::Utc::now();
     let expires_at = now + chrono::Duration::days(INVITATION_TTL_DAYS);
 
     let invitation = state
         .storage
-        .create_invitation(&ctx.org_id, &role, &ctx.user_id, expires_at)
+        .create_invitation(&ctx.org_id, &role, &ctx.user_id, &body.recipient_email, expires_at)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -309,6 +324,8 @@ pub async fn accept_invitation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use llm_gateway_email::noop::NoopMailer;
+    use llm_gateway_email::templates::TemplateRegistry;
     use llm_gateway_ratelimit::RateLimiter;
     use llm_gateway_storage::postgres::PostgresStorage;
     use llm_gateway_storage::{CreateOrg, Storage};
@@ -341,6 +358,11 @@ mod tests {
                 audit_retention_days: None,
             },
             public_base_url: "http://localhost:5173".to_string(),
+            mailer: Arc::new(NoopMailer::new()),
+            templates: Arc::new(
+                TemplateRegistry::load("noreply@test.local".to_string(), "Test".to_string())
+                    .expect("load templates"),
+            ),
         })
     }
 
@@ -378,6 +400,13 @@ mod tests {
                 refresh_token: None,
                 created_at: now,
                 updated_at: now,
+                // Phase 4 fields — the storage layer would default them on
+                // insert, but we provide explicit values to keep this fixture
+                // self-contained.
+                email: None,
+                email_verified_at: None,
+                requires_email_verification: false,
+                password_changed_at: now,
             })
             .await
             .expect("create_user");
@@ -405,6 +434,7 @@ mod tests {
             ctx(&org.id, "alice", MemberRole::Admin),
             Json(CreateInvitationBody {
                 role: "admin".into(),
+                recipient_email: "invitee1@example.com".into(),
             }),
         )
         .await
@@ -434,6 +464,7 @@ mod tests {
             ctx(&org.id, "bob", MemberRole::Member),
             Json(CreateInvitationBody {
                 role: "member".into(),
+                recipient_email: "invitee2@example.com".into(),
             }),
         )
         .await
@@ -454,6 +485,7 @@ mod tests {
             ctx(&org.id, "alice", MemberRole::Admin),
             Json(CreateInvitationBody {
                 role: "owner".into(),
+                recipient_email: "invitee3@example.com".into(),
             }),
         )
         .await
@@ -484,6 +516,7 @@ mod tests {
             admin_ctx.clone(),
             Json(CreateInvitationBody {
                 role: "member".into(),
+                recipient_email: "invitee1@example.com".into(),
             }),
         )
         .await
@@ -495,6 +528,7 @@ mod tests {
             admin_ctx.clone(),
             Json(CreateInvitationBody {
                 role: "admin".into(),
+                recipient_email: "invitee2@example.com".into(),
             }),
         )
         .await
@@ -515,6 +549,7 @@ mod tests {
             admin_ctx.clone(),
             Json(CreateInvitationBody {
                 role: "member".into(),
+                recipient_email: "invitee3@example.com".into(),
             }),
         )
         .await
@@ -555,6 +590,7 @@ mod tests {
             ctx(&org_a.id, "alice", MemberRole::Admin),
             Json(CreateInvitationBody {
                 role: "member".into(),
+                recipient_email: "invitee4@example.com".into(),
             }),
         )
         .await
@@ -597,7 +633,13 @@ mod tests {
         expires_at: chrono::DateTime<chrono::Utc>,
     ) -> llm_gateway_storage::Invitation {
         storage
-            .create_invitation(org_id, &role, created_by, expires_at)
+            .create_invitation(
+                org_id,
+                &role,
+                created_by,
+                "test@example.com",
+                expires_at,
+            )
             .await
             .expect("mint_invitation")
     }

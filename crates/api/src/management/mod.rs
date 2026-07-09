@@ -70,6 +70,13 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/api/v1/auth/me/onboarding", get(auth::me_onboarding))
         .route("/api/v1/auth/refresh", post(auth::refresh))
         .route("/api/v1/auth/change-password", post(auth::change_password))
+        // Phase 4: email verification — public (no auth required) so the
+        // link in the welcome email works before the user can log in.
+        .route("/api/v1/auth/verify-email", post(auth::verify_email))
+        .route(
+            "/api/v1/auth/resend-verification",
+            post(auth::resend_verification),
+        )
         // Orgs (authenticated) — list/create/switch membership context.
         // These are global: they operate on the user's set of memberships,
         // not on a single org scoped by path.

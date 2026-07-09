@@ -331,7 +331,7 @@ async fn test_register_first_user_is_admin(pool: PgPool) {
                 .method("POST")
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
-                .body(Body::from(json!({"username": "admin", "password": "password123"}).to_string()))
+                .body(Body::from(json!({"username": "admin", "password": "password123", "email": "admin@example.com"}).to_string()))
                 .unwrap(),
         )
         .await
@@ -356,7 +356,7 @@ async fn test_register_first_user_is_admin(pool: PgPool) {
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_login_and_me(pool: PgPool) {
-    let app = build_app(common::make_state(pool));
+    let app = build_app(common::make_state(pool.clone()));
 
     // Register
     let register_resp = app
@@ -366,7 +366,7 @@ async fn test_login_and_me(pool: PgPool) {
                 .method("POST")
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
-                .body(Body::from(json!({"username": "testuser", "password": "password123"}).to_string()))
+                .body(Body::from(json!({"username": "testuser", "password": "password123", "email": "testuser@example.com"}).to_string()))
                 .unwrap(),
         )
         .await
@@ -376,6 +376,8 @@ async fn test_login_and_me(pool: PgPool) {
     )
     .unwrap();
     let token = body["token"].as_str().unwrap();
+    // Phase 4: bypass the verification gate for this test (not about it).
+    common::mark_user_verified(&pool, "testuser").await;
 
     // Get me
     let me_resp = app
