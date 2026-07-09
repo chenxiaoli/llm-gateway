@@ -6,6 +6,70 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Phase 4: Email + Email-Bound Invitations (v2.1.0)
+
+- **Email subsystem** (`crates/email`, crate name `llm-gateway-email`): a
+  standalone mailer crate with three transports — `NoopMailer` (default, drops
+  mail silently), `FileMailer` (writes RFC-822 `.eml` files to a directory
+  for local dev / test token extraction), and `SmtpMailer` (real delivery via
+  `lettre`). Transport is selected by `[email] transport` in `config.toml`;
+  `file_output_dir` and `[email] from` configure the file/sender address.
+  Handlebars templates (`verification`, `password_reset`, `invitation`) render
+  both plain-text and HTML bodies.
+- **Schema additions** (migrations `20260711000001`–`20260711000004`):
+  `users.email` / `users.email_verified_at` / `users.password_changed_at`;
+  `invitations.recipient_email` (required at mint time); new
+  `email_verifications` and `password_resets` tables, both token-indexed with
+  expiry + consumed-at columns. Each migration ships a `.down.sql` companion.
+- **Email verification on signup.** `POST /api/v1/auth/register` now requires
+  an `email` field and dispatches a verification email (best-effort; delivery
+  failure never blocks registration). Brand-new users have
+  `email_verified_at = NULL`; `POST /api/v1/auth/login` rejects them with
+  `403 email_not_verified` until they click through. `POST /auth/verify-email`
+  and `POST /auth/verify-email/resend` complete / re-trigger the flow.
+- **Password reset.** `POST /auth/password-reset/request` is always-204
+  (doesn't leak whether the email is registered). `GET /auth/password-reset/
+  preview` validates a token without consuming it; `POST /auth/password-reset/
+  confirm` sets the new password and single-use consumes the token. Login
+  after a password change is rejected with `410 password_changed` for any
+  pre-change token (re-login only).
+- **Email-bound invitations.** `POST /orgs/{slug}/invitations` now requires
+  `recipient_email`; the invitation is bound to that address. `POST
+  /invitations/accept` (logged-in accept) enforces `email_mismatch` /
+  `email_verification_required` (403). `POST /auth/register` with an invite
+  token runs the accept server-side and rejects on `email_mismatch` /
+  `email_required`. The Invitations admin page adds a recipient-email input
+  (Generate disabled until valid); the table shows the recipient column.
+- **`POST /api/v1/auth/me/email`** — lets an existing user (legacy account
+  with no email) set and verify an address without blocking login. Dispatch
+  is fully best-effort; a 204 is returned regardless of mailer outcome.
+- **New `ApiError` codes** (cross-ref `crates/api/src/error.rs`):
+  `email_required` (400), `email_in_use` (409), `email_mismatch` (400 on
+  register / 403 on accept), `email_not_verified` (403, login gate),
+  `email_verification_required` (403, accept gate), `verification_expired`
+  (410), `verification_not_found` (404), `reset_expired` (410),
+  `reset_consumed` (410), `reset_not_found` (404).
+- **Frontend**: `/check-email`, `/verify-email/:token`, `/forgot-password`,
+  `/reset-password/:token` routes and pages; Login page surfaces an inline
+  resend panel on `email_not_verified`; Register redirects to `/check-email`
+  post-signup; AcceptInvite branches on the signed-in user's email state
+  (missing / mismatch / unverified / verified-match); EmailBanner +
+  AddEmailModal prompt legacy users to add an email; new i18n keys under
+  `verify_email`, `check_email`, `forgot_password`, `reset_password`,
+  `emailBanner`, `addEmailModal`, and `acceptInvite`.
+
+### Changed
+- `POST /api/v1/auth/register` now requires `email`; without an invitation
+  token the new user starts in the unverified limbo state (cannot log in
+  until `/verify-email` completes).
+- Default `config.toml` ships with `[email] transport = "noop"` — production
+  deployments must switch to `"smtp"` (or `"file"`) to actually deliver mail.
+
+### Removed
+- The ability to mint an invitation without a `recipient_email`. Existing
+  pre-Phase-4 invitations (NULL recipient) are grandfathered and remain
+  acceptable by any user, but the Generate UI now requires the field.
+
 ### Added — Phase 3: Wizard-gated signup + invitations
 
 - Wizard-first signup: brand-new users land at `/onboarding` and create or join
