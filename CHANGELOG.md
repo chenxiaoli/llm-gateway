@@ -62,6 +62,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `verify_email`, `check_email`, `forgot_password`, `reset_password`,
   `emailBanner`, `addEmailModal`, and `acceptInvite`.
 
+- **Phase 5 (per-org defaults + rate-limit enforcement):**
+  - Added: `GET`/`PUT /api/v1/orgs/{slug}/defaults` for org-wide rate-limit RPM and monthly budget defaults. UI lives in Org Settings → Defaults.
+  - **Behavior change:** per-key rate limits (`api_keys.rate_limit`) are now **enforced** at request time via the existing in-memory rate limiter — previously stored but never checked. Resolution order: `key.rate_limit ?? org.default_rate_limit_rpm ?? unlimited`. Exceeding returns `429` with `Retry-After` set to the configured rate-limit window size.
+  - Org-level `default_budget_monthly_usd` is stored but **not enforced** in this phase (parity with existing per-key budget — both will be enforced in a future phase).
+  - **Upgrade note:** any existing `api_keys` rows with non-null `rate_limit` will start receiving 429s on requests beyond their limit. Audit existing keys before deploying if any have low values set.
+  - Implicit fix: `api_keys.rate_limit` Postgres decode (INT4 column was decoded as `Option<i64>`, now correctly `Option<i32>`); invisible until enforcement made the column live.
+
 ### Changed
 - `POST /api/v1/auth/register` now requires `email`; without an invitation
   token the new user starts in the unverified limbo state (cannot log in
