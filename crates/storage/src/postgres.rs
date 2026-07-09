@@ -3584,32 +3584,51 @@ impl crate::Storage for PostgresStorage {
         org_id: &str,
         defaults: &crate::types::OrgDefaults,
     ) -> Result<(), DbErr> {
+        // Wrap both writes in a single transaction so a pool error or crash
+        // between them can't leave partial state (the trait doc promises
+        // atomicity — see crates/storage/src/lib.rs).
+        let mut tx = self.pool.begin().await?;
         match defaults.default_rate_limit_rpm {
-            Some(n) => self
-                .set_org_setting(org_id, "default_rate_limit_rpm", &n.to_string())
-                .await?,
+            Some(n) => {
+                sqlx::query(
+                    "INSERT INTO org_settings (org_id, key, value) VALUES ($1, 'default_rate_limit_rpm', $2)
+                     ON CONFLICT (org_id, key) DO UPDATE SET value = EXCLUDED.value",
+                )
+                .bind(org_id)
+                .bind(n.to_string())
+                .execute(&mut *tx)
+                .await?;
+            }
             None => {
                 sqlx::query(
                     "DELETE FROM org_settings WHERE org_id = $1 AND key = 'default_rate_limit_rpm'",
                 )
                 .bind(org_id)
-                .execute(&self.pool)
+                .execute(&mut *tx)
                 .await?;
             }
         }
         match defaults.default_budget_monthly_usd {
-            Some(n) => self
-                .set_org_setting(org_id, "default_budget_monthly_usd", &n.to_string())
-                .await?,
+            Some(n) => {
+                sqlx::query(
+                    "INSERT INTO org_settings (org_id, key, value) VALUES ($1, 'default_budget_monthly_usd', $2)
+                     ON CONFLICT (org_id, key) DO UPDATE SET value = EXCLUDED.value",
+                )
+                .bind(org_id)
+                .bind(n.to_string())
+                .execute(&mut *tx)
+                .await?;
+            }
             None => {
                 sqlx::query(
                     "DELETE FROM org_settings WHERE org_id = $1 AND key = 'default_budget_monthly_usd'",
                 )
                 .bind(org_id)
-                .execute(&self.pool)
+                .execute(&mut *tx)
                 .await?;
             }
         }
+        tx.commit().await?;
         Ok(())
     }
 }
