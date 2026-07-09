@@ -22,6 +22,7 @@ type Status = 'loading' | 'ok' | 'gone' | 'error';
  *
  *   logged out                      → preview + "Sign up to accept" / "Log in"
  *   logged in, member               → "you're already a member" + "Go to {{org}}"
+ *   logged in, no email on file      → "add this email to your account" notice
  *   logged in, email mismatch       → "sent to {{email}}" notice (no Accept)
  *   logged in, email unverified     → "verify your email first" notice
  *   logged in, email verified+match → preview + Accept / Decline buttons
@@ -137,9 +138,11 @@ export default function AcceptInvite() {
   // Branch on the signed-in user's email state BEFORE rendering the Accept
   // button so we never offer Accept to someone who can't possibly succeed.
   //
+  // - emailMissing: legacy account with NO email on file. They need to add
+  //   one (Task 16's banner surfaces that generally; for now show a notice
+  //   pointing them at /login so they can re-auth and set one up).
   // - emailMismatch: user has an email, but it doesn't match the recipient.
-  //   Also covers legacy accounts with NO email — they need to add one first
-  //   (Task 16's banner will surface that generally; for now show mismatch).
+  //   Show the "sent to {{email}}" notice — the remedy is to switch accounts.
   // - emailUnverified: user's email matches (or could match), but they haven't
   //   verified it. The accept-time gate requires a verified email.
   // - emailOk: verified + matching → show Accept/Decline.
@@ -148,7 +151,8 @@ export default function AcceptInvite() {
     !!preview.recipient_email &&
     !!userEmail &&
     preview.recipient_email.toLowerCase() === userEmail.toLowerCase();
-  const emailMismatch = !!user && (!userEmail || !emailsMatch);
+  const emailMissing = !!user && !userEmail;
+  const emailMismatch = !!user && !!userEmail && !emailsMatch;
   const emailUnverified = !!user && !!userEmail && emailsMatch && !user.email_verified_at;
   const emailOk = !!user && !!userEmail && emailsMatch && !!user.email_verified_at;
 
@@ -220,7 +224,16 @@ export default function AcceptInvite() {
               {t('acceptInvite.goToOrg', { org: preview.org_name })}
             </Link>
           </div>
-        ) : user && emailMismatch ? (
+        ) : emailMissing ? (
+          <div className="space-y-3">
+            <p className="text-sm text-base-content/70">
+              {t('acceptInvite.emailMissing', { email: preview.recipient_email })}
+            </p>
+            <Link to="/login" className="btn btn-ghost btn-block">
+              {t('acceptInvite.logIn')}
+            </Link>
+          </div>
+        ) : emailMismatch ? (
           <div className="space-y-3">
             <p className="text-sm text-base-content/70">
               {t('acceptInvite.emailMismatch', { email: preview.recipient_email })}
@@ -229,10 +242,14 @@ export default function AcceptInvite() {
               {t('acceptInvite.logIn')}
             </Link>
           </div>
-        ) : user && emailUnverified ? (
+        ) : emailUnverified ? (
           <div className="space-y-3">
             <p className="text-sm text-base-content/70">{t('acceptInvite.emailUnverified')}</p>
-            <Link to="/check-email" className="btn btn-primary btn-block">
+            <Link
+              to="/check-email"
+              state={{ email: user.email }}
+              className="btn btn-primary btn-block"
+            >
               {t('acceptInvite.errors.emailVerificationRequired')}
             </Link>
           </div>

@@ -1337,6 +1337,7 @@
     "role": "You'll join as {{role}}.",
     "sentTo": "Sent to {{email}}",
     "emailMismatch": "This invitation was sent to {{email}}. Sign out and sign back in with that address to accept.",
+    "emailMissing": "You need to add {{email}} to your account before you can accept this invitation.",
     "emailUnverified": "Verify your email first, then come back to accept.",
     "accept": "Accept",
     "decline": "Decline",
@@ -1398,15 +1399,13 @@
     "confirmRevokeDescription": "The link will stop working immediately. This cannot be undone.",
     "empty": "No invitations yet",
     "toasts": {
-      "created": "Invitation link generated",
       "createdTo": "Invitation sent to {{email}}",
       "createFailed": "Failed to generate invitation",
       "revoked": "Invitation revoked",
       "revokeFailed": "Failed to revoke invitation"
     },
     "errors": {
-      "emailInUse": "That email already has an account",
-      "emailInvalid": "Please enter a valid email address"
+      "emailInUse": "That email already has an account"
     }
   }
 }

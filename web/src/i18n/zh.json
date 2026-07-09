@@ -1337,6 +1337,7 @@
     "role": "您将以 {{role}} 身份加入。",
     "sentTo": "发送至 {{email}}",
     "emailMismatch": "此邀请发送至 {{email}}。请退出后使用该邮箱重新登录以接受。",
+    "emailMissing": "您需要先将 {{email}} 添加到您的账户，然后才能接受此邀请。",
     "emailUnverified": "请先验证邮箱，再返回接受邀请。",
     "accept": "接受",
     "decline": "拒绝",
@@ -1398,15 +1399,13 @@
     "confirmRevokeDescription": "链接将立即失效，此操作无法撤销。",
     "empty": "暂无邀请",
     "toasts": {
-      "created": "邀请链接已生成",
       "createdTo": "邀请已发送至 {{email}}",
       "createFailed": "生成邀请失败",
       "revoked": "邀请已撤销",
       "revokeFailed": "撤销邀请失败"
     },
     "errors": {
-      "emailInUse": "该邮箱已注册账户",
-      "emailInvalid": "请输入有效的邮箱地址"
+      "emailInUse": "该邮箱已注册账户"
     }
   }
 }
