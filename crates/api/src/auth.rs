@@ -13,7 +13,8 @@ use llm_gateway_email::dispatch_with_retry;
 use llm_gateway_email::templates::VerificationCtx;
 use llm_gateway_org::OrgContext;
 use llm_gateway_storage::{
-    CreateOrg, Member, MemberRole, MembershipSummary, PlatformRole, UpdateOrg, User,
+    CreateOrg, Member, MemberRole, MembershipSummary, PasswordResetOutcome, PlatformRole,
+    UpdateOrg, User,
 };
 
 use crate::error::ApiError;
@@ -74,7 +75,8 @@ pub struct PasswordResetConfirm {
 ///
 /// `valid=false` collapses consumed, expired, AND not-found — the endpoint is
 /// deliberately tight-lipped so an attacker probing tokens only learns
-/// "usable" vs "not".
+/// "usable" vs "not". When `valid=false`, `expires_at` is always None — the
+/// endpoint never confirms whether the token exists.
 #[derive(Serialize)]
 pub struct PasswordResetPreview {
     pub valid: bool,
@@ -738,62 +740,40 @@ pub async fn password_reset_preview(
         return Ok(Json(PasswordResetPreview { valid: false, expires_at: None }));
     };
     let valid = r.consumed_at.is_none() && r.expires_at > chrono::Utc::now();
-    Ok(Json(PasswordResetPreview {
-        valid,
-        expires_at: Some(r.expires_at.to_rfc3339()),
-    }))
+    let expires_at = if valid {
+        Some(r.expires_at.to_rfc3339())
+    } else {
+        None
+    };
+    Ok(Json(PasswordResetPreview { valid, expires_at }))
 }
 
 /// POST /api/v1/auth/password-reset/confirm — public.
 ///
-/// Consumes the reset token and sets the new password via two storage calls
-/// (there's no combined method). A crash between them leaves the user with
-/// the new password and a still-consumable token that, on retry, would set
-/// the SAME password again — benign. `consume_password_reset` bumps
-/// `users.password_changed_at`, invalidating pre-reset refresh tokens.
+/// Consumes the reset token and sets the new password in a single atomic
+/// storage transaction. SELECT FOR UPDATE on the reset row serializes
+/// concurrent confirm attempts — exactly one wins, the rest get
+/// `ResetConsumed`. No crash window: the password write and the
+/// `consumed_at` write commit together (or roll back together), so an
+/// attacker can never reuse a token after a partial failure.
 pub async fn password_reset_confirm(
     State(state): State<Arc<AppState>>,
     Json(input): Json<PasswordResetConfirm>,
 ) -> Result<StatusCode, ApiError> {
     validate_password(&input.new_password).map_err(ApiError::BadRequest)?;
-    let r = state
+    let new_hash = hash_password(&input.new_password)
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let outcome = state
         .storage
-        .get_password_reset_by_token(&input.token)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or(ApiError::ResetNotFound)?;
-    if r.consumed_at.is_some() {
-        return Err(ApiError::ResetConsumed);
-    }
-    if r.expires_at < chrono::Utc::now() {
-        return Err(ApiError::ResetExpired);
-    }
-    let mut user = state
-        .storage
-        .get_user(&r.user_id)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or_else(|| ApiError::Internal("reset token references missing user".into()))?;
-    user.password =
-        hash_password(&input.new_password).map_err(|e| ApiError::Internal(e.to_string()))?;
-    user.updated_at = chrono::Utc::now();
-    state
-        .storage
-        .update_user(&user)
+        .consume_password_reset_and_set_password(&input.token, &new_hash)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
-    let ok = state
-        .storage
-        .consume_password_reset(&input.token)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-    if !ok {
-        // Race: another request consumed the token between our read and our
-        // consume. The password is already updated; surface the race so the
-        // frontend routes the user to login instead of offering a retry.
-        return Err(ApiError::ResetConsumed);
+    match outcome {
+        PasswordResetOutcome::Success => Ok(StatusCode::NO_CONTENT),
+        PasswordResetOutcome::NotFound => Err(ApiError::ResetNotFound),
+        PasswordResetOutcome::Consumed => Err(ApiError::ResetConsumed),
+        PasswordResetOutcome::Expired => Err(ApiError::ResetExpired),
     }
-    Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn me(

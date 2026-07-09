@@ -328,3 +328,83 @@ async fn refresh_after_password_reset_returns_401(pool: PgPool) {
         "pre-reset refresh token must be rejected"
     );
 }
+
+/// 7. After `POST /auth/change-password`, a refresh token issued BEFORE the
+///    change must be rejected by /auth/refresh (401). Regression test for the
+///    C1 bug where `update_user` silently dropped the `password_changed_at`
+///    bump, leaving pre-change refresh tokens valid. Without the C1 fix
+///    (extending `update_user`'s SET clause to include
+///    `password_changed_at`), this returns 200 — the bump was lost on write.
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn change_password_invalidates_existing_refresh_tokens(pool: PgPool) {
+    let app = build_app(common::make_state(pool.clone()));
+
+    // Register + verify + login captures refresh_token R1.
+    let resp = post(
+        &app,
+        "/api/v1/auth/register",
+        json!({
+            "username": "chgpass",
+            "password": "password123",
+            "email": "chgpass@example.com",
+        }),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    common::mark_user_verified(&pool, "chgpass").await;
+
+    let resp = post(
+        &app,
+        "/api/v1/auth/login",
+        json!({"username": "chgpass", "password": "password123"}),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_json(resp).await;
+    let jwt = body["token"].as_str().expect("access token").to_string();
+    let refresh_r1 = body["refresh_token"]
+        .as_str()
+        .expect("refresh_token in login response")
+        .to_string();
+    assert!(!refresh_r1.is_empty());
+
+    // POST /auth/change-password succeeds (200, returns UserInfo).
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/change-password")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {jwt}"))
+                .body(Body::from(
+                    json!({
+                        "current_password": "password123",
+                        "new_password": "new-password-456",
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "change-password should succeed"
+    );
+
+    // POST /auth/refresh with R1 → 401 (password_changed_at bumped past R1.iat).
+    // Without the C1 fix, this returns 200 — the bump was silently dropped.
+    let resp = post(
+        &app,
+        "/api/v1/auth/refresh",
+        json!({"refresh_token": refresh_r1}),
+    )
+    .await;
+    assert_eq!(
+        resp.status(),
+        StatusCode::UNAUTHORIZED,
+        "pre-change refresh token must be rejected after change_password"
+    );
+}

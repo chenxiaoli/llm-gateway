@@ -145,6 +145,19 @@ pub struct PasswordReset {
     pub consumed_at: Option<DateTime<Utc>>,
 }
 
+/// Result of an atomic password-reset attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasswordResetOutcome {
+    /// Token was valid; password was updated; reset row was marked consumed.
+    Success,
+    /// No row matched the token.
+    NotFound,
+    /// Token had already been consumed.
+    Consumed,
+    /// Token had expired.
+    Expired,
+}
+
 /// Response for invitation mint/list endpoints. The URL is constructed
 /// server-side so the frontend doesn't need to know the public base URL.
 ///

@@ -2031,7 +2031,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn update_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "UPDATE users SET username = $1, password = $2, platform_role = $3, current_org_id = $4, enabled = $5, refresh_token = $6, updated_at = $7 WHERE id = $8",
+            "UPDATE users SET username = $1, password = $2, platform_role = $3, current_org_id = $4, enabled = $5, refresh_token = $6, password_changed_at = $7, updated_at = $8 WHERE id = $9",
         )
         .bind(&user.username)
         .bind(&user.password)
@@ -2039,6 +2039,7 @@ impl crate::Storage for PostgresStorage {
         .bind(&user.current_org_id)
         .bind(user.enabled)
         .bind(&user.refresh_token)
+        .bind(&user.password_changed_at)
         .bind(user.updated_at)
         .bind(&user.id)
         .execute(&self.pool)
@@ -3496,6 +3497,46 @@ impl crate::Storage for PostgresStorage {
 
         tx.commit().await?;
         Ok(true)
+    }
+
+    async fn consume_password_reset_and_set_password(
+        &self,
+        token: &str,
+        new_password_hash: &str,
+    ) -> Result<PasswordResetOutcome, DbErr> {
+        let mut tx = self.pool.begin().await?;
+        let row: Option<PgPasswordResetRow> = sqlx::query_as(
+            "SELECT id::text, token, user_id, created_at, expires_at, consumed_at
+             FROM password_resets WHERE token = $1 FOR UPDATE",
+        )
+        .bind(token)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(row) = row else {
+            tx.rollback().await?;
+            return Ok(PasswordResetOutcome::NotFound);
+        };
+        if row.consumed_at.is_some() {
+            tx.rollback().await?;
+            return Ok(PasswordResetOutcome::Consumed);
+        }
+        if row.expires_at < chrono::Utc::now() {
+            tx.rollback().await?;
+            return Ok(PasswordResetOutcome::Expired);
+        }
+        sqlx::query("UPDATE password_resets SET consumed_at = NOW() WHERE id::text = $1")
+            .bind(&row.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            "UPDATE users SET password = $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $2",
+        )
+        .bind(new_password_hash)
+        .bind(&row.user_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(PasswordResetOutcome::Success)
     }
 
     // ---- Settings (platform + org) ----

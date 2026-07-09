@@ -316,6 +316,21 @@ pub trait Storage: Send + Sync {
         token: &str,
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
 
+    /// Atomic password reset: SELECT FOR UPDATE the reset row, check
+    /// consumed/expired, then in the same tx UPDATE password_resets SET
+    /// consumed_at = NOW() AND UPDATE users SET password =
+    /// $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $user_id.
+    ///
+    /// Returns the outcome — `Success` only if both writes committed.
+    /// `NotFound` / `Consumed` / `Expired` let the caller map to the right
+    /// typed error without a separate pre-check (eliminating the race window
+    /// between get-then-act).
+    async fn consume_password_reset_and_set_password(
+        &self,
+        token: &str,
+        new_password_hash: &str,
+    ) -> Result<PasswordResetOutcome, Box<dyn std::error::Error + Send + Sync>>;
+
     // ---- Settings split ----
     async fn get_platform_setting(&self, key: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
     async fn set_platform_setting(&self, key: &str, value: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
