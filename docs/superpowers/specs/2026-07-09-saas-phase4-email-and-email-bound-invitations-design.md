@@ -89,6 +89,15 @@ CREATE UNIQUE INDEX users_email_unique_idx
 ALTER TABLE invitations
     ADD COLUMN recipient_email TEXT;
 
+-- Data migration FIRST: revoke all pending Phase 3 invitations (no
+-- recipient_email). Must run before the CHECK constraint is added or the
+-- ADD CONSTRAINT would reject the existing rows.
+UPDATE invitations
+SET revoked_at = NOW()
+WHERE accepted_at IS NULL
+  AND revoked_at IS NULL
+  AND recipient_email IS NULL;
+
 ALTER TABLE invitations
     ADD CONSTRAINT invitations_pending_need_recipient
     CHECK (
@@ -96,13 +105,6 @@ ALTER TABLE invitations
         OR revoked_at IS NOT NULL
         OR recipient_email IS NOT NULL
     );
-
--- Data migration: revoke all pending Phase 3 invitations (no recipient_email).
-UPDATE invitations
-SET revoked_at = NOW()
-WHERE accepted_at IS NULL
-  AND revoked_at IS NULL
-  AND recipient_email IS NULL;
 ```
 
 The `CHECK` constraint enforces "going forward, every pending invitation must have a recipient_email". Accepted/revoked rows are grandfathered (the constraint allows them through the `OR` arms). The data migration revokes the existing pending rows so the constraint can be added cleanly.
