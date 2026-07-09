@@ -20,7 +20,7 @@ use crate::AppState;
 
 /// Invitation token lifetime. Kept short — these are typically shared
 /// one-to-one in chat/email, not posted broadly.
-const INVITATION_TTL_DAYS: i64 = 7;
+const INVITATION_TTL_DAYS: u32 = 7;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateInvitationBody {
@@ -68,11 +68,15 @@ pub async fn create_invitation(
     }
     let role = parse_invitation_role(&body.role)?;
     crate::auth::validate_email(&body.recipient_email).map_err(ApiError::BadRequest)?;
+    // Normalize to lowercase so the accept-time email-match gate (which
+    // compares via .to_lowercase()) can't fail on a case mismatch — e.g.
+    // admin mints Alice@Example.com, invitee verifies alice@example.com.
+    let recipient_email = body.recipient_email.trim().to_lowercase();
     // Reject if the recipient already has an account — invites aren't for
     // existing users; the admin should change their role instead.
     if state
         .storage
-        .get_user_by_email(&body.recipient_email)
+        .get_user_by_email(&recipient_email)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .is_some()
@@ -80,61 +84,66 @@ pub async fn create_invitation(
         return Err(ApiError::EmailInUse);
     }
     let now = chrono::Utc::now();
-    let expires_at = now + chrono::Duration::days(INVITATION_TTL_DAYS);
+    let expires_at = now + chrono::Duration::days(i64::from(INVITATION_TTL_DAYS));
 
     let invitation = state
         .storage
-        .create_invitation(&ctx.org_id, &role, &ctx.user_id, &body.recipient_email, expires_at)
+        .create_invitation(&ctx.org_id, &role, &ctx.user_id, &recipient_email, expires_at)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // Dispatch the invitation email fire-and-forget. Failures here don't fail
     // the mint — the token is valid, the admin can re-trigger from the UI.
     let accept_url = build_invite_url(&state.public_base_url, &invitation.token);
+    // These fetches only feed the email template — failures degrade to empty
+    // org name / fallback inviter id, never fail the mint. (The invitation row
+    // is already committed above; a transient DB blip here must not 500 the
+    // admin or they'll retry and mint a duplicate.)
     let org_name = state
         .storage
         .get_org(&ctx.org_id)
         .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok() // transient DB error → empty org name, not a 500
+        .flatten()
         .map(|o| o.name)
         .unwrap_or_default();
     let inviter_username = state
         .storage
         .get_user(&ctx.user_id)
         .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok()
+        .flatten()
         .map(|u| u.username)
         .unwrap_or_else(|| ctx.user_id.clone());
-    if let Ok(msg) = state.templates.render_invitation(InvitationCtx {
+    let response = InvitationResponse {
+        id: invitation.id,
+        token: invitation.token.clone(),
+        url: accept_url,
+        role: invitation.role.as_str().to_string(),
+        created_at: invitation.created_at,
+        expires_at: invitation.expires_at,
+        accepted_at: None,
+        accepted_by: None,
+        revoked_at: None,
+    };
+    match state.templates.render_invitation(InvitationCtx {
         org_name,
         inviter_username,
         role: invitation.role.as_str().to_string(),
-        recipient_email: body.recipient_email.clone(),
-        accept_url: accept_url.clone(),
-        expires_in_days: INVITATION_TTL_DAYS as u32,
+        recipient_email,
+        accept_url: response.url.clone(),
+        expires_in_days: INVITATION_TTL_DAYS,
         public_base_url: state.public_base_url.clone(),
     }) {
-        dispatch_with_retry(
-            state.mailer.clone(),
-            msg,
-            "invitation email".to_string(),
-        );
+        Ok(msg) => {
+            dispatch_with_retry(state.mailer.clone(), msg, "invitation email".to_string());
+        }
+        Err(e) => {
+            tracing::error!(error = ?e, "failed to render invitation email; dispatch skipped");
+        }
     }
 
-    Ok((
-        StatusCode::CREATED,
-        Json(InvitationResponse {
-            id: invitation.id,
-            token: invitation.token.clone(),
-            url: accept_url,
-            role: invitation.role.as_str().to_string(),
-            created_at: invitation.created_at,
-            expires_at: invitation.expires_at,
-            accepted_at: None,
-            accepted_by: None,
-            revoked_at: None,
-        }),
-    ))
+    Ok((StatusCode::CREATED, Json(response)))
 }
 
 /// GET /api/v1/{org_slug}/invitations — list pending + recently-accepted.
@@ -1124,11 +1133,6 @@ mod tests {
         .await
         .expect("mint ok");
         let body = resp.1 .0;
-
-        // Give the fire-and-forget dispatch task a moment to settle so a panic
-        // inside it (if the template render were wrong) surfaces. NoopMailer
-        // returns immediately, so this is just defensive.
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         let row = storage
             .get_invitation_by_token(&body.token)
