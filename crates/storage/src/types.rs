@@ -97,6 +97,66 @@ pub struct MembershipSummary {
     pub group_id: Option<String>,
 }
 
+// --- Invitations (Phase 3) ---
+
+/// One row of the `invitations` table. Used internally by the storage trait.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Invitation {
+    pub id: String,
+    pub token: String,
+    pub org_id: String,
+    pub role: MemberRole,
+    pub created_by: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub accepted_at: Option<DateTime<Utc>>,
+    pub accepted_by: Option<String>,
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
+/// Request body for `POST /api/v1/{org_slug}/invitations`.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct CreateInvitationRequest {
+    pub role: String, // "member" | "admin"
+}
+
+/// Response for invitation mint/list endpoints. The URL is constructed
+/// server-side so the frontend doesn't need to know the public base URL.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct InvitationResponse {
+    pub id: String,
+    pub token: String,
+    pub url: String,
+    pub role: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub accepted_at: Option<DateTime<Utc>>,
+    pub accepted_by: Option<String>,
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
+/// Request body for `POST /api/v1/invitations/accept`.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct AcceptInvitationRequest {
+    pub token: String,
+}
+
+/// Response for `GET /api/v1/invitations/preview?token=...`. Public — does
+/// NOT include the token itself (the caller already has it) or any user-id
+/// data; just enough for the landing page to render.
+///
+/// Note: `already_member` was originally specced but is computed client-side
+/// (the frontend already has the user's membership list) — drop it from the
+/// type per the plan's self-review note.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InvitationPreview {
+    pub org_name: String,
+    pub org_slug: String,
+    pub role: String,
+    pub inviter_username: String,
+    pub expires_at: DateTime<Utc>,
+}
+
 // --- Pagination ---
 
 #[derive(Debug, Clone, Serialize)]
@@ -1140,6 +1200,11 @@ pub struct ServerConfig {
     pub host: String,
     pub port: u16,
     pub encryption_key: String,
+    /// Public-facing base URL the frontend is served at (no trailing slash).
+    /// Used to build invitation links etc. Defaults to
+    /// `http://localhost:5173` when unset.
+    #[serde(default)]
+    pub public_base_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

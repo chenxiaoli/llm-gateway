@@ -9,6 +9,7 @@ pub mod models;
 pub mod usage;
 pub mod logs;
 pub mod members;
+pub mod invitations;
 pub mod requests;
 pub mod users;
 pub mod settings;
@@ -20,7 +21,7 @@ pub mod nats;
 use axum::extract::State;
 use axum::middleware::from_fn_with_state;
 use axum::response::IntoResponse;
-use axum::routing::{any, get, patch, post};
+use axum::routing::{any, delete, get, patch, post};
 use axum::{Json, Router};
 use std::sync::Arc;
 
@@ -66,6 +67,7 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/api/v1/auth/config", get(auth::auth_config))
         .route("/api/v1/auth/me", get(auth::me))
         .route("/api/v1/auth/me/balance", get(auth::me_balance))
+        .route("/api/v1/auth/me/onboarding", get(auth::me_onboarding))
         .route("/api/v1/auth/refresh", post(auth::refresh))
         .route("/api/v1/auth/change-password", post(auth::change_password))
         // Orgs (authenticated) — list/create/switch membership context.
@@ -73,6 +75,18 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // not on a single org scoped by path.
         .route("/api/v1/orgs", get(auth::list_orgs).post(auth::create_org))
         .route("/api/v1/me/current-org", post(auth::switch_org))
+        // Public invitation preview + authed accept. These are global (not
+        // under /{org_slug}/) because the token itself identifies the org —
+        // the acceptor may not yet be a member of the inviting org, so the
+        // org-resolve + membership middleware chain would reject them.
+        .route(
+            "/api/v1/invitations/preview",
+            get(invitations::preview_invitation),
+        )
+        .route(
+            "/api/v1/invitations/accept",
+            post(invitations::accept_invitation),
+        )
         // Version + system info + NATS status (global platform-level).
         .route("/api/v1/version", get(version))
         .route("/api/v1/admin/system-info", get(system_info))
@@ -266,6 +280,12 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
             "/members/{user_id}",
             patch(members::change_member_role).delete(members::remove_member),
         )
+        // Invitations (admin-only) — list/mint/revoke.
+        .route(
+            "/invitations",
+            get(invitations::list_invitations).post(invitations::create_invitation),
+        )
+        .route("/invitations/{id}", delete(invitations::revoke_invitation))
 }
 
 /// Sub-router that turns any unmatched `/api/v1/*` path into a 410 Gone.

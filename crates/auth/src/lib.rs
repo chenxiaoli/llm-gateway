@@ -52,30 +52,40 @@ pub fn validate_username(username: &str) -> Result<(), String> {
 
 // --- JWT ---
 
-// Phase 1 token shape. `current_org_id` is required (always "org_default" in Phase 1).
-// `platform_role` is omitted when None so old code can still parse new tokens.
-// NOTE: pre-Phase-1 tokens that carry `role` instead of `current_org_id` will NOT
-// deserialize — sessions are rotated on deploy.
+// Phase 1 token shape. `current_org_id` is optional (Phase 3: limbo users
+// who just registered have no org yet — they complete the onboarding wizard
+// before gaining a membership). `platform_role` is omitted when None so old
+// code can still parse new tokens.
+//
+// NOTE: pre-Phase-1 tokens that carry `role` instead of `current_org_id`
+// will NOT deserialize — sessions are rotated on deploy. Pre-Phase-3 tokens
+// always carry a non-null `current_org_id`; Phase 3+ limbo tokens omit it.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JwtClaims {
     pub sub: String,
-    pub current_org_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_org_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub platform_role: Option<String>,
     pub exp: usize,
     pub iat: usize,
 }
 
+/// Mint an access JWT.
+///
+/// `current_org_id` is `Option<&str>`: `None` issues a "limbo" token (no
+/// `current_org_id` claim) for users who have just registered and have not
+/// yet completed the onboarding wizard. `Some(id)` embeds the active org.
 pub fn create_jwt(
     user_id: &str,
-    current_org_id: &str,
+    current_org_id: Option<&str>,
     platform_role: Option<&str>,
     secret: &str,
 ) -> Result<String, String> {
     let now = chrono::Utc::now().timestamp() as usize;
     let claims = JwtClaims {
         sub: user_id.to_string(),
-        current_org_id: current_org_id.to_string(),
+        current_org_id: current_org_id.map(|s| s.to_string()),
         platform_role: platform_role.map(|s| s.to_string()),
         exp: now + 86400, // 24 hours
         iat: now,
@@ -207,16 +217,16 @@ mod tests {
     #[test]
     fn test_create_and_verify_jwt() {
         let secret = "test-secret";
-        let token = create_jwt("user-1", "org_default", Some("platform_admin"), secret).unwrap();
+        let token = create_jwt("user-1", Some("org_default"), Some("platform_admin"), secret).unwrap();
         let claims = verify_jwt(&token, secret).unwrap();
         assert_eq!(claims.sub, "user-1");
-        assert_eq!(claims.current_org_id, "org_default");
+        assert_eq!(claims.current_org_id.as_deref(), Some("org_default"));
         assert_eq!(claims.platform_role.as_deref(), Some("platform_admin"));
     }
 
     #[test]
     fn test_verify_jwt_wrong_secret() {
-        let token = create_jwt("user-1", "org_default", None, "secret-1").unwrap();
+        let token = create_jwt("user-1", Some("org_default"), None, "secret-1").unwrap();
         assert!(verify_jwt(&token, "secret-2").is_err());
     }
 
@@ -224,7 +234,7 @@ mod tests {
     fn test_verify_jwt_expired() {
         let claims = JwtClaims {
             sub: "user-1".to_string(),
-            current_org_id: "org_default".to_string(),
+            current_org_id: Some("org_default".to_string()),
             platform_role: None,
             exp: 0,
             iat: 0,
@@ -248,6 +258,19 @@ mod tests {
             r#"{"sub":"u","current_org_id":"org_default","exp":9999999999,"iat":0}"#;
         let parsed: JwtClaims = serde_json::from_str(old_token_payload).unwrap();
         assert_eq!(parsed.platform_role, None);
+    }
+
+    #[test]
+    fn test_create_jwt_without_org_id_omits_claim() {
+        // Limbo users (Phase 3) get a token with no current_org_id claim.
+        // The claim should be missing entirely (not null) so it serializes
+        // compactly and downstream readers treat absence as None.
+        let secret = "test-secret";
+        let token = create_jwt("user-1", None, None, secret).unwrap();
+        let claims = verify_jwt(&token, secret).unwrap();
+        assert_eq!(claims.sub, "user-1");
+        assert_eq!(claims.current_org_id, None);
+        assert_eq!(claims.platform_role, None);
     }
 
     #[test]

@@ -191,6 +191,52 @@ pub trait Storage: Send + Sync {
     /// task (crates/api/src/janitor.rs) calls this on a 5-minute tick.
     async fn delete_stale_impersonations(&self, cutoff: chrono::DateTime<chrono::Utc>) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>;
 
+    // --- Invitations (Phase 3) ---
+
+    /// Mint a new invitation token. The storage layer generates the token and
+    /// returns the inserted row. Expiry is provided by the caller.
+    async fn create_invitation(
+        &self,
+        org_id: &str,
+        role: &MemberRole,
+        created_by: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Invitation, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Fetch by token. Returns None if no row matches.
+    async fn get_invitation_by_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<Invitation>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// List all invitations for an org (both pending and recently-accepted;
+    /// the handler decides what to surface).
+    async fn list_invitations_for_org(
+        &self,
+        org_id: &str,
+    ) -> Result<Vec<Invitation>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Mark an invitation revoked. No-op if already revoked or not found.
+    /// `org_id` is required so an admin in org A cannot revoke org B's invitations.
+    async fn revoke_invitation(
+        &self,
+        org_id: &str,
+        invitation_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Accept an invitation in a single transaction. Validates token +
+    /// not-yet-accepted + not-revoked + not-expired, inserts a `members` row,
+    /// and sets `accepted_at` + `accepted_by`. Returns the new Member on success,
+    /// or None if the invitation was not consumable (expired/revoked/already-used).
+    ///
+    /// Concurrent calls for the same token serialize via SELECT FOR UPDATE;
+    /// exactly one succeeds and the others get None.
+    async fn accept_invitation(
+        &self,
+        token: &str,
+        accepting_user_id: &str,
+    ) -> Result<Option<Member>, Box<dyn std::error::Error + Send + Sync>>;
+
     // ---- Settings split ----
     async fn get_platform_setting(&self, key: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
     async fn set_platform_setting(&self, key: &str, value: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;

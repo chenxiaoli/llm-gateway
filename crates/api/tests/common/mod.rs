@@ -50,6 +50,7 @@ pub fn make_state(pool: PgPool) -> Arc<AppState> {
             upstream_timeout_secs: 30,
             audit_retention_days: Some(90),
         },
+        public_base_url: "http://localhost:5173".to_string(),
     })
 }
 
@@ -114,7 +115,7 @@ pub async fn seed_member(pool: &PgPool, user_id: &str, group_id: Option<&str>) {
 #[allow(dead_code)]
 pub fn make_admin_token() -> TestUser {
     let id = "admin-1".to_string();
-    let token = create_jwt(&id, TEST_ORG, Some("platform_admin"), TEST_JWT_SECRET).unwrap();
+    let token = create_jwt(&id, Some(TEST_ORG), Some("platform_admin"), TEST_JWT_SECRET).unwrap();
     TestUser {
         id,
         username: "admin".to_string(),
@@ -124,7 +125,7 @@ pub fn make_admin_token() -> TestUser {
 
 #[allow(dead_code)]
 pub fn make_user_token(user_id: &str) -> TestUser {
-    let token = create_jwt(user_id, TEST_ORG, None, TEST_JWT_SECRET).unwrap();
+    let token = create_jwt(user_id, Some(TEST_ORG), None, TEST_JWT_SECRET).unwrap();
     TestUser {
         id: user_id.to_string(),
         username: "testuser".to_string(),

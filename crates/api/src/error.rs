@@ -11,6 +11,7 @@ pub enum ApiError {
     NotFound(String),
     BadRequest(String),
     Conflict(String),
+    Gone(String),
     UpstreamError(u16, String),
     Internal(String),
 }
@@ -41,6 +42,7 @@ impl IntoResponse for ApiError {
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str()),
             ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
             ApiError::Conflict(msg) => (StatusCode::CONFLICT, msg.as_str()),
+            ApiError::Gone(msg) => (StatusCode::GONE, msg.as_str()),
             ApiError::UpstreamError(code, msg) => (
                 StatusCode::from_u16(*code).unwrap_or(StatusCode::BAD_GATEWAY),
                 msg.as_str(),

@@ -21,6 +21,11 @@ pub struct AppState {
     pub nats_publisher: Option<std::sync::Arc<llm_gateway_nats_publisher::NatsPublisher>>,
     pub registry: Arc<dyn ChannelRegistry>,
     pub system_info: SystemInfo,
+    /// Public-facing base URL (no trailing slash) for constructing
+    /// invitation links and other user-facing URLs. Configurable via
+    /// `[server] public_base_url` in config.toml; defaults to
+    /// `http://localhost:5173`.
+    pub public_base_url: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

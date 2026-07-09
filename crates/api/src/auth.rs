@@ -35,7 +35,9 @@ pub struct AuthResponse {
     pub token: String,
     pub refresh_token: String,
     pub user: UserInfo,
-    pub current_org: OrgSummary,
+    /// `None` for limbo users (just registered, no org yet). The frontend's
+    /// post-auth flow treats `null` here as "show the onboarding wizard".
+    pub current_org: Option<OrgSummary>,
     pub orgs: Vec<OrgSummary>,
 }
 
@@ -204,16 +206,17 @@ pub async fn login(
     }
 
     let (current_org, orgs) = current_membership(&state, &user).await?;
-    // Login requires at least one membership — the access token carries a
-    // single org_id, so we can't issue one without a target. This branch
-    // should be unreachable in normal flow (users always belong to ≥1 org),
-    // but we fail loudly rather than silently issuing a useless token.
-    let current_org = current_org.ok_or_else(|| {
-        ApiError::Internal("user has no org membership".to_string())
-    })?;
+    // Phase 3: a user with zero memberships (e.g. limbo user who registered
+    // then self-left, or was removed from their last org) can still log in.
+    // They get a token with no `current_org_id` claim and the frontend
+    // bounces them to the onboarding wizard. The token's missing org claim
+    // means org-scoped routes will reject them at authz time — they can
+    // only hit platform-level endpoints (`/auth/me`, `/orgs`, `/auth/me/onboarding`)
+    // until they create or join an org.
+    let current_org_id_arg = current_org.as_ref().map(|o| o.id.as_str());
 
     let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
-    let token = create_jwt(&user.id, &current_org.id, platform_role_str, &state.jwt_secret)
+    let token = create_jwt(&user.id, current_org_id_arg, platform_role_str, &state.jwt_secret)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let refresh_jwt = create_refresh_jwt(&user.id, &state.jwt_secret)
@@ -267,7 +270,7 @@ pub async fn register(
     } else {
         None
     };
-    let mut user = User {
+    let user = User {
         id: uuid::Uuid::new_v4().to_string(),
         username: input.username.clone(),
         password: hash_password(&input.password).map_err(|e| ApiError::Internal(e.to_string()))?,
@@ -285,78 +288,55 @@ pub async fn register(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // TODO(Phase 3): replace the default-org-membership below with auto-creation
-    // of a personal org whose slug is derived from the username.
-    let default_org = state
-        .storage
-        .get_org_by_slug("default")
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or_else(|| ApiError::Internal("default org missing".to_string()))?;
-
-    state
-        .storage
-        .upsert_member(Member {
-            user_id: user.id.clone(),
-            org_id: default_org.id.clone(),
-            role: if is_first_user {
-                MemberRole::Owner
-            } else {
-                MemberRole::Member
-            },
-            group_id: None,
-            created_by: Some(user.id.clone()),
-            created_at: now,
-        })
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    // Persist current_org_id on the user row.
-    user.current_org_id = Some(default_org.id.clone());
-    user.updated_at = chrono::Utc::now();
-    user = state
-        .storage
-        .update_user(&user)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    // Auto-create account for new user (Phase 1: scoped to default org).
-    let account = llm_gateway_storage::Account {
-        id: uuid::Uuid::new_v4().to_string(),
-        org_id: default_org.id.clone(),
-        user_id: user.id.clone(),
-        balance: 0,
-        threshold: llm_gateway_storage::usd_to_units(1.0),
-        created_at: now,
-        updated_at: now,
-    };
-    state
-        .storage
-        .create_account(&default_org.id, &account)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-    let (current_org, orgs) = current_membership(&state, &user).await?;
-    // Register always assigns the new user to a default org above, so this
-    // should never be None — but match login's contract just in case.
-    let current_org = current_org.ok_or_else(|| {
-        ApiError::Internal("user has no org membership".to_string())
-    })?;
-
-    let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
-    let token = create_jwt(&user.id, &current_org.id, platform_role_str, &state.jwt_secret)
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    // Phase 3: brand-new users land in limbo — no auto-org-membership, no
+    // current_org_id, no account. They complete the onboarding wizard to
+    // create or join an org.
+    //
+    // First-user platform_admin auto-grant is preserved (cold-start deploys
+    // still need a way to bootstrap a platform_admin without an existing org).
+    //
+    // NOTE: the existing `is_first_user` check (`user_count == 0`) means a
+    // cold-start deploy's first user gets `platform_role = platform_admin`
+    // but STILL has to complete the wizard to create their first org. This
+    // is intentional — even platform_admins need an org context to operate.
 
     let refresh_jwt = create_refresh_jwt(&user.id, &state.jwt_secret)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
+    // Persist refresh token on the user row so /auth/refresh can rotate it.
+    // (store_refresh_token mutates a local clone and writes — does not
+    // re-read the row, so the local `user` stays authoritative below.)
     store_refresh_token(&state, &user, &refresh_jwt).await?;
+
+    // Reload the user to capture the refresh_token + updated_at that
+    // store_refresh_token just persisted, so the JWT-bound user row reflects
+    // reality and downstream code that re-reads `user` sees the same shape
+    // as the DB.
+    let user = state
+        .storage
+        .get_user(&user.id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or_else(|| ApiError::Internal("just-created user vanished".into()))?;
+
+    let orgs: Vec<OrgSummary> = Vec::new();
+
+    let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
+    let token = create_jwt(
+        &user.id,
+        // current_org_id is None for limbo users — token carries no
+        // current_org_id claim.
+        None,
+        platform_role_str,
+        &state.jwt_secret,
+    )
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(AuthResponse {
         token,
         refresh_token: refresh_jwt,
         user: UserInfo::from(&user),
-        current_org,
+        current_org: None,
         orgs,
     }))
 }
@@ -409,6 +389,34 @@ pub async fn me(
     }))
 }
 
+#[derive(Debug, Serialize)]
+pub struct OnboardingStatus {
+    pub needs_onboarding: bool,
+}
+
+/// GET /api/v1/auth/me/onboarding — quick probe the frontend uses to decide
+/// whether to redirect the user to the onboarding wizard.
+///
+/// Returns `{ needs_onboarding: true }` when the caller has zero org
+/// memberships (limbo). Once they create or join an org — via the wizard,
+/// an invitation, or platform-admin intervention — subsequent calls return
+/// `false`. This endpoint is intentionally cheap (no user row reload, no
+/// impersonation lookup) so the frontend can poll it on boot.
+pub async fn me_onboarding(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<OnboardingStatus>, ApiError> {
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let memberships = state
+        .storage
+        .list_orgs_for_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    Ok(Json(OnboardingStatus {
+        needs_onboarding: memberships.is_empty(),
+    }))
+}
+
 use llm_gateway_storage::{units_to_usd, TransactionResponse};
 
 pub async fn me_balance(
@@ -418,9 +426,23 @@ pub async fn me_balance(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
 
+    // Limbo users have no current org and therefore no account. Return 404
+    // rather than 500 — the frontend treats this as "no balance yet" and
+    // the wizard routes them to create/join an org first. The message names
+    // the real cause (no current org / onboarding incomplete) rather than
+    // "account not found" — the account genuinely doesn't exist yet, but
+    // the user row does; the misleading shape would send a frontend
+    // debugger looking for a missing user.
+    let current_org_id = claims
+        .current_org_id
+        .as_deref()
+        .ok_or_else(|| {
+            ApiError::NotFound("no current org — complete onboarding".to_string())
+        })?;
+
     let account = state
         .storage
-        .get_account_by_user_id(&claims.current_org_id, &claims.sub)
+        .get_account_by_user_id(current_org_id, &claims.sub)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound("Account not found".to_string()))?;
@@ -428,7 +450,7 @@ pub async fn me_balance(
     let (page, page_size) = pagination.normalized();
     let transactions = state
         .storage
-        .list_transactions(&claims.current_org_id, &account.id, page, page_size)
+        .list_transactions(current_org_id, &account.id, page, page_size)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
@@ -493,15 +515,17 @@ pub async fn refresh(
         return Err(ApiError::Unauthorized);
     }
 
-    // Resolve current org so the new access token carries it.
+    // Resolve current org so the new access token carries it. Phase 3: a
+    // limbo user (no memberships) gets a fresh limbo token — they may have
+    // a refresh token from registration but not yet have completed the
+    // onboarding wizard. /me and the wizard endpoints accept tokens with
+    // no `current_org_id` claim; only org-scoped routes reject them.
     let (current_org, _orgs) = current_membership(&state, &user).await?;
-    let current_org = current_org.ok_or_else(|| {
-        ApiError::Internal("user has no org membership".to_string())
-    })?;
+    let current_org_id_arg = current_org.as_ref().map(|o| o.id.as_str());
 
     // Issue new access token
     let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
-    let new_token = create_jwt(&user.id, &current_org.id, platform_role_str, &state.jwt_secret)
+    let new_token = create_jwt(&user.id, current_org_id_arg, platform_role_str, &state.jwt_secret)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     // Issue new refresh token (rotation)
@@ -599,7 +623,7 @@ pub async fn switch_org(
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let platform_role_str = user.platform_role.as_ref().map(|p| p.as_str());
-    let token = create_jwt(&user.id, &target_org.id, platform_role_str, &state.jwt_secret)
+    let token = create_jwt(&user.id, Some(&target_org.id), platform_role_str, &state.jwt_secret)
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let memberships = state
@@ -613,13 +637,13 @@ pub async fn switch_org(
         token,
         refresh_token: user.refresh_token.clone().unwrap_or_default(),
         user: UserInfo::from(&user),
-        current_org: OrgSummary {
+        current_org: Some(OrgSummary {
             id: target_org.id,
             slug: target_org.slug,
             name: target_org.name,
             role: member.role.as_str().to_string(),
             group_id: member.group_id,
-        },
+        }),
         orgs,
     }))
 }
@@ -668,11 +692,25 @@ fn validate_org_slug(slug: &str) -> Result<(), String> {
 }
 
 /// Create a new org with the caller as owner.
+///
+/// Phase 3 behavior:
+/// - If the caller was in limbo (no `current_org_id`), the new org becomes
+///   their current org (auto-switch) and the JWT is reissued with the new
+///   org id embedded.
+/// - If the caller already has a current org, the new org is created and
+///   they're added as owner, but their current_org is NOT switched — they
+///   stay in the context they were working in. They can switch later via
+///   `/me/current-org`.
+/// - Returns `AuthResponse` (not `OrgSummary`) so the client receives the
+///   fresh token + full membership list. Phase 3 ships this before the
+///   Task 7 frontend callers land, so there are momentarily no frontend
+///   consumers of the old `OrgSummary` shape — but those callers are
+///   coming, and will be written against this new shape.
 pub async fn create_org(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(body): Json<CreateOrgRequest>,
-) -> Result<Json<OrgSummary>, ApiError> {
+) -> Result<Json<AuthResponse>, ApiError> {
     let claims = require_auth(&headers, &state.jwt_secret)?;
 
     validate_org_slug(&body.slug).map_err(ApiError::BadRequest)?;
@@ -726,23 +764,54 @@ pub async fn create_org(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // Make the new org the caller's current org so subsequent requests
-    // default to it without an explicit switch.
+    // Auto-switch current_org ONLY when the caller was in limbo. An
+    // established user creating an additional org keeps their current_org so
+    // they don't get yanked out of their working context.
+    let was_limbo = user.current_org_id.is_none();
     let mut updated = user.clone();
-    updated.current_org_id = Some(org.id.clone());
+    if was_limbo {
+        updated.current_org_id = Some(org.id.clone());
+    }
     updated.updated_at = now;
-    state
+    let updated_user = state
         .storage
         .update_user(&updated)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    Ok(Json(OrgSummary {
-        id: org.id,
-        slug: org.slug,
-        name: org.name,
-        role: MemberRole::Owner.as_str().to_string(),
-        group_id: None,
+    // Reissue JWT with the caller's current org (new org if was limbo,
+    // previous org otherwise).
+    let effective_current_org_id = updated_user
+        .current_org_id
+        .as_deref()
+        .unwrap_or(&org.id);
+    let platform_role_str = updated_user.platform_role.as_ref().map(|p| p.as_str());
+    let token = create_jwt(
+        &updated_user.id,
+        Some(effective_current_org_id),
+        platform_role_str,
+        &state.jwt_secret,
+    )
+    .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    let memberships = state
+        .storage
+        .list_orgs_for_user(&updated_user.id)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let orgs: Vec<OrgSummary> = memberships.into_iter().map(Into::into).collect();
+    let current_org_summary = orgs
+        .iter()
+        .find(|o| o.id == *effective_current_org_id)
+        .cloned()
+        .ok_or_else(|| ApiError::Internal("current_org not in membership list".into()))?;
+
+    Ok(Json(AuthResponse {
+        token,
+        refresh_token: updated_user.refresh_token.clone().unwrap_or_default(),
+        user: UserInfo::from(&updated_user),
+        current_org: Some(current_org_summary),
+        orgs,
     }))
 }
 
@@ -952,5 +1021,330 @@ mod tests {
         // Sanity: close-but-not-exact slugs are fine.
         assert!(validate_org_slug("keys-prod").is_ok());
         assert!(validate_org_slug("usage-team").is_ok());
+    }
+
+    // ─── Phase 3: integration tests for register / create_org / auth/me/onboarding ───
+    //
+    // These tests need a real Postgres pool (migrations + state). They live
+    // inline in this module rather than under `crates/api/tests/` so they can
+    // call private helpers (`AuthResponse` shape) and stay close to the
+    // handler under test. They reuse the same management router +
+    // `seed_admin_user`/`make_state`/`create_jwt` helpers the integration
+    // tests use.
+
+    use axum::body::{Body, to_bytes};
+    use axum::http::Request;
+    use llm_gateway_storage::postgres::PostgresStorage;
+    use llm_gateway_storage::Storage;
+    use serde_json::{Value, json};
+    use sqlx::PgPool;
+    use tower::ServiceExt;
+
+    /// Build a management router wired to a real Postgres storage pool. The
+    /// JWT secret matches what `create_jwt` uses in tests below.
+    fn build_router(storage: Arc<PostgresStorage>) -> axum::Router {
+        let state: Arc<AppState> = Arc::new(AppState {
+            storage: storage.clone() as Arc<dyn Storage>,
+            rate_limiter: Arc::new(llm_gateway_ratelimit::RateLimiter::new(60)),
+            jwt_secret: "test-jwt-secret".to_string(),
+            encryption_key: [0u8; 32],
+            nats_publisher: None,
+            registry: Arc::new(crate::InMemoryChannelRegistry::new(
+                storage as Arc<dyn Storage>,
+                [0u8; 32],
+                std::time::Duration::from_secs(30),
+            )),
+            system_info: crate::SystemInfo {
+                server_bind_address: "127.0.0.1:8080".to_string(),
+                database_driver: "postgres".to_string(),
+                rate_limit_window_secs: 60,
+                rate_limit_flush_interval_secs: 30,
+                upstream_timeout_secs: 30,
+                audit_retention_days: None,
+            },
+            public_base_url: "http://localhost:5173".to_string(),
+        });
+        crate::management::management_router(state.clone()).with_state(state)
+    }
+
+    async fn body_json(resp: axum::http::Response<Body>) -> Value {
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    fn bearer(token: &str) -> String {
+        format!("Bearer {token}")
+    }
+
+    async fn post_json(
+        app: &axum::Router,
+        uri: &str,
+        token: Option<&str>,
+        body: Value,
+    ) -> axum::http::Response<Body> {
+        let mut req = Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header("content-type", "application/json");
+        if let Some(t) = token {
+            req = req.header("authorization", bearer(t));
+        }
+        app.clone()
+            .oneshot(req.body(Body::from(body.to_string())).unwrap())
+            .await
+            .unwrap()
+    }
+
+    async fn get_authed(app: &axum::Router, uri: &str, token: &str) -> axum::http::Response<Body> {
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(uri)
+                    .header("authorization", bearer(token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    /// Direct storage lookup to verify DB-side state after a handler call.
+    /// Used to assert that `users.current_org_id` was persisted correctly.
+    async fn user_current_org_id(pool: &PgPool, user_id: &str) -> Option<String> {
+        let row: (Option<String>,) = sqlx::query_as(
+            "SELECT current_org_id FROM users WHERE id = $1",
+        )
+        .bind(user_id)
+        .fetch_one(pool)
+        .await
+        .expect("user row exists");
+        row.0
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn register_returns_jwt_with_null_current_org(pool: PgPool) {
+        // POST /auth/register → 200. Response has current_org: None, orgs: [].
+        // The user row in DB has current_org_id = NULL.
+        let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
+        let app = build_router(storage);
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/register",
+            None,
+            json!({"username": "alice", "password": "password123"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body = body_json(resp).await;
+        assert!(
+            body["current_org"].is_null(),
+            "limbo user should have null current_org, got {}",
+            body["current_org"]
+        );
+        assert!(body["orgs"].as_array().unwrap().is_empty());
+        assert!(body["token"].is_string());
+
+        // DB row should have current_org_id = NULL.
+        // Look up the user we just created (id is generated; look up by username).
+        let row: (String, Option<String>) = sqlx::query_as(
+            "SELECT id, current_org_id FROM users WHERE username = 'alice'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("user row");
+        assert!(row.1.is_none(), "DB current_org_id must be NULL for limbo user");
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn create_org_called_by_limbo_user_switches_current_org_and_reissues_jwt(pool: PgPool) {
+        // Register (limbo) → POST /api/v1/orgs → 200 with AuthResponse.
+        // Assert: current_org is the new org, orgs list contains the new org,
+        // and the user row has current_org_id set to the new org id.
+        let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
+        let app = build_router(storage);
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/register",
+            None,
+            json!({"username": "alice", "password": "password123"}),
+        )
+        .await;
+        let body = body_json(resp).await;
+        let token = body["token"].as_str().unwrap().to_string();
+        let user_id: String = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+        // Limbo user creates an org.
+        let resp = post_json(
+            &app,
+            "/api/v1/orgs",
+            Some(&token),
+            json!({"slug": "acme", "name": "Acme"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body = body_json(resp).await;
+        // current_org should be the new org (auto-switched because was limbo).
+        assert_eq!(body["current_org"]["slug"], "acme");
+        assert_eq!(body["current_org"]["role"], "owner");
+        // orgs list contains the new org.
+        assert!(body["orgs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|o| o["slug"] == "acme"));
+        // New token issued.
+        assert!(body["token"].is_string());
+
+        // DB: user.current_org_id was persisted to the new org.
+        let new_org_id: String = sqlx::query_scalar("SELECT id FROM orgs WHERE slug = 'acme'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        let current = user_current_org_id(&pool, &user_id).await;
+        assert_eq!(current.as_deref(), Some(new_org_id.as_str()));
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn create_org_called_by_established_user_does_not_switch_current_org(pool: PgPool) {
+        // Setup: user already has Org A as current_org.
+        // POST /api/v1/orgs with slug "b" → 200 with AuthResponse.
+        // Assert: current_org is STILL Org A (not Org B), orgs list contains
+        //   both Org A and Org B, and user row's current_org_id is unchanged.
+        let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
+        let app = build_router(storage.clone());
+
+        // Bootstrap: create Org A (org_a) via storage, seed an owner user
+        // with current_org_id pointing at Org A, then create Org B via the
+        // API and verify current_org stays at Org A.
+        let owner_id = "established-1".to_string();
+        sqlx::query(
+            r#"INSERT INTO users (id, username, password, current_org_id, enabled, created_at, updated_at)
+               VALUES ($1, 'established', 'x', NULL, true, NOW(), NOW())"#,
+        )
+        .bind(&owner_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+        let org_a = storage
+            .create_org(CreateOrg {
+                id: "org-a-id".to_string(),
+                slug: "org-a".to_string(),
+                name: "Org A".to_string(),
+                owner_id: owner_id.clone(),
+            })
+            .await
+            .unwrap();
+        storage
+            .upsert_member(llm_gateway_storage::Member {
+                user_id: owner_id.clone(),
+                org_id: org_a.id.clone(),
+                role: llm_gateway_storage::MemberRole::Owner,
+                group_id: None,
+                created_by: Some(owner_id.clone()),
+                created_at: chrono::Utc::now(),
+            })
+            .await
+            .unwrap();
+        // Set current_org_id to Org A — this user is NOT in limbo.
+        sqlx::query("UPDATE users SET current_org_id = $1 WHERE id = $2")
+            .bind(&org_a.id)
+            .bind(&owner_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+
+        // Token carries Org A as current_org_id (non-limbo JWT).
+        let token = llm_gateway_auth::create_jwt(
+            &owner_id,
+            Some(&org_a.id),
+            None,
+            "test-jwt-secret",
+        )
+        .unwrap();
+
+        let resp = post_json(
+            &app,
+            "/api/v1/orgs",
+            Some(&token),
+            json!({"slug": "org-b", "name": "Org B"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body = body_json(resp).await;
+        // current_org should STILL be Org A, not the newly created Org B.
+        assert_eq!(body["current_org"]["slug"], "org-a",
+            "established user must not be yanked into the new org");
+        // orgs list contains BOTH Org A and Org B.
+        let org_slugs: Vec<&str> = body["orgs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["slug"].as_str().unwrap())
+            .collect();
+        assert!(org_slugs.contains(&"org-a"));
+        assert!(org_slugs.contains(&"org-b"));
+
+        // DB: user.current_org_id is UNCHANGED (still Org A).
+        let current = user_current_org_id(&pool, &owner_id).await;
+        assert_eq!(current.as_deref(), Some(org_a.id.as_str()));
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn me_onboarding_returns_true_for_limbo_user(pool: PgPool) {
+        // Register → GET /api/v1/auth/me/onboarding → { needs_onboarding: true }.
+        let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
+        let app = build_router(storage);
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/register",
+            None,
+            json!({"username": "alice", "password": "password123"}),
+        )
+        .await;
+        let body = body_json(resp).await;
+        let token = body["token"].as_str().unwrap().to_string();
+
+        let resp = get_authed(&app, "/api/v1/auth/me/onboarding", &token).await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body = body_json(resp).await;
+        assert_eq!(body["needs_onboarding"], true);
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn me_onboarding_returns_false_once_user_has_org(pool: PgPool) {
+        // Register → create_org → GET /api/v1/auth/me/onboarding → { needs_onboarding: false }.
+        let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
+        let app = build_router(storage);
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/register",
+            None,
+            json!({"username": "alice", "password": "password123"}),
+        )
+        .await;
+        let body = body_json(resp).await;
+        let token = body["token"].as_str().unwrap().to_string();
+
+        // Complete onboarding by creating an org.
+        let resp = post_json(
+            &app,
+            "/api/v1/orgs",
+            Some(&token),
+            json!({"slug": "acme", "name": "Acme"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        // Use the freshly reissued token from the AuthResponse.
+        let body = body_json(resp).await;
+        let token = body["token"].as_str().unwrap().to_string();
+
+        let resp = get_authed(&app, "/api/v1/auth/me/onboarding", &token).await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body = body_json(resp).await;
+        assert_eq!(body["needs_onboarding"], false);
     }
 }

@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { acceptInvitation } from './invitations';
 import type { AuthResponse, ChangePasswordRequest, LoginRequest, MeResponse, RefreshResponse, RegisterRequest, AuthConfigResponse, User } from '../types';
 
 export async function login(input: LoginRequest): Promise<AuthResponse> {
@@ -6,8 +7,23 @@ export async function login(input: LoginRequest): Promise<AuthResponse> {
   return data;
 }
 
-export async function register(input: RegisterRequest): Promise<AuthResponse> {
+export async function register(
+  input: RegisterRequest,
+  inviteToken?: string | null,
+): Promise<AuthResponse> {
   const { data } = await apiClient.post<AuthResponse>('/auth/register', input);
+  // If an invite token was stashed, immediately accept it after register.
+  // The accept response is itself an AuthResponse reflecting the joined org.
+  // A failed accept (expired/revoked/already-accepted) gracefully degrades to
+  // the register response so the caller can still log the user in to onboarding.
+  if (inviteToken) {
+    try {
+      const acceptData = await acceptInvitation({ token: inviteToken });
+      return acceptData;
+    } catch (err) {
+      console.warn('Invite accept failed after register; continuing to onboarding', err);
+    }
+  }
   return data;
 }
 

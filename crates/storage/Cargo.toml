@@ -12,3 +12,5 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 sqlx = { workspace = true }
+rand = "0.8"
+base64 = "0.22"

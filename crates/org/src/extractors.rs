@@ -10,14 +10,16 @@ use llm_gateway_storage::Storage;
 /// Resolve the per-request [`OrgContext`] from JWT claims plus a storage
 /// membership lookup.
 ///
-/// Phase 1: `org_id` always comes from `claims.current_org_id` (no path-based
-/// routing yet). Phase 2 will look up via path `{org_slug}` and require active
-/// membership.
+/// Phase 3: `claims.current_org_id` is `Option<String>` — limbo users (just
+/// registered, no org yet) get a JWT without the claim. They cannot reach
+/// org-scoped routes (membership_layer rejects them earlier), but this
+/// helper is also called from non-middleware paths (`user_models`) so we
+/// fail with `NotFound` if the claim is missing.
 ///
 /// Errors:
+/// - [`OrgError::NotFound`] when the JWT carries no `current_org_id` (limbo
+///   user) or when the underlying storage call fails.
 /// - [`OrgError::NotMember`] when the user has no member row in the org.
-/// - [`OrgError::NotFound`] when the underlying storage call fails (surfaced
-///   as a generic lookup failure for now).
 // TODO(Task 9/10): storage failures are currently mapped to `NotFound`, which
 // will mislead API handlers that branch on `NotFound` -> 404. Before wiring
 // this into HTTP responses, add `OrgError::Internal` (or similar) and remap
@@ -26,7 +28,10 @@ pub async fn resolve_org_context(
     claims: &JwtClaims,
     storage: &dyn Storage,
 ) -> Result<OrgContext, OrgError> {
-    let org_id = claims.current_org_id.clone();
+    let org_id = claims
+        .current_org_id
+        .clone()
+        .ok_or_else(|| OrgError::NotFound("JWT has no current_org_id".to_string()))?;
 
     let member = storage
         .get_member(&claims.sub, &org_id)

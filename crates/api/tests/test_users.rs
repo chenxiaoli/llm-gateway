@@ -43,14 +43,32 @@ async fn register_user(
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_list_users_admin(pool: PgPool) {
-    let app = build_app(common::make_state(pool));
+    let app = build_app(common::make_state(pool.clone()));
 
-    // Register first user (admin)
+    // Register first user (admin) — Phase 3 leaves them in limbo.
     let admin_body = register_user(&app, "admin", "password123").await;
     let admin_token = admin_body["token"].as_str().unwrap();
+    let admin_id = admin_body["user"]["id"].as_str().unwrap();
 
-    // Register a second user
-    register_user(&app, "regular", "password123").await;
+    // Register a second user — also in limbo.
+    let regular_body = register_user(&app, "regular", "password123").await;
+    let regular_id = regular_body["user"]["id"].as_str().unwrap();
+
+    // Phase 3: register no longer auto-members users into the default org.
+    // Seed both as members of org_default so the org-scoped user-list route
+    // can see them. (Pre-Phase-3, register did this implicitly.)
+    for uid in [admin_id, regular_id] {
+        sqlx::query(
+            "INSERT INTO members (user_id, org_id, role, created_by, created_at)
+             VALUES ($1, $2, 'member', $1, NOW())
+             ON CONFLICT (user_id, org_id) DO NOTHING",
+        )
+        .bind(uid)
+        .bind(common::TEST_ORG)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
 
     // List users
     let resp = app

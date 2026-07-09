@@ -281,7 +281,11 @@ export interface AuthResponse {
   token: string;
   refresh_token: string;
   user: User;
-  current_org: OrgSummary;
+  /**
+   * null for limbo users (just registered, no org yet). The post-auth flow
+   * treats null here as "show the onboarding wizard".
+   */
+  current_org: OrgSummary | null;
   orgs: OrgSummary[];
 }
 
@@ -727,4 +731,33 @@ export interface RequestDetailsResponse {
   transaction: RequestTransaction | null;
   usage: RequestUsage | null;
   audit: RequestAudit | null;
+}
+
+// Phase 3: invitations
+export interface Invitation {
+  id: string;
+  token: string;
+  url: string;
+  role: 'member' | 'admin';
+  created_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+  accepted_by: string | null; // username, not user id
+  revoked_at: string | null;
+}
+
+export interface InvitationPreview {
+  org_name: string;
+  org_slug: string;
+  role: 'member' | 'admin';
+  inviter_username: string;
+  expires_at: string;
+}
+
+export interface CreateInvitationBody {
+  role: 'member' | 'admin';
+}
+
+export interface AcceptInvitationBody {
+  token: string;
 }
