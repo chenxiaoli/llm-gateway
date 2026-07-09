@@ -338,12 +338,12 @@ function DefaultsSection({ canEdit }: { canEdit: boolean }) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    if (data && !hydrated) {
+    if (data && (!hydrated || updateDefaults.isSuccess)) {
       setRpm(data.default_rate_limit_rpm?.toString() ?? '');
       setBudget(data.default_budget_monthly_usd?.toString() ?? '');
       setHydrated(true);
     }
-  }, [data, hydrated]);
+  }, [data, hydrated, updateDefaults.isSuccess]);
 
   if (isLoading) {
     return (
@@ -353,7 +353,7 @@ function DefaultsSection({ canEdit }: { canEdit: boolean }) {
         transition={{ duration: 0.3, ease: EASE }}
         className="rounded-xl border border-base-300 bg-base-100 p-6 mt-6"
       >
-        <div className="text-base-content/60">Loading…</div>
+        <div className="text-base-content/60">{t('orgSettings.defaults.loading')}</div>
       </motion.section>
     );
   }
@@ -366,22 +366,29 @@ function DefaultsSection({ canEdit }: { canEdit: boolean }) {
         transition={{ duration: 0.3, ease: EASE }}
         className="rounded-xl border border-base-300 bg-base-100 p-6 mt-6"
       >
-        <div className="text-error">Failed to load defaults.</div>
+        <div className="text-error">{t('orgSettings.defaults.loadError')}</div>
       </motion.section>
     );
   }
 
-  const rpmNum = rpm === '' ? null : parseInt(rpm, 10);
-  const budgetNum = budget === '' ? null : parseFloat(budget);
+  const rpmValid = rpm === '' || /^\d+$/.test(rpm);
+  const budgetValid = budget === '' || /^\d+(\.\d+)?$/.test(budget);
+  const rpmNum = rpmValid && rpm !== '' ? parseInt(rpm, 10) : null;
+  const budgetNum = budgetValid && budget !== '' ? parseFloat(budget) : null;
   const dirty =
-    (rpmNum ?? null) !== (data?.default_rate_limit_rpm ?? null) ||
-    (budgetNum ?? null) !== (data?.default_budget_monthly_usd ?? null);
+    rpmNum !== (data?.default_rate_limit_rpm ?? null) ||
+    budgetNum !== (data?.default_budget_monthly_usd ?? null);
+  const canSave = dirty && rpmValid && budgetValid && !updateDefaults.isPending;
 
   const onSave = async () => {
-    await updateDefaults.mutateAsync({
-      default_rate_limit_rpm: rpmNum !== null && !Number.isNaN(rpmNum) ? rpmNum : null,
-      default_budget_monthly_usd: budgetNum !== null && !Number.isNaN(budgetNum) ? budgetNum : null,
-    });
+    try {
+      await updateDefaults.mutateAsync({
+        default_rate_limit_rpm: rpmNum !== null && !Number.isNaN(rpmNum) ? rpmNum : null,
+        default_budget_monthly_usd: budgetNum !== null && !Number.isNaN(budgetNum) ? budgetNum : null,
+      });
+    } catch {
+      // error toast already shown by useUpdateOrgDefaults.onError
+    }
   };
 
   return (
@@ -445,7 +452,7 @@ function DefaultsSection({ canEdit }: { canEdit: boolean }) {
           </Button>
           <Button
             onClick={onSave}
-            disabled={!dirty || updateDefaults.isPending}
+            disabled={!canSave}
           >
             {t('orgSettings.defaults.save')}
           </Button>

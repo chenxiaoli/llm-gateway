@@ -131,4 +131,54 @@ describe('OrgSettings — Defaults section', () => {
       expect(mockToastSuccess).toHaveBeenCalledWith('Defaults saved.');
     });
   });
+
+  it('Cancel button resets the inputs and disables Save', async () => {
+    server.use(
+      http.get('*/api/v1/org-1/defaults', () =>
+        HttpResponse.json({ default_rate_limit_rpm: 100, default_budget_monthly_usd: 50 }),
+      ),
+    );
+    renderAt('/org-1/settings');
+    const rpm = await screen.findByLabelText('Default rate limit (RPM)');
+    await userEvent.clear(rpm);
+    await userEvent.type(rpm, '200');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(rpm).toHaveValue(100);
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
+  it('Save button is disabled until the form is dirty', async () => {
+    server.use(
+      http.get('*/api/v1/org-1/defaults', () =>
+        HttpResponse.json({ default_rate_limit_rpm: 100, default_budget_monthly_usd: 50 }),
+      ),
+    );
+    renderAt('/org-1/settings');
+    await screen.findByLabelText('Default rate limit (RPM)');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    const rpm = screen.getByLabelText('Default rate limit (RPM)');
+    await userEvent.clear(rpm);
+    await userEvent.type(rpm, '200');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+  });
+
+  it('Save failure: shows error toast, no unhandled rejection', async () => {
+    server.use(
+      http.get('*/api/v1/org-1/defaults', () =>
+        HttpResponse.json({ default_rate_limit_rpm: 100, default_budget_monthly_usd: 50 }),
+      ),
+      http.put('*/api/v1/org-1/defaults', () =>
+        HttpResponse.json({}, { status: 500 }),
+      ),
+    );
+    renderAt('/org-1/settings');
+    const rpm = await screen.findByLabelText('Default rate limit (RPM)');
+    await userEvent.clear(rpm);
+    await userEvent.type(rpm, '200');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalledWith('Failed to save defaults.');
+    });
+  });
 });

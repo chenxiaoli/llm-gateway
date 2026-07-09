@@ -985,7 +985,9 @@
       "save": "Save",
       "cancel": "Cancel",
       "saveSuccess": "Defaults saved.",
-      "saveError": "Failed to save defaults."
+      "saveError": "Failed to save defaults.",
+      "loading": "Loading…",
+      "loadError": "Failed to load defaults."
     },
     "danger": {
       "sectionTitle": "DANGER ZONE",

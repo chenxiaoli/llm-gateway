@@ -985,7 +985,9 @@
       "save": "保存",
       "cancel": "取消",
       "saveSuccess": "默认值已保存。",
-      "saveError": "保存默认值失败。"
+      "saveError": "保存默认值失败。",
+      "loading": "加载中…",
+      "loadError": "加载默认值失败。"
     },
     "danger": {
       "sectionTitle": "危险操作",
