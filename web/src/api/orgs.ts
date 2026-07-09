@@ -20,3 +20,18 @@ export async function updateOrg(req: { name?: string; slug?: string }): Promise<
 export async function deleteOrg(password: string): Promise<void> {
   await apiClient.delete(orgPrefix(), { data: { password } });
 }
+
+export type OrgDefaults = {
+  default_rate_limit_rpm: number | null;
+  default_budget_monthly_usd: number | null;
+};
+
+export async function getOrgDefaults(): Promise<OrgDefaults> {
+  const { data } = await apiClient.get<OrgDefaults>(`${orgPrefix()}/defaults`);
+  return data;
+}
+
+export async function updateOrgDefaults(input: OrgDefaults): Promise<OrgDefaults> {
+  const { data } = await apiClient.put<OrgDefaults>(`${orgPrefix()}/defaults`, input);
+  return data;
+}
