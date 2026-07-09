@@ -3,8 +3,9 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
-import { getAuthConfig } from '../api/auth';
+import { getAuthConfig, resendVerification } from '../api/auth';
 import { Button } from '../components/ui/Button';
+import { Alert } from '../components/ui/Alert';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
 
@@ -13,6 +14,9 @@ export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [emailNotVerified, setEmailNotVerified] = useState(false);
+  const [resendEmail, setResendEmail] = useState('');
+  const [resending, setResending] = useState(false);
   const navigate = useNavigate();
   const login = useAuthStore((s) => s.login);
 
@@ -30,12 +34,38 @@ export default function Login() {
       await login({ username, password });
       const slug = useAuthStore.getState().currentOrg?.slug;
       navigate(slug ? `/${slug}/dashboard` : '/login');
-    } catch (err) {
-      toast.error(getErrorMessage(err, t('auth.errorInvalid')));
+    } catch (err: any) {
+      const code = err?.response?.data?.error?.code;
+      if (code === 'email_not_verified') {
+        // Backend rejected the login because the user hasn't verified their
+        // email yet. Surface an inline resend panel instead of a toast so the
+        // user has an obvious next step. The user types the email here (it
+        // may be different from the username's email if they have access to
+        // a different inbox).
+        setEmailNotVerified(true);
+      } else {
+        toast.error(getErrorMessage(err, t('auth.errorInvalid')));
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  async function handleResend() {
+    if (!resendEmail) return;
+    setResending(true);
+    try {
+      await resendVerification(resendEmail);
+      toast.success(t('auth.verificationSent'));
+    } catch (err) {
+      // The backend degrades resend errors to a warn log (doesn't leak
+      // whether the email exists), so a failure here is genuinely
+      // unexpected — show the generic error toast.
+      toast.error(getErrorMessage(err, t('auth.errorInvalid')));
+    } finally {
+      setResending(false);
+    }
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-base-200">
@@ -47,6 +77,36 @@ export default function Login() {
             </div>
             <span className="font-bold text-xl">TokenVis</span>
           </div>
+
+          {emailNotVerified && (
+            <Alert variant="warning" className="mb-4">
+              <div className="flex flex-col gap-2 w-full">
+                <span>{t('auth.emailNotVerifiedMessage')}</span>
+                <div className="flex gap-2 mt-1">
+                  <input
+                    type="email"
+                    value={resendEmail}
+                    onChange={(e) => setResendEmail(e.target.value)}
+                    placeholder={t('auth.email')}
+                    className="input input-bordered input-sm flex-1"
+                  />
+                  <Button size="sm" onClick={handleResend} loading={resending} disabled={!resendEmail}>
+                    {t('auth.resendVerification')}
+                  </Button>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs self-start mt-1"
+                  onClick={() => {
+                    setEmailNotVerified(false);
+                    setResendEmail('');
+                  }}
+                >
+                  {t('auth.signIn')}
+                </button>
+              </div>
+            </Alert>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">
             <div className="form-control">

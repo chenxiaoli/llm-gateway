@@ -94,7 +94,31 @@
     "errorRegister": "注册失败",
     "successChanged": "密码已修改",
     "updateAccountPassword": "更新您的账户密码",
-    "registrationDisabled": "注册功能已禁用"
+    "registrationDisabled": "注册功能已禁用",
+    "email": "邮箱",
+    "emailInUse": "该邮箱已被使用。",
+    "emailMismatch": "邮箱与邀请不匹配。",
+    "emailRequired": "邮箱为必填项。",
+    "emailNotVerifiedMessage": "登录前请先验证邮箱。",
+    "verificationSent": "验证邮件已发送。",
+    "resendVerification": "重新发送验证邮件"
+  },
+  "verify_email": {
+    "verifying": "正在验证您的邮箱…",
+    "verified_title": "邮箱已验证",
+    "verified_body": "您的邮箱已通过验证，现在可以登录了。",
+    "continue_to_login": "前往登录",
+    "expired_title": "链接已过期或无效",
+    "expired_body": "此验证链接已���效。您可以在登录页面申请一个新的链接。",
+    "error_title": "出现问题",
+    "retry": "重试"
+  },
+  "check_email": {
+    "title": "请查看您的邮箱",
+    "body": "我们已向 {{email}} 发送了一封验证邮件。请点击邮件中的链接以验证您的邮箱。",
+    "resend": "重新发送邮件",
+    "go_to_login": "前往登录",
+    "resent": "验证邮件已重新发送。"
   },
   "toasts": {
     "keyCreated": "API 密钥已创建",

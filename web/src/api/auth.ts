@@ -1,5 +1,4 @@
 import { apiClient } from './client';
-import { acceptInvitation } from './invitations';
 import type { AuthResponse, ChangePasswordRequest, LoginRequest, MeResponse, RefreshResponse, RegisterRequest, AuthConfigResponse, User } from '../types';
 
 export async function login(input: LoginRequest): Promise<AuthResponse> {
@@ -7,23 +6,20 @@ export async function login(input: LoginRequest): Promise<AuthResponse> {
   return data;
 }
 
-export async function register(
-  input: RegisterRequest,
-  inviteToken?: string | null,
-): Promise<AuthResponse> {
-  const { data } = await apiClient.post<AuthResponse>('/auth/register', input);
-  // If an invite token was stashed, immediately accept it after register.
-  // The accept response is itself an AuthResponse reflecting the joined org.
-  // A failed accept (expired/revoked/already-accepted) gracefully degrades to
-  // the register response so the caller can still log the user in to onboarding.
-  if (inviteToken) {
-    try {
-      const acceptData = await acceptInvitation({ token: inviteToken });
-      return acceptData;
-    } catch (err) {
-      console.warn('Invite accept failed after register; continuing to onboarding', err);
-    }
+export async function register(input: RegisterRequest): Promise<AuthResponse> {
+  // Send snake_case to match the backend's serde-Deserialize struct.
+  // Task 8 wired the backend to accept invite_token in the register body and
+  // server-side-accept the invitation in the same transaction — so the
+  // previous client-side accept is no longer needed.
+  const body: Record<string, unknown> = {
+    username: input.username,
+    password: input.password,
+    email: input.email,
+  };
+  if (input.inviteToken) {
+    body.invite_token = input.inviteToken;
   }
+  const { data } = await apiClient.post<AuthResponse>('/auth/register', body);
   return data;
 }
 
@@ -50,4 +46,21 @@ export async function changePassword(input: ChangePasswordRequest): Promise<User
 export async function switchOrg(orgSlug: string): Promise<AuthResponse> {
   const { data } = await apiClient.post<AuthResponse>('/me/current-org', { org_slug: orgSlug });
   return data;
+}
+
+/**
+ * Submit a verification token pulled from the email link. The backend marks
+ * the user's email_verified_at; on success returns 204 (no body).
+ */
+export async function verifyEmail(token: string): Promise<void> {
+  await apiClient.post('/auth/verify-email', { token });
+}
+
+/**
+ * Request the backend re-send the verification email. Safe to call repeatedly
+ * — the backend rate-limits and degrades errors to a warn log so the caller
+ * doesn't learn whether the email exists.
+ */
+export async function resendVerification(email: string): Promise<void> {
+  await apiClient.post('/auth/resend-verification', { email });
 }

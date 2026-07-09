@@ -12,6 +12,7 @@ import { getErrorMessage } from '../api/client';
 export default function Register() {
   const { t } = useTranslation();
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,14 +44,19 @@ export default function Register() {
       toast.error(t('auth.errorMismatch'));
       return;
     }
-    if (!username || !password) return;
+    if (!username || !password || !email) return;
     setLoading(true);
     try {
-      await register({ username, password });
-      const slug = useAuthStore.getState().currentOrg?.slug;
-      navigate(slug ? `/${slug}/dashboard` : '/login');
-    } catch (err) {
-      toast.error(getErrorMessage(err, t('auth.errorRegister')));
+      await register({ username, password, email });
+      // After register, the user is in "email not verified" limbo. Redirect to
+      // /check-email which shows "we sent a verification email to {email}".
+      navigate('/check-email', { state: { email } });
+    } catch (err: any) {
+      const code = err?.response?.data?.error?.code;
+      if (code === 'email_in_use') toast.error(t('auth.emailInUse'));
+      else if (code === 'email_mismatch') toast.error(t('auth.emailMismatch'));
+      else if (code === 'email_required') toast.error(t('auth.emailRequired'));
+      else toast.error(getErrorMessage(err, t('auth.errorRegister')));
     } finally {
       setLoading(false);
     }
@@ -81,6 +87,18 @@ export default function Register() {
                 placeholder={t('auth.username')}
                 required
                 minLength={3}
+                disabled={registrationDisabled}
+                className="input input-bordered w-full"
+              />
+            </div>
+            <div className="form-control">
+              <label className="label"><span className="label-text font-medium">{t('auth.email')}</span></label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t('auth.email')}
+                required
                 disabled={registrationDisabled}
                 className="input input-bordered w-full"
               />

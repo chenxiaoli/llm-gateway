@@ -10,6 +10,8 @@ import { LegacyRedirect } from './components/LegacyRedirect';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import VerifyEmail from './pages/VerifyEmail';
+import CheckEmail from './pages/CheckEmail';
 import Onboarding from './pages/Onboarding';
 import AcceptInvite from './pages/AcceptInvite';
 import Dashboard from './pages/Dashboard';
@@ -106,6 +108,8 @@ function App() {
         {/* User-scoped — no org prefix, no Layout */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/verify-email/:token" element={<VerifyEmail />} />
+        <Route path="/check-email" element={<CheckEmail />} />
         <Route path="/accept-invite" element={<AcceptInvite />} />
         <Route path="/onboarding" element={<Onboarding />} />
 

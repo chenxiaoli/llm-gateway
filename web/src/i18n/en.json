@@ -94,7 +94,31 @@
     "errorRegister": "Registration failed",
     "successChanged": "Password changed",
     "updateAccountPassword": "Update your account password",
-    "registrationDisabled": "Registration is currently disabled"
+    "registrationDisabled": "Registration is currently disabled",
+    "email": "Email",
+    "emailInUse": "That email is already in use.",
+    "emailMismatch": "Email does not match the invitation.",
+    "emailRequired": "Email is required.",
+    "emailNotVerifiedMessage": "Please verify your email before logging in.",
+    "verificationSent": "Verification email sent.",
+    "resendVerification": "Resend verification email"
+  },
+  "verify_email": {
+    "verifying": "Verifying your email…",
+    "verified_title": "Email verified",
+    "verified_body": "Your email address has been verified. You can now log in.",
+    "continue_to_login": "Continue to login",
+    "expired_title": "Link expired or invalid",
+    "expired_body": "This verification link is no longer valid. You can request a new one from the login page.",
+    "error_title": "Something went wrong",
+    "retry": "Try again"
+  },
+  "check_email": {
+    "title": "Check your email",
+    "body": "We sent a verification email to {{email}}. Click the link inside to verify your address.",
+    "resend": "Resend email",
+    "go_to_login": "Go to login",
+    "resent": "Verification email resent."
   },
   "toasts": {
     "keyCreated": "API key created",

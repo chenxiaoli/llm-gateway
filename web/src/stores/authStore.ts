@@ -59,7 +59,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       setRefreshToken(resp.refresh_token);
       const me = await getMe();
       set({
-        user: { id: me.id, username: me.username, platform_role: me.platform_role },
+        user: { id: me.id, username: me.username, platform_role: me.platform_role, email: me.email, email_verified_at: me.email_verified_at },
         currentOrg: me.current_org,
         orgs: me.orgs,
         // Login always lands the user in their own org — never impersonating.
@@ -77,12 +77,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true });
     const inviteToken = useAuthStore.getState().pendingInviteToken;
     try {
-      const resp = await apiRegister(input, inviteToken);
+      // inviteToken travels inside the RegisterRequest body (Task 9) — the
+      // backend accepts the invitation in the same transaction (Task 8).
+      const resp = await apiRegister({ ...input, inviteToken: inviteToken ?? undefined });
       setToken(resp.token);
       setRefreshToken(resp.refresh_token);
       const me = await getMe();
       set({
-        user: { id: me.id, username: me.username, platform_role: me.platform_role },
+        user: { id: me.id, username: me.username, platform_role: me.platform_role, email: me.email, email_verified_at: me.email_verified_at },
         currentOrg: me.current_org,
         orgs: me.orgs,
         // Register always assigns the user to a fresh default org — never impersonating.
@@ -106,7 +108,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     setRefreshToken(resp.refresh_token);
     const me = await getMe();
     set({
-      user: { id: me.id, username: me.username, platform_role: me.platform_role },
+      user: { id: me.id, username: me.username, platform_role: me.platform_role, email: me.email, email_verified_at: me.email_verified_at },
       currentOrg: me.current_org,
       orgs: me.orgs,
       // Onboarding (create or join) always produces a real membership — never
@@ -135,7 +137,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     // to learn whether the new current_org is a temp/system membership row.
     const me = await getMe();
     set({
-      user: { id: me.id, username: me.username, platform_role: me.platform_role },
+      user: { id: me.id, username: me.username, platform_role: me.platform_role, email: me.email, email_verified_at: me.email_verified_at },
       currentOrg: me.current_org,
       orgs: me.orgs,
       impersonating: me.impersonating,
@@ -145,7 +147,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   refreshOrgs: async () => {
     const me = await getMe();
     set({
-      user: { id: me.id, username: me.username, platform_role: me.platform_role },
+      user: { id: me.id, username: me.username, platform_role: me.platform_role, email: me.email, email_verified_at: me.email_verified_at },
       currentOrg: me.current_org,
       orgs: me.orgs,
       impersonating: me.impersonating,
@@ -232,7 +234,7 @@ export function useAuthBootstrap() {
   // Sync React Query data into Zustand store
   useEffect(() => {
     if (me && !useAuthStore.getState().user) {
-      setUser({ id: me.id, username: me.username, platform_role: me.platform_role });
+      setUser({ id: me.id, username: me.username, platform_role: me.platform_role, email: me.email, email_verified_at: me.email_verified_at });
       useAuthStore.setState({
         currentOrg: me.current_org,
         orgs: me.orgs,
