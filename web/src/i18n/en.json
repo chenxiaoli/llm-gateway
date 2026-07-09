@@ -101,7 +101,8 @@
     "emailRequired": "Email is required.",
     "emailNotVerifiedMessage": "Please verify your email before logging in.",
     "verificationSent": "Verification email sent.",
-    "resendVerification": "Resend verification email"
+    "resendVerification": "Resend verification email",
+    "forgotPassword": "Forgot password?"
   },
   "verify_email": {
     "verifying": "Verifying your email…",
@@ -119,6 +120,31 @@
     "resend": "Resend email",
     "go_to_login": "Go to login",
     "resent": "Verification email resent."
+  },
+  "forgot_password": {
+    "title": "Reset your password",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "submit": "Send reset link",
+    "sentTitle": "Check your email",
+    "sentBody": "If an account exists for {{email}}, we've sent a reset link. The link expires in 1 hour.",
+    "backToLogin": "Back to login"
+  },
+  "reset_password": {
+    "loading": "Checking link…",
+    "validTitle": "Set a new password",
+    "passwordLabel": "New password",
+    "confirmLabel": "Confirm new password",
+    "submit": "Update password",
+    "updated": "Password updated",
+    "updatedBody": "Redirecting to login…",
+    "expiredTitle": "Link expired or invalid",
+    "expiredBody": "This password reset link is no longer valid. Please request a new one.",
+    "requestNew": "Request new link",
+    "errorTitle": "Something went wrong",
+    "retry": "Try again",
+    "consumed": "This link has already been used.",
+    "genericError": "Something went wrong. Please try again."
   },
   "toasts": {
     "keyCreated": "API key created",

@@ -64,3 +64,35 @@ export async function verifyEmail(token: string): Promise<void> {
 export async function resendVerification(email: string): Promise<void> {
   await apiClient.post('/auth/resend-verification', { email });
 }
+
+/**
+ * Request a password reset email. The backend is intentionally always-204 —
+ * it does not leak whether the email is registered. Callers should show a
+ * generic "if an account exists, we've sent a link" message regardless.
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await apiClient.post('/auth/password-reset/request', { email });
+}
+
+/**
+ * Preview a password reset token (from the email link) without consuming it.
+ * Returns `{ valid, expires_at }`. Used by the ResetPassword landing page to
+ * decide which panel to show before the user types a new password.
+ */
+export async function previewPasswordReset(
+  token: string,
+): Promise<{ valid: boolean; expires_at: string | null }> {
+  const { data } = await apiClient.get<{ valid: boolean; expires_at: string | null }>(
+    '/auth/password-reset/preview',
+    { params: { token } },
+  );
+  return data;
+}
+
+/**
+ * Submit a new password for a reset token. Consumes the token — a second call
+ * with the same token will fail with `reset_consumed`.
+ */
+export async function confirmPasswordReset(token: string, new_password: string): Promise<void> {
+  await apiClient.post('/auth/password-reset/confirm', { token, new_password });
+}

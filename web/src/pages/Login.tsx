@@ -131,6 +131,11 @@ export default function Login() {
                 className="input input-bordered w-full"
               />
             </div>
+            <div className="text-right -mt-2">
+              <Link to="/forgot-password" className="link link-primary text-sm">
+                {t('auth.forgotPassword')}
+              </Link>
+            </div>
             <div className={authConfig?.allow_registration ? 'pt-2' : ''}>
               <Button variant="primary" size="lg" loading={loading} className="w-full">
                 {t('auth.signIn')}
