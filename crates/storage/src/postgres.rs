@@ -3463,42 +3463,6 @@ impl crate::Storage for PostgresStorage {
         Ok(row.map(PasswordReset::from))
     }
 
-    async fn consume_password_reset(&self, token: &str) -> Result<bool, DbErr> {
-        let mut tx = self.pool.begin().await?;
-        let row: Option<PgPasswordResetRow> = sqlx::query_as(
-            "SELECT id::text, token, user_id, created_at, expires_at, consumed_at
-             FROM password_resets WHERE token = $1 FOR UPDATE",
-        )
-        .bind(token)
-        .fetch_optional(&mut *tx)
-        .await?;
-
-        let Some(row) = row else {
-            tx.rollback().await?;
-            return Ok(false);
-        };
-        if row.consumed_at.is_some() || row.expires_at < chrono::Utc::now() {
-            tx.rollback().await?;
-            return Ok(false);
-        }
-
-        sqlx::query("UPDATE password_resets SET consumed_at = NOW() WHERE id::text = $1")
-            .bind(&row.id)
-            .execute(&mut *tx)
-            .await?;
-        // Bump password_changed_at so existing refresh tokens are invalidated.
-        // The auth handler is expected to UPDATE users.password in the same
-        // outer transaction at the caller, but if the caller forgets, this
-        // still does the right thing (revokes token validity).
-        sqlx::query("UPDATE users SET password_changed_at = NOW() WHERE id = $1")
-            .bind(&row.user_id)
-            .execute(&mut *tx)
-            .await?;
-
-        tx.commit().await?;
-        Ok(true)
-    }
-
     async fn consume_password_reset_and_set_password(
         &self,
         token: &str,
@@ -4638,8 +4602,10 @@ mod phase4_tests {
         assert!(!second, "second consume must return false");
     }
 
-    /// Password reset: mint → expire-not-yet → consume → user's
-    /// password_changed_at advances. The second consume is no-op.
+    /// Atomic password reset round trip: mint → Success outcome writes the
+    /// new hash + bumps `password_changed_at`; a second consume is `Consumed`.
+    /// Exercises `consume_password_reset_and_set_password` end-to-end so the
+    /// legacy non-atomic path stays out of the test loop.
     #[sqlx::test(migrator = "crate::MIGRATOR")]
     async fn password_reset_round_trip(pool: sqlx::PgPool) {
         let storage = crate::postgres::PostgresStorage::from_pool(pool);
@@ -4666,28 +4632,39 @@ mod phase4_tests {
             .expect("user")
             .password_changed_at;
 
-        let consumed = storage
-            .consume_password_reset(&reset.token)
+        let outcome = storage
+            .consume_password_reset_and_set_password(&reset.token, "new-hash")
             .await
             .expect("consume");
-        assert!(consumed, "first consume should succeed");
+        assert_eq!(
+            matches!(outcome, crate::types::PasswordResetOutcome::Success),
+            true,
+            "first consume should be Success (got {outcome:?})"
+        );
 
         let after = storage
             .get_user(&user.id)
             .await
             .expect("get")
-            .expect("user")
-            .password_changed_at;
+            .expect("user");
+        assert_eq!(
+            after.password, "new-hash",
+            "consume must write the new password hash atomically"
+        );
         assert!(
-            after > before,
-            "password_changed_at must advance after consume (before={before}, after={after})"
+            after.password_changed_at > before,
+            "password_changed_at must advance after consume (before={before}, after={})",
+            after.password_changed_at
         );
 
         let second = storage
-            .consume_password_reset(&reset.token)
+            .consume_password_reset_and_set_password(&reset.token, "ignored")
             .await
             .expect("consume again");
-        assert!(!second, "second consume must return false");
+        assert!(
+            matches!(second, crate::types::PasswordResetOutcome::Consumed),
+            "second consume must be Consumed (got {second:?})"
+        );
     }
 
     /// Case-insensitive uniqueness on users.email (the migration defines

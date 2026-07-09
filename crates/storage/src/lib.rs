@@ -307,15 +307,6 @@ pub trait Storage: Send + Sync {
         token: &str,
     ) -> Result<Option<PasswordReset>, Box<dyn std::error::Error + Send + Sync>>;
 
-    /// Atomically mark the reset consumed AND bump
-    /// `users.password_changed_at = NOW()` so existing refresh tokens are
-    /// invalidated. Returns `true` on success, `false` if missing / already
-    /// consumed / expired.
-    async fn consume_password_reset(
-        &self,
-        token: &str,
-    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
-
     /// Atomic password reset: SELECT FOR UPDATE the reset row, check
     /// consumed/expired, then in the same tx UPDATE password_resets SET
     /// consumed_at = NOW() AND UPDATE users SET password =
