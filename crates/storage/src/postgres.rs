@@ -3337,7 +3337,8 @@ impl crate::Storage for PostgresStorage {
         requires_email_verification: bool,
     ) -> Result<User, DbErr> {
         sqlx::query(
-            "UPDATE users SET email = $1, email_verified_at = $2, requires_email_verification = $3
+            "UPDATE users SET email = $1, email_verified_at = $2, requires_email_verification = $3,
+                              updated_at = NOW()
              WHERE id = $4",
         )
         .bind(email)
