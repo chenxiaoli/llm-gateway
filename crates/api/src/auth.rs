@@ -606,7 +606,7 @@ pub async fn resend_verification(
     {
         Ok(v) => v,
         Err(e) => {
-            tracing::error!(error = %e, "failed to mint verification token on resend");
+            tracing::warn!(error = %e, "resend_verification: mint failed, returning 204 to avoid enumeration");
             return Ok(StatusCode::NO_CONTENT);
         }
     };
