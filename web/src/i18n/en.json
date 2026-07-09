@@ -1335,6 +1335,9 @@
     "title": "Join {{org}}",
     "inviter": "Invite from {{user}}",
     "role": "You'll join as {{role}}.",
+    "sentTo": "Sent to {{email}}",
+    "emailMismatch": "This invitation was sent to {{email}}. Sign out and sign back in with that address to accept.",
+    "emailUnverified": "Verify your email first, then come back to accept.",
     "accept": "Accept",
     "decline": "Decline",
     "signUp": "Sign up to accept",
@@ -1343,7 +1346,9 @@
     "goToOrg": "Go to {{org}}",
     "errors": {
       "invalidToken": "This invitation is no longer valid",
-      "alreadyAccepted": "This invitation has already been accepted"
+      "alreadyAccepted": "This invitation has already been accepted",
+      "emailMismatch": "Your email doesn't match the invitation recipient",
+      "emailVerificationRequired": "Verify your email first"
     },
     "gone": {
       "title": "Invitation no longer valid",
@@ -1361,6 +1366,8 @@
     "generate": {
       "title": "Generate invite link",
       "role": "Role",
+      "recipientEmail": "Recipient email",
+      "recipientEmailPlaceholder": "alice@example.com",
       "submit": "Generate"
     },
     "roles": {
@@ -1370,6 +1377,7 @@
     "table": {
       "link": "Link",
       "role": "Role",
+      "recipient": "Recipient",
       "status": "Status",
       "created": "Created",
       "actions": "Actions"
@@ -1391,9 +1399,14 @@
     "empty": "No invitations yet",
     "toasts": {
       "created": "Invitation link generated",
+      "createdTo": "Invitation sent to {{email}}",
       "createFailed": "Failed to generate invitation",
       "revoked": "Invitation revoked",
       "revokeFailed": "Failed to revoke invitation"
+    },
+    "errors": {
+      "emailInUse": "That email already has an account",
+      "emailInvalid": "Please enter a valid email address"
     }
   }
 }

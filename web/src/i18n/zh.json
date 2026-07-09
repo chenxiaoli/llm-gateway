@@ -1335,6 +1335,9 @@
     "title": "加入 {{org}}",
     "inviter": "{{user}} 的邀请",
     "role": "您将以 {{role}} 身份加入。",
+    "sentTo": "发送至 {{email}}",
+    "emailMismatch": "此邀请发送至 {{email}}。请退出后使用该邮箱重新登录以接受。",
+    "emailUnverified": "请先验证邮箱，再返回接受邀请。",
     "accept": "接受",
     "decline": "拒绝",
     "signUp": "注册以接受",
@@ -1343,7 +1346,9 @@
     "goToOrg": "进入 {{org}}",
     "errors": {
       "invalidToken": "此邀请已失效",
-      "alreadyAccepted": "此邀请已被接受"
+      "alreadyAccepted": "此邀请已被接受",
+      "emailMismatch": "您的邮箱与邀请收件人不匹配",
+      "emailVerificationRequired": "请先验证您的邮箱"
     },
     "gone": {
       "title": "邀请已失效",
@@ -1361,6 +1366,8 @@
     "generate": {
       "title": "生成邀请链接",
       "role": "角色",
+      "recipientEmail": "收件人邮箱",
+      "recipientEmailPlaceholder": "alice@example.com",
       "submit": "生成"
     },
     "roles": {
@@ -1370,6 +1377,7 @@
     "table": {
       "link": "链接",
       "role": "角色",
+      "recipient": "收件人",
       "status": "状态",
       "created": "创建时间",
       "actions": "操作"
@@ -1391,9 +1399,14 @@
     "empty": "暂无邀请",
     "toasts": {
       "created": "邀请链接已生成",
+      "createdTo": "邀请已发送至 {{email}}",
       "createFailed": "生成邀请失败",
       "revoked": "邀请已撤销",
       "revokeFailed": "撤销邀请失败"
+    },
+    "errors": {
+      "emailInUse": "该邮箱已注册账户",
+      "emailInvalid": "请输入有效的邮箱地址"
     }
   }
 }

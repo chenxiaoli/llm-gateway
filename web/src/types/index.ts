@@ -774,6 +774,12 @@ export interface Invitation {
   token: string;
   url: string;
   role: 'member' | 'admin';
+  /**
+   * Phase 4: the email this invitation was sent to. Optional only for legacy
+   * rows; new rows always carry a recipient per `create_invitation`'s required
+   * body field.
+   */
+  recipient_email: string | null;
   created_at: string;
   expires_at: string;
   accepted_at: string | null;
@@ -786,11 +792,21 @@ export interface InvitationPreview {
   org_slug: string;
   role: 'member' | 'admin';
   inviter_username: string;
+  /**
+   * Phase 4: the email the admin bound this invitation to. The landing page
+   * surfaces it so the recipient can confirm the address matches their account.
+   */
+  recipient_email: string;
   expires_at: string;
 }
 
 export interface CreateInvitationBody {
   role: 'member' | 'admin';
+  /**
+   * Phase 4: required. The invitation is bound to this recipient email; only a
+   * verified user with a matching email can accept it.
+   */
+  recipient_email: string;
 }
 
 export interface AcceptInvitationBody {

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
 import { getAuthConfig } from '../api/auth';
+import { previewInvitation } from '../api/invitations';
 import { Button } from '../components/ui/Button';
 import { Alert } from '../components/ui/Alert';
 import { toast } from 'sonner';
@@ -19,6 +20,7 @@ export default function Register() {
   const navigate = useNavigate();
   const register = useAuthStore((s) => s.register);
   const setPendingInviteToken = useAuthStore((s) => s.setPendingInviteToken);
+  const pendingInviteToken = useAuthStore((s) => s.pendingInviteToken);
   const [params] = useSearchParams();
 
   // Belt-and-suspenders: if the visitor arrived via /register?invite=... (e.g.
@@ -29,6 +31,28 @@ export default function Register() {
   useEffect(() => {
     if (inviteFromUrl) setPendingInviteToken(inviteFromUrl);
   }, [inviteFromUrl, setPendingInviteToken]);
+
+  // Phase 4: if the user arrived via an invitation link, pre-fill the email
+  // field with the invitation's recipient email (the whole point of email-
+  // bound invitations is that the recipient address is fixed). Fetch is
+  // best-effort — if the preview fails (expired/revoked/network), we swallow
+  // silently and let the user type the email manually. The backend will reject
+  // a mismatch on submit anyway.
+  useEffect(() => {
+    if (!pendingInviteToken) return;
+    let cancelled = false;
+    previewInvitation(pendingInviteToken)
+      .then((p) => {
+        if (cancelled) return;
+        setEmail((prev) => prev || p.recipient_email);
+      })
+      .catch(() => {
+        // Swallow: user can still type an email manually.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingInviteToken]);
 
   const { data: authConfig } = useQuery({
     queryKey: ['authConfig'],

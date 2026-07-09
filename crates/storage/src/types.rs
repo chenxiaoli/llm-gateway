@@ -147,12 +147,17 @@ pub struct PasswordReset {
 
 /// Response for invitation mint/list endpoints. The URL is constructed
 /// server-side so the frontend doesn't need to know the public base URL.
+///
+/// Phase 4: `recipient_email` is surfaced so the admin list can show whom the
+/// invitation was sent to (Task 11). It's Option only for legacy rows — new
+/// rows always carry a recipient per `create_invitation`'s required body field.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct InvitationResponse {
     pub id: String,
     pub token: String,
     pub url: String,
     pub role: String,
+    pub recipient_email: Option<String>,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub accepted_at: Option<DateTime<Utc>>,

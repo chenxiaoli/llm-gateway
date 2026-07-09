@@ -20,9 +20,11 @@ type Status = 'loading' | 'ok' | 'gone' | 'error';
  * The page is reachable whether or not the visitor is signed in, so the UI
  * branches on the auth store state rather than being gated by a route guard:
  *
- *   logged out           → preview + "Sign up to accept" / "Log in" buttons
- *   logged in, member    → "you're already a member" + "Go to {{org}}" link
- *   logged in, not member→ preview + Accept / Decline buttons
+ *   logged out                      → preview + "Sign up to accept" / "Log in"
+ *   logged in, member               → "you're already a member" + "Go to {{org}}"
+ *   logged in, email mismatch       → "sent to {{email}}" notice (no Accept)
+ *   logged in, email unverified     → "verify your email first" notice
+ *   logged in, email verified+match → preview + Accept / Decline buttons
  *
  * The token lives in the URL query string, so a global Referrer-Policy meta
  * tag in index.html (no-referrer) prevents it from leaking via the Referer
@@ -131,6 +133,25 @@ export default function AcceptInvite() {
   // /onboarding instead, acknowledging they still need to set up a workspace.
   const declineHref = orgs.length === 0 ? '/onboarding' : '/';
 
+  // Phase 4 email-binding: the invitation is bound to a specific recipient.
+  // Branch on the signed-in user's email state BEFORE rendering the Accept
+  // button so we never offer Accept to someone who can't possibly succeed.
+  //
+  // - emailMismatch: user has an email, but it doesn't match the recipient.
+  //   Also covers legacy accounts with NO email — they need to add one first
+  //   (Task 16's banner will surface that generally; for now show mismatch).
+  // - emailUnverified: user's email matches (or could match), but they haven't
+  //   verified it. The accept-time gate requires a verified email.
+  // - emailOk: verified + matching → show Accept/Decline.
+  const userEmail = user?.email ?? null;
+  const emailsMatch =
+    !!preview.recipient_email &&
+    !!userEmail &&
+    preview.recipient_email.toLowerCase() === userEmail.toLowerCase();
+  const emailMismatch = !!user && (!userEmail || !emailsMatch);
+  const emailUnverified = !!user && !!userEmail && emailsMatch && !user.email_verified_at;
+  const emailOk = !!user && !!userEmail && emailsMatch && !!user.email_verified_at;
+
   async function handleAccept() {
     if (accepting) return;
     setAccepting(true);
@@ -143,10 +164,16 @@ export default function AcceptInvite() {
         navigate(`/${slug}/dashboard`, { replace: true });
       }
     } catch (err) {
-      const code = (err as { response?: { status?: number } })?.response?.status;
-      if (code === 410) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const code = (err as { response?: { data?: { error?: { code?: string } } } })
+        ?.response?.data?.error?.code;
+      if (status === 403 && code === 'email_mismatch') {
+        setError(t('acceptInvite.errors.emailMismatch'));
+      } else if (status === 403 && code === 'email_verification_required') {
+        setError(t('acceptInvite.errors.emailVerificationRequired'));
+      } else if (status === 410) {
         setError(t('acceptInvite.errors.invalidToken'));
-      } else if (code === 409) {
+      } else if (status === 409) {
         setError(t('acceptInvite.errors.alreadyAccepted'));
       } else {
         toast.error(getErrorMessage(err, t('acceptInvite.errors.invalidToken')));
@@ -175,7 +202,12 @@ export default function AcceptInvite() {
       >
         <h1 className="text-xl font-semibold mb-1">{t('acceptInvite.title', { org: preview.org_name })}</h1>
         <p className="text-sm text-base-content/60 mb-1">{t('acceptInvite.inviter', { user: preview.inviter_username })}</p>
-        <p className="text-sm text-base-content/60 mb-6">{t('acceptInvite.role', { role: preview.role })}</p>
+        <p className="text-sm text-base-content/60 mb-1">{t('acceptInvite.role', { role: preview.role })}</p>
+        {preview.recipient_email && (
+          <p className="text-sm text-base-content/60 mb-6">
+            {t('acceptInvite.sentTo', { email: preview.recipient_email })}
+          </p>
+        )}
 
         {error && (
           <p role="alert" className="text-sm text-error mb-4">{error}</p>
@@ -188,7 +220,23 @@ export default function AcceptInvite() {
               {t('acceptInvite.goToOrg', { org: preview.org_name })}
             </Link>
           </div>
-        ) : user ? (
+        ) : user && emailMismatch ? (
+          <div className="space-y-3">
+            <p className="text-sm text-base-content/70">
+              {t('acceptInvite.emailMismatch', { email: preview.recipient_email })}
+            </p>
+            <Link to="/login" className="btn btn-ghost btn-block">
+              {t('acceptInvite.logIn')}
+            </Link>
+          </div>
+        ) : user && emailUnverified ? (
+          <div className="space-y-3">
+            <p className="text-sm text-base-content/70">{t('acceptInvite.emailUnverified')}</p>
+            <Link to="/check-email" className="btn btn-primary btn-block">
+              {t('acceptInvite.errors.emailVerificationRequired')}
+            </Link>
+          </div>
+        ) : emailOk ? (
           <div className="flex gap-2">
             <Button onClick={handleAccept} loading={accepting} className="flex-1">
               {t('acceptInvite.accept')}
