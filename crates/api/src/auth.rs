@@ -888,40 +888,44 @@ pub async fn set_my_email(
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // Mint a verification token + dispatch the email. Best-effort: if the
-    // dispatch fails after the row is committed, the user can still request
-    // a resend via /auth/resend-verification.
-    let verification = state
+    // Mint a verification token + dispatch the email. Best-effort: a storage
+    // or render failure here does NOT roll back the email change — the user
+    // can re-request via /auth/resend-verification. Mirrors `register`'s
+    // pattern so the two endpoints have the same failure surface.
+    let verification_expires = chrono::Utc::now() + chrono::Duration::hours(EMAIL_VERIFICATION_TTL_HOURS);
+    match state
         .storage
-        .create_email_verification(
-            &updated.id,
-            &email,
-            chrono::Utc::now() + chrono::Duration::hours(EMAIL_VERIFICATION_TTL_HOURS),
-        )
+        .create_email_verification(&updated.id, &email, verification_expires)
         .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
-    let verification_url = format!(
-        "{}/verify-email/{}",
-        state.public_base_url.trim_end_matches('/'),
-        verification.token
-    );
-    let ctx = VerificationCtx {
-        username: updated.username.clone(),
-        recipient_email: email.clone(),
-        verification_url,
-        expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
-        public_base_url: state.public_base_url.clone(),
-    };
-    match state.templates.render_verification(ctx) {
-        Ok(msg) => {
-            dispatch_with_retry(
-                state.mailer.clone(),
-                msg,
-                "verification email (me/email)".into(),
+    {
+        Ok(verification) => {
+            let verification_url = format!(
+                "{}/verify-email/{}",
+                state.public_base_url.trim_end_matches('/'),
+                verification.token
             );
+            let ctx = VerificationCtx {
+                username: updated.username.clone(),
+                recipient_email: email.clone(),
+                verification_url,
+                expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
+                public_base_url: state.public_base_url.clone(),
+            };
+            match state.templates.render_verification(ctx) {
+                Ok(msg) => {
+                    dispatch_with_retry(
+                        state.mailer.clone(),
+                        msg,
+                        "verification email (me/email)".into(),
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "failed to render verification email (me/email)");
+                }
+            }
         }
         Err(e) => {
-            tracing::error!(error = %e, "failed to render verification email (me/email); dispatch skipped");
+            tracing::error!(error = %e, "failed to mint verification token (me/email)");
         }
     }
 

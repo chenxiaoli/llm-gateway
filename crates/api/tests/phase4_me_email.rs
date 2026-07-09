@@ -161,9 +161,10 @@ async fn set_my_email_dispatches_verification(pool: PgPool) {
         "expected a verification row for the new email; got count={count}"
     );
 
-    // The user row carries the new email + (still) a verified timestamp from
-    // the round-trip — but the new address itself isn't what was verified, so
-    // we just assert the row picked up the new value.
+    // The user row picked up the new email. The handler resets
+    // email_verified_at to NULL (the new address isn't verified yet) — we
+    // don't assert that here, but the row at minimum must reflect the new
+    // email value.
     let stored: Option<String> = sqlx::query_scalar(
         "SELECT email FROM users WHERE username = 'alice'",
     )
