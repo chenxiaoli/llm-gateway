@@ -70,9 +70,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   deployments must switch to `"smtp"` (or `"file"`) to actually deliver mail.
 
 ### Removed
-- The ability to mint an invitation without a `recipient_email`. Existing
-  pre-Phase-4 invitations (NULL recipient) are grandfathered and remain
-  acceptable by any user, but the Generate UI now requires the field.
+- The ability to mint an invitation without a `recipient_email`. **Pending
+  pre-Phase-4 invitations (NULL recipient) are revoked by the
+  `20260711000002_invitations_recipient_email.sql` migration** — admins must
+  re-mint them with a recipient address. Accepted and already-revoked
+  historical rows are retained unchanged. The old generic-token flow was
+  effectively unauthenticated, so this is a deliberate security hardening.
 
 ### Added — Phase 3: Wizard-gated signup + invitations
 
