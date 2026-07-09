@@ -6,7 +6,7 @@ use serde_json::json;
 pub enum ApiError {
     Unauthorized,
     Forbidden,
-    RateLimited,
+    RateLimited { retry_after_secs: i64 },
     PaymentRequired,
     NotFound(String),
     BadRequest(String),
@@ -49,6 +49,24 @@ impl From<llm_gateway_org::OrgError> for ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        // RateLimited is the only variant that emits an HTTP header (Retry-After),
+        // so it can't share the flat (status, message, code) tuple path below.
+        if let ApiError::RateLimited { retry_after_secs } = self {
+            let body = axum::Json(json!({
+                "error": {
+                    "message": "Rate limit exceeded",
+                    "type": StatusCode::TOO_MANY_REQUESTS.as_u16(),
+                }
+            }));
+            let mut resp = (StatusCode::TOO_MANY_REQUESTS, body).into_response();
+            resp.headers_mut().insert(
+                "retry-after",
+                axum::http::HeaderValue::from_str(&retry_after_secs.to_string())
+                    .expect("retry_after_secs fits in a HeaderValue"),
+            );
+            return resp;
+        }
+
         // (status, message, code) — code is a short stable string the frontend
         // can branch on. None for legacy variants keeps the existing JSON shape.
         // No explicit type annotation: the message borrows from `self` for the
@@ -57,7 +75,6 @@ impl IntoResponse for ApiError {
         let (status, message, code) = match &self {
             ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized", None),
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden", None),
-            ApiError::RateLimited => (StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded", None),
             ApiError::PaymentRequired => (StatusCode::PAYMENT_REQUIRED, "Insufficient balance", None),
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str(), None),
             ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str(), None),
@@ -117,6 +134,8 @@ impl IntoResponse for ApiError {
                 "Password reset token not found",
                 Some("reset_not_found"),
             ),
+            // Handled by the early-return above; unreachable here.
+            ApiError::RateLimited { .. } => unreachable!("RateLimited handled above"),
         };
         let body = if let Some(c) = code {
             json!({ "error": { "message": message, "type": status.as_u16(), "code": c } })
