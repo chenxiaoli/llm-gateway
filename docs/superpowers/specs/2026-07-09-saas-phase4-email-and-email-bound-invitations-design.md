@@ -533,8 +533,10 @@ All errors are JSON: `{error: "<code>", message: "..."}`.
 | `email_not_verified` | 403 | Login attempt with `requires_email_verification=TRUE` and `email_verified_at IS NULL` |
 | `email_verification_required` | 403 | Accept invite while logged-in user's email is unverified |
 | `verification_expired` | 410 | Verify-email with expired or already-consumed token |
+| `verification_not_found` | 404 | Verify-email with token that doesn't match any row |
 | `reset_expired` | 410 | Password-reset confirm with expired token |
 | `reset_consumed` | 410 | Password-reset confirm with already-used token |
+| `reset_not_found` | 404 | Password-reset confirm with token that doesn't match any row |
 
 ### 8.3 Rate limits
 
