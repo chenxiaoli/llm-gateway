@@ -900,6 +900,38 @@ async fn proxy_inner(
         return Err(ApiError::Forbidden);
     }
 
+    // === Step 1.5: Rate-limit check ===
+    // Resolution order: api_key.rate_limit ?? org.default_rate_limit_rpm ?? None (unlimited).
+    // Bucket is per-api_key (model dimension collapsed via "" so the limit
+    // applies regardless of which model the client requested).
+    let effective_rpm = match api_key.rate_limit {
+        Some(n) => Some(n),
+        None => match state
+            .storage
+            .get_org_setting(&api_key.org_id, "default_rate_limit_rpm")
+            .await
+        {
+            Ok(Some(raw)) => raw.parse::<i64>().ok(),
+            Ok(None) => None,
+            Err(e) => {
+                tracing::warn!(error = %e, "org default lookup failed; failing open");
+                None
+            }
+        },
+    };
+
+    if let Some(rpm) = effective_rpm {
+        let allowed = state
+            .rate_limiter
+            .check_and_increment(&api_key.id, "", Some(rpm), None, None)
+            .await;
+        if !allowed {
+            return Err(ApiError::RateLimited {
+                retry_after_secs: state.system_info.rate_limit_window_secs,
+            });
+        }
+    }
+
     // === Step 2: Balance check ===
     // Keys with created_by = None (e.g. admin-created test keys) skip balance checks.
     // A threshold of 0 means "no limit" — skip the check in that case.

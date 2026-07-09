@@ -259,3 +259,114 @@ pub async fn seed_member_in_org(pool: &PgPool, slug: &str) -> String {
 
     llm_gateway_auth::create_jwt(&user_id, Some(&org_id), None, TEST_JWT_SECRET).unwrap()
 }
+
+// ─── Phase 5: proxy enforcement test helper ──────────────────────────────
+//
+// The proxy path uses the raw API key (not a JWT) for /v1/chat/completions.
+// This helper seeds a fresh org + owner user, optionally writes the
+// `default_rate_limit_rpm` org setting, inserts an api_keys row carrying the
+// given per-key rate_limit, and returns the plaintext key the test then sends
+// as the Bearer token. The proxy hashes it on the way in to look up the row.
+//
+// Note: `org_default` setting and `api_key.rate_limit` are both Option<i64>
+// — None means "unlimited" / "fall back to org default" respectively.
+
+/// Seed a fresh org + owner, optionally set an org-wide
+/// `default_rate_limit_rpm`, and create an api_key with the given per-key
+/// `rate_limit`. Returns the plaintext key string (the test sends it as a
+/// Bearer token; the proxy hashes it for lookup).
+///
+/// `state` is taken by reference even though we write directly via the pool:
+/// the contract is "the same AppState the app is built with", so the proxy
+/// sees the same `RateLimiter` the test logic conceptually shares. We don't
+/// need to call anything on it here.
+pub async fn seed_org_with_default_and_key(
+    pool: &PgPool,
+    _state: &Arc<AppState>,
+    org_default_rpm: Option<i64>,
+    key_rate_limit: Option<i64>,
+) -> String {
+    let tag = uuid::Uuid::new_v4().to_string();
+    let slug = format!("o-{}", &tag.replace('-', "").to_lowercase()[..12]);
+    let org_id = format!("org-{tag}");
+    let user_id = format!("u-{tag}");
+
+    // User first (org FK references it via owner_id).
+    sqlx::query(
+        r#"INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, created_at, updated_at)
+           VALUES ($1, $2, 'x', NULL, NULL, true, NOW(), NOW())"#,
+    )
+    .bind(&user_id)
+    .bind(&user_id)
+    .execute(pool)
+    .await
+    .expect("seed user");
+
+    sqlx::query(
+        r#"INSERT INTO orgs (id, slug, name, owner_id, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, NOW(), NOW())"#,
+    )
+    .bind(&org_id)
+    .bind(&slug)
+    .bind(format!("Org {tag}"))
+    .bind(&user_id)
+    .execute(pool)
+    .await
+    .expect("seed org");
+
+    sqlx::query("UPDATE users SET current_org_id = $1 WHERE id = $2")
+        .bind(&org_id)
+        .bind(&user_id)
+        .execute(pool)
+        .await
+        .expect("set current_org_id");
+
+    sqlx::query(
+        r#"INSERT INTO members (user_id, org_id, role, created_by, created_at)
+           VALUES ($1, $2, 'owner', $1, NOW())"#,
+    )
+    .bind(&user_id)
+    .bind(&org_id)
+    .execute(pool)
+    .await
+    .expect("seed owner member");
+
+    // Org-wide default RPM, if requested. We write the raw kv row directly
+    // rather than going through the typed `set_org_defaults` facade — same
+    // payload shape, and avoids a storage-trait import in this test helper.
+    if let Some(rpm) = org_default_rpm {
+        sqlx::query(
+            r#"INSERT INTO org_settings (org_id, key, value)
+               VALUES ($1, 'default_rate_limit_rpm', $2)"#,
+        )
+        .bind(&org_id)
+        .bind(rpm.to_string())
+        .execute(pool)
+        .await
+        .expect("set org default_rate_limit_rpm");
+    }
+
+    // Mint a plaintext key, hash it the same way the proxy will, and insert
+    // the api_keys row. `created_by` is set so the proxy's balance-check
+    // branch runs — but the user has no billing account, so the check is a
+    // no-op (account lookup returns None).
+    let plaintext = llm_gateway_auth::generate_api_key();
+    let key_hash = llm_gateway_auth::hash_api_key(&plaintext);
+    let key_id = format!("key-{tag}");
+    sqlx::query(
+        r#"INSERT INTO api_keys
+             (id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly,
+              enabled, created_by, model_fallback_id, created_at, updated_at)
+           VALUES ($1, $2, 'test-key', $3, NULL, $4, NULL, true, $5, NULL, NOW(), NOW())"#,
+    )
+    .bind(&key_id)
+    .bind(&org_id)
+    .bind(&key_hash)
+    .bind(key_rate_limit)
+    .bind(&user_id)
+    .execute(pool)
+    .await
+    .expect("seed api_key");
+
+    plaintext
+}
