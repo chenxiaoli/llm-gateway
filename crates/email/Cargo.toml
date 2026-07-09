@@ -1,0 +1,17 @@
+[package]
+name = "llm-gateway-email"
+version = "2.0.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+lettre = { workspace = true }
+handlebars = { workspace = true }
+rand = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }

@@ -10,6 +10,7 @@ members = [
     "crates/audit",
     "crates/storage",
     "crates/encryption",
+    "crates/email",
     "crates/nats-publisher",
     "crates/usage-worker",
     "crates/audit-worker",
@@ -35,4 +36,9 @@ async-trait = "0.1"
 tower = "0.5"
 hyper = "1"
 futures = "0.3"
+base64 = "0.22"
+rand = "0.8"
+lettre = { version = "0.11", default-features = false, features = ["builder", "hostname", "smtp-transport", "tokio1-native-tls", "tokio1", "file-transport", "serde"] }
+handlebars = "6.0"
 llm-gateway-encryption = { path = "crates/encryption" }
+llm-gateway-email = { path = "crates/email" }
