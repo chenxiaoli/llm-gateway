@@ -328,4 +328,20 @@ pub trait Storage: Send + Sync {
     async fn get_org_setting(&self, org_id: &str, key: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
     async fn set_org_setting(&self, org_id: &str, key: &str, value: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn list_org_settings(&self, org_id: &str) -> Result<Vec<(String, String)>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Typed facade over `org_settings` for the two Phase 5 default keys
+    /// (`default_rate_limit_rpm`, `default_budget_monthly_usd`). Absent keys
+    /// are surfaced as `None`. `default_budget_monthly_usd` is in USD cents.
+    async fn get_org_defaults(
+        &self,
+        org_id: &str,
+    ) -> Result<crate::types::OrgDefaults, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Writes both default keys atomically (call sites pass the full struct;
+    /// `None` clears that key by deleting the row).
+    async fn set_org_defaults(
+        &self,
+        org_id: &str,
+        defaults: &crate::types::OrgDefaults,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }

@@ -73,6 +73,21 @@ pub struct UpdateOrg {
     pub slug: Option<String>,
 }
 
+/// Org-wide default settings surfaced via `GET/PUT /api/v1/orgs/{id}/defaults`.
+///
+/// Stored as two rows in `org_settings` kv table; this struct is the typed
+/// facade. `default_budget_monthly_usd` is in integer cents (matches the
+/// monetary-integer-subunits convention used elsewhere — see `crates/storage/src/money.rs`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrgDefaults {
+    /// Default per-key RPM cap for keys whose own `rate_limit` is NULL.
+    /// None = unlimited.
+    pub default_rate_limit_rpm: Option<i64>,
+    /// Default per-key monthly budget in USD cents. None = no budget.
+    /// NOTE: stored for display; NOT enforced in Phase 5.
+    pub default_budget_monthly_usd: Option<i64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Member {
     pub user_id: String,

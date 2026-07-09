@@ -3560,6 +3560,58 @@ impl crate::Storage for PostgresStorage {
         .await?;
         Ok(rows)
     }
+
+    async fn get_org_defaults(
+        &self,
+        org_id: &str,
+    ) -> Result<crate::types::OrgDefaults, DbErr> {
+        let rpm = self
+            .get_org_setting(org_id, "default_rate_limit_rpm")
+            .await?
+            .and_then(|s| s.parse::<i64>().ok());
+        let budget = self
+            .get_org_setting(org_id, "default_budget_monthly_usd")
+            .await?
+            .and_then(|s| s.parse::<i64>().ok());
+        Ok(crate::types::OrgDefaults {
+            default_rate_limit_rpm: rpm,
+            default_budget_monthly_usd: budget,
+        })
+    }
+
+    async fn set_org_defaults(
+        &self,
+        org_id: &str,
+        defaults: &crate::types::OrgDefaults,
+    ) -> Result<(), DbErr> {
+        match defaults.default_rate_limit_rpm {
+            Some(n) => self
+                .set_org_setting(org_id, "default_rate_limit_rpm", &n.to_string())
+                .await?,
+            None => {
+                sqlx::query(
+                    "DELETE FROM org_settings WHERE org_id = $1 AND key = 'default_rate_limit_rpm'",
+                )
+                .bind(org_id)
+                .execute(&self.pool)
+                .await?;
+            }
+        }
+        match defaults.default_budget_monthly_usd {
+            Some(n) => self
+                .set_org_setting(org_id, "default_budget_monthly_usd", &n.to_string())
+                .await?,
+            None => {
+                sqlx::query(
+                    "DELETE FROM org_settings WHERE org_id = $1 AND key = 'default_budget_monthly_usd'",
+                )
+                .bind(org_id)
+                .execute(&self.pool)
+                .await?;
+            }
+        }
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -4522,6 +4574,56 @@ mod invitation_tests {
                 .expect("mint");
             assert!(seen.insert(inv.token), "duplicate token generated");
         }
+    }
+
+    /// Org defaults round-trip: writes both fields, reads them back, verifies
+    /// `None` is preserved, and confirms no cross-org interference.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn org_defaults_round_trip(pool: sqlx::PgPool) {
+        use crate::types::OrgDefaults;
+
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-a", "Org A").await;
+
+        // 1. Initial state — both None.
+        let initial = storage.get_org_defaults(&org.id).await.expect("get initial");
+        assert_eq!(initial, OrgDefaults {
+            default_rate_limit_rpm: None,
+            default_budget_monthly_usd: None,
+        });
+
+        // 2. Write both fields.
+        storage
+            .set_org_defaults(&org.id, &OrgDefaults {
+                default_rate_limit_rpm: Some(100),
+                default_budget_monthly_usd: Some(5000),  // $50.00 in cents
+            })
+            .await
+            .expect("set both");
+
+        let after = storage.get_org_defaults(&org.id).await.expect("get after set");
+        assert_eq!(after.default_rate_limit_rpm, Some(100));
+        assert_eq!(after.default_budget_monthly_usd, Some(5000));
+
+        // 3. Clear rate limit only — budget must persist.
+        storage
+            .set_org_defaults(&org.id, &OrgDefaults {
+                default_rate_limit_rpm: None,
+                default_budget_monthly_usd: Some(5000),
+            })
+            .await
+            .expect("clear rate limit");
+        let cleared = storage.get_org_defaults(&org.id).await.expect("get after clear");
+        assert_eq!(cleared.default_rate_limit_rpm, None);
+        assert_eq!(cleared.default_budget_monthly_usd, Some(5000));
+
+        // 4. Different org — independent state.
+        let org_b = make_test_org(&storage, "org-b", "Org B").await;
+        let b_initial = storage.get_org_defaults(&org_b.id).await.expect("get b initial");
+        assert_eq!(b_initial, OrgDefaults {
+            default_rate_limit_rpm: None,
+            default_budget_monthly_usd: None,
+        });
     }
 }
 
