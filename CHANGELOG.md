@@ -30,9 +30,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Password reset.** `POST /auth/password-reset/request` is always-204
   (doesn't leak whether the email is registered). `GET /auth/password-reset/
   preview` validates a token without consuming it; `POST /auth/password-reset/
-  confirm` sets the new password and single-use consumes the token. Login
-  after a password change is rejected with `410 password_changed` for any
-  pre-change token (re-login only).
+  confirm` sets the new password and single-use consumes the token. The
+  confirm handler stores the new password and marks `password_changed_at` in
+  one atomic transaction (SELECT FOR UPDATE on the reset row), so a partial
+  failure can never leave a token re-usable. Refresh tokens issued before
+  the reset are rejected on the next `/auth/refresh` (epoch check on the
+  refresh JWT's `iat` vs `users.password_changed_at` → `401 unauthorized`),
+  forcing re-login on every active session.
 - **Email-bound invitations.** `POST /orgs/{slug}/invitations` now requires
   `recipient_email`; the invitation is bound to that address. `POST
   /invitations/accept` (logged-in accept) enforces `email_mismatch` /
