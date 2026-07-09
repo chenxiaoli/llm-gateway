@@ -88,6 +88,7 @@ export default function ForgotPassword() {
                 placeholder={t('forgot_password.emailPlaceholder')}
                 required
                 autoFocus
+                autoComplete="email"
                 className="input input-bordered w-full"
               />
             </div>

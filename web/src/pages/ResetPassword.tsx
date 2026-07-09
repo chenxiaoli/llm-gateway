@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
@@ -38,6 +38,17 @@ export default function ResetPassword() {
   const [submitting, setSubmitting] = useState(false);
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up the success-redirect timer if the component unmounts early (e.g.
+  // the user hits the back button during the 1500ms window).
+  useEffect(() => {
+    return () => {
+      if (redirectTimer.current !== null) {
+        clearTimeout(redirectTimer.current);
+      }
+    };
+  }, []);
 
   // Initial preview. Incrementing retryCount from the error panel re-runs this.
   useEffect(() => {
@@ -78,7 +89,7 @@ export default function ResetPassword() {
       .then(() => {
         toast.success(t('reset_password.updated'));
         setStatus('success');
-        setTimeout(() => navigate('/login'), 1500);
+        redirectTimer.current = setTimeout(() => navigate('/login'), 1500);
       })
       .catch((err: any) => {
         const code = err?.response?.data?.error?.code;
@@ -127,6 +138,7 @@ export default function ResetPassword() {
                   required
                   minLength={8}
                   autoFocus
+                  autoComplete="new-password"
                   className="input input-bordered w-full"
                 />
                 <p className="text-xs text-base-content/40 mt-1">{t('auth.minChars')}</p>
@@ -140,6 +152,7 @@ export default function ResetPassword() {
                   placeholder={t('reset_password.confirmLabel')}
                   required
                   minLength={8}
+                  autoComplete="new-password"
                   className="input input-bordered w-full"
                 />
               </div>
