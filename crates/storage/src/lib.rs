@@ -331,7 +331,8 @@ pub trait Storage: Send + Sync {
 
     /// Typed facade over `org_settings` for the two Phase 5 default keys
     /// (`default_rate_limit_rpm`, `default_budget_monthly_usd`). Absent keys
-    /// are surfaced as `None`. `default_budget_monthly_usd` is in USD cents.
+    /// are surfaced as `None`. `default_budget_monthly_usd` is in USD subunits
+    /// (10⁸ per USD — see `crates/storage/src/money.rs`).
     async fn get_org_defaults(
         &self,
         org_id: &str,

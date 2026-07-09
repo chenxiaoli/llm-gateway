@@ -168,18 +168,9 @@ pub fn make_member_token(user_id: &str) -> TestUser {
 // new org as `current_org_id`, which is what `org_resolve_layer` +
 // `membership_layer` need to let the request through.
 
-use axum::Router as AxumRouter;
-
 /// Seed a fresh org with a unique slug and an owner user. Returns the
 /// owner's JWT and the new org's slug.
-///
-/// The `app` argument is accepted to match the call shape used by the
-/// Phase 5 tests but is not currently needed (seeding is pure SQL). Kept
-/// in the signature so the tests' helper calls read symmetrically.
-pub async fn seed_org_with_admin(
-    pool: &PgPool,
-    _app: &AxumRouter,
-) -> (String, String) {
+pub async fn seed_org_with_admin(pool: &PgPool) -> (String, String) {
     let tag = uuid::Uuid::new_v4().to_string();
     let slug = format!("o-{}", &tag.replace('-', "").to_lowercase()[..12]);
     let org_id = format!("org-{tag}");
@@ -235,11 +226,7 @@ pub async fn seed_org_with_admin(
 /// Seed a plain `member` role user in the org identified by `slug`. Returns
 /// that member's JWT. The org + its owner must already exist (seed via
 /// `seed_org_with_admin` first).
-pub async fn seed_member_in_org(
-    pool: &PgPool,
-    _app: &AxumRouter,
-    slug: &str,
-) -> String {
+pub async fn seed_member_in_org(pool: &PgPool, slug: &str) -> String {
     let org_id: String = sqlx::query_scalar("SELECT id FROM orgs WHERE slug = $1")
         .bind(slug)
         .fetch_one(pool)

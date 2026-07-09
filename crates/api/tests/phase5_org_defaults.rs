@@ -68,7 +68,7 @@ async fn get_defaults_initial_empty(pool: PgPool) {
     let app = build_app(common::make_state(pool.clone()));
 
     // Seed an org + admin user (use the same pattern as phase2_orgs tests).
-    let (token, slug) = common::seed_org_with_admin(&pool, &app).await;
+    let (token, slug) = common::seed_org_with_admin(&pool).await;
 
     let resp = get(&app, &format!("/api/v1/{slug}/defaults"), &token).await;
     assert_eq!(resp.status(), StatusCode::OK);
@@ -81,7 +81,7 @@ async fn get_defaults_initial_empty(pool: PgPool) {
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn put_then_get_round_trip(pool: PgPool) {
     let app = build_app(common::make_state(pool.clone()));
-    let (token, slug) = common::seed_org_with_admin(&pool, &app).await;
+    let (token, slug) = common::seed_org_with_admin(&pool).await;
 
     let resp = put(
         &app,
@@ -109,7 +109,7 @@ async fn put_then_get_round_trip(pool: PgPool) {
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn put_null_clears_field(pool: PgPool) {
     let app = build_app(common::make_state(pool.clone()));
-    let (token, slug) = common::seed_org_with_admin(&pool, &app).await;
+    let (token, slug) = common::seed_org_with_admin(&pool).await;
 
     // Set both.
     let _ = put(
@@ -137,7 +137,7 @@ async fn put_null_clears_field(pool: PgPool) {
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn put_rejects_zero_rpm(pool: PgPool) {
     let app = build_app(common::make_state(pool.clone()));
-    let (token, slug) = common::seed_org_with_admin(&pool, &app).await;
+    let (token, slug) = common::seed_org_with_admin(&pool).await;
 
     let resp = put(
         &app,
@@ -153,7 +153,7 @@ async fn put_rejects_zero_rpm(pool: PgPool) {
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn put_rejects_negative_budget(pool: PgPool) {
     let app = build_app(common::make_state(pool.clone()));
-    let (token, slug) = common::seed_org_with_admin(&pool, &app).await;
+    let (token, slug) = common::seed_org_with_admin(&pool).await;
 
     let resp = put(
         &app,
@@ -169,8 +169,8 @@ async fn put_rejects_negative_budget(pool: PgPool) {
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn put_forbidden_for_member(pool: PgPool) {
     let app = build_app(common::make_state(pool.clone()));
-    let (_admin_token, slug) = common::seed_org_with_admin(&pool, &app).await;
-    let member_token = common::seed_member_in_org(&pool, &app, &slug).await;
+    let (_admin_token, slug) = common::seed_org_with_admin(&pool).await;
+    let member_token = common::seed_member_in_org(&pool, &slug).await;
 
     let resp = put(
         &app,

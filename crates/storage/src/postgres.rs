@@ -4615,7 +4615,7 @@ mod invitation_tests {
         storage
             .set_org_defaults(&org.id, &OrgDefaults {
                 default_rate_limit_rpm: Some(100),
-                default_budget_monthly_usd: Some(5000),  // $50.00 in cents
+                default_budget_monthly_usd: Some(5000),  // subunits (10⁸ per USD)
             })
             .await
             .expect("set both");
