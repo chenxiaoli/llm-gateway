@@ -28,7 +28,7 @@ retention_days = 90
 [email]
 # Transport: "smtp" for production, "file" for dev/tests (writes .eml to
 # file_output_dir), "noop" for unit tests.
-transport = "file"
+transport = "noop"
 from_address = "noreply@example.com"
 from_name = "LLM Gateway"
 file_output_dir = "./dev-emails"

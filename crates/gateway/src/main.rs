@@ -79,19 +79,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.window_size_secs));
 
     // Init email subsystem
-    let templates = std::sync::Arc::new(
+    let templates = Arc::new(
         llm_gateway_email::templates::TemplateRegistry::load(
             config.email.from_address.clone(),
             config.email.from_name.clone(),
         )
-        .expect("failed to load email templates"),
+        .map_err(|e| format!("failed to load email templates: {e}"))?,
     );
 
-    let mailer: std::sync::Arc<dyn llm_gateway_email::Mailer> = match config.email.transport.as_str() {
-        "noop" => std::sync::Arc::new(llm_gateway_email::noop::NoopMailer::new()),
+    let mailer: Arc<dyn llm_gateway_email::Mailer> = match config.email.transport.as_str() {
+        "noop" => Arc::new(llm_gateway_email::noop::NoopMailer::new()),
         "file" => {
-            std::fs::create_dir_all(&config.email.file_output_dir).ok();
-            std::sync::Arc::new(llm_gateway_email::file::FileMailer::new(
+            std::fs::create_dir_all(&config.email.file_output_dir)
+                .map_err(|e| format!("creating email output dir {}: {e}", config.email.file_output_dir))?;
+            Arc::new(llm_gateway_email::file::FileMailer::new(
                 &config.email.file_output_dir,
                 config.email.from_address.clone(),
                 config.email.from_name.clone(),
@@ -99,10 +100,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         "smtp" => {
             let host = config.email.smtp_host.clone()
-                .expect("[email] smtp_host is required when transport = \"smtp\"");
+                .ok_or_else(|| "[email] smtp_host is required when transport = \"smtp\"".to_string())?;
             let port = config.email.smtp_port.unwrap_or(587);
             let cfg = llm_gateway_email::smtp::SmtpMailerConfig {
-                host,
+                host: host.clone(),
                 port,
                 username: config.email.smtp_username.clone(),
                 password: config.email.smtp_password.clone(),
@@ -110,12 +111,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 from_address: config.email.from_address.clone(),
                 from_name: config.email.from_name.clone(),
             };
-            std::sync::Arc::new(
+            Arc::new(
                 llm_gateway_email::smtp::SmtpMailer::new(cfg)
-                    .expect("failed to construct SMTP mailer"),
+                    .map_err(|e| format!("constructing SMTP mailer for {host}: {e}"))?,
             )
         }
-        other => panic!("unknown [email] transport: {other}"),
+        other => return Err(format!("unknown [email] transport: {other}").into()),
     };
 
     // App state
