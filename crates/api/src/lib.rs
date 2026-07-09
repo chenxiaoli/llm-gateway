@@ -26,6 +26,8 @@ pub struct AppState {
     /// `[server] public_base_url` in config.toml; defaults to
     /// `http://localhost:5173`.
     pub public_base_url: String,
+    pub mailer: Arc<dyn llm_gateway_email::Mailer>,
+    pub templates: Arc<llm_gateway_email::templates::TemplateRegistry>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

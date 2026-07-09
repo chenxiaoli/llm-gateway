@@ -1193,6 +1193,8 @@ pub struct AppConfig {
     pub upstream: UpstreamConfig,
     pub audit: AuditConfig,
     pub nats: Option<NatsConfig>,
+    #[serde(default)]
+    pub email: EmailConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1244,4 +1246,47 @@ pub struct NatsConfig {
     /// Takes precedence over `token` when set.
     #[serde(default)]
     pub credentials_file: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EmailConfig {
+    /// "smtp" | "file" | "noop"
+    #[serde(default = "default_email_transport")]
+    pub transport: String,
+    #[serde(default = "default_email_from_address")]
+    pub from_address: String,
+    #[serde(default = "default_email_from_name")]
+    pub from_name: String,
+    /// Used when transport = "file"
+    #[serde(default = "default_email_file_output_dir")]
+    pub file_output_dir: String,
+    /// SMTP-specific — required when transport = "smtp"
+    pub smtp_host: Option<String>,
+    pub smtp_port: Option<u16>,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<String>,
+    #[serde(default = "default_email_smtp_use_tls")]
+    pub smtp_use_tls: bool,
+}
+
+fn default_email_transport() -> String { "file".into() }
+fn default_email_from_address() -> String { "noreply@example.com".into() }
+fn default_email_from_name() -> String { "LLM Gateway".into() }
+fn default_email_file_output_dir() -> String { "./dev-emails".into() }
+fn default_email_smtp_use_tls() -> bool { true }
+
+impl Default for EmailConfig {
+    fn default() -> Self {
+        Self {
+            transport: default_email_transport(),
+            from_address: default_email_from_address(),
+            from_name: default_email_from_name(),
+            file_output_dir: default_email_file_output_dir(),
+            smtp_host: None,
+            smtp_port: None,
+            smtp_username: None,
+            smtp_password: None,
+            smtp_use_tls: default_email_smtp_use_tls(),
+        }
+    }
 }

@@ -11,6 +11,7 @@ llm-gateway-org = { path = "../org" }
 llm-gateway-provider = { path = "../provider" }
 llm-gateway-billing = { path = "../billing" }
 llm-gateway-nats-publisher = { path = "../nats-publisher" }
+llm-gateway-email = { workspace = true }
 llm-gateway-ratelimit = { path = "../ratelimit" }
 llm-gateway-encryption = { workspace = true }
 serde = { workspace = true }
