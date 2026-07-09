@@ -145,12 +145,6 @@ pub struct PasswordReset {
     pub consumed_at: Option<DateTime<Utc>>,
 }
 
-/// Request body for `POST /api/v1/{org_slug}/invitations`.
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct CreateInvitationRequest {
-    pub role: String, // "member" | "admin"
-}
-
 /// Response for invitation mint/list endpoints. The URL is constructed
 /// server-side so the frontend doesn't need to know the public base URL.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -185,6 +179,7 @@ pub struct InvitationPreview {
     pub org_slug: String,
     pub role: String,
     pub inviter_username: String,
+    pub recipient_email: Option<String>,
     pub expires_at: DateTime<Utc>,
 }
 
