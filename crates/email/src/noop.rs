@@ -2,12 +2,18 @@
 
 use crate::{EmailError, EmailMessage, Mailer};
 
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct NoopMailer;
 
 impl NoopMailer {
     pub fn new() -> Self {
         Self
+    }
+}
+
+impl Default for NoopMailer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -32,6 +32,8 @@ pub enum EmailError {
     InvalidAddress(String),
     #[error("template render error: {0}")]
     Template(String),
+    #[error("failed to build email message: {0}")]
+    Build(String),
 }
 
 impl From<lettre::transport::smtp::Error> for EmailError {
@@ -40,9 +42,21 @@ impl From<lettre::transport::smtp::Error> for EmailError {
     }
 }
 
+impl From<lettre::transport::file::Error> for EmailError {
+    fn from(e: lettre::transport::file::Error) -> Self {
+        EmailError::File(e.to_string())
+    }
+}
+
 impl From<lettre::address::AddressError> for EmailError {
     fn from(e: lettre::address::AddressError) -> Self {
         EmailError::InvalidAddress(e.to_string())
+    }
+}
+
+impl From<lettre::error::Error> for EmailError {
+    fn from(e: lettre::error::Error) -> Self {
+        EmailError::Build(e.to_string())
     }
 }
 
@@ -63,7 +77,7 @@ pub trait Mailer: Send + Sync {
 ///
 /// Spawns a tokio task; never blocks the caller. On total failure, logs an
 /// error and returns. The caller is responsible for any audit-row write on
-/// failure (callers pass an optional `on_failure` closure).
+/// failure before calling this helper.
 ///
 /// Usage:
 /// ```ignore
