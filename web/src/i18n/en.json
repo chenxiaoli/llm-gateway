@@ -1433,5 +1433,21 @@
     "errors": {
       "emailInUse": "That email already has an account"
     }
+  },
+  "emailBanner": {
+    "message": "Add an email to receive invitations and reset your password.",
+    "addAction": "Add email",
+    "dismiss": "Dismiss"
+  },
+  "addEmailModal": {
+    "title": "Add your email",
+    "body": "We'll send a verification link to this address. You can keep using TokenVis while it's pending verification.",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "submit": "Send verification",
+    "cancel": "Cancel",
+    "success": "Verification email sent — check your inbox.",
+    "errorInUse": "That email is already in use.",
+    "errorGeneric": "Something went wrong. Please try again."
   }
 }

@@ -24,6 +24,13 @@ interface AuthState {
    * stale token can't loop.
    */
   pendingInviteToken: string | null;
+  /**
+   * Per-session flag for "user dismissed the add-email banner this login".
+   * Reset to false on login/logout/register so a fresh session shows it again.
+   * Switching orgs does NOT reset it — see dismissEmailBanner.
+   */
+  emailBannerDismissed: boolean;
+  dismissEmailBanner: () => void;
   login: (input: LoginRequest) => Promise<AuthResponse>;
   register: (input: RegisterRequest) => Promise<AuthResponse>;
   /**
@@ -50,6 +57,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: false,
   impersonating: false,
   pendingInviteToken: null,
+  emailBannerDismissed: false,
+  dismissEmailBanner: () => set({ emailBannerDismissed: true }),
 
   login: async (input: LoginRequest) => {
     set({ isLoading: true });
@@ -65,6 +74,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         // Login always lands the user in their own org — never impersonating.
         impersonating: false,
         isLoading: false,
+        emailBannerDismissed: false,
       });
       return resp;
     } catch (err) {
@@ -90,6 +100,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         // Register always assigns the user to a fresh default org — never impersonating.
         impersonating: false,
         isLoading: false,
+        emailBannerDismissed: false,
       });
       return resp;
     } catch (err) {
@@ -115,13 +126,14 @@ export const useAuthStore = create<AuthState>((set) => ({
       // a temp/system impersonation row.
       impersonating: false,
       isLoading: false,
+      emailBannerDismissed: false,
     });
   },
 
   logout: () => {
     clearToken();
     clearRefreshToken();
-    set({ user: null, currentOrg: null, orgs: [], impersonating: false });
+    set({ user: null, currentOrg: null, orgs: [], impersonating: false, emailBannerDismissed: false });
     window.location.href = '/login';
   },
 

@@ -1433,5 +1433,21 @@
     "errors": {
       "emailInUse": "该邮箱已注册账户"
     }
+  },
+  "emailBanner": {
+    "message": "添加邮箱以接收邀请和重置密码。",
+    "addAction": "添加邮箱",
+    "dismiss": "忽略"
+  },
+  "addEmailModal": {
+    "title": "添加邮箱",
+    "body": "我们将向此地址发送验证链接。在验证完成前，您可以继续使用 TokenVis。",
+    "emailLabel": "邮箱",
+    "emailPlaceholder": "you@example.com",
+    "submit": "发送验证邮件",
+    "cancel": "取消",
+    "success": "验证邮件已发送，请查收。",
+    "errorInUse": "该邮箱已被使用。",
+    "errorGeneric": "出错了，请重试。"
   }
 }

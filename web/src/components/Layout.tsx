@@ -36,6 +36,7 @@ import { useTranslation } from 'react-i18next';
 import { Globe } from 'lucide-react';
 import { OrgSwitcher } from './OrgSwitcher';
 import { ImpersonationBanner } from './ImpersonationBanner';
+import { EmailBanner } from './EmailBanner';
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -420,6 +421,7 @@ export default function AppLayout() {
 
         {/* Content */}
         <main className={`flex-1 p-4 md:p-6 overflow-y-auto ${ptShift} pb-8`}>
+          <EmailBanner />
           <div className="animate-fade-in-up" key={location.pathname}>
             <Outlet />
           </div>

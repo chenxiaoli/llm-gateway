@@ -96,3 +96,17 @@ export async function previewPasswordReset(
 export async function confirmPasswordReset(token: string, new_password: string): Promise<void> {
   await apiClient.post('/auth/password-reset/confirm', { token, new_password });
 }
+
+/**
+ * Set or change the signed-in user's email. The backend mints a fresh
+ * verification token + dispatches the verification email (best-effort).
+ * Returns the updated MeResponse so the caller can refresh cached state.
+ *
+ * Rejects with 409 `email_in_use` if another user already owns the address;
+ * 400 (no code) on malformed input — the backend's `validate_email` returns
+ * a string surfaced via `ApiError::BadRequest`, which carries no `code` field.
+ */
+export async function setMyEmail(email: string): Promise<MeResponse> {
+  const { data } = await apiClient.post<MeResponse>('/auth/me/email', { email });
+  return data;
+}
