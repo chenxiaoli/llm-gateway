@@ -100,6 +100,9 @@ pub struct MembershipSummary {
 // --- Invitations (Phase 3) ---
 
 /// One row of the `invitations` table. Used internally by the storage trait.
+///
+/// Phase 4: `recipient_email` binds the invitation to a specific email. Old
+/// generic-token rows (Phase 3) had NULL here; the migration revokes them.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Invitation {
     pub id: String,
@@ -107,11 +110,39 @@ pub struct Invitation {
     pub org_id: String,
     pub role: MemberRole,
     pub created_by: String,
+    pub recipient_email: Option<String>,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub accepted_at: Option<DateTime<Utc>>,
     pub accepted_by: Option<String>,
     pub revoked_at: Option<DateTime<Utc>>,
+}
+
+/// One row of the `email_verifications` table. The `token` is the lookup
+/// key the user clicks in their email; `consumed_at IS NULL` means "still
+/// usable". `email` is denormalized from `users.email` so the row records
+/// *what* was being verified at mint time.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct EmailVerification {
+    pub id: String,
+    pub token: String,
+    pub user_id: String,
+    pub email: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub consumed_at: Option<DateTime<Utc>>,
+}
+
+/// One row of the `password_resets` table. Same shape as
+/// `EmailVerification` minus the denormalized `email`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PasswordReset {
+    pub id: String,
+    pub token: String,
+    pub user_id: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub consumed_at: Option<DateTime<Utc>>,
 }
 
 /// Request body for `POST /api/v1/{org_slug}/invitations`.
@@ -890,6 +921,11 @@ pub struct User {
     pub refresh_token: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    // Phase 4: email + verification + password-change tracking.
+    pub email: Option<String>,
+    pub email_verified_at: Option<DateTime<Utc>>,
+    pub requires_email_verification: bool,
+    pub password_changed_at: DateTime<Utc>,
 }
 
 // TODO(Task 5/8): migrate alongside User — drop role/group_id fields once
