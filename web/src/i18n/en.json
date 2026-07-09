@@ -975,6 +975,18 @@
       "save": "Save Changes",
       "readOnlyNotice": "Only admins can change org settings."
     },
+    "defaults": {
+      "title": "Defaults",
+      "description": "Org-wide defaults applied to API keys without their own settings",
+      "rateLimitLabel": "Default rate limit (RPM)",
+      "rateLimitHelp": "Applies to API keys without their own limit. Empty = unlimited.",
+      "budgetLabel": "Default monthly budget (USD)",
+      "budgetHelp": "Stored for display. Not currently enforced. Empty = no budget.",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saveSuccess": "Defaults saved.",
+      "saveError": "Failed to save defaults."
+    },
     "danger": {
       "sectionTitle": "DANGER ZONE",
       "warning": "Deleting this org permanently removes all keys, channels, usage history, and audit logs. This cannot be undone.",
