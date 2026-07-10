@@ -90,6 +90,10 @@ pub trait Storage: Send + Sync {
 
     // Usage
     async fn record_usage(&self, org_id: &str, usage: &UsageRecord) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    /// Returns the month-to-date spend for the given key, in 10^8 subunits per USD.
+    /// Returns 0 if no counter row exists (key has no spend this month).
+    /// Month bucket is UTC calendar month derived from current time.
+    async fn get_month_to_date_spend(&self, key_id: &str) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage(&self, org_id: &str, filter: &UsageFilter) -> Result<Vec<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage_paginated(&self, org_id: &str, filter: &UsageFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage_summary(&self, org_id: &str, filter: &UsageFilter) -> Result<Vec<UsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>>;
