@@ -1,7 +1,5 @@
 //! Integration test for ApiError::BudgetExceeded response shape.
 
-mod common;
-
 use axum::body::to_bytes;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;

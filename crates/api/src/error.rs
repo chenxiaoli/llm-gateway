@@ -1,5 +1,3 @@
-use axum::body::Body;
-use axum::http::header::CONTENT_TYPE;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
@@ -98,12 +96,7 @@ impl IntoResponse for ApiError {
                     "accrued": accrued_usd,
                 }
             });
-            return Response::builder()
-                .status(StatusCode::TOO_MANY_REQUESTS)
-                .header(CONTENT_TYPE, "application/json")
-                .body(Body::from(body.to_string()))
-                .unwrap()
-                .into_response();
+            return (StatusCode::TOO_MANY_REQUESTS, axum::Json(body)).into_response();
         }
 
         // (status, message, code) — code is a short stable string the frontend
