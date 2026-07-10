@@ -381,6 +381,9 @@ pub async fn seed_org_with_default_and_key(
 // `key_budget_monthly` is stored directly on the `api_keys.budget_monthly`
 // column (BIGINT). Both are `Option<i64>` — None means "fall back to the next
 // layer" / "unlimited".
+//
+// `_state` is taken for API parity with `seed_org_with_default_and_key`; the
+// helper writes via the pool directly.
 pub async fn seed_org_with_budget_and_key(
     pool: &PgPool,
     _state: &Arc<AppState>,

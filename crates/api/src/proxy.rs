@@ -958,11 +958,21 @@ async fn proxy_inner(
     };
 
     if let Some(budget) = effective_budget {
-        let accrued = state
+        let accrued = match state
             .storage
             .get_month_to_date_spend(&api_key.id)
             .await
-            .unwrap_or(0); // fail-open on storage error, matches Step 1.5 posture
+        {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    key_id = %api_key.id,
+                    "MTD counter read failed; failing open"
+                );
+                0
+            }
+        };
         if accrued > budget {
             let month_bucket = format!("{}", chrono::Utc::now().format("%Y-%m"));
             return Err(ApiError::BudgetExceeded {

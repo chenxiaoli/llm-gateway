@@ -114,6 +114,11 @@ async fn org_default_budget_enforces(pool: PgPool) {
     common::seed_usage_record(&pool, &state.storage, &api_key, 600_000_000).await; // MTD $11
     let resp = chat_completion(&app, &api_key).await;
     assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+    let body = to_bytes(resp.into_body(), 1024 * 16).await.unwrap();
+    let v: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(v["error"]["type"], "budget_exceeded");
+    assert_eq!(v["error"]["limit"], 10.0); // org default $10
+    assert!(v["error"]["accrued"].as_f64().unwrap() > 10.0);
 }
 
 /// 3. No per-key, no org default → unlimited path (20 requests, none 429).
