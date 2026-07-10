@@ -68,6 +68,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Org-level `default_budget_monthly_usd` is stored but **not enforced** in this phase (parity with existing per-key budget — both will be enforced in a future phase).
   - **Upgrade note:** any existing `api_keys` rows with non-null `rate_limit` will start receiving 429s on requests beyond their limit. Audit existing keys before deploying if any have low values set.
   - Implicit fix: `api_keys.rate_limit` Postgres decode (INT4 column was decoded as `Option<i64>`, now correctly `Option<i32>`); invisible until enforcement made the column live.
+- **Phase 6 (budget enforcement):**
+  - **Behavior change:** per-key monthly budgets (`api_keys.budget_monthly`) and org-default budgets (`default_budget_monthly_usd` from Phase 5) are now **enforced**. Resolution order: `key.budget_monthly ?? org.default_budget_monthly_usd ?? unlimited`. Exceeding returns `429` with `error.type = "budget_exceeded"` and body `{ key_id, month_bucket, limit, accrued }` (USD floats). No `Retry-After` — caller must wait until next month or have budget raised.
+  - New `budget_counters` table materializes month-to-date spend per key (UTC calendar month), updated atomically with each `usage_records` insert via app-level transaction in `record_usage`.
+  - Counting semantic is **post-completion**: the check uses MTD that excludes the current request's cost. The request that pushes MTD over budget is allowed; the next request is rejected. Industry-standard leak (matches Stripe, OpenAI).
+  - OrgSettings `budgetHelp` text updated — the previous "Not currently enforced" disclaimer is removed.
+  - **Upgrade note:** any existing `api_keys` rows with non-null `budget_monthly`, or orgs with `default_budget_monthly_usd` set, will start receiving 429s on requests once their month-to-date spend exceeds the budget. Audit existing values before deploying.
 
 ### Changed
 - `POST /api/v1/auth/register` now requires `email`; without an invitation
