@@ -981,7 +981,7 @@
       "rateLimitLabel": "默认速率限制 (RPM)",
       "rateLimitHelp": "应用于未单独设置限制的 API 密钥。留空 = 不限制。",
       "budgetLabel": "默认月度预算 (USD)",
-      "budgetHelp": "仅供显示,当前不强制执行。留空 = 无预算。",
+      "budgetHelp": "按公历月（UTC）强制执行。留空 = 无预算。",
       "save": "保存",
       "cancel": "取消",
       "saveSuccess": "默认值已保存。",
