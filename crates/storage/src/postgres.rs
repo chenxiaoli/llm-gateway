@@ -4703,13 +4703,13 @@ mod invitation_tests {
         key_id.to_string()
     }
 
-    /// Helper: build a minimal UsageRecord with the given key_id, cost, and
+    /// Helper: build a minimal UsageRecord with the given org_id, key_id, cost, and
     /// created_at. Other token fields are zeroed; only cost matters for the
     /// budget counter logic.
-    fn mk_usage(key_id: &str, cost: i64, created_at: chrono::DateTime<chrono::Utc>) -> crate::types::UsageRecord {
+    fn mk_usage(org_id: &str, key_id: &str, cost: i64, created_at: chrono::DateTime<chrono::Utc>) -> crate::types::UsageRecord {
         crate::types::UsageRecord {
             id: format!("rec-{}-{}", key_id, uuid::Uuid::new_v4()),
-            org_id: "org-budget".to_string(),
+            org_id: org_id.to_string(),
             request_id: None,
             key_id: key_id.to_string(),
             model_name: "test-model".to_string(),
@@ -4742,7 +4742,7 @@ mod invitation_tests {
         // 2. After a $5 usage record, MTD should be $5 (500_000_000 subunits).
         let five_usd = crate::money::usd_to_units(5.0);
         storage
-            .record_usage(&org.id, &mk_usage(&key_id, five_usd, chrono::Utc::now()))
+            .record_usage(&org.id, &mk_usage(&org.id, &key_id, five_usd, chrono::Utc::now()))
             .await
             .expect("record_usage #1");
         let after_five = storage.get_month_to_date_spend(&key_id).await.expect("mtd after 5");
@@ -4751,7 +4751,7 @@ mod invitation_tests {
         // 3. After a second $3 record, MTD should be $8 (increment, not replace).
         let three_usd = crate::money::usd_to_units(3.0);
         storage
-            .record_usage(&org.id, &mk_usage(&key_id, three_usd, chrono::Utc::now()))
+            .record_usage(&org.id, &mk_usage(&org.id, &key_id, three_usd, chrono::Utc::now()))
             .await
             .expect("record_usage #2");
         let after_eight = storage.get_month_to_date_spend(&key_id).await.expect("mtd after 3");
@@ -4765,11 +4765,11 @@ mod invitation_tests {
         let org = make_test_org(&storage, "org-bucket", "Bucket Org").await;
         let key_id = make_test_key_for_budget(&storage, &org.id, "key-bucket").await;
 
-        // Insert a record dated 40 days ago (prior calendar month, almost always).
+        // Insert a record dated 40 days ago (prior calendar month, guaranteed — longest calendar month is 31 days).
         let old_cost = crate::money::usd_to_units(10.0);
         let old_ts = chrono::Utc::now() - chrono::Duration::days(40);
         storage
-            .record_usage(&org.id, &mk_usage(&key_id, old_cost, old_ts))
+            .record_usage(&org.id, &mk_usage(&org.id, &key_id, old_cost, old_ts))
             .await
             .expect("record_usage old");
 
@@ -4805,7 +4805,7 @@ mod invitation_tests {
             let key_id = key_id.clone();
             handles.push(tokio::spawn(async move {
                 storage
-                    .record_usage(&org_id, &mk_usage(&key_id, one_usd, chrono::Utc::now()))
+                    .record_usage(&org_id, &mk_usage(&org_id, &key_id, one_usd, chrono::Utc::now()))
                     .await
                     .expect("record_usage in task");
             }));
