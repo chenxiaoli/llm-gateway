@@ -932,6 +932,58 @@ async fn proxy_inner(
         }
     }
 
+    // === Step 1.6: Budget check ===
+    // Post-completion: uses MTD that EXCLUDES the current request's cost
+    // (record_usage runs after the response via the audit worker pipeline).
+    // Resolution order mirrors rate limits:
+    //   effective_budget = api_key.budget_monthly ?? org.default_budget_monthly_usd ?? None
+    let effective_budget = match api_key.budget_monthly {
+        Some(units) => Some(units),
+        None => match state
+            .storage
+            .get_org_setting(&api_key.org_id, "default_budget_monthly_usd")
+            .await
+        {
+            Ok(Some(raw)) => raw.parse::<i64>().ok(),
+            Ok(None) => None,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    org_id = %api_key.org_id,
+                    "org default budget lookup failed; failing open"
+                );
+                None
+            }
+        },
+    };
+
+    if let Some(budget) = effective_budget {
+        let accrued = match state
+            .storage
+            .get_month_to_date_spend(&api_key.id)
+            .await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    key_id = %api_key.id,
+                    "MTD counter read failed; failing open"
+                );
+                0
+            }
+        };
+        if accrued > budget {
+            let month_bucket = format!("{}", chrono::Utc::now().format("%Y-%m"));
+            return Err(ApiError::BudgetExceeded {
+                key_id: api_key.id.clone(),
+                month_bucket,
+                limit_units: budget,
+                accrued_units: accrued,
+            });
+        }
+    }
+
     // === Step 2: Balance check ===
     // Keys with created_by = None (e.g. admin-created test keys) skip balance checks.
     // A threshold of 0 means "no limit" — skip the check in that case.

@@ -370,3 +370,165 @@ pub async fn seed_org_with_default_and_key(
 
     plaintext
 }
+
+// ─── Phase 6: budget enforcement test helpers ───────────────────────────
+//
+// Sibling of `seed_org_with_default_and_key` (above) but for monthly budgets.
+// `default_budget_monthly_usd` is stored in `org_settings` kv as a raw string
+// of integer USD subunits (10^8 per USD), matching how the production
+// `set_org_defaults` facade writes it.
+//
+// `key_budget_monthly` is stored directly on the `api_keys.budget_monthly`
+// column (BIGINT). Both are `Option<i64>` — None means "fall back to the next
+// layer" / "unlimited".
+//
+// `_state` is taken for API parity with `seed_org_with_default_and_key`; the
+// helper writes via the pool directly.
+pub async fn seed_org_with_budget_and_key(
+    pool: &PgPool,
+    _state: &Arc<AppState>,
+    org_default_budget_monthly: Option<i64>,
+    key_budget_monthly: Option<i64>,
+) -> String {
+    let tag = uuid::Uuid::new_v4().to_string();
+    let slug = format!("o-{}", &tag.replace('-', "").to_lowercase()[..12]);
+    let org_id = format!("org-{tag}");
+    let user_id = format!("u-{tag}");
+
+    // User first (org FK references it via owner_id).
+    sqlx::query(
+        r#"INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, created_at, updated_at)
+           VALUES ($1, $2, 'x', NULL, NULL, true, NOW(), NOW())"#,
+    )
+    .bind(&user_id)
+    .bind(&user_id)
+    .execute(pool)
+    .await
+    .expect("seed user");
+
+    sqlx::query(
+        r#"INSERT INTO orgs (id, slug, name, owner_id, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, NOW(), NOW())"#,
+    )
+    .bind(&org_id)
+    .bind(&slug)
+    .bind(format!("Org {tag}"))
+    .bind(&user_id)
+    .execute(pool)
+    .await
+    .expect("seed org");
+
+    sqlx::query("UPDATE users SET current_org_id = $1 WHERE id = $2")
+        .bind(&org_id)
+        .bind(&user_id)
+        .execute(pool)
+        .await
+        .expect("set current_org_id");
+
+    sqlx::query(
+        r#"INSERT INTO members (user_id, org_id, role, created_by, created_at)
+           VALUES ($1, $2, 'owner', $1, NOW())"#,
+    )
+    .bind(&user_id)
+    .bind(&org_id)
+    .execute(pool)
+    .await
+    .expect("seed owner member");
+
+    // Org-wide default monthly budget, if requested. We write the raw kv row
+    // directly rather than going through the typed `set_org_defaults` facade
+    // — same payload shape, and avoids a storage-trait import in this helper.
+    if let Some(units) = org_default_budget_monthly {
+        sqlx::query(
+            r#"INSERT INTO org_settings (org_id, key, value)
+               VALUES ($1, 'default_budget_monthly_usd', $2)"#,
+        )
+        .bind(&org_id)
+        .bind(units.to_string())
+        .execute(pool)
+        .await
+        .expect("set org default_budget_monthly_usd");
+    }
+
+    // Mint a plaintext key, hash it the same way the proxy will, and insert
+    // the api_keys row with the per-key budget_monthly. `created_by` is set
+    // so the proxy's balance-check branch runs — but the user has no billing
+    // account, so the check is a no-op (account lookup returns None).
+    let plaintext = llm_gateway_auth::generate_api_key();
+    let key_hash = llm_gateway_auth::hash_api_key(&plaintext);
+    let key_id = format!("key-{tag}");
+    sqlx::query(
+        r#"INSERT INTO api_keys
+             (id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly,
+              enabled, created_by, model_fallback_id, created_at, updated_at)
+           VALUES ($1, $2, 'test-key', $3, NULL, NULL, $4, true, $5, NULL, NOW(), NOW())"#,
+    )
+    .bind(&key_id)
+    .bind(&org_id)
+    .bind(&key_hash)
+    .bind(key_budget_monthly)
+    .bind(&user_id)
+    .execute(pool)
+    .await
+    .expect("seed api_key");
+
+    plaintext
+}
+
+/// Seed a usage record via the same write path production traffic uses.
+///
+/// Goes through `storage.record_usage(...)` so the `budget_counters.accrued`
+/// row is incremented in the same transaction as `usage_records` — matching
+/// what a real request would do. The proxy's `get_month_to_date_spend` then
+/// reads back the counter; this gives the test the exact same counter state
+/// the proxy sees in production.
+///
+/// `cost_units` is in USD subunits (10^8 per USD), e.g. `300_000_000` for $3.
+/// `bearer` is the plaintext API key the test sent; we hash it to look up
+/// the api_keys row and grab its `(id, org_id)`.
+///
+/// Note: `AppState` does not expose the underlying `PgPool` (it stores an
+/// `Arc<dyn Storage>`), so the test helper takes the pool directly. This is
+/// safe because every test here constructs `AppState` from the same pool
+/// (see `make_state`), so reading the pool independently for fixture
+/// seeding is observationally identical.
+pub async fn seed_usage_record(
+    pool: &PgPool,
+    storage: &Arc<dyn llm_gateway_storage::Storage>,
+    bearer: &str,
+    cost_units: i64,
+) {
+    let key_hash = llm_gateway_auth::hash_api_key(bearer);
+    let row: Option<(String, String)> = sqlx::query_as(
+        "SELECT id, org_id FROM api_keys WHERE key_hash = $1",
+    )
+    .bind(&key_hash)
+    .fetch_optional(pool)
+    .await
+    .expect("look up api_key by hash");
+    let (key_id, org_id) = row.expect("api_key not found for bearer");
+
+    let usage = llm_gateway_storage::UsageRecord {
+        id: format!("seed-{}", uuid::Uuid::new_v4()),
+        org_id: org_id.clone(),
+        request_id: None,
+        key_id: key_id.clone(),
+        model_name: "seed".into(),
+        provider_id: "seed".into(),
+        channel_id: None,
+        protocol: llm_gateway_storage::Protocol::Openai,
+        input_tokens: Some(1),
+        output_tokens: Some(1),
+        cache_read_tokens: None,
+        cache_creation_tokens: None,
+        cost: cost_units,
+        pricing_policy: None,
+        weighted_tokens: 0,
+        user_id: None,
+        created_at: chrono::Utc::now(),
+    };
+    storage
+        .record_usage(&org_id, &usage)
+        .await
+        .expect("record_usage");
+}

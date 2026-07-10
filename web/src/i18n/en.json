@@ -981,7 +981,7 @@
       "rateLimitLabel": "Default rate limit (RPM)",
       "rateLimitHelp": "Applies to API keys without their own limit. Empty = unlimited.",
       "budgetLabel": "Default monthly budget (USD)",
-      "budgetHelp": "Stored for display. Not currently enforced. Empty = no budget.",
+      "budgetHelp": "Enforced per calendar month (UTC). Empty = no budget.",
       "save": "Save",
       "cancel": "Cancel",
       "saveSuccess": "Defaults saved.",

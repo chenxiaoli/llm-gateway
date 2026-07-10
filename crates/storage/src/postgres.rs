@@ -1384,6 +1384,9 @@ impl crate::Storage for PostgresStorage {
     // ---- Usage (tenant: org_id scoping) ----
 
     async fn record_usage(&self, org_id: &str, usage: &UsageRecord) -> Result<(), DbErr> {
+        let mut tx = self.pool.begin().await?;
+
+        // Existing 17-column insert (unchanged).
         sqlx::query(
             "INSERT INTO usage_records (id, org_id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
@@ -1405,9 +1408,39 @@ impl crate::Storage for PostgresStorage {
         .bind(usage.weighted_tokens)
         .bind(usage.user_id.clone())
         .bind(usage.created_at)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
+
+        // Atomic counter upsert. Month bucket derived from created_at (UTC),
+        // so backdated records bucket into the month they actually occurred.
+        let month_bucket = format!("{}", usage.created_at.format("%Y-%m"));
+        sqlx::query(
+            "INSERT INTO budget_counters (key_id, month_bucket, accrued, updated_at)
+             VALUES ($1, $2, $3, NOW())
+             ON CONFLICT (key_id, month_bucket)
+             DO UPDATE SET accrued = budget_counters.accrued + EXCLUDED.accrued,
+                           updated_at = NOW()",
+        )
+        .bind(&usage.key_id)
+        .bind(&month_bucket)
+        .bind(usage.cost)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
         Ok(())
+    }
+
+    async fn get_month_to_date_spend(&self, key_id: &str) -> Result<i64, DbErr> {
+        let month_bucket = format!("{}", chrono::Utc::now().format("%Y-%m"));
+        let row: Option<(i64,)> = sqlx::query_as(
+            "SELECT accrued FROM budget_counters WHERE key_id = $1 AND month_bucket = $2",
+        )
+        .bind(key_id)
+        .bind(&month_bucket)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(v,)| v).unwrap_or(0))
     }
 
     async fn query_usage(&self, org_id: &str, _filter: &UsageFilter) -> Result<Vec<UsageRecord>, DbErr> {
@@ -4646,6 +4679,143 @@ mod invitation_tests {
             default_rate_limit_rpm: None,
             default_budget_monthly_usd: None,
         });
+    }
+
+    // ---- Phase 6: budget_counters ----
+
+    /// Helper: create a real org + api_key row pair so usage_records FK and
+    /// budget_counters FK are satisfied. Returns the key_id.
+    async fn make_test_key_for_budget(storage: &PostgresStorage, org_id: &str, key_id: &str) -> String {
+        let now = chrono::Utc::now();
+        sqlx::query(
+            "INSERT INTO api_keys (id, org_id, name, key_hash, enabled, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, true, $5, $6) ON CONFLICT (id) DO NOTHING",
+        )
+        .bind(key_id)
+        .bind(org_id)
+        .bind(key_id)
+        .bind(format!("{key_id:0>64}")) // 64-char placeholder hash
+        .bind(now)
+        .bind(now)
+        .execute(&storage.pool)
+        .await
+        .expect("seed api_key");
+        key_id.to_string()
+    }
+
+    /// Helper: build a minimal UsageRecord with the given org_id, key_id, cost, and
+    /// created_at. Other token fields are zeroed; only cost matters for the
+    /// budget counter logic.
+    fn mk_usage(org_id: &str, key_id: &str, cost: i64, created_at: chrono::DateTime<chrono::Utc>) -> crate::types::UsageRecord {
+        crate::types::UsageRecord {
+            id: format!("rec-{}-{}", key_id, uuid::Uuid::new_v4()),
+            org_id: org_id.to_string(),
+            request_id: None,
+            key_id: key_id.to_string(),
+            model_name: "test-model".to_string(),
+            provider_id: "test-provider".to_string(),
+            channel_id: None,
+            protocol: crate::types::Protocol::Openai,
+            input_tokens: Some(0),
+            output_tokens: Some(0),
+            cache_read_tokens: None,
+            cache_creation_tokens: None,
+            cost,
+            pricing_policy: None,
+            weighted_tokens: 0,
+            user_id: None,
+            created_at,
+        }
+    }
+
+    /// Unknown key returns 0; record_usage accumulates spend into the counter.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn budget_counters_round_trip(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-budget", "Budget Org").await;
+        let key_id = make_test_key_for_budget(&storage, &org.id, "key-round-trip").await;
+
+        // 1. Unknown key → 0.
+        let initial = storage.get_month_to_date_spend(&key_id).await.expect("initial mtd");
+        assert_eq!(initial, 0, "unknown key should report 0 spend");
+
+        // 2. After a $5 usage record, MTD should be $5 (500_000_000 subunits).
+        let five_usd = crate::money::usd_to_units(5.0);
+        storage
+            .record_usage(&org.id, &mk_usage(&org.id, &key_id, five_usd, chrono::Utc::now()))
+            .await
+            .expect("record_usage #1");
+        let after_five = storage.get_month_to_date_spend(&key_id).await.expect("mtd after 5");
+        assert_eq!(after_five, five_usd, "MTD should reflect single $5 record");
+
+        // 3. After a second $3 record, MTD should be $8 (increment, not replace).
+        let three_usd = crate::money::usd_to_units(3.0);
+        storage
+            .record_usage(&org.id, &mk_usage(&org.id, &key_id, three_usd, chrono::Utc::now()))
+            .await
+            .expect("record_usage #2");
+        let after_eight = storage.get_month_to_date_spend(&key_id).await.expect("mtd after 3");
+        assert_eq!(after_eight, five_usd + three_usd, "MTD should accumulate across records");
+    }
+
+    /// A record dated in a prior month must NOT count toward this month's MTD.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn budget_counters_month_bucketing(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-bucket", "Bucket Org").await;
+        let key_id = make_test_key_for_budget(&storage, &org.id, "key-bucket").await;
+
+        // Insert a record dated 40 days ago (prior calendar month, guaranteed — longest calendar month is 31 days).
+        let old_cost = crate::money::usd_to_units(10.0);
+        let old_ts = chrono::Utc::now() - chrono::Duration::days(40);
+        storage
+            .record_usage(&org.id, &mk_usage(&org.id, &key_id, old_cost, old_ts))
+            .await
+            .expect("record_usage old");
+
+        // Current-month MTD should be 0.
+        let mtd = storage.get_month_to_date_spend(&key_id).await.expect("current mtd");
+        assert_eq!(mtd, 0, "prior-month record must not count toward current MTD");
+
+        // Sanity: confirm the old counter row exists with a different bucket.
+        let any_row: Option<(i64,)> = sqlx::query_as(
+            "SELECT accrued FROM budget_counters WHERE key_id = $1 AND month_bucket <> $2",
+        )
+        .bind(&key_id)
+        .bind(format!("{}", chrono::Utc::now().format("%Y-%m")))
+        .fetch_optional(&storage.pool)
+        .await
+        .expect("query old counter");
+        assert_eq!(any_row.map(|(v,)| v), Some(old_cost), "old-month counter row should exist with old cost");
+    }
+
+    /// 10 parallel record_usage calls must produce MTD=$10 with no lost updates.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn budget_counters_concurrent_inserts(pool: sqlx::PgPool) {
+        let storage = std::sync::Arc::new(crate::postgres::PostgresStorage::from_pool(pool));
+        let org = make_test_org(&storage, "org-concurrent", "Concurrent Org").await;
+        let key_id = make_test_key_for_budget(&storage, &org.id, "key-concurrent").await;
+
+        let one_usd = crate::money::usd_to_units(1.0);
+        let n = 10;
+        let mut handles = Vec::with_capacity(n);
+        for _ in 0..n {
+            let storage = storage.clone();
+            let org_id = org.id.clone();
+            let key_id = key_id.clone();
+            handles.push(tokio::spawn(async move {
+                storage
+                    .record_usage(&org_id, &mk_usage(&org_id, &key_id, one_usd, chrono::Utc::now()))
+                    .await
+                    .expect("record_usage in task");
+            }));
+        }
+        for h in handles {
+            h.await.expect("task panicked");
+        }
+
+        let mtd = storage.get_month_to_date_spend(&key_id).await.expect("mtd after concurrent");
+        assert_eq!(mtd, one_usd * n as i64, "all 10 concurrent writes must be reflected (no lost updates)");
     }
 }
 

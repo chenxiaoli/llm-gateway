@@ -7,6 +7,12 @@ pub enum ApiError {
     Unauthorized,
     Forbidden,
     RateLimited { retry_after_secs: i64 },
+    BudgetExceeded {
+        key_id: String,
+        month_bucket: String,
+        limit_units: i64,    // 10^8 subunits per USD
+        accrued_units: i64,  // 10^8 subunits per USD
+    },
     PaymentRequired,
     NotFound(String),
     BadRequest(String),
@@ -65,6 +71,32 @@ impl IntoResponse for ApiError {
                     .expect("retry_after_secs fits in a HeaderValue"),
             );
             return resp;
+        }
+
+        // BudgetExceeded carries a structured payload (key, bucket, USD figures),
+        // so it doesn't fit the flat (status, message, code) path below.
+        if let ApiError::BudgetExceeded {
+            key_id,
+            month_bucket,
+            limit_units,
+            accrued_units,
+        } = self
+        {
+            let limit_usd = llm_gateway_storage::units_to_usd(limit_units);
+            let accrued_usd = llm_gateway_storage::units_to_usd(accrued_units);
+            let body = json!({
+                "error": {
+                    "type": "budget_exceeded",
+                    "message": format!(
+                        "Monthly budget exceeded. Spend: ${accrued_usd:.2} / Limit: ${limit_usd:.2}. Month: {month_bucket}."
+                    ),
+                    "key_id": key_id,
+                    "month_bucket": month_bucket,
+                    "limit": limit_usd,
+                    "accrued": accrued_usd,
+                }
+            });
+            return (StatusCode::TOO_MANY_REQUESTS, axum::Json(body)).into_response();
         }
 
         // (status, message, code) — code is a short stable string the frontend
@@ -136,6 +168,7 @@ impl IntoResponse for ApiError {
             ),
             // Handled by the early-return above; unreachable here.
             ApiError::RateLimited { .. } => unreachable!("RateLimited handled above"),
+            ApiError::BudgetExceeded { .. } => unreachable!("BudgetExceeded handled above"),
         };
         let body = if let Some(c) = code {
             json!({ "error": { "message": message, "type": status.as_u16(), "code": c } })
