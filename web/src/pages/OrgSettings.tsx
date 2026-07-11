@@ -471,7 +471,7 @@ function DefaultsSection({ canEdit }: { canEdit: boolean }) {
 function BudgetStatusSection() {
   const { t } = useTranslation();
   const reducedMotion = useReducedMotion();
-  const { data: defaults } = useGetOrgDefaults();
+  const { data: defaults, isLoading: defaultsLoading } = useGetOrgDefaults();
   const { data: status, isLoading, isError } = useGetBudgetStatus();
 
   // Units conversion: budget from defaults (USD → units for parity comparison),
@@ -502,7 +502,7 @@ function BudgetStatusSection() {
         )}
       </div>
 
-      {isLoading ? (
+      {isLoading || defaultsLoading ? (
         <div className="text-base-content/60">{t('orgSettings.defaults.loading')}</div>
       ) : isError ? (
         <div className="text-error">{t('orgSettings.defaults.loadError')}</div>

@@ -101,6 +101,9 @@ describe('OrgSettings — Defaults section', () => {
       http.get('*/api/v1/org-1/defaults', () =>
         HttpResponse.json({ error: { message: 'down' } }, { status: 500 }),
       ),
+      http.get('*/api/v1/org-1/budget-status', () =>
+        HttpResponse.json({ accrued_units: 0, month_bucket: '2026-07' }),
+      ),
     );
 
     renderAt('/org-1/settings');
