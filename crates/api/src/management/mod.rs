@@ -1,5 +1,6 @@
 pub mod accounts;
 pub mod auth;
+pub mod budget;
 pub mod channels;
 pub mod groups;
 pub mod keys;
@@ -178,6 +179,11 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
         .route(
             "/defaults",
             get(auth::get_org_defaults).put(auth::update_org_defaults),
+        )
+        // Org-wide MTD spend (Phase 7). GET = member+. Read-only; no PUT.
+        .route(
+            "/budget-status",
+            get(budget::get_budget_status),
         )
         // Keys (authenticated)
         .route("/keys", post(keys::create_key).get(keys::list_keys))
