@@ -230,6 +230,7 @@
       "status": "状态",
       "rateLimit": "速率限制 (RPM)",
       "monthlyBudget": "月度预算",
+      "mtdThisMonth": "本月消费",
       "fallback": "降级策略",
       "created": "创建时间"
     },
@@ -988,6 +989,12 @@
       "saveError": "保存默认值失败。",
       "loading": "加载中…",
       "loadError": "加载默认值失败。"
+    },
+    "budgetStatus": {
+      "title": "预算状态",
+      "usedOf": "已使用 {{accrued}} / {{limit}}",
+      "unlimited": "无限制 — 无月度上限",
+      "overBudget": "超出预算 {{amount}}"
     },
     "danger": {
       "sectionTitle": "危险操作",

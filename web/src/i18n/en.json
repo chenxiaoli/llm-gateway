@@ -230,6 +230,7 @@
       "status": "Status",
       "rateLimit": "Rate Limit (RPM)",
       "monthlyBudget": "Monthly Budget",
+      "mtdThisMonth": "MTD this month",
       "fallback": "Fallback",
       "created": "Created"
     },
@@ -988,6 +989,12 @@
       "saveError": "Failed to save defaults.",
       "loading": "Loading…",
       "loadError": "Failed to load defaults."
+    },
+    "budgetStatus": {
+      "title": "Budget status",
+      "usedOf": "{{accrued}} used of {{limit}}",
+      "unlimited": "Unlimited — no monthly cap",
+      "overBudget": "Over budget by {{amount}}"
     },
     "danger": {
       "sectionTitle": "DANGER ZONE",
