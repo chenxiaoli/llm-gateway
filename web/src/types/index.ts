@@ -9,6 +9,9 @@ export interface ApiKey {
   model_fallback_id: string | null;
   created_at: string;
   updated_at: string;
+  /** Phase 7: current UTC-month MTD spend in 10^8 subunits per USD.
+   *  `0` when the key has no usage this month. */
+  mtd_units: number;
 }
 
 export interface CreateKeyRequest {
