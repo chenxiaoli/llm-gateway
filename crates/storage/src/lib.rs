@@ -14,6 +14,7 @@ pub use types::{
     CreateTransaction, UpdateAccountThreshold,
     DeductBalance, DeductBalanceResult,
     AddBalance, AddBalanceResult,
+    ApiKeyWithMtd,
 };
 pub use seed::{SeedData, SeedProvider, SeedModel, get_available_providers, get_available_models, get_seed_provider_models};
 
@@ -28,6 +29,15 @@ pub trait Storage: Send + Sync {
     async fn list_keys(&self, org_id: &str) -> Result<Vec<ApiKey>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_keys_paginated(&self, org_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_keys_paginated_for_user(&self, org_id: &str, created_by: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>>;
+    /// Like `list_keys_paginated` but LEFT JOINs `budget_counters` so each
+    /// returned item carries its current-month MTD spend (`mtd_units`).
+    /// Used by Phase 7 keys-listing endpoint. Single SQL round-trip; no N+1.
+    async fn list_keys_paginated_with_mtd(
+        &self,
+        org_id: &str,
+        page: i64,
+        page_size: i64,
+    ) -> Result<PaginatedResponse<crate::types::ApiKeyWithMtd>, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_key(&self, org_id: &str, key: &ApiKey) -> Result<ApiKey, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_key(&self, org_id: &str, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
@@ -97,6 +107,15 @@ pub trait Storage: Send + Sync {
     /// Cheap O(1) lookup via PK; suitable for per-request budget enforcement.
     /// Do NOT call `SUM(cost) FROM usage_records WHERE key_id = $1` per request.
     async fn get_month_to_date_spend(&self, key_id: &str) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
+    /// Returns the org-wide month-to-date spend in 10^8 subunits per USD,
+    /// summing `budget_counters.accrued` across all keys in the org for the
+    /// current UTC calendar month. Returns 0 when the org has no spend this
+    /// month (including when the org has no keys at all). Read-time SUM; no
+    /// materialized `org_budget_counters` table — see Phase 7 design doc.
+    async fn get_org_month_to_date_spend(
+        &self,
+        org_id: &str,
+    ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage(&self, org_id: &str, filter: &UsageFilter) -> Result<Vec<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage_paginated(&self, org_id: &str, filter: &UsageFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage_summary(&self, org_id: &str, filter: &UsageFilter) -> Result<Vec<UsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>>;

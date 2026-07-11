@@ -8,7 +8,7 @@ use llm_gateway_auth::{generate_api_key, hash_api_key};
 use llm_gateway_org::{can_manage_channels, OrgContext};
 use llm_gateway_storage::{
     opt_units_to_usd, opt_usd_to_units,
-    ApiKey, PaginatedResponse, PaginationParams,
+    ApiKey, ApiKeyWithMtd, PaginatedResponse, PaginationParams,
 };
 
 use crate::error::ApiError;
@@ -58,6 +58,10 @@ pub struct KeyResponse {
     pub model_fallback_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Phase 7: current UTC-month MTD spend in 10^8 subunits per USD. `0`
+    /// when the key has no usage this month. Additive field — existing API
+    /// consumers ignore it.
+    pub mtd_units: i64,
 }
 
 impl From<ApiKey> for KeyResponse {
@@ -73,6 +77,26 @@ impl From<ApiKey> for KeyResponse {
             model_fallback_id: k.model_fallback_id,
             created_at: k.created_at,
             updated_at: k.updated_at,
+            mtd_units: 0,
+        }
+    }
+}
+
+impl From<ApiKeyWithMtd> for KeyResponse {
+    fn from(x: ApiKeyWithMtd) -> Self {
+        let k = x.key;
+        KeyResponse {
+            id: k.id,
+            name: k.name,
+            key_prefix: k.key_prefix,
+            rate_limit: k.rate_limit,
+            budget_monthly: opt_units_to_usd(k.budget_monthly),
+            enabled: k.enabled,
+            created_by: k.created_by,
+            model_fallback_id: k.model_fallback_id,
+            created_at: k.created_at,
+            updated_at: k.updated_at,
+            mtd_units: x.mtd_units,
         }
     }
 }
@@ -127,19 +151,25 @@ pub async fn list_keys(
     let (page, page_size) = pagination.normalized();
     // Admin-or-above in this org (or platform_admin) sees all keys in the org;
     // a regular member sees only keys they created.
-    let result = if can_manage_channels(&ctx) {
-        state
+    if can_manage_channels(&ctx) {
+        let result = state
             .storage
-            .list_keys_paginated(&ctx.org_id, page, page_size)
+            .list_keys_paginated_with_mtd(&ctx.org_id, page, page_size)
             .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?
-    } else {
-        state
-            .storage
-            .list_keys_paginated_for_user(&ctx.org_id, &ctx.user_id, page, page_size)
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?
-    };
+            .map_err(|e| ApiError::Internal(e.to_string()))?;
+        return Ok(Json(PaginatedResponse {
+            items: result.items.into_iter().map(KeyResponse::from).collect(),
+            total: result.total,
+            page: result.page,
+            page_size: result.page_size,
+        }));
+    }
+
+    let result = state
+        .storage
+        .list_keys_paginated_for_user(&ctx.org_id, &ctx.user_id, page, page_size)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     Ok(Json(PaginatedResponse {
         items: result.items.into_iter().map(KeyResponse::from).collect(),

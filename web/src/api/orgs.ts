@@ -35,3 +35,19 @@ export async function updateOrgDefaults(input: OrgDefaults): Promise<OrgDefaults
   const { data } = await apiClient.put<OrgDefaults>(`${orgPrefix()}/defaults`, input);
   return data;
 }
+
+/**
+ * Response from `GET /api/v1/{org_slug}/budget-status` (Phase 7).
+ * `accrued_units` is in 10^8 subunits per USD — convert to USD at the
+ * rendering boundary via the `unitsToUsd` helper. `month_bucket` is the
+ * UTC calendar month (`YYYY-MM`) the accrual is counted against.
+ */
+export type BudgetStatus = {
+  accrued_units: number;
+  month_bucket: string;
+};
+
+export async function getBudgetStatus(): Promise<BudgetStatus> {
+  const { data } = await apiClient.get<BudgetStatus>(`${orgPrefix()}/budget-status`);
+  return data;
+}

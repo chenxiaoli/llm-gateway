@@ -268,6 +268,16 @@ pub struct ApiKey {
     pub updated_at: DateTime<Utc>,
 }
 
+/// ApiKey + its current UTC-month MTD spend. The MTD field is `0` when the
+/// key has no budget_counters row this month (mirrors SQL `COALESCE(..., 0)`).
+/// Used by the Phase 7 keys-listing endpoint so the UI can render per-key
+/// spend in one round-trip without an N+1 of `get_month_to_date_spend`.
+#[derive(Debug, Clone, Serialize)]
+pub struct ApiKeyWithMtd {
+    pub key: ApiKey,
+    pub mtd_units: i64,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateApiKey {
     pub org_id: String,

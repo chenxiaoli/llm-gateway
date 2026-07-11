@@ -76,6 +76,45 @@ impl From<PgKeyRow> for ApiKey {
     }
 }
 
+#[derive(sqlx::FromRow)]
+struct PgKeyWithMtdRow {
+    id: String,
+    org_id: String,
+    name: String,
+    key_hash: String,
+    key_prefix: Option<String>,
+    rate_limit: Option<i32>,
+    budget_monthly: Option<i64>,
+    enabled: bool,
+    created_by: Option<String>,
+    model_fallback_id: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    mtd_units: i64,
+}
+
+impl From<PgKeyWithMtdRow> for crate::types::ApiKeyWithMtd {
+    fn from(r: PgKeyWithMtdRow) -> Self {
+        crate::types::ApiKeyWithMtd {
+            key: ApiKey {
+                id: r.id,
+                org_id: r.org_id,
+                name: r.name,
+                key_hash: r.key_hash,
+                key_prefix: r.key_prefix,
+                rate_limit: r.rate_limit.map(|i| i as i64),
+                budget_monthly: r.budget_monthly,
+                enabled: r.enabled,
+                created_by: r.created_by,
+                model_fallback_id: r.model_fallback_id,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+            },
+            mtd_units: r.mtd_units,
+        }
+    }
+}
+
 #[derive(FromRow)]
 struct PgProviderRow {
     id: String,
@@ -829,6 +868,44 @@ impl crate::Storage for PostgresStorage {
         })
     }
 
+    async fn list_keys_paginated_with_mtd(
+        &self,
+        org_id: &str,
+        page: i64,
+        page_size: i64,
+    ) -> Result<PaginatedResponse<crate::types::ApiKeyWithMtd>, DbErr> {
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM api_keys WHERE org_id = $1")
+            .bind(org_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let offset = (page - 1) * page_size;
+        let month_bucket = format!("{}", chrono::Utc::now().format("%Y-%m"));
+        let rows: Vec<PgKeyWithMtdRow> = sqlx::query_as(
+            "SELECT ak.id, ak.org_id, ak.name, ak.key_hash, ak.key_prefix,
+                    ak.rate_limit, ak.budget_monthly, ak.enabled, ak.created_by,
+                    ak.model_fallback_id, ak.created_at, ak.updated_at,
+                    COALESCE(bc.accrued, 0) AS mtd_units
+             FROM api_keys ak
+             LEFT JOIN budget_counters bc
+               ON bc.key_id = ak.id AND bc.month_bucket = $2
+             WHERE ak.org_id = $1
+             ORDER BY ak.created_at DESC
+             LIMIT $3 OFFSET $4",
+        )
+        .bind(org_id)
+        .bind(&month_bucket)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(PaginatedResponse {
+            items: rows.into_iter().map(crate::types::ApiKeyWithMtd::from).collect(),
+            total: total.0,
+            page,
+            page_size,
+        })
+    }
+
     async fn update_key(&self, org_id: &str, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
             "UPDATE api_keys SET name = $1, key_hash = $2, rate_limit = $3, budget_monthly = $4,
@@ -1437,6 +1514,27 @@ impl crate::Storage for PostgresStorage {
             "SELECT accrued FROM budget_counters WHERE key_id = $1 AND month_bucket = $2",
         )
         .bind(key_id)
+        .bind(&month_bucket)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(v,)| v).unwrap_or(0))
+    }
+
+    async fn get_org_month_to_date_spend(&self, org_id: &str) -> Result<i64, DbErr> {
+        let month_bucket = format!("{}", chrono::Utc::now().format("%Y-%m"));
+        // INNER JOIN: every budget_counters row has a matching api_keys row
+        // (FK), so a LEFT JOIN would just add NULLs we don't want. COALESCE
+        // covers the "org has zero matching counter rows" case (fetch_optional
+        // then unwrap_or(0) below).
+        // SUM over NUMERIC returns NUMERIC, which sqlx won't decode to i64
+        // directly — cast to BIGINT (the value space is bounded by accrued i64).
+        let row: Option<(i64,)> = sqlx::query_as(
+            "SELECT CAST(COALESCE(SUM(bc.accrued), 0) AS BIGINT)
+             FROM budget_counters bc
+             JOIN api_keys ak ON ak.id = bc.key_id
+             WHERE ak.org_id = $1 AND bc.month_bucket = $2",
+        )
+        .bind(org_id)
         .bind(&month_bucket)
         .fetch_optional(&self.pool)
         .await?;
@@ -4816,6 +4914,168 @@ mod invitation_tests {
 
         let mtd = storage.get_month_to_date_spend(&key_id).await.expect("mtd after concurrent");
         assert_eq!(mtd, one_usd * n as i64, "all 10 concurrent writes must be reflected (no lost updates)");
+    }
+
+    // ---- Phase 7: org-wide MTD aggregation ----
+
+    /// Unknown org → 0 (no keys, no counters).
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn get_org_mtd_returns_zero_for_unknown_org(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        // Brand-new org has no keys → SUM must be 0, not null, not an error.
+        let org = make_test_org(&storage, "org-mtd-empty", "Empty Org").await;
+        let mtd = storage
+            .get_org_month_to_date_spend(&org.id)
+            .await
+            .expect("get_org_month_to_date_spend on empty org");
+        assert_eq!(mtd, 0, "empty org must report 0 MTD");
+    }
+
+    /// 3 keys, each with $5 spend this month → org total = $15.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn get_org_mtd_sums_across_keys(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-mtd-sum", "Sum Org").await;
+
+        let five_usd = crate::money::usd_to_units(5.0);
+        for n in 0..3 {
+            let key_id = make_test_key_for_budget(&storage, &org.id, &format!("key-mtd-{n}")).await;
+            storage
+                .record_usage(
+                    &org.id,
+                    &mk_usage(&org.id, &key_id, five_usd, chrono::Utc::now()),
+                )
+                .await
+                .expect("record_usage");
+        }
+
+        let mtd = storage
+            .get_org_month_to_date_spend(&org.id)
+            .await
+            .expect("get_org_month_to_date_spend");
+        assert_eq!(mtd, five_usd * 3, "MTD must sum across all keys in the org");
+    }
+
+    /// A record dated 40 days ago lands in a prior month bucket and must NOT count.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn get_org_mtd_excludes_other_months(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-mtd-prior", "Prior Org").await;
+        let key_id = make_test_key_for_budget(&storage, &org.id, "key-prior").await;
+
+        let old_ts = chrono::Utc::now() - chrono::Duration::days(40);
+        let old_cost = crate::money::usd_to_units(10.0);
+        storage
+            .record_usage(&org.id, &mk_usage(&org.id, &key_id, old_cost, old_ts))
+            .await
+            .expect("record_usage old");
+
+        let mtd = storage
+            .get_org_month_to_date_spend(&org.id)
+            .await
+            .expect("get_org_month_to_date_spend");
+        assert_eq!(mtd, 0, "prior-month spend must not count toward current MTD");
+    }
+
+    /// Key in org A's spend must NOT bleed into org B's MTD.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn get_org_mtd_no_cross_org_leak(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org_a = make_test_org(&storage, "org-mtd-a", "Org A").await;
+        let org_b = make_test_org(&storage, "org-mtd-b", "Org B").await;
+
+        let key_a = make_test_key_for_budget(&storage, &org_a.id, "key-a").await;
+        let key_b = make_test_key_for_budget(&storage, &org_b.id, "key-b").await;
+
+        let cost = crate::money::usd_to_units(7.0);
+        storage
+            .record_usage(&org_a.id, &mk_usage(&org_a.id, &key_a, cost, chrono::Utc::now()))
+            .await
+            .expect("record_usage a");
+        storage
+            .record_usage(&org_b.id, &mk_usage(&org_b.id, &key_b, cost, chrono::Utc::now()))
+            .await
+            .expect("record_usage b");
+
+        let mtd_a = storage
+            .get_org_month_to_date_spend(&org_a.id)
+            .await
+            .expect("get_org_month_to_date_spend a");
+        assert_eq!(mtd_a, cost, "org A's MTD must exclude org B's spend");
+    }
+
+    /// Keys without spend this month report `mtd_units: 0`.
+    /// Keys with spend report the correct accrued sum.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn list_keys_with_mtd_includes_per_key_spend(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-keys-mtd", "Keys Mtd Org").await;
+
+        // key-with-cost: $4 spend this month
+        let key_with_cost =
+            make_test_key_for_budget(&storage, &org.id, "key-with-cost").await;
+        let four_usd = crate::money::usd_to_units(4.0);
+        storage
+            .record_usage(
+                &org.id,
+                &mk_usage(&org.id, &key_with_cost, four_usd, chrono::Utc::now()),
+            )
+            .await
+            .expect("record_usage");
+
+        // key-no-cost: no usage records
+        let key_no_cost =
+            make_test_key_for_budget(&storage, &org.id, "key-no-cost").await;
+
+        let result = storage
+            .list_keys_paginated_with_mtd(&org.id, 1, 50)
+            .await
+            .expect("list_keys_paginated_with_mtd");
+
+        // 2 keys total
+        assert_eq!(result.total, 2, "should see both keys");
+
+        let by_id: std::collections::HashMap<String, i64> = result
+            .items
+            .iter()
+            .map(|x| (x.key.id.clone(), x.mtd_units))
+            .collect();
+        assert_eq!(
+            by_id.get(&key_with_cost),
+            Some(&four_usd),
+            "key with $4 usage must report mtd_units = $4 in subunits"
+        );
+        assert_eq!(
+            by_id.get(&key_no_cost),
+            Some(&0),
+            "key with no usage must report mtd_units = 0"
+        );
+    }
+
+    /// A prior-month spend must NOT show up in the current month's MTD column.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn list_keys_with_mtd_excludes_other_months(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-keys-prior", "Keys Prior Org").await;
+        let key_id = make_test_key_for_budget(&storage, &org.id, "key-prior-mtd").await;
+
+        let old_ts = chrono::Utc::now() - chrono::Duration::days(40);
+        let old_cost = crate::money::usd_to_units(20.0);
+        storage
+            .record_usage(&org.id, &mk_usage(&org.id, &key_id, old_cost, old_ts))
+            .await
+            .expect("record_usage old");
+
+        let result = storage
+            .list_keys_paginated_with_mtd(&org.id, 1, 50)
+            .await
+            .expect("list_keys_paginated_with_mtd");
+        let row = result
+            .items
+            .iter()
+            .find(|x| x.key.id == key_id)
+            .expect("key must be in result");
+        assert_eq!(row.mtd_units, 0, "prior-month spend must not count toward current MTD");
     }
 }
 
