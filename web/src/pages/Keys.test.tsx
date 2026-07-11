@@ -17,6 +17,7 @@ const mockKeys: ApiKey[] = [
     enabled: true,
     created_at: '2026-01-15T00:00:00Z',
     updated_at: '2026-01-15T00:00:00Z',
+    mtd_units: 0,
   },
   {
     id: 'key-2',
@@ -27,6 +28,7 @@ const mockKeys: ApiKey[] = [
     enabled: false,
     created_at: '2026-02-20T00:00:00Z',
     updated_at: '2026-02-20T00:00:00Z',
+    mtd_units: 0,
   },
 ];
 
