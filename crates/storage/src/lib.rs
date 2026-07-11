@@ -97,6 +97,15 @@ pub trait Storage: Send + Sync {
     /// Cheap O(1) lookup via PK; suitable for per-request budget enforcement.
     /// Do NOT call `SUM(cost) FROM usage_records WHERE key_id = $1` per request.
     async fn get_month_to_date_spend(&self, key_id: &str) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
+    /// Returns the org-wide month-to-date spend in 10^8 subunits per USD,
+    /// summing `budget_counters.accrued` across all keys in the org for the
+    /// current UTC calendar month. Returns 0 when the org has no spend this
+    /// month (including when the org has no keys at all). Read-time SUM; no
+    /// materialized `org_budget_counters` table — see Phase 7 design doc.
+    async fn get_org_month_to_date_spend(
+        &self,
+        org_id: &str,
+    ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage(&self, org_id: &str, filter: &UsageFilter) -> Result<Vec<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage_paginated(&self, org_id: &str, filter: &UsageFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage_summary(&self, org_id: &str, filter: &UsageFilter) -> Result<Vec<UsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>>;
