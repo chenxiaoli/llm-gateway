@@ -12,6 +12,9 @@ import { getErrorMessage } from '../api/client';
 import { Button } from '../components/ui/Button';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useGetOrgDefaults, useUpdateOrgDefaults } from '../hooks/useOrgDefaults';
+import { useGetBudgetStatus } from '../hooks/useBudgetStatus';
+import { ProgressBar } from '../components/ui/ProgressBar';
+import { budgetBarColor, budgetUsedPct } from '../lib/budgetColor';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -247,6 +250,9 @@ export default function OrgSettings() {
         {/* Defaults section — admin can edit; member is read-only. */}
         <DefaultsSection canEdit={canEdit} />
 
+        {/* Phase 7: Budget status — read-only MTD card. Admin+ and member both see it. */}
+        <BudgetStatusSection />
+
         {/* Danger zone — owner-only. Hidden entirely for non-owners. */}
         {canDelete && (
           <motion.section
@@ -456,6 +462,70 @@ function DefaultsSection({ canEdit }: { canEdit: boolean }) {
           >
             {t('orgSettings.defaults.save')}
           </Button>
+        </div>
+      )}
+    </motion.section>
+  );
+}
+
+function BudgetStatusSection() {
+  const { t } = useTranslation();
+  const reducedMotion = useReducedMotion();
+  const { data: defaults } = useGetOrgDefaults();
+  const { data: status, isLoading, isError } = useGetBudgetStatus();
+
+  // Units conversion: budget from defaults (USD → units for parity comparison),
+  // accrued from status (already units). Both share the 10^8 convention.
+  const UNITS_PER_USD = 100_000_000;
+  const budgetUsd = defaults?.default_budget_monthly_usd ?? null;
+  const budgetUnits = budgetUsd !== null ? Math.round(budgetUsd * UNITS_PER_USD) : null;
+  const accruedUnits = status?.accrued_units ?? 0;
+  const usedPct = budgetUsedPct(accruedUnits, budgetUnits);
+
+  // USD formatting — 2 decimals per spec.
+  const accruedUsd = accruedUnits / UNITS_PER_USD;
+  const accruedStr = `$${accruedUsd.toFixed(2)}`;
+  const limitStr = budgetUsd !== null ? `$${budgetUsd.toFixed(2)}` : '';
+  const overByUsd = usedPct !== null && usedPct > 100 ? accruedUsd - budgetUsd! : 0;
+
+  return (
+    <motion.section
+      initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: EASE }}
+      className="rounded-xl border border-base-300 bg-base-100 p-6 mt-6"
+    >
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="text-xl font-semibold">{t('orgSettings.budgetStatus.title')}</h2>
+        {status?.month_bucket && (
+          <span className="text-xs text-base-content/50 font-mono">{status.month_bucket}</span>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="text-base-content/60">{t('orgSettings.defaults.loading')}</div>
+      ) : isError ? (
+        <div className="text-error">{t('orgSettings.defaults.loadError')}</div>
+      ) : budgetUsd === null ? (
+        <p className="text-sm text-base-content/70">{t('orgSettings.budgetStatus.unlimited')}</p>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-sm text-base-content/80">
+            {t('orgSettings.budgetStatus.usedOf', { accrued: accruedStr, limit: limitStr })}
+          </p>
+          <ProgressBar pct={usedPct ?? 0} colorClass={budgetBarColor(usedPct)} />
+          <div className="flex items-center justify-between text-xs text-base-content/50">
+            <span>
+              {usedPct !== null ? `${usedPct.toFixed(1)}%` : '—'}
+            </span>
+            {overByUsd > 0 && (
+              <span className="text-red-500">
+                {t('orgSettings.budgetStatus.overBudget', {
+                  amount: `$${overByUsd.toFixed(2)}`,
+                })}
+              </span>
+            )}
+          </div>
         </div>
       )}
     </motion.section>
