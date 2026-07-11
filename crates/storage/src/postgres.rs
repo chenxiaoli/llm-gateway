@@ -1445,8 +1445,10 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_org_month_to_date_spend(&self, org_id: &str) -> Result<i64, DbErr> {
         let month_bucket = format!("{}", chrono::Utc::now().format("%Y-%m"));
-        // LEFT JOIN would also work, but we want 0 (not NULL) when no rows —
-        // COALESCE on the inner SUM does that without an extra outer wrapper.
+        // INNER JOIN: every budget_counters row has a matching api_keys row
+        // (FK), so a LEFT JOIN would just add NULLs we don't want. COALESCE
+        // covers the "org has zero matching counter rows" case (fetch_optional
+        // then unwrap_or(0) below).
         // SUM over NUMERIC returns NUMERIC, which sqlx won't decode to i64
         // directly — cast to BIGINT (the value space is bounded by accrued i64).
         let row: Option<(i64,)> = sqlx::query_as(
