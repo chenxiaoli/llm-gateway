@@ -74,6 +74,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Counting semantic is **post-completion**: the check uses MTD that excludes the current request's cost. The request that pushes MTD over budget is allowed; the next request is rejected. Industry-standard leak (matches Stripe, OpenAI).
   - OrgSettings `budgetHelp` text updated — the previous "Not currently enforced" disclaimer is removed.
   - **Upgrade note:** any existing `api_keys` rows with non-null `budget_monthly`, or orgs with `default_budget_monthly_usd` set, will start receiving 429s on requests once their month-to-date spend exceeds the budget. Audit existing values before deploying.
+- **Phase 7 (budget observability):**
+  - **New UI:** OrgSettings gets a "Budget status" subsection showing org MTD total (sum across all keys) against the org-default budget, with a color-coded progress bar (green <60%, yellow 60-80%, orange 80-100%, red >100%). The Keys table gets an "MTD this month" column showing per-key spend with the same color coding.
+  - **New endpoint:** `GET /api/v1/{slug}/budget-status` returns `{ accrued_units, month_bucket }` (i64 subunits, UTC calendar month). Member-gated (parity with `GET /{slug}/defaults`).
+  - **Extended endpoint:** `GET /api/v1/{slug}/keys` now includes `mtd_units: i64` per key. Additive, non-breaking — existing API consumers ignore the new field.
+  - **New storage methods:** `Storage::get_org_month_to_date_spend(org_id)` and `Storage::list_keys_paginated_with_mtd(org_id, page, page_size)`. Both read the existing `budget_counters` table (from Phase 6) — no schema changes.
+  - **No behavior change:** enforcement remains as shipped in Phase 6 (post-completion, fail-open on storage errors). This phase is purely read-side observability.
 
 ### Changed
 - `POST /api/v1/auth/register` now requires `email`; without an invitation
