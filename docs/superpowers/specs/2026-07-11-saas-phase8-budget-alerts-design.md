@@ -362,22 +362,21 @@ async fn send_alert(
         Some(base) => format!("{}{}", base.trim_end_matches('/'), dashboard_path),
         None => dashboard_path,
     };
+    let month_bucket = chrono::Utc::now().format("%Y-%m").to_string();
 
-    let text = email_templates.render("budget_alert.txt", &serde_json::json!({
-        "from_name":    from_name,
-        "org_name":     snapshot.org_name,
-        "org_slug":     snapshot.org_slug,
-        "accrued_usd":  accrued_usd,
-        "budget_usd":   budget_usd,
-        "percent":      threshold,
-        "month_bucket": chrono::Utc::now().format("%Y-%m").to_string(),
+    let template_vars = serde_json::json!({
+        "from_name":     from_name,
+        "org_name":      snapshot.org_name,
+        "org_slug":      snapshot.org_slug,
+        "accrued_usd":   accrued_usd,
+        "budget_usd":    budget_usd,
+        "percent":       threshold,
+        "month_bucket":  month_bucket,
         "dashboard_url": dashboard_url,
-    }))?;
+    });
 
-    let html = email_templates.render("budget_alert.html", &serde_json::json!({
-        // same vars
-        ...same JSON as above...
-    }))?;
+    let text = email_templates.render("budget_alert.txt", &template_vars)?;
+    let html = email_templates.render("budget_alert.html", &template_vars)?;
 
     let subject = format!("{}: {} budget at {}%", from_name, snapshot.org_name, threshold);
 
