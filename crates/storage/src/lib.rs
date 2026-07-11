@@ -14,6 +14,7 @@ pub use types::{
     CreateTransaction, UpdateAccountThreshold,
     DeductBalance, DeductBalanceResult,
     AddBalance, AddBalanceResult,
+    ApiKeyWithMtd,
 };
 pub use seed::{SeedData, SeedProvider, SeedModel, get_available_providers, get_available_models, get_seed_provider_models};
 
@@ -28,6 +29,15 @@ pub trait Storage: Send + Sync {
     async fn list_keys(&self, org_id: &str) -> Result<Vec<ApiKey>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_keys_paginated(&self, org_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_keys_paginated_for_user(&self, org_id: &str, created_by: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>>;
+    /// Like `list_keys_paginated` but LEFT JOINs `budget_counters` so each
+    /// returned item carries its current-month MTD spend (`mtd_units`).
+    /// Used by Phase 7 keys-listing endpoint. Single SQL round-trip; no N+1.
+    async fn list_keys_paginated_with_mtd(
+        &self,
+        org_id: &str,
+        page: i64,
+        page_size: i64,
+    ) -> Result<PaginatedResponse<crate::types::ApiKeyWithMtd>, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_key(&self, org_id: &str, key: &ApiKey) -> Result<ApiKey, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_key(&self, org_id: &str, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
