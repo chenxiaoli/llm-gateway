@@ -185,3 +185,93 @@ describe('OrgSettings — Defaults section', () => {
     });
   });
 });
+
+describe('OrgSettings — Budget status section', () => {
+  beforeEach(() => {
+    useAuthStore.setState({
+      user: adminUser,
+      currentOrg: adminOrg,
+    });
+  });
+
+  it('renders the under-budget state (green bar)', async () => {
+    server.use(
+      http.get('*/api/v1/org-1/defaults', () =>
+        HttpResponse.json({ default_rate_limit_rpm: 100, default_budget_monthly_usd: 50.0 }),
+      ),
+      http.get('*/api/v1/org-1/budget-status', () =>
+        HttpResponse.json({ accrued_units: 1_500_000_000, month_bucket: '2026-07' }),
+      ),
+    );
+
+    renderAt('/org-1/settings');
+
+    await waitFor(() => {
+      expect(screen.getByText('$15.00 used of $50.00')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('heading', { name: 'Budget status' })).toBeInTheDocument();
+    expect(screen.getByText('30.0%')).toBeInTheDocument();
+    const fill = await screen.findByTestId('progress-fill');
+    expect(fill.className).toContain('bg-emerald-500');
+  });
+
+  it('renders the over-budget state (red bar + over-budget line)', async () => {
+    server.use(
+      http.get('*/api/v1/org-1/defaults', () =>
+        HttpResponse.json({ default_rate_limit_rpm: 100, default_budget_monthly_usd: 10.0 }),
+      ),
+      http.get('*/api/v1/org-1/budget-status', () =>
+        HttpResponse.json({ accrued_units: 1_500_000_000, month_bucket: '2026-07' }),
+      ),
+    );
+
+    renderAt('/org-1/settings');
+
+    await waitFor(() => {
+      expect(screen.getByText('$15.00 used of $10.00')).toBeInTheDocument();
+    });
+    expect(screen.getByText('150.0%')).toBeInTheDocument();
+    expect(screen.getByText('Over budget by $5.00')).toBeInTheDocument();
+    const fill = await screen.findByTestId('progress-fill');
+    expect(fill.className).toContain('bg-red-500');
+  });
+
+  it('renders the unlimited state when no budget is set', async () => {
+    server.use(
+      http.get('*/api/v1/org-1/defaults', () =>
+        HttpResponse.json({ default_rate_limit_rpm: 100, default_budget_monthly_usd: null }),
+      ),
+      http.get('*/api/v1/org-1/budget-status', () =>
+        HttpResponse.json({ accrued_units: 5_000_000_000, month_bucket: '2026-07' }),
+      ),
+    );
+
+    renderAt('/org-1/settings');
+
+    await waitFor(() => {
+      expect(screen.getByText('Unlimited — no monthly cap')).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/\$.* used of/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('progress-fill')).not.toBeInTheDocument();
+  });
+
+  it('renders the no-spend state (empty green bar at 0%)', async () => {
+    server.use(
+      http.get('*/api/v1/org-1/defaults', () =>
+        HttpResponse.json({ default_rate_limit_rpm: 100, default_budget_monthly_usd: 50.0 }),
+      ),
+      http.get('*/api/v1/org-1/budget-status', () =>
+        HttpResponse.json({ accrued_units: 0, month_bucket: '2026-07' }),
+      ),
+    );
+
+    renderAt('/org-1/settings');
+
+    await waitFor(() => {
+      expect(screen.getByText('$0.00 used of $50.00')).toBeInTheDocument();
+    });
+    expect(screen.getByText('0.0%')).toBeInTheDocument();
+    const fill = await screen.findByTestId('progress-fill');
+    expect(fill.className).toContain('bg-emerald-500');
+  });
+});
