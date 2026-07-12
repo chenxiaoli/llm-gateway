@@ -18,6 +18,7 @@ pub mod channel_models;
 pub mod pricing_policies;
 pub mod seed;
 pub mod nats;
+pub mod admin_users;
 
 use axum::extract::State;
 use axum::middleware::from_fn_with_state;
@@ -118,6 +119,11 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/api/v1/version", get(version))
         .route("/api/v1/admin/system-info", get(system_info))
         .route("/api/v1/admin/nats/status", get(nats::get_nats_status))
+        .route("/api/v1/admin/platform-users", get(admin_users::list_platform_users))
+        .route(
+            "/api/v1/admin/users/{id}/platform-role",
+            patch(admin_users::patch_platform_role),
+        )
         // --- Explicit 410 routes for single-segment legacy paths ---
         //
         // Pre-Phase-2 endpoints whose root lived directly at `/api/v1/<name>`

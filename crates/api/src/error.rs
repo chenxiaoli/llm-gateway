@@ -35,6 +35,7 @@ pub enum ApiError {
     ResetExpired,               // 410 reset_expired
     ResetConsumed,              // 410 reset_consumed
     ResetNotFound,              // 404 reset_not_found
+    LastPlatformAdmin,          // 409 last_platform_admin
 }
 
 impl From<llm_gateway_org::OrgError> for ApiError {
@@ -165,6 +166,11 @@ impl IntoResponse for ApiError {
                 StatusCode::NOT_FOUND,
                 "Password reset token not found",
                 Some("reset_not_found"),
+            ),
+            ApiError::LastPlatformAdmin => (
+                StatusCode::CONFLICT,
+                "Cannot demote the last platform admin",
+                Some("last_platform_admin"),
             ),
             // Handled by the early-return above; unreachable here.
             ApiError::RateLimited { .. } => unreachable!("RateLimited handled above"),
