@@ -63,7 +63,8 @@
     "orgSettings": "Org Settings",
     "logs": "Audit Logs",
     "collapse": "Collapse",
-    "expand": "Expand sidebar"
+    "expand": "Expand sidebar",
+    "platformUsers": "Platform Users"
   },
   "header": {
     "account": "Account",
@@ -1471,5 +1472,8 @@
     "success": "Verification email sent — check your inbox.",
     "errorInUse": "That email is already in use.",
     "errorGeneric": "Something went wrong. Please try again."
+  },
+  "platformLayout": {
+    "backTo": "Back to"
   }
 }

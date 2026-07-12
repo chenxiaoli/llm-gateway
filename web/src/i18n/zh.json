@@ -63,7 +63,8 @@
     "orgSettings": "组织设置",
     "logs": "审计日志",
     "collapse": "收起",
-    "expand": "展开侧边栏"
+    "expand": "展开侧边栏",
+    "platformUsers": "平台管理员"
   },
   "header": {
     "account": "账户",
@@ -1471,5 +1472,8 @@
     "success": "验证邮件已发送，请查收。",
     "errorInUse": "该邮箱已被使用。",
     "errorGeneric": "出错了，请重试。"
+  },
+  "platformLayout": {
+    "backTo": "返回"
   }
 }
