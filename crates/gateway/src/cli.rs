@@ -25,7 +25,8 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         revoke: bool,
         /// Override the last-admin guard when revoking. Required to demote
-        /// the only platform_admin. Prints a warning when used.
+        /// the only platform_admin. Prints a warning when used. Ignored
+        /// when granting (no last-admin check applies to grants).
         #[arg(long, default_value_t = false)]
         allow_last_admin: bool,
     },
