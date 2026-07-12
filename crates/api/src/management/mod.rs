@@ -288,21 +288,22 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
             "/admin/users/{id}",
             patch(users::update_user).delete(users::delete_user),
         )
-        // Account / Balance (admin)
+        // Account / Balance (admin) — moved from /admin/users/* to /admin/members/*
+        // to match the per-org Members page (Task 6 of users → members refactor).
         .route(
-            "/admin/users/{id}/balance",
+            "/admin/members/{user_id}/balance",
             get(accounts::get_balance),
         )
         .route(
-            "/admin/users/{id}/recharge",
+            "/admin/members/{user_id}/recharge",
             post(accounts::recharge),
         )
         .route(
-            "/admin/users/{id}/adjust",
+            "/admin/members/{user_id}/adjust",
             post(accounts::adjust),
         )
         .route(
-            "/admin/users/{id}/threshold",
+            "/admin/members/{user_id}/threshold",
             patch(accounts::update_threshold),
         )
         // Seed data (reads static JSON)

@@ -556,3 +556,57 @@ async fn remove_member_can_self_remove(pool: PgPool) {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 }
+
+// =====================================================================
+// Task 6: account routes moved from /admin/users/* to /admin/members/*
+// =====================================================================
+//
+// `seed_default_member` writes the members row via raw SQL and bypasses the
+// storage layer's `upsert_member`, so it does NOT create the paired
+// accounts row that the handlers look up via `get_account_by_user_id`. We
+// therefore seed the account row explicitly here (balance = 0). The
+// canonical fix would be to route the helper through `upsert_member`, but
+// that is out of scope for Task 6; the inline seed keeps the blast radius
+// to this single test.
+//
+// We exercise GET /balance rather than POST /recharge to keep Task 6
+// focused on the route move. (recharge's downstream `add_balance` path has
+// a separate column/placeholder arity bug in postgres.rs that is unrelated
+// to this refactor and will be fixed in its own change.)
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn get_balance_member_under_new_route(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    seed_default_member(&pool, "u-bal", "bal", "member").await;
+
+    // Seed the accounts row the handler looks up. Threshold matches the
+    // storage layer's default (DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS).
+    sqlx::query(
+        r#"INSERT INTO accounts (id, org_id, user_id, balance, threshold, created_at, updated_at)
+           VALUES ('acc-bal', 'org_default', 'u-bal', 0, 0, NOW(), NOW())
+           ON CONFLICT (org_id, user_id) DO NOTHING"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed account row");
+
+    let app = build_app(common::make_state(pool));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/default/admin/members/u-bal/balance")
+                .header("authorization", bearer(&admin.token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Confirm the handler found the right account (balance 0 → 0.0 USD).
+    let body = body_json(resp).await;
+    assert_eq!(body["account"]["user_id"], "u-bal");
+    assert_eq!(body["account"]["balance"], 0.0);
+}
