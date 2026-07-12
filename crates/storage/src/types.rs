@@ -109,12 +109,13 @@ pub struct Member {
     pub created_at: DateTime<Utc>,
 }
 
-/// Default per-membership account threshold in subunits (1.00 USD at 6-decimal
-/// precision, i.e. 10⁸ per USD). Matches the migration default in
+/// Default per-membership account threshold. Structurally equal to
+/// `UNITS_PER_USD` because the intended value is "1.00 USD" expressed in
+/// subunits (10⁸ per USD). Matches the migration default in
 /// 20260426000000_accounts_and_transactions.sql. Used when inserting new
 /// account rows (upsert_member / accept_invitation) and as the COALESCE
 /// fallback when joining accounts in `list_members`.
-pub const DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS: i64 = 100_000_000;
+pub const DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS: i64 = crate::money::UNITS_PER_USD;
 
 /// A membership row joined with its user, optional group, and per-membership
 /// account. This is the shape `list_members` returns so the Members page UI

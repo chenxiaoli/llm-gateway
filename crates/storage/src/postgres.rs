@@ -3225,6 +3225,10 @@ impl crate::Storage for PostgresStorage {
                 COALESCE(a.threshold, $2) AS threshold,
                 m.created_at
             FROM members m
+            -- INNER JOIN is safe: members.user_id has ON DELETE CASCADE
+            -- (migration 20260708000000_saas_orgs.sql), so no member row can
+            -- outlive its user. LEFT JOIN would hide FK violations rather than
+            -- fail loudly on them.
             JOIN users u ON u.id = m.user_id
             LEFT JOIN groups g ON g.id = m.group_id
             LEFT JOIN accounts a ON a.user_id = m.user_id AND a.org_id = m.org_id
