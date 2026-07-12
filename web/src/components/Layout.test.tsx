@@ -52,6 +52,8 @@ describe('AppLayout sidebar — Platform group gating', () => {
     // assert at least one is present in the Platform group's nav section.
     const settingsItems = screen.getAllByText('Settings');
     expect(settingsItems.length).toBeGreaterThanOrEqual(1);
+    // The Platform Users menu also appears under the Platform group.
+    expect(screen.getByText('Platform Users')).toBeInTheDocument();
   });
 
   it('org admin does NOT see the Platform group, but Admin group remains', () => {

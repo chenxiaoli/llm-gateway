@@ -88,7 +88,8 @@ export default function AppLayout() {
   // get 403, so this group is hidden from them and the route is gated by
   // RequirePlatformAdmin.
   const platformItems = [
-    { key: `/${slug}/admin/settings`, icon: Settings, label: t('sidebar.settings') },
+    { key: '/admin/settings', icon: Settings, label: t('sidebar.settings') },
+    { key: '/admin/platform-users', icon: Users, label: t('sidebar.platformUsers') },
   ];
 
   // Map paths to display names for breadcrumbs
