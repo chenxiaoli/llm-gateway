@@ -15,6 +15,7 @@ import CheckEmail from './pages/CheckEmail';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Onboarding from './pages/Onboarding';
+import OrgCreate from './pages/OrgCreate';
 import AcceptInvite from './pages/AcceptInvite';
 import Dashboard from './pages/Dashboard';
 import Account from './pages/Account';
@@ -133,6 +134,7 @@ function App() {
         <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/accept-invite" element={<AcceptInvite />} />
         <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/orgs/new" element={<OrgCreate />} />
 
         {/* Org-scoped — wraps everything else */}
         <Route path="/:orgSlug" element={<Layout />}>
