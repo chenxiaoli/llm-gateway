@@ -41,6 +41,8 @@ import Logs from './pages/Logs';
 import AdminDashboard from './pages/AdminDashboard';
 import DocsLayout from './pages/DocsLayout';
 import DocsPage from './pages/DocsPage';
+import PlatformLayout from './components/PlatformLayout';
+import PlatformUsers from './pages/PlatformUsers';
 
 function RequireAuth() {
   const status = useAuthGate();
@@ -168,15 +170,27 @@ function App() {
             </Route>
           </Route>
 
-          {/* Platform-admin-only routes. URL still carries /:orgSlug/ for
-              nav consistency, but the handlers are platform-scoped
-              (is_platform_admin() gate on the backend). */}
-          <Route element={<RequirePlatformAdmin />}>
-            <Route element={<OrgRouteGuard />}>
-              <Route path="admin/settings" element={<Settings />} />
-            </Route>
+          {/* Platform-admin-only routes were previously mounted here under
+              /:orgSlug/admin/settings. They've been promoted to top-level
+              /admin/* routes (see below) — the URL no longer carries an org
+              slug because the page is platform-scoped, not org-scoped. */}
+        </Route>
+
+        {/* Platform-scoped routes — top-level, no org prefix. The handlers
+            are platform-scoped (is_platform_admin() gate on the backend);
+            the URL reflects that. */}
+        <Route element={<RequirePlatformAdmin />}>
+          <Route element={<PlatformLayout />}>
+            <Route path="/admin/settings" element={<Settings />} />
+            <Route path="/admin/platform-users" element={<PlatformUsers />} />
           </Route>
         </Route>
+
+        {/* Backward-compat: redirect the old /{slug}/admin/settings URL to
+            the new top-level /admin/settings. Sits OUTSIDE RequirePlatformAdmin
+            so any user (including org admins with stale bookmarks) gets
+            redirected rather than 403'd at the route guard. */}
+        <Route path="/:orgSlug/admin/settings" element={<Navigate to="/admin/settings" replace />} />
 
         {/* Legacy paths — redirect to current org */}
         <Route path="/console/*" element={<LegacyRedirect />} />
