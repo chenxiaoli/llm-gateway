@@ -88,9 +88,6 @@ export const server = setupServer(
   http.get('*/api/v1/test-org/admin/providers', () => {
     return HttpResponse.json([]);
   }),
-  http.get('*/api/v1/test-org/admin/users', () => {
-    return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
-  }),
   http.get('*/api/v1/test-org/members', () => {
     return HttpResponse.json([
       {

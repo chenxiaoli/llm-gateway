@@ -58,7 +58,6 @@
     "channels": "Channels",
     "providers": "Providers",
     "pricingPolicies": "Pricing Policies",
-    "users": "Users",
     "members": "Members",
     "invitations": "Invitations",
     "settings": "Settings",
@@ -191,10 +190,6 @@
     "providerModelAddFailed": "Failed to add model",
     "providerModelUpdateFailed": "Failed to update model",
     "providerModelRemoveFailed": "Failed to remove model",
-    "userUpdated": "User updated",
-    "userDeleted": "User deleted",
-    "userUpdateFailed": "Failed to update user",
-    "userDeleteFailed": "Failed to delete user",
     "groupCreated": "Group created",
     "groupCreateFailed": "Failed to create group",
     "groupUpdated": "Group updated",
@@ -848,27 +843,13 @@
     }
   },
   "users": {
-    "title": "Users",
-    "description": "Manage user accounts and permissions",
     "table": {
-      "username": "Username",
-      "role": "Role",
       "group": "Group",
       "status": "Status",
-      "balance": "Balance",
-      "created": "Created",
-      "actions": "Actions"
+      "balance": "Balance"
     },
-    "roleAdmin": "Admin",
-    "roleUser": "User",
     "enabled": "Enabled",
     "disabled": "Disabled",
-    "noUsers": "No users found",
-    "pagination": {
-      "total": "Total {{count}}",
-      "previous": "Previous",
-      "next": "Next"
-    },
     "drawer": {
       "title": "User Details",
       "accountBalance": "Account Balance",
@@ -904,7 +885,6 @@
     },
     "detail": "Detail",
     "usage": "Usage",
-    "deleteUser": "Delete this user?",
     "usageDrawer": {
       "title": "User Usage",
       "noUsage": "No usage data for this user",

@@ -29,7 +29,6 @@ import Models from './pages/Models';
 import PricingPolicies from './pages/PricingPolicies';
 import Providers from './pages/Providers';
 import ProviderDetail from './pages/ProviderDetail';
-import Users from './pages/Users';
 import Members from './pages/Members';
 import Invitations from './pages/Invitations';
 import OrgSettings from './pages/OrgSettings';
@@ -162,7 +161,6 @@ function App() {
               <Route path="admin/providers/:id" element={<ProviderDetail />} />
               <Route path="admin/models" element={<Models />} />
               <Route path="admin/pricing-policies" element={<PricingPolicies />} />
-              <Route path="admin/users" element={<Users />} />
               <Route path="admin/invitations" element={<Invitations />} />
               <Route path="admin/groups" element={<Groups />} />
               <Route path="admin/users/:userId/balance" element={<AccountBalance />} />

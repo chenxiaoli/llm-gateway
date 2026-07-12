@@ -367,25 +367,6 @@ export interface ChangePasswordRequest {
   new_password: string;
 }
 
-export interface UserResponse {
-  id: string;
-  username: string;
-  role: 'admin' | 'user';
-  enabled: boolean;
-  group_id: string | null;
-  group_name: string | null;
-  balance: number;
-  threshold: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface UpdateUserRequest {
-  role?: 'admin' | 'user';
-  enabled?: boolean;
-  group_id?: string | null;
-}
-
 export interface SettingsResponse {
   allow_registration: boolean;
   server_host: string;
