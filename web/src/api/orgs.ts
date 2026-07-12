@@ -1,0 +1,53 @@
+import { apiClient, orgPrefix } from './client';
+import type { OrgSummary } from '../types';
+
+/**
+ * PATCH /api/v1/{org_slug} — update the current org's name and/or slug.
+ * Admin+ gate on the backend; returns the updated OrgSummary (role echoed
+ * back from the caller's membership, unaffected by the rename).
+ */
+export async function updateOrg(req: { name?: string; slug?: string }): Promise<OrgSummary> {
+  const { data } = await apiClient.patch<OrgSummary>(orgPrefix(), req);
+  return data;
+}
+
+/**
+ * DELETE /api/v1/{org_slug} — hard-delete the current org.
+ * Owner-only + password re-check on the backend. Cascades to all
+ * org-scoped rows (keys, channels, usage, audit logs, members).
+ * Returns 204 on success; caller must log out (auth state is now invalid).
+ */
+export async function deleteOrg(password: string): Promise<void> {
+  await apiClient.delete(orgPrefix(), { data: { password } });
+}
+
+export type OrgDefaults = {
+  default_rate_limit_rpm: number | null;
+  default_budget_monthly_usd: number | null;
+};
+
+export async function getOrgDefaults(): Promise<OrgDefaults> {
+  const { data } = await apiClient.get<OrgDefaults>(`${orgPrefix()}/defaults`);
+  return data;
+}
+
+export async function updateOrgDefaults(input: OrgDefaults): Promise<OrgDefaults> {
+  const { data } = await apiClient.put<OrgDefaults>(`${orgPrefix()}/defaults`, input);
+  return data;
+}
+
+/**
+ * Response from `GET /api/v1/{org_slug}/budget-status` (Phase 7).
+ * `accrued_units` is in 10^8 subunits per USD — convert to USD at the
+ * rendering boundary via the `unitsToUsd` helper. `month_bucket` is the
+ * UTC calendar month (`YYYY-MM`) the accrual is counted against.
+ */
+export type BudgetStatus = {
+  accrued_units: number;
+  month_bucket: string;
+};
+
+export async function getBudgetStatus(): Promise<BudgetStatus> {
+  const { data } = await apiClient.get<BudgetStatus>(`${orgPrefix()}/budget-status`);
+  return data;
+}

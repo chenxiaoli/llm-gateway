@@ -12,13 +12,15 @@ export interface SelectProps {
   placeholder?: string;
   className?: string;
   size?: keyof typeof sizeMap;
+  disabled?: boolean;
 }
 
-export function Select({ value, onChange, options, placeholder, className, size = 'md' }: SelectProps) {
+export function Select({ value, onChange, options, placeholder, className, size = 'md', disabled }: SelectProps) {
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
       className={cn('select select-bordered w-full', sizeMap[size], className)}
     >
       {placeholder && (

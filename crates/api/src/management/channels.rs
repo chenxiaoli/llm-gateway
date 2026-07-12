@@ -1,19 +1,17 @@
 use axum::extract::{Path, Query, State};
-use axum::http::HeaderMap;
 use axum::Json;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use llm_gateway_encryption::{decrypt, encrypt};
-use llm_gateway_org::{can_access_channel, can_manage_channels, resolve_org_context};
+use llm_gateway_org::{can_access_channel, can_manage_channels, OrgContext};
 use llm_gateway_storage::{
     bps_to_ratio, opt_units_to_usd, opt_usd_to_units, ratio_to_bps,
     Channel, ChannelModel, TimeSlot, UpdateChannelApiKey,
 };
 
 use crate::error::ApiError;
-use crate::extractors::require_auth;
 use crate::AppState;
 
 /// Summary of a channel model with model name resolved from the models table.
@@ -147,11 +145,9 @@ pub struct UpdateChannelRequest {
 
 pub async fn create_channel(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Json(input): Json<CreateChannelRequest>,
 ) -> Result<Json<ChannelResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -198,7 +194,7 @@ pub async fn create_channel(
         weight: input.weight,
         enabled: input.enabled.unwrap_or(true),
         available_hours: input.available_hours,
-        created_by: Some(claims.sub),
+        created_by: Some(ctx.user_id.clone()),
         group_id: input.group_id,
         disabled_until: None,
         created_at: now,
@@ -256,12 +252,9 @@ pub async fn create_channel(
 
 pub async fn list_channels(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(provider_id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, provider_id)): Path<(String, String)>,
 ) -> Result<Json<Vec<ChannelResponse>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let mut channels = state
         .storage
         .list_channels_by_provider(&ctx.org_id, &provider_id)
@@ -298,10 +291,8 @@ pub async fn list_channels(
 
 pub async fn list_all_channels(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
 ) -> Result<Json<Vec<ChannelWithModels>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -399,12 +390,9 @@ pub async fn list_all_channels(
 
 pub async fn get_channel(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<Json<ChannelResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let mut channel = state
         .storage
         .get_channel(&ctx.org_id, &id)
@@ -434,12 +422,10 @@ pub async fn get_channel(
 
 pub async fn update_channel(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
     Json(input): Json<UpdateChannelRequest>,
 ) -> Result<Json<ChannelResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -518,12 +504,10 @@ pub async fn update_channel(
 /// Separated from general channel updates to prevent accidental key clearing.
 pub async fn update_channel_api_key(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
     Json(input): Json<UpdateChannelApiKey>,
 ) -> Result<Json<ChannelResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -554,11 +538,9 @@ pub async fn update_channel_api_key(
 
 pub async fn delete_channel(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -580,12 +562,10 @@ pub struct TestChannelQuery {
 
 pub async fn test_channel(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
     Query(query): Query<TestChannelQuery>,
 ) -> Result<Json<Vec<llm_gateway_storage::ChannelTestResult>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }

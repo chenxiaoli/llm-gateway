@@ -1,6 +1,7 @@
 import { adminApiClient } from './client';
 import type { SettingsResponse, UpdateSettingsRequest, SystemInfo, NatsStatusResponse } from '../types';
 
+// All routes here are platform-scoped (top-level /admin/* — no org prefix).
 export async function getSettings(): Promise<SettingsResponse> {
   const { data } = await adminApiClient.get<SettingsResponse>('/settings');
   return data;

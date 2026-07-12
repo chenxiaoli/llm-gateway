@@ -14,6 +14,7 @@ pub use types::{
     CreateTransaction, UpdateAccountThreshold,
     DeductBalance, DeductBalanceResult,
     AddBalance, AddBalanceResult,
+    ApiKeyWithMtd,
 };
 pub use seed::{SeedData, SeedProvider, SeedModel, get_available_providers, get_available_models, get_seed_provider_models};
 
@@ -28,6 +29,15 @@ pub trait Storage: Send + Sync {
     async fn list_keys(&self, org_id: &str) -> Result<Vec<ApiKey>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_keys_paginated(&self, org_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_keys_paginated_for_user(&self, org_id: &str, created_by: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<ApiKey>, Box<dyn std::error::Error + Send + Sync>>;
+    /// Like `list_keys_paginated` but LEFT JOINs `budget_counters` so each
+    /// returned item carries its current-month MTD spend (`mtd_units`).
+    /// Used by Phase 7 keys-listing endpoint. Single SQL round-trip; no N+1.
+    async fn list_keys_paginated_with_mtd(
+        &self,
+        org_id: &str,
+        page: i64,
+        page_size: i64,
+    ) -> Result<PaginatedResponse<crate::types::ApiKeyWithMtd>, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_key(&self, org_id: &str, key: &ApiKey) -> Result<ApiKey, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_key(&self, org_id: &str, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
@@ -90,6 +100,22 @@ pub trait Storage: Send + Sync {
 
     // Usage
     async fn record_usage(&self, org_id: &str, usage: &UsageRecord) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    /// Returns the month-to-date spend for the given key, in 10^8 subunits per USD.
+    /// Returns 0 if no counter row exists (key has no spend this month).
+    /// Month bucket is UTC calendar month derived from current time.
+    ///
+    /// Cheap O(1) lookup via PK; suitable for per-request budget enforcement.
+    /// Do NOT call `SUM(cost) FROM usage_records WHERE key_id = $1` per request.
+    async fn get_month_to_date_spend(&self, key_id: &str) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
+    /// Returns the org-wide month-to-date spend in 10^8 subunits per USD,
+    /// summing `budget_counters.accrued` across all keys in the org for the
+    /// current UTC calendar month. Returns 0 when the org has no spend this
+    /// month (including when the org has no keys at all). Read-time SUM; no
+    /// materialized `org_budget_counters` table — see Phase 7 design doc.
+    async fn get_org_month_to_date_spend(
+        &self,
+        org_id: &str,
+    ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage(&self, org_id: &str, filter: &UsageFilter) -> Result<Vec<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage_paginated(&self, org_id: &str, filter: &UsageFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>;
     async fn query_usage_summary(&self, org_id: &str, filter: &UsageFilter) -> Result<Vec<UsageSummaryRecord>, Box<dyn std::error::Error + Send + Sync>>;
@@ -185,6 +211,179 @@ pub trait Storage: Send + Sync {
     async fn update_member_role(&self, user_id: &str, org_id: &str, role: MemberRole) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_member(&self, user_id: &str, org_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn count_owners(&self, org_id: &str) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
+    async fn touch_member_last_seen(&self, user_id: &str, org_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    /// Delete platform-admin impersonation temp rows whose `last_seen` is
+    /// older than `cutoff`. Returns the count of rows removed. The janitor
+    /// task (crates/api/src/janitor.rs) calls this on a 5-minute tick.
+    async fn delete_stale_impersonations(&self, cutoff: chrono::DateTime<chrono::Utc>) -> Result<u64, Box<dyn std::error::Error + Send + Sync>>;
+
+    // --- Invitations (Phase 3) ---
+
+    /// Mint a new invitation token. The storage layer generates the token and
+    /// returns the inserted row. Expiry is provided by the caller.
+    ///
+    /// Phase 4: `recipient_email` binds the invitation to a specific email;
+    /// the DB CHECK constraint requires it for any pending row.
+    async fn create_invitation(
+        &self,
+        org_id: &str,
+        role: &MemberRole,
+        created_by: &str,
+        recipient_email: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Invitation, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Fetch by token. Returns None if no row matches.
+    async fn get_invitation_by_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<Invitation>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// List all invitations for an org (both pending and recently-accepted;
+    /// the handler decides what to surface).
+    async fn list_invitations_for_org(
+        &self,
+        org_id: &str,
+    ) -> Result<Vec<Invitation>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Mark an invitation revoked. No-op if already revoked or not found.
+    /// `org_id` is required so an admin in org A cannot revoke org B's invitations.
+    async fn revoke_invitation(
+        &self,
+        org_id: &str,
+        invitation_id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Accept an invitation in a single transaction. Validates token +
+    /// not-yet-accepted + not-revoked + not-expired, inserts a `members` row,
+    /// and sets `accepted_at` + `accepted_by`. Returns the new Member on success,
+    /// or None if the invitation was not consumable (expired/revoked/already-used).
+    ///
+    /// Concurrent calls for the same token serialize via SELECT FOR UPDATE;
+    /// exactly one succeeds and the others get None.
+    async fn accept_invitation(
+        &self,
+        token: &str,
+        accepting_user_id: &str,
+    ) -> Result<Option<Member>, Box<dyn std::error::Error + Send + Sync>>;
+
+    // ---- Phase 4: users by email ----
+
+    /// Look up a user by their (case-insensitive) email address. Returns
+    /// None when the email column is NULL or no row matches. Callers
+    /// (login, password-reset) treat None and "no row" identically.
+    async fn get_user_by_email(
+        &self,
+        email: &str,
+    ) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Set a user's platform-level admin role, or clear it (`role = None`).
+    ///
+    /// `actor_user_id` is the user performing the change — recorded for audit
+    /// but not enforced here; the caller (HTTP handler / CLI) is responsible
+    /// for authorizing the actor (must already be a platform admin).
+    ///
+    /// `allow_last_admin_override` bypasses the last-admin guard when true.
+    /// Pass `false` from interactive endpoints; pass `true` only from the
+    /// bootstrap / CLI escape hatches where the operator explicitly accepts
+    /// the risk of zero platform admins.
+    ///
+    /// Errors:
+    /// - `UserNotFound` — no user with `target_user_id`.
+    /// - `LastPlatformAdmin` — demoting would leave zero platform admins and
+    ///   the override was not set.
+    async fn set_user_platform_role(
+        &self,
+        target_user_id: &str,
+        actor_user_id: &str,
+        role: Option<PlatformRole>,
+        allow_last_admin_override: bool,
+    ) -> Result<(), SetPlatformRoleError>;
+
+    /// Return every user that currently holds `platform_role = 'platform_admin'`.
+    /// Used by the `GET /api/v1/admin/platform-users` handler. No pagination —
+    /// the platform_admin set is expected to stay small (typically <10).
+    async fn list_platform_admins(&self) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Substring-search users whose `platform_role IS NULL` by username or email
+    /// (case-insensitive). Returns up to 20 results. Used by the
+    /// search-to-add affordance on the PlatformUsers page; the response must
+    /// exclude existing platform_admins.
+    async fn search_user_candidates(
+        &self,
+        query: &str,
+    ) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Set the user's email + verification metadata. `verified_at = None`
+    /// + `requires = true` means the user must click the verification link
+    /// before they can log in. Used by both register and
+    /// `POST /auth/me/email`.
+    async fn set_user_email(
+        &self,
+        user_id: &str,
+        email: &str,
+        verified_at: Option<chrono::DateTime<chrono::Utc>>,
+        requires_email_verification: bool,
+    ) -> Result<User, Box<dyn std::error::Error + Send + Sync>>;
+
+    // ---- Phase 4: email_verifications ----
+
+    /// Mint a fresh verification token. The token is the lookup key for
+    /// the user-facing email link. Expiry is typically 24 hours.
+    async fn create_email_verification(
+        &self,
+        user_id: &str,
+        email: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<EmailVerification, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Look up by token. Returns None if no row matches (including expired /
+    /// consumed — the caller decides semantics).
+    async fn get_email_verification_by_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<EmailVerification>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Atomically mark the verification consumed AND set
+    /// `users.email_verified_at = NOW()`. Returns `true` on success or
+    /// `false` if the row is missing / already consumed / expired. Both
+    /// writes happen in a single transaction so a partial state (consumed
+    /// but user not verified) is impossible.
+    async fn consume_email_verification(
+        &self,
+        token: &str,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
+
+    // ---- Phase 4: password_resets ----
+
+    /// Mint a fresh password-reset token. Expiry is typically 1 hour
+    /// (shorter than email_verifications — resets are higher-stakes).
+    async fn create_password_reset(
+        &self,
+        user_id: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<PasswordReset, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Look up by token. Returns None if no row matches.
+    async fn get_password_reset_by_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<PasswordReset>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Atomic password reset: SELECT FOR UPDATE the reset row, check
+    /// consumed/expired, then in the same tx UPDATE password_resets SET
+    /// consumed_at = NOW() AND UPDATE users SET password =
+    /// $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $user_id.
+    ///
+    /// Returns the outcome — `Success` only if both writes committed.
+    /// `NotFound` / `Consumed` / `Expired` let the caller map to the right
+    /// typed error without a separate pre-check (eliminating the race window
+    /// between get-then-act).
+    async fn consume_password_reset_and_set_password(
+        &self,
+        token: &str,
+        new_password_hash: &str,
+    ) -> Result<PasswordResetOutcome, Box<dyn std::error::Error + Send + Sync>>;
 
     // ---- Settings split ----
     async fn get_platform_setting(&self, key: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
@@ -192,4 +391,21 @@ pub trait Storage: Send + Sync {
     async fn get_org_setting(&self, org_id: &str, key: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>>;
     async fn set_org_setting(&self, org_id: &str, key: &str, value: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn list_org_settings(&self, org_id: &str) -> Result<Vec<(String, String)>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Typed facade over `org_settings` for the two Phase 5 default keys
+    /// (`default_rate_limit_rpm`, `default_budget_monthly_usd`). Absent keys
+    /// are surfaced as `None`. `default_budget_monthly_usd` is in USD subunits
+    /// (10⁸ per USD — see `crates/storage/src/money.rs`).
+    async fn get_org_defaults(
+        &self,
+        org_id: &str,
+    ) -> Result<crate::types::OrgDefaults, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Writes both default keys atomically (call sites pass the full struct;
+    /// `None` clears that key by deleting the row).
+    async fn set_org_defaults(
+        &self,
+        org_id: &str,
+        defaults: &crate::types::OrgDefaults,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 }

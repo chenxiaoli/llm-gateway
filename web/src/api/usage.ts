@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, orgPrefix } from './client';
 import type { PaginatedResponse, UsageFilter, UsageRecord, UsageSummaryRecord, ChannelUsageSummaryRecord, DailyUsageRecord } from '../types';
 
 export async function queryUsage(filter: UsageFilter = {}, page = 1, pageSize = 20): Promise<PaginatedResponse<UsageRecord>> {
@@ -8,7 +8,7 @@ export async function queryUsage(filter: UsageFilter = {}, page = 1, pageSize = 
   if (filter.model_name) params.model_name = filter.model_name;
   if (filter.since) params.since = filter.since;
   if (filter.until) params.until = filter.until;
-  const { data } = await apiClient.get<PaginatedResponse<UsageRecord>>('/usage', { params });
+  const { data } = await apiClient.get<PaginatedResponse<UsageRecord>>(`${orgPrefix()}/usage`, { params });
   return data;
 }
 
@@ -19,7 +19,7 @@ export async function queryUsageSummary(filter: UsageFilter = {}): Promise<Usage
   if (filter.model_name) params.model_name = filter.model_name;
   if (filter.since) params.since = filter.since;
   if (filter.until) params.until = filter.until;
-  const { data } = await apiClient.get<UsageSummaryRecord[]>('/usage/summary', { params });
+  const { data } = await apiClient.get<UsageSummaryRecord[]>(`${orgPrefix()}/usage/summary`, { params });
   return data;
 }
 
@@ -30,7 +30,7 @@ export async function queryChannelUsageSummary(filter: UsageFilter = {}): Promis
   if (filter.model_name) params.model_name = filter.model_name;
   if (filter.since) params.since = filter.since;
   if (filter.until) params.until = filter.until;
-  const { data } = await apiClient.get<ChannelUsageSummaryRecord[]>('/usage/channel-summary', { params });
+  const { data } = await apiClient.get<ChannelUsageSummaryRecord[]>(`${orgPrefix()}/usage/channel-summary`, { params });
   return data;
 }
 
@@ -43,6 +43,6 @@ export async function queryDailyUsage(filter: UsageFilter): Promise<DailyUsageRe
   if (filter.until) params.set('until', filter.until);
   if (filter.tz) params.set('tz', filter.tz);
   const query = params.toString() ? `?${params.toString()}` : '';
-  const { data } = await apiClient.get<DailyUsageRecord[]>(`/usage/daily${query}`);
+  const { data } = await apiClient.get<DailyUsageRecord[]>(`${orgPrefix()}/usage/daily${query}`);
   return data;
 }

@@ -1,13 +1,11 @@
 use axum::extract::{Path, Query, State};
-use axum::http::HeaderMap;
 use axum::Json;
-use llm_gateway_org::{can_manage_channels, resolve_org_context};
+use llm_gateway_org::{can_manage_channels, OrgContext};
 use llm_gateway_storage::{units_to_usd, Member, MemberRole, PaginatedResponse, PaginationParams, UpdateUser as StorageUpdateUser, UserWithBalance};
 use serde::Serialize;
 use std::sync::Arc;
 
 use crate::error::ApiError;
-use crate::extractors::require_auth;
 use crate::AppState;
 
 #[derive(Serialize)]
@@ -43,11 +41,9 @@ impl From<UserWithBalance> for UserResponse {
 
 pub async fn list_users(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Query(pagination): Query<PaginationParams>,
 ) -> Result<Json<PaginatedResponse<UserResponse>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -63,12 +59,10 @@ pub async fn list_users(
 
 pub async fn update_user(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
     Json(input): Json<StorageUpdateUser>,
 ) -> Result<Json<UserResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }
@@ -104,7 +98,7 @@ pub async fn update_user(
         org_id: ctx.org_id.clone(),
         role: MemberRole::Member,
         group_id: None,
-        created_by: Some(claims.sub.clone()),
+        created_by: Some(ctx.user_id.clone()),
         created_at: chrono::Utc::now(),
     });
 
@@ -154,11 +148,9 @@ pub async fn update_user(
 
 pub async fn delete_user(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
     if !can_manage_channels(&ctx) {
         return Err(ApiError::Forbidden);
     }

@@ -40,8 +40,8 @@ const mockLogsResponse = {
 describe('Logs page', () => {
   it('renders routes column and shows attempt count badge', async () => {
     server.use(
-      http.get('*/api/v1/admin/logs', () => HttpResponse.json(mockLogsResponse)),
-      http.get('*/api/v1/admin/channels', () => HttpResponse.json([])),
+      http.get('*/api/v1/test-org/admin/logs', () => HttpResponse.json(mockLogsResponse)),
+      http.get('*/api/v1/test-org/admin/channels', () => HttpResponse.json([])),
     );
 
     renderWithProviders(<Logs />, { route: '/admin/logs' });
@@ -53,8 +53,8 @@ describe('Logs page', () => {
 
   it('opens routes modal with all attempts on badge click', async () => {
     server.use(
-      http.get('*/api/v1/admin/logs', () => HttpResponse.json(mockLogsResponse)),
-      http.get('*/api/v1/admin/channels', () => HttpResponse.json([])),
+      http.get('*/api/v1/test-org/admin/logs', () => HttpResponse.json(mockLogsResponse)),
+      http.get('*/api/v1/test-org/admin/channels', () => HttpResponse.json([])),
     );
 
     const user = userEvent.setup();

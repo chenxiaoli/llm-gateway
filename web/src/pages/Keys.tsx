@@ -10,8 +10,11 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Badge } from '../components/ui/Badge';
+import { ProgressBar } from '../components/ui/ProgressBar';
+import { budgetBarColor, budgetUsedPct } from '../lib/budgetColor';
 import { toast } from 'sonner';
 import i18n from '../i18n';
+import { useAuthStore } from '../stores/authStore';
 import type { CreateKeyResponse } from '../types';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -23,6 +26,7 @@ export default function Keys() {
   const [pageSize] = useState(20);
   const { data, isLoading } = useKeys(page, pageSize);
   const createKeyMutation = useCreateKey();
+  const slug = useAuthStore((s) => s.currentOrg?.slug);
   const navigate = useNavigate();
   const { data: fallbacks } = useModelFallbacks();
   const reducedMotion = useReducedMotion();
@@ -110,6 +114,7 @@ export default function Keys() {
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('keys.table.status')}</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('keys.table.rateLimit')}</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('keys.table.monthlyBudget')}</th>
+                  <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('keys.table.mtdThisMonth')}</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('keys.table.fallback')}</th>
                   <th className="text-xs font-semibold uppercase tracking-wider text-base-content/45">{t('keys.table.created')}</th>
                 </tr>
@@ -124,7 +129,7 @@ export default function Keys() {
                     className="border-b border-base-200/40 hover:bg-base-200/20 transition-colors"
                   >
                     <td>
-                      <button onClick={() => navigate(`/console/keys/${key.id}`)} className="link link-primary text-sm font-medium">
+                      <button onClick={() => navigate(slug ? `/${slug}/keys/${key.id}` : '/login')} className="link link-primary text-sm font-medium">
                         {key.name}
                       </button>
                     </td>
@@ -134,13 +139,37 @@ export default function Keys() {
                     <td><Badge variant={key.enabled ? 'green' : 'red'}>{key.enabled ? t('keys.active') : t('keys.disabled')}</Badge></td>
                     <td className="font-mono text-sm text-base-content/55">{key.rate_limit ?? t('keys.unlimited')}</td>
                     <td className="font-mono text-sm text-base-content/55">{key.budget_monthly != null ? formatCurrency(key.budget_monthly, symbol, 2) : t('keys.unlimited')}</td>
+                    <td className="font-mono text-sm text-base-content/55">
+                      {(() => {
+                        const UNITS_PER_USD = 100_000_000;
+                        const budgetUnits =
+                          key.budget_monthly !== null
+                            ? Math.round(key.budget_monthly * UNITS_PER_USD)
+                            : null;
+                        const pct = budgetUsedPct(key.mtd_units ?? 0, budgetUnits);
+                        const accruedUsd = (key.mtd_units ?? 0) / UNITS_PER_USD;
+                        return (
+                          <div className="flex items-center gap-2 min-w-[140px]">
+                            <span className="tabular-nums">
+                              {formatCurrency(accruedUsd, symbol, 2)}
+                            </span>
+                            <div className="flex-1">
+                              <ProgressBar pct={pct ?? 0} colorClass={budgetBarColor(pct)} size="sm" />
+                            </div>
+                            <span className="text-xs text-base-content/45 tabular-nums w-10 text-right">
+                              {pct !== null ? `${Math.round(pct)}%` : '—'}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td className="text-sm text-base-content/55">{key.model_fallback_id ? (fallbacks?.find(f => f.id === key.model_fallback_id)?.name ?? '—') : t('keys.none')}</td>
                     <td className="font-mono text-sm text-base-content/50">{new Date(key.created_at).toLocaleDateString()}</td>
                   </motion.tr>
                 ))}
                 {(!data?.items?.length) && (
                   <tr>
-                    <td colSpan={7} className="text-center py-16">
+                    <td colSpan={8} className="text-center py-16">
                       <div className="flex flex-col items-center gap-3">
                         <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-base-200/60">
                           <KeyRound className="h-6 w-6 text-base-content/30" />

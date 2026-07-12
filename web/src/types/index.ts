@@ -9,6 +9,9 @@ export interface ApiKey {
   model_fallback_id: string | null;
   created_at: string;
   updated_at: string;
+  /** Phase 7: current UTC-month MTD spend in 10^8 subunits per USD.
+   *  `0` when the key has no usage this month. */
+  mtd_units: number;
 }
 
 export interface CreateKeyRequest {
@@ -38,6 +41,7 @@ export interface UpdateKeyRequest {
 
 export interface Provider {
   id: string;
+  owner_org_id: string | null;
   name: string;
   slug: string;
   endpoints: Record<string, string> | null;
@@ -62,6 +66,7 @@ export interface UpdateProviderRequest {
 
 export interface Model {
   id: string;
+  owner_org_id: string | null;
   name: string;
   model_type?: string | null;
   pricing_policy_id?: string | null;
@@ -216,6 +221,15 @@ export interface User {
   platform_role: 'platform_admin' | null;
   balance?: number;
   threshold?: number;
+  /**
+   * User's email address. null until the user sets one (Phase 4 email flow:
+   * registration collects it, but legacy accounts may have none yet).
+   */
+  email: string | null;
+  /**
+   * ISO timestamp of when the user verified their email, or null if unverified.
+   */
+  email_verified_at: string | null;
 }
 
 // --- Org / multi-tenant ---
@@ -226,6 +240,18 @@ export interface OrgSummary {
   name: string;
   role: 'owner' | 'admin' | 'member';
   group_id: string | null;
+}
+
+// --- Members ---
+
+export type MemberRole = 'owner' | 'admin' | 'member';
+
+export interface Member {
+  user_id: string;
+  username: string;
+  role: MemberRole;
+  group_id: string | null;
+  joined_at: string; // ISO timestamp
 }
 
 // --- Groups ---
@@ -261,13 +287,28 @@ export interface LoginRequest {
 export interface RegisterRequest {
   username: string;
   password: string;
+  /**
+   * Required email address (Phase 4). A verification email is sent on
+   * register; the user must click through before they can log in.
+   */
+  email: string;
+  /**
+   * Optional invitation token — when set, the backend accepts the invitation
+   * server-side in the same register transaction (Task 8) instead of forcing
+   * a separate client-side /invitations/accept round-trip.
+   */
+  inviteToken?: string;
 }
 
 export interface AuthResponse {
   token: string;
   refresh_token: string;
   user: User;
-  current_org: OrgSummary;
+  /**
+   * null for limbo users (just registered, no org yet). The post-auth flow
+   * treats null here as "show the onboarding wizard".
+   */
+  current_org: OrgSummary | null;
   orgs: OrgSummary[];
 }
 
@@ -275,9 +316,35 @@ export interface MeResponse {
   id: string;
   username: string;
   platform_role: 'platform_admin' | null;
-  current_org: OrgSummary;
+  /**
+   * null when the user has no memberships (e.g. just self-left their last
+   * org). The auth store treats null as "no current org" and route guards
+   * bounce the user to /login.
+   */
+  current_org: OrgSummary | null;
   orgs: OrgSummary[];
   allow_registration: boolean;
+  /**
+   * True when the current membership is a temp/system-created row, indicating
+   * a platform_admin is operating in an org they don't really belong to. The
+   * UI surfaces an "platform admin mode" banner when this is set.
+   */
+  impersonating: boolean;
+  /**
+   * The signed-in user's email (may be null for legacy accounts that predate
+   * the email-required signup flow). Surfaced in the account UI.
+   */
+  email: string | null;
+  /**
+   * ISO timestamp of email verification, or null if the user hasn't verified
+   * yet. The login flow gates unverified users (403 email_not_verified).
+   */
+  email_verified_at: string | null;
+  /**
+   * True when this server requires email verification before login. The
+   * frontend surfaces UI hints (e.g. an "Add email" banner) based on this.
+   */
+  requires_email_verification: boolean;
 }
 
 export interface AuthConfigResponse {
@@ -566,6 +633,7 @@ export interface SyncedModel {
 
 export interface PricingPolicy {
   id: string;
+  owner_org_id: string | null;
   name: string;
   billing_type: string;
   config: PricingConfig;
@@ -701,4 +769,49 @@ export interface RequestDetailsResponse {
   transaction: RequestTransaction | null;
   usage: RequestUsage | null;
   audit: RequestAudit | null;
+}
+
+// Phase 3: invitations
+export interface Invitation {
+  id: string;
+  token: string;
+  url: string;
+  role: 'member' | 'admin';
+  /**
+   * Phase 4: the email this invitation was sent to. Optional only for legacy
+   * rows; new rows always carry a recipient per `create_invitation`'s required
+   * body field.
+   */
+  recipient_email: string | null;
+  created_at: string;
+  expires_at: string;
+  accepted_at: string | null;
+  accepted_by: string | null; // username, not user id
+  revoked_at: string | null;
+}
+
+export interface InvitationPreview {
+  org_name: string;
+  org_slug: string;
+  role: 'member' | 'admin';
+  inviter_username: string;
+  /**
+   * Phase 4: the email the admin bound this invitation to. The landing page
+   * surfaces it so the recipient can confirm the address matches their account.
+   */
+  recipient_email: string;
+  expires_at: string;
+}
+
+export interface CreateInvitationBody {
+  role: 'member' | 'admin';
+  /**
+   * Phase 4: required. The invitation is bound to this recipient email; only a
+   * verified user with a matching email can accept it.
+   */
+  recipient_email: string;
+}
+
+export interface AcceptInvitationBody {
+  token: string;
 }

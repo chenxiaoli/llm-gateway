@@ -4,10 +4,14 @@ import { Plus, Pencil, Trash2, Copy, Check, Globe, Zap, Radio, Layers, Shield } 
 import { useProviders, useCreateProvider, useUpdateProvider, useDeleteProvider, useProviderModels, useUpdateProviderModels } from '../hooks/useProviders';
 import { useAllModels } from '../hooks/useModels';
 import { usePricingPolicies } from '../hooks/usePricingPolicies';
+import { useCatalogFilter } from '../hooks/useCatalogFilter';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Drawer } from '../components/ui/Drawer';
 import { EndpointsEditor } from '../components/ui/EndpointsEditor';
+import { CatalogFilter, type CatalogScope } from '../components/CatalogFilter';
+import { CatalogNoMatches } from '../components/CatalogNoMatches';
+import { useCanCreateOrgCatalog } from '../stores/authStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Provider } from '../types';
 
@@ -562,6 +566,11 @@ export default function Providers() {
   const updateMutation = useUpdateProvider();
   const deleteMutation = useDeleteProvider();
 
+  const [scope, setScope] = useState<CatalogScope>('all');
+  const showOrgOption = useCanCreateOrgCatalog();
+  const visible = useCatalogFilter(providers, scope);
+  const totalUnfiltered = providers?.length ?? 0;
+
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const [createEndpoints, setCreateEndpoints] = useState<Record<string, string>>({});
@@ -653,7 +662,7 @@ export default function Providers() {
     setDeletingProvider(null);
   };
 
-  const totalProviders = providers?.length ?? 0;
+  const totalProviders = visible?.length ?? 0;
 
   return (
     <div className="px-6 pb-8">
@@ -685,7 +694,9 @@ export default function Providers() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.92 }}
               transition={{ duration: 0.2 }}
+              className="flex items-center gap-3"
             >
+              <CatalogFilter value={scope} onChange={setScope} showOrgOption={showOrgOption} />
               <Button
                 icon={<Plus className="h-4 w-4" />}
                 size="sm"
@@ -699,7 +710,7 @@ export default function Providers() {
       </motion.div>
 
       {/* Stats */}
-      {totalProviders > 0 && <StatsBar providers={providers!} />}
+      {totalProviders > 0 && <StatsBar providers={visible!} />}
 
       {/* Content */}
       {isLoading ? (
@@ -710,7 +721,11 @@ export default function Providers() {
           </div>
         </div>
       ) : totalProviders === 0 ? (
-        <EmptyState onAddClick={() => setCreateOpen(true)} />
+        totalUnfiltered === 0 ? (
+          <EmptyState onAddClick={() => setCreateOpen(true)} />
+        ) : (
+          <CatalogNoMatches />
+        )
       ) : (
         <motion.div
           initial="hidden"
@@ -718,7 +733,7 @@ export default function Providers() {
           variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.08 } } }}
           className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4"
         >
-          {providers!.map((provider, i) => (
+          {visible!.map((provider, i) => (
             <ProviderModule
               key={provider.id}
               provider={provider}

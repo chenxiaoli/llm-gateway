@@ -10,6 +10,8 @@ import {
   Cpu,
   Users,
   UsersRound,
+  UserPlus,
+  Mail,
   Settings,
   FileText,
   DollarSign,
@@ -27,11 +29,14 @@ import {
   SquareStack,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
-import { isAdminOrAbove } from '../lib/auth';
+import { isAdminOrAbove, isPlatformAdmin } from '../lib/auth';
 import { useTheme } from '../hooks/useTheme';
 import { apiClient } from '../api/client';
 import { useTranslation } from 'react-i18next';
 import { Globe } from 'lucide-react';
+import { OrgSwitcher } from './OrgSwitcher';
+import { ImpersonationBanner } from './ImpersonationBanner';
+import { EmailBanner } from './EmailBanner';
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -43,10 +48,13 @@ export default function AppLayout() {
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
   const currentOrg = useAuthStore((s) => s.currentOrg);
+  const impersonating = useAuthStore((s) => s.impersonating);
   const logout = useAuthStore((s) => s.logout);
   const isAdmin = isAdminOrAbove(user, currentOrg);
+  const showPlatform = isPlatformAdmin(user);
   const { theme, toggleTheme } = useTheme();
   const { t, i18n } = useTranslation();
+  const slug = currentOrg?.slug ?? '';
   const toggleLanguage = () => {
     const next = i18n.language === 'zh' ? 'en' : 'zh';
     i18n.changeLanguage(next);
@@ -54,23 +62,34 @@ export default function AppLayout() {
   };
 
   const consoleItems = [
-    { key: '/console/dashboard', icon: LayoutDashboard, label: t('sidebar.dashboard') },
-    { key: '/console/keys', icon: KeyRound, label: t('sidebar.keys') },
-    { key: '/console/model-fallbacks', icon: ArrowRightLeft, label: t('sidebar.modelFallbacks') },
-    { key: '/console/models', icon: SquareStack, label: t('sidebar.models') },
-    { key: '/console/usage', icon: BarChart3, label: t('sidebar.usage') },
+    { key: `/${slug}/dashboard`, icon: LayoutDashboard, label: t('sidebar.dashboard') },
+    { key: `/${slug}/keys`, icon: KeyRound, label: t('sidebar.keys') },
+    { key: `/${slug}/model-fallbacks`, icon: ArrowRightLeft, label: t('sidebar.modelFallbacks') },
+    { key: `/${slug}/models`, icon: SquareStack, label: t('sidebar.models') },
+    { key: `/${slug}/usage`, icon: BarChart3, label: t('sidebar.usage') },
+    { key: `/${slug}/settings`, icon: Settings, label: t('sidebar.orgSettings') },
   ];
 
   const adminItems = [
-    { key: '/admin/dashboard', icon: LayoutDashboard, label: t('sidebar.dashboard') },
-    { key: '/admin/channels', icon: Network, label: t('sidebar.channels') },
-    { key: '/admin/providers', icon: Server, label: t('sidebar.providers') },
-    { key: '/admin/models', icon: Cpu, label: t('sidebar.models') },
-    { key: '/admin/pricing-policies', icon: DollarSign, label: t('sidebar.pricingPolicies') },
-    { key: '/admin/users', icon: Users, label: t('sidebar.users') },
-    { key: '/admin/groups', icon: UsersRound, label: t('groups.title') },
+    { key: `/${slug}/admin/dashboard`, icon: LayoutDashboard, label: t('sidebar.dashboard') },
+    { key: `/${slug}/admin/channels`, icon: Network, label: t('sidebar.channels') },
+    { key: `/${slug}/admin/providers`, icon: Server, label: t('sidebar.providers') },
+    { key: `/${slug}/admin/models`, icon: Cpu, label: t('sidebar.models') },
+    { key: `/${slug}/admin/pricing-policies`, icon: DollarSign, label: t('sidebar.pricingPolicies') },
+    { key: `/${slug}/admin/users`, icon: Users, label: t('sidebar.users') },
+    { key: `/${slug}/members`, icon: UserPlus, label: t('sidebar.members') },
+    { key: `/${slug}/admin/invitations`, icon: Mail, label: t('sidebar.invitations') },
+    { key: `/${slug}/admin/groups`, icon: UsersRound, label: t('groups.title') },
+    { key: `/${slug}/admin/logs`, icon: FileText, label: t('sidebar.logs') },
+  ];
+
+  // Platform-admin-only items. The /{slug}/admin/settings handler is
+  // platform-scoped (is_platform_admin() gate on the backend) — org admins
+  // get 403, so this group is hidden from them and the route is gated by
+  // RequirePlatformAdmin.
+  const platformItems = [
     { key: '/admin/settings', icon: Settings, label: t('sidebar.settings') },
-    { key: '/admin/logs', icon: FileText, label: t('sidebar.logs') },
+    { key: '/admin/platform-users', icon: Users, label: t('sidebar.platformUsers') },
   ];
 
   // Map paths to display names for breadcrumbs
@@ -84,6 +103,8 @@ export default function AppLayout() {
     models: t('sidebar.models'),
     'pricing-policies': t('sidebar.pricingPolicies'),
     users: t('sidebar.users'),
+    members: t('sidebar.members'),
+    invitations: t('sidebar.invitations'),
     settings: t('sidebar.settings'),
     logs: t('sidebar.logs'),
   };
@@ -110,7 +131,15 @@ export default function AppLayout() {
 
   const sidebarWidth = collapsed ? 'w-[68px]' : 'w-[232px]';
 
-  const breadcrumbSegment = location.pathname.replace(/^\/(console|admin)\//, '');
+  // When the impersonation banner is visible (fixed top-0 h-8), shift the
+  // fixed header, the mobile sidebar overlay, and the main content's top
+  // padding down by 32px so nothing overlaps. The desktop sidebar already
+  // spans top-0..bottom-0 but sits under the banner z-[60] < sidebar z-[100];
+  // it still needs to start below the banner so its logo row isn't hidden.
+  const topShift = impersonating ? 'top-8' : 'top-0';
+  const ptShift = impersonating ? 'pt-20' : 'pt-12';
+
+  const breadcrumbSegment = location.pathname.replace(/^\/[^/]+\/(admin\/)?/, '');
 
   const navItem = (item: { key: string; icon: typeof LayoutDashboard; label: string }, active: boolean) => {
     const Icon = item.icon;
@@ -156,6 +185,13 @@ export default function AppLayout() {
         </span>
       </div>
 
+      {/* Org switcher — only show if currentOrg is set */}
+      {currentOrg && !collapsed && (
+        <div className="border-b border-base-300/60 px-2 py-2">
+          <OrgSwitcher />
+        </div>
+      )}
+
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4 flex flex-col gap-0.5" role="navigation" aria-label="Main navigation">
         {!collapsed && (
@@ -173,6 +209,17 @@ export default function AppLayout() {
               </div>
             )}
             {adminItems.map((item) => navItem(item, location.pathname === item.key || location.pathname.startsWith(item.key + '/')))}
+          </>
+        )}
+
+        {showPlatform && (
+          <>
+            {!collapsed && (
+              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-5 pb-2">
+                {t('sidebar.platform')}
+              </div>
+            )}
+            {platformItems.map((item) => navItem(item, location.pathname === item.key || location.pathname.startsWith(item.key + '/')))}
           </>
         )}
       </nav>
@@ -204,14 +251,15 @@ export default function AppLayout() {
 
   return (
     <div className="flex min-h-screen bg-base-200">
+      <ImpersonationBanner />
       {/* ── Desktop Sidebar ── */}
-      <aside className={`hidden md:flex fixed left-0 top-0 bottom-0 z-[100] flex-col bg-base-100 border-r border-base-300/60 transition-all duration-300 overflow-hidden ${sidebarWidth}`}>
+      <aside className={`hidden md:flex fixed left-0 ${topShift} bottom-0 z-[100] flex-col bg-base-100 border-r border-base-300/60 transition-all duration-300 overflow-hidden ${sidebarWidth}`}>
         {sidebarContent}
       </aside>
 
       {/* ── Mobile Sidebar Overlay ── */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-[200] md:hidden">
+        <div className={`fixed inset-0 ${impersonating ? 'top-8' : 'top-0'} z-[200] md:hidden`}>
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
           <aside className="absolute left-0 top-0 bottom-0 w-[272px] flex flex-col bg-base-100 border-r border-base-300/60 overflow-hidden animate-fade-in">
             {/* Mobile close button */}
@@ -226,6 +274,12 @@ export default function AppLayout() {
                 <X className="h-5 w-5" />
               </button>
             </div>
+            {/* Org switcher — mobile */}
+            {currentOrg && (
+              <div className="border-b border-base-300/60 px-2 py-2">
+                <OrgSwitcher />
+              </div>
+            )}
             {/* Reuse nav items at full width */}
             <nav className="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-0.5" role="navigation" aria-label="Main navigation">
               <div className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-1 pb-2">
@@ -276,6 +330,32 @@ export default function AppLayout() {
                   })}
                 </>
               )}
+              {showPlatform && (
+                <>
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-5 pb-2">
+                    {t('sidebar.platform')}
+                  </div>
+                  {platformItems.map((item) => {
+                    const Icon = item.icon;
+                    const active = location.pathname === item.key || location.pathname.startsWith(item.key + '/');
+                    return (
+                      <button
+                        key={item.key}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer text-base font-medium transition-all duration-150 whitespace-nowrap select-none relative ${
+                          active
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-base-content/50 hover:bg-base-200 hover:text-base-content/80'
+                        }`}
+                        onClick={() => navigate(item.key)}
+                      >
+                        {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-primary" />}
+                        <Icon className="h-[17px] w-[17px] shrink-0" strokeWidth={active ? 2 : 1.5} />
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </>
+              )}
             </nav>
             {version && (
               <div className="border-t border-base-300/60 px-4 py-3">
@@ -289,7 +369,7 @@ export default function AppLayout() {
       {/* ── Main content ── */}
       <div className={`flex min-h-screen flex-col transition-all duration-300 ${collapsed ? 'md:ml-[68px]' : 'md:ml-[232px]'}`}>
         {/* Header */}
-        <header className={`fixed top-0 z-40 shrink-0 bg-base-100/80 backdrop-blur-md border-b border-base-300/60 h-12 left-0 md:left-auto ${collapsed ? 'md:left-[68px]' : 'md:left-[232px]'} right-0`}>
+        <header className={`fixed ${topShift} z-40 shrink-0 bg-base-100/80 backdrop-blur-md border-b border-base-300/60 h-12 left-0 md:left-auto ${collapsed ? 'md:left-[68px]' : 'md:left-[232px]'} right-0`}>
           <div className="flex h-12 items-center justify-between px-4 md:px-6 gap-3 w-full">
             {/* Left: Mobile hamburger + Breadcrumb */}
             <div className="flex items-center gap-2 min-w-0">
@@ -302,7 +382,7 @@ export default function AppLayout() {
               </button>
               <nav className="flex items-center gap-1.5 text-xs min-w-0">
                 <button
-                  onClick={() => navigate('/console/dashboard')}
+                  onClick={() => navigate(slug ? `/${slug}/dashboard` : '/login')}
                   className="text-base-content/30 hover:text-base-content/50 transition-colors shrink-0 font-medium"
                 >
                   {t('sidebar.console')}
@@ -341,7 +421,6 @@ export default function AppLayout() {
               <div className="h-4 w-px bg-base-300/60 mx-1" />
 
               <div ref={dropdownRef} className="relative">
-                {/* TODO(Phase 2): render OrgSwitcher here using useAuthStore.currentOrg + .orgs */}
                 <button
                   className="flex items-center gap-2 text-sm cursor-pointer rounded-lg px-2 py-1 hover:bg-base-200/60 transition-colors"
                   onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -359,14 +438,14 @@ export default function AppLayout() {
                   <div className="absolute right-0 top-full mt-1.5 w-48 rounded-xl border border-base-300/60 bg-base-100 shadow-lg shadow-black/10 py-1.5 z-50">
                     <button
                       className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors cursor-pointer"
-                      onClick={() => { setDropdownOpen(false); navigate('/console/account'); }}
+                      onClick={() => { setDropdownOpen(false); navigate(slug ? `/${slug}/account` : '/login'); }}
                     >
                       <User className="h-4 w-4 text-base-content/40" />
                       {t('header.account')}
                     </button>
                     <button
                       className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors cursor-pointer"
-                      onClick={() => { setDropdownOpen(false); navigate('/console/change-password'); }}
+                      onClick={() => { setDropdownOpen(false); navigate(slug ? `/${slug}/change-password` : '/login'); }}
                     >
                       <Lock className="h-4 w-4 text-base-content/40" />
                       {t('header.changePassword')}
@@ -387,7 +466,8 @@ export default function AppLayout() {
         </header>
 
         {/* Content */}
-        <main className="flex-1 p-4 md:p-6 overflow-y-auto pt-12 pb-8">
+        <main className={`flex-1 p-4 md:p-6 overflow-y-auto ${ptShift} pb-8`}>
+          <EmailBanner />
           <div className="animate-fade-in-up" key={location.pathname}>
             <Outlet />
           </div>

@@ -40,7 +40,7 @@ describe('Users page', () => {
   it('shows group selector in user drawer and updates on change', async () => {
     let patchBody: unknown = null;
     server.use(
-      http.get('*/api/v1/admin/groups', () =>
+      http.get('*/api/v1/test-org/admin/groups', () =>
         HttpResponse.json({
           items: [
             { id: 'g1', name: 'engineering', description: null, created_at: '', updated_at: '' },
@@ -51,7 +51,7 @@ describe('Users page', () => {
           page_size: 20,
         }),
       ),
-      http.get('*/api/v1/admin/users', () =>
+      http.get('*/api/v1/test-org/admin/users', () =>
         HttpResponse.json({
           items: [
             {
@@ -72,13 +72,13 @@ describe('Users page', () => {
           page_size: 20,
         }),
       ),
-      http.get('*/api/v1/admin/users/u1/balance', () =>
+      http.get('*/api/v1/test-org/admin/users/u1/balance', () =>
         HttpResponse.json({
           account: { id: 'a1', user_id: 'u1', balance: 100, threshold: 10, created_at: '', updated_at: '' },
           transactions: { items: [], total: 0, page: 1, page_size: 10 },
         }),
       ),
-      http.patch('*/api/v1/admin/users/u1', async ({ request }) => {
+      http.patch('*/api/v1/test-org/admin/users/u1', async ({ request }) => {
         patchBody = await request.json();
         return HttpResponse.json({
           id: 'u1', username: 'alice', role: 'user', enabled: true,

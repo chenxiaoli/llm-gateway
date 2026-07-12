@@ -51,7 +51,7 @@ function TestCreateKey({ onCreate }: { onCreate: (key: string) => void }) {
 describe('useKeys', () => {
   it('fetches and renders keys', async () => {
     server.use(
-      http.get('*/api/v1/keys', () => HttpResponse.json({ items: mockKeys, total: 2, page: 1, page_size: 20 })),
+      http.get('*/api/v1/test-org/keys', () => HttpResponse.json({ items: mockKeys, total: 2, page: 1, page_size: 20 })),
     );
 
     renderWithProviders(<TestKeysList />);
@@ -66,7 +66,7 @@ describe('useKeys', () => {
 
   it('shows empty list when no keys', async () => {
     server.use(
-      http.get('*/api/v1/keys', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
+      http.get('*/api/v1/test-org/keys', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
     );
 
     renderWithProviders(<TestKeysList />);
@@ -82,7 +82,7 @@ describe('useKeys', () => {
 describe('useCreateKey', () => {
   it('creates a key and returns the raw key', async () => {
     server.use(
-      http.post('*/api/v1/keys', () =>
+      http.post('*/api/v1/test-org/keys', () =>
         HttpResponse.json({
           id: 'key-new',
           name: 'new-key',

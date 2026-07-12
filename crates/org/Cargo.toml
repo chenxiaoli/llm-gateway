@@ -9,3 +9,7 @@ llm-gateway-auth = { path = "../auth" }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
+axum = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

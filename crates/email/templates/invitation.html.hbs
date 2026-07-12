@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; color: #111;">
+    <h2>You're invited to join {{org_name}}</h2>
+    <p>{{inviter_username}} invited you to join as <strong>{{role}}</strong>.</p>
+    <p>
+      <a href="{{accept_url}}"
+         style="display: inline-block; padding: 10px 20px; background: #2563eb; color: #fff; text-decoration: none; border-radius: 4px;">
+        Accept invitation
+      </a>
+    </p>
+    <p style="color: #555; font-size: 12px;">
+      Or paste this link into your browser: {{accept_url}}
+      <br>Expires in {{expires_in_days}} days.
+    </p>
+    <p style="color: #555; font-size: 12px;">
+      If you don't recognize the sender, you can safely ignore this email.
+    </p>
+  </body>
+</html>

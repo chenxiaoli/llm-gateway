@@ -1,4 +1,18 @@
 {
+  "catalog": {
+    "filter": {
+      "all": "全部",
+      "platform": "平台",
+      "ours": "本组织"
+    },
+    "noMatches": {
+      "title": "当前筛选下无内容",
+      "description": "没有匹配当前过滤条件的条目。切回「全部」以查看所有内容。"
+    }
+  },
+  "impersonation": {
+    "banner": "平台管理员模式 — 正以临时管理员身份查看 {{org}}。所有操作将以 {{user}} 的身份记入审计日志。"
+  },
   "common": {
     "save": "保存",
     "cancel": "取消",
@@ -21,17 +35,21 @@
     "noResults": "未找到结果",
     "copy": "复制",
     "copied": "已复制！",
+    "copyFailed": "复制失败",
     "close": "关闭",
     "refresh": "刷新",
     "test": "测试",
     "add": "添加",
     "remove": "移除",
     "reset": "重置",
-    "submit": "提交"
+    "submit": "提交",
+    "username": "用户名",
+    "email": "邮箱"
   },
   "sidebar": {
     "console": "控制台",
     "admin": "管理",
+    "platform": "平台",
     "dashboard": "仪表盘",
     "keys": "API 密钥",
     "modelFallbacks": "模型降级",
@@ -41,10 +59,14 @@
     "providers": "提供商",
     "pricingPolicies": "定价策略",
     "users": "用户",
+    "members": "成员",
+    "invitations": "邀请",
     "settings": "设置",
+    "orgSettings": "组织设置",
     "logs": "审计日志",
     "collapse": "收起",
-    "expand": "展开侧边栏"
+    "expand": "展开侧边栏",
+    "platformUsers": "平台管理员"
   },
   "header": {
     "account": "账户",
@@ -76,7 +98,57 @@
     "errorRegister": "注册失败",
     "successChanged": "密码已修改",
     "updateAccountPassword": "更新您的账户密码",
-    "registrationDisabled": "注册功能已禁用"
+    "registrationDisabled": "注册功能已禁用",
+    "email": "邮箱",
+    "emailInUse": "该邮箱已被使用。",
+    "emailMismatch": "邮箱与邀请不匹配。",
+    "emailRequired": "邮箱为必填项。",
+    "emailNotVerifiedMessage": "登录前请先验证邮箱。",
+    "verificationSent": "验证邮件已发送。",
+    "resendVerification": "重新发送验证邮件",
+    "forgotPassword": "忘记密码？"
+  },
+  "verify_email": {
+    "verifying": "正在验证您的邮箱…",
+    "verified_title": "邮箱已验证",
+    "verified_body": "您的邮箱已通过验证，现在可以登录了。",
+    "continue_to_login": "前往登录",
+    "expired_title": "链接已过期或无效",
+    "expired_body": "此验证链接已���效。您可以在登录页面申请一个新的链接。",
+    "error_title": "出现问题",
+    "retry": "重试"
+  },
+  "check_email": {
+    "title": "请查看您的邮箱",
+    "body": "我们已向 {{email}} 发送了一封验证邮件。请点击邮件中的链接以验证您的邮箱。",
+    "resend": "重新发送邮件",
+    "go_to_login": "前往登录",
+    "resent": "验证邮件已重新发送。"
+  },
+  "forgot_password": {
+    "title": "重置密码",
+    "emailLabel": "邮箱",
+    "emailPlaceholder": "you@example.com",
+    "submit": "发送重置链接",
+    "sentTitle": "请查收邮件",
+    "sentBody": "如果存在该邮箱对应的账户，我们已发送重置链接。链接有效期为 1 小时。",
+    "backToLogin": "返回登录"
+  },
+  "reset_password": {
+    "loading": "正在校验链接…",
+    "validTitle": "设置新密码",
+    "passwordLabel": "新密码",
+    "confirmLabel": "确认新密码",
+    "submit": "更新密码",
+    "updated": "密码已更新",
+    "updatedBody": "正在跳转到登录页…",
+    "expiredTitle": "链接已失效",
+    "expiredBody": "此密码重置链接已失效，请重新申请。",
+    "requestNew": "申请新链接",
+    "errorTitle": "出错了",
+    "retry": "重试",
+    "consumed": "此链接已被使用。",
+    "genericError": "出错了，请重试。"
   },
   "toasts": {
     "keyCreated": "API 密钥已创建",
@@ -162,6 +234,7 @@
       "status": "状态",
       "rateLimit": "速率限制 (RPM)",
       "monthlyBudget": "月度预算",
+      "mtdThisMonth": "本月消费",
       "fallback": "降级策略",
       "created": "创建时间"
     },
@@ -856,6 +929,96 @@
       }
     }
   },
+  "members": {
+    "title": "成员",
+    "description": "管理本组织的成员与角色",
+    "invite": "邀请成员",
+    "table": {
+      "username": "用户名",
+      "role": "角色",
+      "joined": "加入时间",
+      "actions": "操作"
+    },
+    "role": {
+      "owner": "所有者",
+      "admin": "管理员",
+      "member": "成员"
+    },
+    "noMembers": "暂无成员",
+    "inviteModal": {
+      "title": "邀请成员",
+      "username": "用户名",
+      "usernamePlaceholder": "例如：alice",
+      "role": "角色",
+      "invite": "邀请"
+    },
+    "confirmRemove": "确定将 {{name}} 移出本组织？",
+    "confirmLeave": "确定退出本组织？",
+    "confirmDemote": "确定将该所有者降级为 {{role}}？",
+    "remove": "移除",
+    "leave": "退出",
+    "selfLabel": "（你）",
+    "forbidden": "你没有权限查看成员列表。",
+    "toasts": {
+      "invited": "成员已邀请",
+      "inviteFailed": "邀请成员失败",
+      "roleUpdated": "角色已更新",
+      "roleUpdateFailed": "更新角色失败",
+      "removed": "成员已移除",
+      "removeFailed": "移除成员失败"
+    }
+  },
+  "orgSettings": {
+    "title": "组织设置",
+    "description": "重命名或删除本组织",
+    "general": {
+      "sectionTitle": "通用",
+      "name": "组织名称",
+      "namePlaceholder": "例如：Acme Inc.",
+      "slug": "组织 Slug",
+      "slugHint": "小写字母、数字和连字符，3-64 个字符。",
+      "save": "保存更改",
+      "readOnlyNotice": "仅管理员可更改组织设置。"
+    },
+    "defaults": {
+      "title": "默认值",
+      "description": "组织级默认值,应用于未单独设置的 API 密钥",
+      "rateLimitLabel": "默认速率限制 (RPM)",
+      "rateLimitHelp": "应用于未单独设置限制的 API 密钥。留空 = 不限制。",
+      "budgetLabel": "默认月度预算 (USD)",
+      "budgetHelp": "按公历月（UTC）强制执行。留空 = 无预算。",
+      "save": "保存",
+      "cancel": "取消",
+      "saveSuccess": "默认值已保存。",
+      "saveError": "保存默认值失败。",
+      "loading": "加载中…",
+      "loadError": "加载默认值失败。"
+    },
+    "budgetStatus": {
+      "title": "预算状态",
+      "usedOf": "已使用 {{accrued}} / {{limit}}",
+      "unlimited": "无限制 — 无月度上限",
+      "overBudget": "超出预算 {{amount}}"
+    },
+    "danger": {
+      "sectionTitle": "危险操作",
+      "warning": "删除本组织将永久移除所有密钥、通道、用量历史和审计日志。此操作不可撤销。",
+      "confirmLabel": "输入组织 slug 以确认",
+      "confirmPlaceholder": "输入组织 slug",
+      "passwordLabel": "您的密码",
+      "passwordPlaceholder": "输入您的密码",
+      "delete": "删除本组织",
+      "deleteConfirm": "这将永久删除该组织及其所有数据。确定继续？"
+    },
+    "toasts": {
+      "updated": "组织已更新",
+      "updateFailed": "更新组织失败",
+      "deleted": "组织已删除",
+      "deleteFailed": "删除组织失败",
+      "wrongPassword": "密码错误"
+    },
+    "forbidden": "你没有权限查看组织设置。"
+  },
   "groups": {
     "title": "分组",
     "description": "管理用户和渠道分组以控制访问权限",
@@ -1190,5 +1353,142 @@
     "footer": {
       "brand": "TokenVis"
     }
+  },
+  "onboarding": {
+    "title": "设置您的工作区",
+    "subtitle": "创建新组织或加入您被邀请的组织。",
+    "create": {
+      "title": "创建组织",
+      "subtitle": "1 分钟表单",
+      "name": "组织名称",
+      "namePlaceholder": "例如：Acme Inc.",
+      "slug": "Slug",
+      "slugPlaceholder": "例如：acme",
+      "slugHint": "小写字母、数字和连字符。3-64 个字符。",
+      "submit": "创建",
+      "errors": {
+        "slugTaken": "该 Slug 已被占用，请更换一个"
+      }
+    },
+    "join": {
+      "title": "有邀请？",
+      "subtitle": "粘贴链接或令牌",
+      "tokenLabel": "邀请链接或令牌",
+      "tokenPlaceholder": "粘贴您的邀请链接或令牌",
+      "submit": "加入",
+      "errors": {
+        "invalidToken": "此邀请已失效",
+        "alreadyAccepted": "此邀请已被接受"
+      }
+    }
+  },
+  "acceptInvite": {
+    "title": "加入 {{org}}",
+    "inviter": "{{user}} 的邀请",
+    "role": "您将以 {{role}} 身份加入。",
+    "sentTo": "发送至 {{email}}",
+    "emailMismatch": "此邀请发送至 {{email}}。请退出后使用该邮箱重新登录以接受。",
+    "emailMissing": "您需要先将 {{email}} 添加到您的账户，然后才能接受此邀请。",
+    "emailUnverified": "请先验证邮箱，再返回接受邀请。",
+    "accept": "接受",
+    "decline": "拒绝",
+    "signUp": "注册以接受",
+    "logIn": "登录",
+    "alreadyMember": "您已经是 {{org}} 的成员。",
+    "goToOrg": "进入 {{org}}",
+    "errors": {
+      "invalidToken": "此邀请已失效",
+      "alreadyAccepted": "此邀请已被接受",
+      "emailMismatch": "您的邮箱与邀请收件人不匹配",
+      "emailVerificationRequired": "请先验证您的邮箱"
+    },
+    "gone": {
+      "title": "邀请已失效",
+      "description": "此链接可能已过期、被撤销或已被使用。请申请新的邀请。",
+      "back": "返回登录"
+    },
+    "error": {
+      "title": "无法加载邀请",
+      "description": "无法连接到服务器，请检查网络后重试。"
+    }
+  },
+  "invitations": {
+    "title": "邀请",
+    "description": "生成邀请链接并管理待接受、已接受和已撤销的邀请",
+    "generate": {
+      "title": "生成邀请链接",
+      "role": "角色",
+      "recipientEmail": "收件人邮箱",
+      "recipientEmailPlaceholder": "alice@example.com",
+      "submit": "生成"
+    },
+    "roles": {
+      "member": "成员",
+      "admin": "管理员"
+    },
+    "table": {
+      "link": "链接",
+      "role": "角色",
+      "recipient": "收件人",
+      "status": "状态",
+      "created": "创建时间",
+      "actions": "操作"
+    },
+    "status": {
+      "pending": "待接受",
+      "accepted": "已接受",
+      "revoked": "已撤销",
+      "expired": "已过期"
+    },
+    "expiresInDays": "{{count}} 天后过期",
+    "expiresInOneDay": "1 天后过期",
+    "expired": "已过期",
+    "acceptedBy": "已被 {{user}} 接受",
+    "acceptedByUnknown": "已接受",
+    "revoke": "撤销",
+    "confirmRevoke": "撤销此邀请？链接将立即失效。",
+    "confirmRevokeDescription": "链接将立即失效，此操作无法撤销。",
+    "empty": "暂无邀请",
+    "toasts": {
+      "createdTo": "邀请已发送至 {{email}}",
+      "createFailed": "生成邀请失败",
+      "revoked": "邀请已撤销",
+      "revokeFailed": "撤销邀请失败"
+    },
+    "errors": {
+      "emailInUse": "该邮箱已注册账户"
+    }
+  },
+  "emailBanner": {
+    "message": "添加邮箱以接收邀请和重置密码。",
+    "addAction": "添加邮箱",
+    "dismiss": "忽略"
+  },
+  "addEmailModal": {
+    "title": "添加邮箱",
+    "body": "我们将向此地址发送验证链接。在验证完成前，您可以继续使用 TokenVis。",
+    "emailLabel": "邮箱",
+    "emailPlaceholder": "you@example.com",
+    "submit": "发送验证邮件",
+    "cancel": "取消",
+    "success": "验证邮件已发送，请查收。",
+    "errorInUse": "该邮箱已被使用。",
+    "errorGeneric": "出错了，请重试。"
+  },
+  "platformLayout": {
+    "backTo": "返回"
+  },
+  "platformUsers": {
+    "title": "平台管理员",
+    "subtitle": "管理具有平台级别管理员权限的用户。",
+    "currentAdmins": "当前平台管理员",
+    "addAdmin": "添加平台管理员",
+    "searchPlaceholder": "按用户名或邮箱搜索",
+    "noCandidates": "未找到用户。",
+    "grant": "授予",
+    "revoke": "撤销",
+    "confirmRevoke": "确认撤销 {{username}} 的平台管理员权限？",
+    "lastAdminHint": "您是唯一的平台管理员。请先添加其他管理员再撤销。",
+    "stalenessNote": "权限变更将在用户下次登录（access-token 刷新）时生效。"
   }
 }

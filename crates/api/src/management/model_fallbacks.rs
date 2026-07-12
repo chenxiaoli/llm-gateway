@@ -1,22 +1,20 @@
 use axum::extract::{Path, State};
-use axum::http::HeaderMap;
 use axum::Json;
 use std::sync::Arc;
 
+use llm_gateway_org::OrgContext;
 use llm_gateway_storage::{CreateModelFallback, ModelFallbackConfig, UpdateModelFallback};
 
 use crate::error::ApiError;
-use crate::extractors::require_auth;
 use crate::AppState;
 
 pub async fn create_model_fallback(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Json(input): Json<CreateModelFallback>,
 ) -> Result<Json<ModelFallbackConfig>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    // model_fallbacks is platform-level config in Phase 1 (not org-scoped).
-    if claims.platform_role.as_deref() != Some("platform_admin") {
+    // model_fallbacks is platform-level config (not org-scoped).
+    if !ctx.is_platform_admin() {
         return Err(ApiError::Forbidden);
     }
 
@@ -24,7 +22,7 @@ pub async fn create_model_fallback(
         id: uuid::Uuid::new_v4().to_string(),
         name: input.name,
         config: input.config,
-        created_by: Some(claims.sub),
+        created_by: Some(ctx.user_id.clone()),
         created_at: chrono::Utc::now(),
     };
 
@@ -39,22 +37,19 @@ pub async fn create_model_fallback(
 
 pub async fn list_model_fallbacks(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
 ) -> Result<Json<Vec<ModelFallbackConfig>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let is_platform_admin = claims.platform_role.as_deref() == Some("platform_admin");
-
     let all = state
         .storage
         .list_model_fallbacks()
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    let filtered = if is_platform_admin {
+    let filtered = if ctx.is_platform_admin() {
         all
     } else {
         all.into_iter()
-            .filter(|f| f.created_by.as_deref() == Some(&claims.sub))
+            .filter(|f| f.created_by.as_deref() == Some(ctx.user_id.as_str()))
             .collect()
     };
 
@@ -63,12 +58,9 @@ pub async fn list_model_fallbacks(
 
 pub async fn get_model_fallback(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<Json<ModelFallbackConfig>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let is_platform_admin = claims.platform_role.as_deref() == Some("platform_admin");
-
     let config = state
         .storage
         .get_model_fallback(&id)
@@ -79,7 +71,7 @@ pub async fn get_model_fallback(
             id
         )))?;
 
-    if !is_platform_admin && config.created_by.as_deref() != Some(&claims.sub) {
+    if !ctx.is_platform_admin() && config.created_by.as_deref() != Some(ctx.user_id.as_str()) {
         return Err(ApiError::NotFound(format!(
             "Model fallback '{}' not found",
             id
@@ -91,13 +83,10 @@ pub async fn get_model_fallback(
 
 pub async fn update_model_fallback(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
     Json(input): Json<UpdateModelFallback>,
 ) -> Result<Json<ModelFallbackConfig>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let is_platform_admin = claims.platform_role.as_deref() == Some("platform_admin");
-
     let mut config = state
         .storage
         .get_model_fallback(&id)
@@ -108,7 +97,7 @@ pub async fn update_model_fallback(
             id
         )))?;
 
-    if !is_platform_admin && config.created_by.as_deref() != Some(&claims.sub) {
+    if !ctx.is_platform_admin() && config.created_by.as_deref() != Some(ctx.user_id.as_str()) {
         return Err(ApiError::NotFound(format!(
             "Model fallback '{}' not found",
             id
@@ -133,12 +122,9 @@ pub async fn update_model_fallback(
 
 pub async fn delete_model_fallback(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let is_platform_admin = claims.platform_role.as_deref() == Some("platform_admin");
-
     let config = state
         .storage
         .get_model_fallback(&id)
@@ -149,7 +135,7 @@ pub async fn delete_model_fallback(
             id
         )))?;
 
-    if !is_platform_admin && config.created_by.as_deref() != Some(&claims.sub) {
+    if !ctx.is_platform_admin() && config.created_by.as_deref() != Some(ctx.user_id.as_str()) {
         return Err(ApiError::NotFound(format!(
             "Model fallback '{}' not found",
             id

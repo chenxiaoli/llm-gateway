@@ -6,19 +6,32 @@ pub mod user_models;
 pub mod proxy;
 pub mod workers;
 pub mod management;
+pub mod middleware;
+pub mod janitor;
 
 pub use crate::proxy::{ChannelRegistry, InMemoryChannelRegistry, ResolvedChannel, spawn_registry_refresh};
 use llm_gateway_ratelimit::RateLimiter;
-use llm_gateway_storage::Storage;
+use llm_gateway_storage::{AuthConfig, Storage};
 use std::sync::Arc;
 pub struct AppState {
     pub storage: Arc<dyn Storage>,
     pub rate_limiter: Arc<RateLimiter>,
     pub jwt_secret: String,
+    /// Full auth configuration. Held so handlers can read runtime flags like
+    /// `first_user_is_admin` without having to plumb each one through as a
+    /// separate AppState field.
+    pub auth_config: Arc<AuthConfig>,
     pub encryption_key: [u8; 32],
     pub nats_publisher: Option<std::sync::Arc<llm_gateway_nats_publisher::NatsPublisher>>,
     pub registry: Arc<dyn ChannelRegistry>,
     pub system_info: SystemInfo,
+    /// Public-facing base URL (no trailing slash) for constructing
+    /// invitation links and other user-facing URLs. Configurable via
+    /// `[server] public_base_url` in config.toml; defaults to
+    /// `http://localhost:5173`.
+    pub public_base_url: String,
+    pub mailer: Arc<dyn llm_gateway_email::Mailer>,
+    pub templates: Arc<llm_gateway_email::templates::TemplateRegistry>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

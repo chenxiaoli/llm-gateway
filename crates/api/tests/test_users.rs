@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 fn build_app(state: Arc<AppState>) -> axum::Router {
-    management::management_router().with_state(state)
+    management::management_router(state.clone()).with_state(state)
 }
 
 fn bearer_token(token: &str) -> String {
@@ -31,7 +31,7 @@ async fn register_user(
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": username, "password": password}).to_string(),
+                    json!({"username": username, "password": password, "email": format!("{username}@example.com")}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -43,14 +43,32 @@ async fn register_user(
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn test_list_users_admin(pool: PgPool) {
-    let app = build_app(common::make_state(pool));
+    let app = build_app(common::make_state(pool.clone()));
 
-    // Register first user (admin)
+    // Register first user (admin) — Phase 3 leaves them in limbo.
     let admin_body = register_user(&app, "admin", "password123").await;
     let admin_token = admin_body["token"].as_str().unwrap();
+    let admin_id = admin_body["user"]["id"].as_str().unwrap();
 
-    // Register a second user
-    register_user(&app, "regular", "password123").await;
+    // Register a second user — also in limbo.
+    let regular_body = register_user(&app, "regular", "password123").await;
+    let regular_id = regular_body["user"]["id"].as_str().unwrap();
+
+    // Phase 3: register no longer auto-members users into the default org.
+    // Seed both as members of org_default so the org-scoped user-list route
+    // can see them. (Pre-Phase-3, register did this implicitly.)
+    for uid in [admin_id, regular_id] {
+        sqlx::query(
+            "INSERT INTO members (user_id, org_id, role, created_by, created_at)
+             VALUES ($1, $2, 'member', $1, NOW())
+             ON CONFLICT (user_id, org_id) DO NOTHING",
+        )
+        .bind(uid)
+        .bind(common::TEST_ORG)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
 
     // List users
     let resp = app
@@ -58,7 +76,7 @@ async fn test_list_users_admin(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/admin/users")
+                .uri("/api/v1/default/admin/users")
                 .header("authorization", bearer_token(admin_token))
                 .body(Body::empty())
                 .unwrap(),
@@ -83,7 +101,7 @@ async fn test_list_users_without_auth_returns_401(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/admin/users")
+                .uri("/api/v1/default/admin/users")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -111,7 +129,7 @@ async fn test_update_user_role_admin_to_user(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(&format!("/api/v1/admin/users/{}", user_id))
+                .uri(&format!("/api/v1/default/admin/users/{}", user_id))
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"role": "admin"}).to_string()))
@@ -130,7 +148,7 @@ async fn test_update_user_role_admin_to_user(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(&format!("/api/v1/admin/users/{}", admin_id))
+                .uri(&format!("/api/v1/default/admin/users/{}", admin_id))
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"role": "member"}).to_string()))
@@ -165,7 +183,7 @@ async fn test_update_user_role_user_to_admin(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(&format!("/api/v1/admin/users/{}", user_id))
+                .uri(&format!("/api/v1/default/admin/users/{}", user_id))
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"role": "admin"}).to_string()))
@@ -204,7 +222,7 @@ async fn test_cannot_disable_last_admin_user(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(&format!("/api/v1/admin/users/{}", admin_id))
+                .uri(&format!("/api/v1/default/admin/users/{}", admin_id))
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"enabled": false}).to_string()))
@@ -235,7 +253,7 @@ async fn test_cannot_demote_last_admin_user(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri(&format!("/api/v1/admin/users/{}", admin_id))
+                .uri(&format!("/api/v1/default/admin/users/{}", admin_id))
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"role": "user"}).to_string()))
@@ -265,7 +283,7 @@ async fn test_delete_user(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(&format!("/api/v1/admin/users/{}", user_id))
+                .uri(&format!("/api/v1/default/admin/users/{}", user_id))
                 .header("authorization", bearer_token(admin_token))
                 .body(Body::empty())
                 .unwrap(),
@@ -281,7 +299,7 @@ async fn test_delete_user(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/admin/users")
+                .uri("/api/v1/default/admin/users")
                 .header("authorization", bearer_token(admin_token))
                 .body(Body::empty())
                 .unwrap(),
@@ -315,7 +333,7 @@ async fn test_cannot_delete_last_admin_user(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri(&format!("/api/v1/admin/users/{}", admin_id))
+                .uri(&format!("/api/v1/default/admin/users/{}", admin_id))
                 .header("authorization", bearer_token(admin_token))
                 .body(Body::empty())
                 .unwrap(),
@@ -339,7 +357,7 @@ async fn test_update_nonexistent_user_returns_404(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri("/api/v1/admin/users/nonexistent-id")
+                .uri("/api/v1/default/admin/users/nonexistent-id")
                 .header("authorization", bearer_token(admin_token))
                 .header("content-type", "application/json")
                 .body(Body::from(json!({"role": "admin"}).to_string()))
@@ -364,7 +382,7 @@ async fn test_delete_nonexistent_user_returns_404(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("DELETE")
-                .uri("/api/v1/admin/users/nonexistent-id")
+                .uri("/api/v1/default/admin/users/nonexistent-id")
                 .header("authorization", bearer_token(admin_token))
                 .body(Body::empty())
                 .unwrap(),

@@ -20,3 +20,15 @@ export function isAdminOrAbove(
     user?.platform_role === 'platform_admin'
   );
 }
+
+/**
+ * True only for platform_admin users. Use this to gate platform-scoped UI
+ * (e.g. the Platform sidebar group, the /{slug}/admin/settings route).
+ * Distinct from `isAdminOrAbove` which is true for org admins too —
+ * platform-scoped backend handlers reject org admins with 403.
+ */
+export function isPlatformAdmin(
+  user: Pick<User, 'platform_role'> | null | undefined,
+): boolean {
+  return user?.platform_role === 'platform_admin';
+}

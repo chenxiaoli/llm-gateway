@@ -745,7 +745,13 @@ async fn process_sse_stream(
         request_headers: Some(audit_params.request_headers),
         response_headers: Some(audit_params.response_headers),
         org_id: audit_params.org_id.clone(),
-        actor_is_platform_admin: false, // api_keys don't carry platform role
+        // Proxy auth is API-key based, so OrgContext.platform_role is never
+        // available here — every proxy audit event is actor_is_platform_admin
+        // = false by design. Future management-API audit paths (if added)
+        // SHOULD populate this from
+        // `org_ctx.platform_role == Some(PlatformRole::PlatformAdmin)`.
+        // (Same rationale applies to the three other AuditTask sites below.)
+        actor_is_platform_admin: false,
         routes,
     };
     dispatch_audit_task(&state, task).await;
@@ -892,6 +898,90 @@ async fn proxy_inner(
 
     if !api_key.enabled {
         return Err(ApiError::Forbidden);
+    }
+
+    // === Step 1.5: Rate-limit check ===
+    // Resolution order: api_key.rate_limit ?? org.default_rate_limit_rpm ?? None (unlimited).
+    // Bucket is per-api_key (model dimension collapsed via "" so the limit
+    // applies regardless of which model the client requested).
+    let effective_rpm = match api_key.rate_limit {
+        Some(n) => Some(n),
+        None => match state
+            .storage
+            .get_org_setting(&api_key.org_id, "default_rate_limit_rpm")
+            .await
+        {
+            Ok(Some(raw)) => raw.parse::<i64>().ok(),
+            Ok(None) => None,
+            Err(e) => {
+                tracing::warn!(error = %e, "org default lookup failed; failing open");
+                None
+            }
+        },
+    };
+
+    if let Some(rpm) = effective_rpm {
+        let allowed = state
+            .rate_limiter
+            .check_and_increment(&api_key.id, "", Some(rpm), None, None)
+            .await;
+        if !allowed {
+            return Err(ApiError::RateLimited {
+                retry_after_secs: state.system_info.rate_limit_window_secs,
+            });
+        }
+    }
+
+    // === Step 1.6: Budget check ===
+    // Post-completion: uses MTD that EXCLUDES the current request's cost
+    // (record_usage runs after the response via the audit worker pipeline).
+    // Resolution order mirrors rate limits:
+    //   effective_budget = api_key.budget_monthly ?? org.default_budget_monthly_usd ?? None
+    let effective_budget = match api_key.budget_monthly {
+        Some(units) => Some(units),
+        None => match state
+            .storage
+            .get_org_setting(&api_key.org_id, "default_budget_monthly_usd")
+            .await
+        {
+            Ok(Some(raw)) => raw.parse::<i64>().ok(),
+            Ok(None) => None,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    org_id = %api_key.org_id,
+                    "org default budget lookup failed; failing open"
+                );
+                None
+            }
+        },
+    };
+
+    if let Some(budget) = effective_budget {
+        let accrued = match state
+            .storage
+            .get_month_to_date_spend(&api_key.id)
+            .await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    key_id = %api_key.id,
+                    "MTD counter read failed; failing open"
+                );
+                0
+            }
+        };
+        if accrued > budget {
+            let month_bucket = format!("{}", chrono::Utc::now().format("%Y-%m"));
+            return Err(ApiError::BudgetExceeded {
+                key_id: api_key.id.clone(),
+                month_bucket,
+                limit_units: budget,
+                accrued_units: accrued,
+            });
+        }
     }
 
     // === Step 2: Balance check ===

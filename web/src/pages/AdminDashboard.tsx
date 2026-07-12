@@ -11,6 +11,7 @@ import { useKeys } from '../hooks/useKeys';
 import { useSystemInfo, useNatsStatus } from '../hooks/useSettings';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useCurrencyStore, formatCurrency } from '../stores/currency';
+import { useAuthStore } from '../stores/authStore';
 import { Badge } from '../components/ui/Badge';
 import { motion } from 'framer-motion';
 
@@ -70,6 +71,7 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
   const symbol = useCurrencyStore((s) => s.symbol);
+  const slug = useAuthStore((s) => s.currentOrg?.slug);
 
   const { data: todaySummary } = useUsageSummary({ since: startOfDay() });
   const { data: monthSummary } = useUsageSummary({ since: startOfMonth() });
@@ -141,23 +143,23 @@ export default function AdminDashboard() {
             </div>
           )}
           <div className="ml-auto flex items-center gap-4">
-            <button onClick={() => navigate('/admin/providers')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
+            <button onClick={() => navigate(slug ? `/${slug}/admin/providers` : '/login')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               <Server className="h-3.5 w-3.5" />
               {t('adminDashboard.providersCount', { active: activeProviders, total: providers?.length ?? 0 })}
             </button>
-            <button onClick={() => navigate('/admin/channels')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
+            <button onClick={() => navigate(slug ? `/${slug}/admin/channels` : '/login')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               <Network className="h-3.5 w-3.5" />
               {t('adminDashboard.channelsCount', { active: activeChannels, total: channels?.length ?? 0 })}
             </button>
-            <button onClick={() => navigate('/admin/models')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
+            <button onClick={() => navigate(slug ? `/${slug}/admin/models` : '/login')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               <Cpu className="h-3.5 w-3.5" />
               {t('adminDashboard.modelsCount', { count: models?.length ?? 0 })}
             </button>
-            <button onClick={() => navigate('/admin/users')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
+            <button onClick={() => navigate(slug ? `/${slug}/admin/users` : '/login')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               <Users className="h-3.5 w-3.5" />
               {t('adminDashboard.usersCount', { count: users?.total ?? 0 })}
             </button>
-            <button onClick={() => navigate('/console/keys')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
+            <button onClick={() => navigate(slug ? `/${slug}/keys` : '/login')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               <KeyRound className="h-3.5 w-3.5" />
               {t('adminDashboard.keysCount', { count: keys?.total ?? 0 })}
             </button>
@@ -221,7 +223,7 @@ export default function AdminDashboard() {
         <div className="lg:col-span-1">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-bold text-base-content/70">{t('adminDashboard.topModelsToday')}</h2>
-            <button onClick={() => navigate('/admin/models')} className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
+            <button onClick={() => navigate(slug ? `/${slug}/admin/models` : '/login')} className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               {t('adminDashboard.viewAll')} <ArrowRight className="h-3 w-3" />
             </button>
           </div>
@@ -257,7 +259,7 @@ export default function AdminDashboard() {
         <div className="lg:col-span-1">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-bold text-base-content/70">{t('adminDashboard.channelUsageToday')}</h2>
-            <button onClick={() => navigate('/admin/channels')} className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
+            <button onClick={() => navigate(slug ? `/${slug}/admin/channels` : '/login')} className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               {t('adminDashboard.viewAll')} <ArrowRight className="h-3 w-3" />
             </button>
           </div>
@@ -294,7 +296,7 @@ export default function AdminDashboard() {
         <div className="lg:col-span-1">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-bold text-base-content/70">{t('adminDashboard.recentRequests')}</h2>
-            <button onClick={() => navigate('/admin/logs')} className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
+            <button onClick={() => navigate(slug ? `/${slug}/admin/logs` : '/login')} className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               {t('adminDashboard.viewAll')} <ArrowRight className="h-3 w-3" />
             </button>
           </div>

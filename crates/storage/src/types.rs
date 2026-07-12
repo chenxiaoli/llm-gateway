@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 // --- Org / Membership ---
 
@@ -49,6 +50,16 @@ impl PlatformRole {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum SetPlatformRoleError {
+    #[error("user not found")]
+    UserNotFound,
+    #[error("cannot demote the last platform admin")]
+    LastPlatformAdmin,
+    #[error(transparent)]
+    Database(#[from] sqlx::Error),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Org {
     pub id: String,
@@ -73,6 +84,21 @@ pub struct UpdateOrg {
     pub slug: Option<String>,
 }
 
+/// Org-wide default settings surfaced via `GET/PUT /api/v1/orgs/{id}/defaults`.
+///
+/// Stored as two rows in `org_settings` kv table; this struct is the typed
+/// facade. `default_budget_monthly_usd` is in USD subunits (10⁸ per USD,
+/// i.e. `UNITS_PER_USD` in `crates/storage/src/money.rs`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrgDefaults {
+    /// Default per-key RPM cap for keys whose own `rate_limit` is NULL.
+    /// None = unlimited.
+    pub default_rate_limit_rpm: Option<i64>,
+    /// Default per-key monthly budget in USD subunits (10⁸ per USD). None = no budget.
+    /// NOTE: stored for display; NOT enforced in Phase 5.
+    pub default_budget_monthly_usd: Option<i64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Member {
     pub user_id: String,
@@ -95,6 +121,110 @@ pub struct MembershipSummary {
     pub org: Org,
     pub role: MemberRole,
     pub group_id: Option<String>,
+}
+
+// --- Invitations (Phase 3) ---
+
+/// One row of the `invitations` table. Used internally by the storage trait.
+///
+/// Phase 4: `recipient_email` binds the invitation to a specific email. Old
+/// generic-token rows (Phase 3) had NULL here; the migration revokes them.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Invitation {
+    pub id: String,
+    pub token: String,
+    pub org_id: String,
+    pub role: MemberRole,
+    pub created_by: String,
+    pub recipient_email: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub accepted_at: Option<DateTime<Utc>>,
+    pub accepted_by: Option<String>,
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
+/// One row of the `email_verifications` table. The `token` is the lookup
+/// key the user clicks in their email; `consumed_at IS NULL` means "still
+/// usable". `email` is denormalized from `users.email` so the row records
+/// *what* was being verified at mint time.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct EmailVerification {
+    pub id: String,
+    pub token: String,
+    pub user_id: String,
+    pub email: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub consumed_at: Option<DateTime<Utc>>,
+}
+
+/// One row of the `password_resets` table. Same shape as
+/// `EmailVerification` minus the denormalized `email`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PasswordReset {
+    pub id: String,
+    pub token: String,
+    pub user_id: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub consumed_at: Option<DateTime<Utc>>,
+}
+
+/// Result of an atomic password-reset attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasswordResetOutcome {
+    /// Token was valid; password was updated; reset row was marked consumed.
+    Success,
+    /// No row matched the token.
+    NotFound,
+    /// Token had already been consumed.
+    Consumed,
+    /// Token had expired.
+    Expired,
+}
+
+/// Response for invitation mint/list endpoints. The URL is constructed
+/// server-side so the frontend doesn't need to know the public base URL.
+///
+/// Phase 4: `recipient_email` is surfaced so the admin list can show whom the
+/// invitation was sent to (Task 11). It's Option only for legacy rows — new
+/// rows always carry a recipient per `create_invitation`'s required body field.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct InvitationResponse {
+    pub id: String,
+    pub token: String,
+    pub url: String,
+    pub role: String,
+    pub recipient_email: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub accepted_at: Option<DateTime<Utc>>,
+    pub accepted_by: Option<String>,
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
+/// Request body for `POST /api/v1/invitations/accept`.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct AcceptInvitationRequest {
+    pub token: String,
+}
+
+/// Response for `GET /api/v1/invitations/preview?token=...`. Public — does
+/// NOT include the token itself (the caller already has it) or any user-id
+/// data; just enough for the landing page to render.
+///
+/// Note: `already_member` was originally specced but is computed client-side
+/// (the frontend already has the user's membership list) — drop it from the
+/// type per the plan's self-review note.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InvitationPreview {
+    pub org_name: String,
+    pub org_slug: String,
+    pub role: String,
+    pub inviter_username: String,
+    pub recipient_email: Option<String>,
+    pub expires_at: DateTime<Utc>,
 }
 
 // --- Pagination ---
@@ -149,6 +279,16 @@ pub struct ApiKey {
     pub updated_at: DateTime<Utc>,
 }
 
+/// ApiKey + its current UTC-month MTD spend. The MTD field is `0` when the
+/// key has no budget_counters row this month (mirrors SQL `COALESCE(..., 0)`).
+/// Used by the Phase 7 keys-listing endpoint so the UI can render per-key
+/// spend in one round-trip without an N+1 of `get_month_to_date_spend`.
+#[derive(Debug, Clone, Serialize)]
+pub struct ApiKeyWithMtd {
+    pub key: ApiKey,
+    pub mtd_units: i64,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateApiKey {
     pub org_id: String,
@@ -186,6 +326,7 @@ pub struct Provider {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderWithEndpoints {
     pub id: String,
+    pub owner_org_id: Option<String>,
     pub name: String,
     pub slug: String,
     pub endpoints: Option<std::collections::HashMap<String, String>>,
@@ -200,6 +341,7 @@ impl From<Provider> for ProviderWithEndpoints {
         let endpoints = p.endpoints.and_then(|e| serde_json::from_str(&e).ok());
         ProviderWithEndpoints {
             id: p.id,
+            owner_org_id: p.owner_org_id,
             name: p.name,
             slug: p.slug,
             endpoints,
@@ -828,6 +970,11 @@ pub struct User {
     pub refresh_token: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    // Phase 4: email + verification + password-change tracking.
+    pub email: Option<String>,
+    pub email_verified_at: Option<DateTime<Utc>>,
+    pub requires_email_verification: bool,
+    pub password_changed_at: DateTime<Utc>,
 }
 
 // TODO(Task 5/8): migrate alongside User — drop role/group_id fields once
@@ -1131,6 +1278,8 @@ pub struct AppConfig {
     pub upstream: UpstreamConfig,
     pub audit: AuditConfig,
     pub nats: Option<NatsConfig>,
+    #[serde(default)]
+    pub email: EmailConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1138,13 +1287,27 @@ pub struct ServerConfig {
     pub host: String,
     pub port: u16,
     pub encryption_key: String,
+    /// Public-facing base URL the frontend is served at (no trailing slash).
+    /// Used to build invitation links etc. Defaults to
+    /// `http://localhost:5173` when unset.
+    #[serde(default)]
+    pub public_base_url: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AuthConfig {
     pub jwt_secret: String,
     pub allow_registration: Option<bool>,
+    /// When true (default), the first user to register against an empty DB
+    /// is automatically promoted to `platform_admin`. Operators who want to
+    /// bootstrap via the CLI subcommand instead should set this to false.
+    /// Self-hosted deployments typically leave this on; SaaS deployments
+    /// typically turn it off.
+    #[serde(default = "default_first_user_is_admin")]
+    pub first_user_is_admin: bool,
 }
+
+fn default_first_user_is_admin() -> bool { true }
 
 #[derive(Debug, Deserialize)]
 pub struct DatabaseConfig {
@@ -1173,4 +1336,51 @@ pub struct NatsConfig {
     pub url: String,
     #[serde(default)]
     pub token: Option<String>,
+    /// Path to a NATS credentials file (JWT + NKey seed) for JWT-based auth.
+    /// Takes precedence over `token` when set.
+    #[serde(default)]
+    pub credentials_file: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct EmailConfig {
+    /// "smtp" | "file" | "noop"
+    #[serde(default = "default_email_transport")]
+    pub transport: String,
+    #[serde(default = "default_email_from_address")]
+    pub from_address: String,
+    #[serde(default = "default_email_from_name")]
+    pub from_name: String,
+    /// Used when transport = "file"
+    #[serde(default = "default_email_file_output_dir")]
+    pub file_output_dir: String,
+    /// SMTP-specific — required when transport = "smtp"
+    pub smtp_host: Option<String>,
+    pub smtp_port: Option<u16>,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<String>,
+    #[serde(default = "default_email_smtp_use_tls")]
+    pub smtp_use_tls: bool,
+}
+
+fn default_email_transport() -> String { "file".into() }
+fn default_email_from_address() -> String { "noreply@example.com".into() }
+fn default_email_from_name() -> String { "LLM Gateway".into() }
+fn default_email_file_output_dir() -> String { "./dev-emails".into() }
+fn default_email_smtp_use_tls() -> bool { true }
+
+impl Default for EmailConfig {
+    fn default() -> Self {
+        Self {
+            transport: default_email_transport(),
+            from_address: default_email_from_address(),
+            from_name: default_email_from_name(),
+            file_output_dir: default_email_file_output_dir(),
+            smtp_host: None,
+            smtp_port: None,
+            smtp_username: None,
+            smtp_password: None,
+            smtp_use_tls: default_email_smtp_use_tls(),
+        }
+    }
 }

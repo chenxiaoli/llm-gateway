@@ -1,4 +1,18 @@
 {
+  "catalog": {
+    "filter": {
+      "all": "All",
+      "platform": "Platform",
+      "ours": "Ours"
+    },
+    "noMatches": {
+      "title": "Nothing in this scope",
+      "description": "No entries match the current filter. Switch to All to see everything."
+    }
+  },
+  "impersonation": {
+    "banner": "Platform admin mode — viewing {{org}} as a temporary admin. Actions are logged under {{user}}."
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
@@ -21,17 +35,21 @@
     "noResults": "No results found",
     "copy": "Copy",
     "copied": "Copied!",
+    "copyFailed": "Couldn't copy to clipboard",
     "close": "Close",
     "refresh": "Refresh",
     "test": "Test",
     "add": "Add",
     "remove": "Remove",
     "reset": "Reset",
-    "submit": "Submit"
+    "submit": "Submit",
+    "username": "Username",
+    "email": "Email"
   },
   "sidebar": {
     "console": "Console",
     "admin": "Admin",
+    "platform": "Platform",
     "dashboard": "Dashboard",
     "keys": "API Keys",
     "modelFallbacks": "Model Fallbacks",
@@ -41,10 +59,14 @@
     "providers": "Providers",
     "pricingPolicies": "Pricing Policies",
     "users": "Users",
+    "members": "Members",
+    "invitations": "Invitations",
     "settings": "Settings",
+    "orgSettings": "Org Settings",
     "logs": "Audit Logs",
     "collapse": "Collapse",
-    "expand": "Expand sidebar"
+    "expand": "Expand sidebar",
+    "platformUsers": "Platform Users"
   },
   "header": {
     "account": "Account",
@@ -76,7 +98,57 @@
     "errorRegister": "Registration failed",
     "successChanged": "Password changed",
     "updateAccountPassword": "Update your account password",
-    "registrationDisabled": "Registration is currently disabled"
+    "registrationDisabled": "Registration is currently disabled",
+    "email": "Email",
+    "emailInUse": "That email is already in use.",
+    "emailMismatch": "Email does not match the invitation.",
+    "emailRequired": "Email is required.",
+    "emailNotVerifiedMessage": "Please verify your email before logging in.",
+    "verificationSent": "Verification email sent.",
+    "resendVerification": "Resend verification email",
+    "forgotPassword": "Forgot password?"
+  },
+  "verify_email": {
+    "verifying": "Verifying your email…",
+    "verified_title": "Email verified",
+    "verified_body": "Your email address has been verified. You can now log in.",
+    "continue_to_login": "Continue to login",
+    "expired_title": "Link expired or invalid",
+    "expired_body": "This verification link is no longer valid. You can request a new one from the login page.",
+    "error_title": "Something went wrong",
+    "retry": "Try again"
+  },
+  "check_email": {
+    "title": "Check your email",
+    "body": "We sent a verification email to {{email}}. Click the link inside to verify your address.",
+    "resend": "Resend email",
+    "go_to_login": "Go to login",
+    "resent": "Verification email resent."
+  },
+  "forgot_password": {
+    "title": "Reset your password",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "submit": "Send reset link",
+    "sentTitle": "Check your email",
+    "sentBody": "If an account exists for {{email}}, we've sent a reset link. The link expires in 1 hour.",
+    "backToLogin": "Back to login"
+  },
+  "reset_password": {
+    "loading": "Checking link…",
+    "validTitle": "Set a new password",
+    "passwordLabel": "New password",
+    "confirmLabel": "Confirm new password",
+    "submit": "Update password",
+    "updated": "Password updated",
+    "updatedBody": "Redirecting to login…",
+    "expiredTitle": "Link expired or invalid",
+    "expiredBody": "This password reset link is no longer valid. Please request a new one.",
+    "requestNew": "Request new link",
+    "errorTitle": "Something went wrong",
+    "retry": "Try again",
+    "consumed": "This link has already been used.",
+    "genericError": "Something went wrong. Please try again."
   },
   "toasts": {
     "keyCreated": "API key created",
@@ -162,6 +234,7 @@
       "status": "Status",
       "rateLimit": "Rate Limit (RPM)",
       "monthlyBudget": "Monthly Budget",
+      "mtdThisMonth": "MTD this month",
       "fallback": "Fallback",
       "created": "Created"
     },
@@ -856,6 +929,96 @@
       }
     }
   },
+  "members": {
+    "title": "Members",
+    "description": "Manage members and roles for this organization",
+    "invite": "Invite Member",
+    "table": {
+      "username": "Username",
+      "role": "Role",
+      "joined": "Joined",
+      "actions": "Actions"
+    },
+    "role": {
+      "owner": "Owner",
+      "admin": "Admin",
+      "member": "Member"
+    },
+    "noMembers": "No members found",
+    "inviteModal": {
+      "title": "Invite Member",
+      "username": "Username",
+      "usernamePlaceholder": "e.g., alice",
+      "role": "Role",
+      "invite": "Invite"
+    },
+    "confirmRemove": "Remove {{name}} from this organization?",
+    "confirmLeave": "Leave this organization?",
+    "confirmDemote": "Demote this owner to {{role}}?",
+    "remove": "Remove",
+    "leave": "Leave",
+    "selfLabel": "(you)",
+    "forbidden": "You don't have permission to view members.",
+    "toasts": {
+      "invited": "Member invited",
+      "inviteFailed": "Failed to invite member",
+      "roleUpdated": "Role updated",
+      "roleUpdateFailed": "Failed to update role",
+      "removed": "Member removed",
+      "removeFailed": "Failed to remove member"
+    }
+  },
+  "orgSettings": {
+    "title": "Org Settings",
+    "description": "Rename or remove this organization",
+    "general": {
+      "sectionTitle": "GENERAL",
+      "name": "Org Name",
+      "namePlaceholder": "e.g., Acme Inc.",
+      "slug": "Org Slug",
+      "slugHint": "Lowercase letters, digits, and hyphens. 3-64 chars.",
+      "save": "Save Changes",
+      "readOnlyNotice": "Only admins can change org settings."
+    },
+    "defaults": {
+      "title": "Defaults",
+      "description": "Org-wide defaults applied to API keys without their own settings",
+      "rateLimitLabel": "Default rate limit (RPM)",
+      "rateLimitHelp": "Applies to API keys without their own limit. Empty = unlimited.",
+      "budgetLabel": "Default monthly budget (USD)",
+      "budgetHelp": "Enforced per calendar month (UTC). Empty = no budget.",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saveSuccess": "Defaults saved.",
+      "saveError": "Failed to save defaults.",
+      "loading": "Loading…",
+      "loadError": "Failed to load defaults."
+    },
+    "budgetStatus": {
+      "title": "Budget status",
+      "usedOf": "{{accrued}} used of {{limit}}",
+      "unlimited": "Unlimited — no monthly cap",
+      "overBudget": "Over budget by {{amount}}"
+    },
+    "danger": {
+      "sectionTitle": "DANGER ZONE",
+      "warning": "Deleting this org permanently removes all keys, channels, usage history, and audit logs. This cannot be undone.",
+      "confirmLabel": "Type the org slug to confirm",
+      "confirmPlaceholder": "enter the org slug",
+      "passwordLabel": "Your Password",
+      "passwordPlaceholder": "enter your password",
+      "delete": "Delete This Org",
+      "deleteConfirm": "This will permanently delete the org and all its data. Continue?"
+    },
+    "toasts": {
+      "updated": "Org updated",
+      "updateFailed": "Failed to update org",
+      "deleted": "Org deleted",
+      "deleteFailed": "Failed to delete org",
+      "wrongPassword": "Wrong password"
+    },
+    "forbidden": "You don't have permission to view org settings."
+  },
   "groups": {
     "title": "Groups",
     "description": "Manage user and channel groups for access control",
@@ -1190,5 +1353,142 @@
     "footer": {
       "brand": "TokenVis"
     }
+  },
+  "onboarding": {
+    "title": "Set up your workspace",
+    "subtitle": "Create a new org or join one you've been invited to.",
+    "create": {
+      "title": "Create an org",
+      "subtitle": "1 minute form",
+      "name": "Org name",
+      "namePlaceholder": "e.g., Acme Inc.",
+      "slug": "Slug",
+      "slugPlaceholder": "e.g., acme",
+      "slugHint": "Lowercase letters, digits, and hyphens. 3-64 chars.",
+      "submit": "Create",
+      "errors": {
+        "slugTaken": "That slug is taken, try another"
+      }
+    },
+    "join": {
+      "title": "Have an invite?",
+      "subtitle": "Paste the link or token",
+      "tokenLabel": "Invitation link or token",
+      "tokenPlaceholder": "Paste your invitation link or token",
+      "submit": "Join",
+      "errors": {
+        "invalidToken": "This invitation is no longer valid",
+        "alreadyAccepted": "This invitation has already been accepted"
+      }
+    }
+  },
+  "acceptInvite": {
+    "title": "Join {{org}}",
+    "inviter": "Invite from {{user}}",
+    "role": "You'll join as {{role}}.",
+    "sentTo": "Sent to {{email}}",
+    "emailMismatch": "This invitation was sent to {{email}}. Sign out and sign back in with that address to accept.",
+    "emailMissing": "You need to add {{email}} to your account before you can accept this invitation.",
+    "emailUnverified": "Verify your email first, then come back to accept.",
+    "accept": "Accept",
+    "decline": "Decline",
+    "signUp": "Sign up to accept",
+    "logIn": "Log in",
+    "alreadyMember": "You're already a member of {{org}}.",
+    "goToOrg": "Go to {{org}}",
+    "errors": {
+      "invalidToken": "This invitation is no longer valid",
+      "alreadyAccepted": "This invitation has already been accepted",
+      "emailMismatch": "Your email doesn't match the invitation recipient",
+      "emailVerificationRequired": "Verify your email first"
+    },
+    "gone": {
+      "title": "Invitation no longer valid",
+      "description": "This link may have expired, been revoked, or already been used. Please request a new invitation.",
+      "back": "Back to login"
+    },
+    "error": {
+      "title": "Couldn't load invitation",
+      "description": "We couldn't reach the server. Check your connection and try the link again."
+    }
+  },
+  "invitations": {
+    "title": "Invitations",
+    "description": "Generate invite links and manage pending, accepted, and revoked invitations",
+    "generate": {
+      "title": "Generate invite link",
+      "role": "Role",
+      "recipientEmail": "Recipient email",
+      "recipientEmailPlaceholder": "alice@example.com",
+      "submit": "Generate"
+    },
+    "roles": {
+      "member": "Member",
+      "admin": "Admin"
+    },
+    "table": {
+      "link": "Link",
+      "role": "Role",
+      "recipient": "Recipient",
+      "status": "Status",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "status": {
+      "pending": "Pending",
+      "accepted": "Accepted",
+      "revoked": "Revoked",
+      "expired": "Expired"
+    },
+    "expiresInDays": "Expires in {{count}} days",
+    "expiresInOneDay": "Expires in 1 day",
+    "expired": "Expired",
+    "acceptedBy": "Accepted by {{user}}",
+    "acceptedByUnknown": "Accepted",
+    "revoke": "Revoke",
+    "confirmRevoke": "Revoke this invitation? The link will stop working immediately.",
+    "confirmRevokeDescription": "The link will stop working immediately. This cannot be undone.",
+    "empty": "No invitations yet",
+    "toasts": {
+      "createdTo": "Invitation sent to {{email}}",
+      "createFailed": "Failed to generate invitation",
+      "revoked": "Invitation revoked",
+      "revokeFailed": "Failed to revoke invitation"
+    },
+    "errors": {
+      "emailInUse": "That email already has an account"
+    }
+  },
+  "emailBanner": {
+    "message": "Add an email to receive invitations and reset your password.",
+    "addAction": "Add email",
+    "dismiss": "Dismiss"
+  },
+  "addEmailModal": {
+    "title": "Add your email",
+    "body": "We'll send a verification link to this address. You can keep using TokenVis while it's pending verification.",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "submit": "Send verification",
+    "cancel": "Cancel",
+    "success": "Verification email sent — check your inbox.",
+    "errorInUse": "That email is already in use.",
+    "errorGeneric": "Something went wrong. Please try again."
+  },
+  "platformLayout": {
+    "backTo": "Back to"
+  },
+  "platformUsers": {
+    "title": "Platform users",
+    "subtitle": "Manage who has platform-level administrator access.",
+    "currentAdmins": "Current platform admins",
+    "addAdmin": "Add platform admin",
+    "searchPlaceholder": "Search by username or email",
+    "noCandidates": "No users found.",
+    "grant": "Grant",
+    "revoke": "Revoke",
+    "confirmRevoke": "Revoke platform admin from {{username}}?",
+    "lastAdminHint": "You are the only platform admin. Promote another user before revoking.",
+    "stalenessNote": "Role changes take effect on the user's next login (access-token refresh)."
   }
 }

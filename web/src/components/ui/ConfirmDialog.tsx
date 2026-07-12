@@ -7,37 +7,56 @@ import { useTranslation } from 'react-i18next';
 export interface ConfirmDialogProps {
   title: string;
   onConfirm: () => void;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   okText?: string;
   cancelText?: string;
   variant?: 'danger' | 'default';
+  /** Controlled open state. When provided, the dialog won't render its trigger wrapper. */
+  open?: boolean;
+  /** Called when the user cancels or dismisses (controlled mode only). */
+  onCancel?: () => void;
 }
 
-export function ConfirmDialog({ title, onConfirm, children, okText, cancelText, variant = 'default' }: ConfirmDialogProps) {
+export function ConfirmDialog({
+  title,
+  onConfirm,
+  children,
+  okText,
+  cancelText,
+  variant = 'default',
+  open: controlledOpen,
+  onCancel,
+}: ConfirmDialogProps) {
   const { t } = useTranslation();
   const resolvedOkText = okText ?? t('common.confirm');
   const resolvedCancelText = cancelText ?? t('common.cancel');
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const close = () => (isControlled ? onCancel?.() : setInternalOpen(false));
 
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') close();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const handleConfirm = () => {
     onConfirm();
-    setOpen(false);
+    if (!isControlled) setInternalOpen(false);
   };
 
   return (
     <>
-      <div onClick={() => setOpen(true)} className="inline-block cursor-pointer">
-        {children}
-      </div>
+      {!isControlled && (
+        <div onClick={() => setInternalOpen(true)} className="inline-block cursor-pointer">
+          {children}
+        </div>
+      )}
 
       {createPortal(
         <AnimatePresence>
@@ -56,7 +75,7 @@ export function ConfirmDialog({ title, onConfirm, children, okText, cancelText, 
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.15 }}
                 className="absolute inset-0 bg-black/60"
-                onClick={() => setOpen(false)}
+                onClick={close}
               />
 
               {/* Panel */}
@@ -69,9 +88,14 @@ export function ConfirmDialog({ title, onConfirm, children, okText, cancelText, 
                 style={{ maxWidth: 400 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <h3 className="text-[15px] font-semibold text-base-content mb-6">{title}</h3>
+                <h3 className="text-[15px] font-semibold text-base-content">{title}</h3>
+                {isControlled && children ? (
+                  <p className="text-sm text-base-content/60 mt-2 mb-6">{children}</p>
+                ) : (
+                  <div className="mb-6" />
+                )}
                 <div className="flex justify-end gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+                  <Button variant="ghost" size="sm" onClick={close}>
                     {resolvedCancelText}
                   </Button>
                   <Button variant={variant === 'danger' ? 'danger' : undefined} size="sm" onClick={handleConfirm}>

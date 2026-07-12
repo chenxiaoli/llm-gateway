@@ -45,7 +45,10 @@ struct PgKeyRow {
     name: String,
     key_hash: String,
     key_prefix: Option<String>,
-    rate_limit: Option<i64>,
+    // Postgres stores this column as INTEGER (INT4); decoding it directly into
+    // `i64` trips sqlx's strict type check. Read it as the native width and
+    // widen at the ApiKey boundary.
+    rate_limit: Option<i32>,
     budget_monthly: Option<i64>,
     enabled: bool,
     created_by: Option<String>,
@@ -62,13 +65,52 @@ impl From<PgKeyRow> for ApiKey {
             name: r.name,
             key_hash: r.key_hash,
             key_prefix: r.key_prefix,
-            rate_limit: r.rate_limit,
+            rate_limit: r.rate_limit.map(|i| i as i64),
             budget_monthly: r.budget_monthly,
             enabled: r.enabled,
             created_by: r.created_by,
             model_fallback_id: r.model_fallback_id,
             created_at: r.created_at,
             updated_at: r.updated_at,
+        }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct PgKeyWithMtdRow {
+    id: String,
+    org_id: String,
+    name: String,
+    key_hash: String,
+    key_prefix: Option<String>,
+    rate_limit: Option<i32>,
+    budget_monthly: Option<i64>,
+    enabled: bool,
+    created_by: Option<String>,
+    model_fallback_id: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    mtd_units: i64,
+}
+
+impl From<PgKeyWithMtdRow> for crate::types::ApiKeyWithMtd {
+    fn from(r: PgKeyWithMtdRow) -> Self {
+        crate::types::ApiKeyWithMtd {
+            key: ApiKey {
+                id: r.id,
+                org_id: r.org_id,
+                name: r.name,
+                key_hash: r.key_hash,
+                key_prefix: r.key_prefix,
+                rate_limit: r.rate_limit.map(|i| i as i64),
+                budget_monthly: r.budget_monthly,
+                enabled: r.enabled,
+                created_by: r.created_by,
+                model_fallback_id: r.model_fallback_id,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+            },
+            mtd_units: r.mtd_units,
         }
     }
 }
@@ -452,6 +494,11 @@ struct PgUserRow {
     refresh_token: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
+    // Phase 4:
+    email: Option<String>,
+    email_verified_at: Option<chrono::DateTime<chrono::Utc>>,
+    requires_email_verification: bool,
+    password_changed_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl From<PgUserRow> for User {
@@ -466,6 +513,10 @@ impl From<PgUserRow> for User {
             refresh_token: r.refresh_token,
             created_at: r.created_at,
             updated_at: r.updated_at,
+            email: r.email,
+            email_verified_at: r.email_verified_at,
+            requires_email_verification: r.requires_email_verification,
+            password_changed_at: r.password_changed_at,
         }
     }
 }
@@ -811,6 +862,44 @@ impl crate::Storage for PostgresStorage {
         .await?;
         Ok(PaginatedResponse {
             items: rows.into_iter().map(ApiKey::from).collect(),
+            total: total.0,
+            page,
+            page_size,
+        })
+    }
+
+    async fn list_keys_paginated_with_mtd(
+        &self,
+        org_id: &str,
+        page: i64,
+        page_size: i64,
+    ) -> Result<PaginatedResponse<crate::types::ApiKeyWithMtd>, DbErr> {
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM api_keys WHERE org_id = $1")
+            .bind(org_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let offset = (page - 1) * page_size;
+        let month_bucket = format!("{}", chrono::Utc::now().format("%Y-%m"));
+        let rows: Vec<PgKeyWithMtdRow> = sqlx::query_as(
+            "SELECT ak.id, ak.org_id, ak.name, ak.key_hash, ak.key_prefix,
+                    ak.rate_limit, ak.budget_monthly, ak.enabled, ak.created_by,
+                    ak.model_fallback_id, ak.created_at, ak.updated_at,
+                    COALESCE(bc.accrued, 0) AS mtd_units
+             FROM api_keys ak
+             LEFT JOIN budget_counters bc
+               ON bc.key_id = ak.id AND bc.month_bucket = $2
+             WHERE ak.org_id = $1
+             ORDER BY ak.created_at DESC
+             LIMIT $3 OFFSET $4",
+        )
+        .bind(org_id)
+        .bind(&month_bucket)
+        .bind(page_size)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(PaginatedResponse {
+            items: rows.into_iter().map(crate::types::ApiKeyWithMtd::from).collect(),
             total: total.0,
             page,
             page_size,
@@ -1372,6 +1461,9 @@ impl crate::Storage for PostgresStorage {
     // ---- Usage (tenant: org_id scoping) ----
 
     async fn record_usage(&self, org_id: &str, usage: &UsageRecord) -> Result<(), DbErr> {
+        let mut tx = self.pool.begin().await?;
+
+        // Existing 17-column insert (unchanged).
         sqlx::query(
             "INSERT INTO usage_records (id, org_id, request_id, key_id, model_name, provider_id, channel_id, protocol, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, cost, pricing_policy, weighted_tokens, user_id, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
@@ -1393,9 +1485,60 @@ impl crate::Storage for PostgresStorage {
         .bind(usage.weighted_tokens)
         .bind(usage.user_id.clone())
         .bind(usage.created_at)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await?;
+
+        // Atomic counter upsert. Month bucket derived from created_at (UTC),
+        // so backdated records bucket into the month they actually occurred.
+        let month_bucket = format!("{}", usage.created_at.format("%Y-%m"));
+        sqlx::query(
+            "INSERT INTO budget_counters (key_id, month_bucket, accrued, updated_at)
+             VALUES ($1, $2, $3, NOW())
+             ON CONFLICT (key_id, month_bucket)
+             DO UPDATE SET accrued = budget_counters.accrued + EXCLUDED.accrued,
+                           updated_at = NOW()",
+        )
+        .bind(&usage.key_id)
+        .bind(&month_bucket)
+        .bind(usage.cost)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
         Ok(())
+    }
+
+    async fn get_month_to_date_spend(&self, key_id: &str) -> Result<i64, DbErr> {
+        let month_bucket = format!("{}", chrono::Utc::now().format("%Y-%m"));
+        let row: Option<(i64,)> = sqlx::query_as(
+            "SELECT accrued FROM budget_counters WHERE key_id = $1 AND month_bucket = $2",
+        )
+        .bind(key_id)
+        .bind(&month_bucket)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(v,)| v).unwrap_or(0))
+    }
+
+    async fn get_org_month_to_date_spend(&self, org_id: &str) -> Result<i64, DbErr> {
+        let month_bucket = format!("{}", chrono::Utc::now().format("%Y-%m"));
+        // INNER JOIN: every budget_counters row has a matching api_keys row
+        // (FK), so a LEFT JOIN would just add NULLs we don't want. COALESCE
+        // covers the "org has zero matching counter rows" case (fetch_optional
+        // then unwrap_or(0) below).
+        // SUM over NUMERIC returns NUMERIC, which sqlx won't decode to i64
+        // directly — cast to BIGINT (the value space is bounded by accrued i64).
+        let row: Option<(i64,)> = sqlx::query_as(
+            "SELECT CAST(COALESCE(SUM(bc.accrued), 0) AS BIGINT)
+             FROM budget_counters bc
+             JOIN api_keys ak ON ak.id = bc.key_id
+             WHERE ak.org_id = $1 AND bc.month_bucket = $2",
+        )
+        .bind(org_id)
+        .bind(&month_bucket)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(v,)| v).unwrap_or(0))
     }
 
     async fn query_usage(&self, org_id: &str, _filter: &UsageFilter) -> Result<Vec<UsageRecord>, DbErr> {
@@ -1921,8 +2064,10 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, refresh_token, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            "INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                                created_at, updated_at,
+                                email, email_verified_at, requires_email_verification, password_changed_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
         )
         .bind(&user.id)
         .bind(&user.username)
@@ -1933,6 +2078,10 @@ impl crate::Storage for PostgresStorage {
         .bind(&user.refresh_token)
         .bind(user.created_at)
         .bind(user.updated_at)
+        .bind(&user.email)
+        .bind(user.email_verified_at)
+        .bind(user.requires_email_verification)
+        .bind(user.password_changed_at)
         .execute(&self.pool)
         .await?;
         Ok(user.clone())
@@ -1940,7 +2089,10 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_user(&self, id: &str) -> Result<Option<User>, DbErr> {
         let row: Option<PgUserRow> = sqlx::query_as(
-            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token, created_at, updated_at FROM users WHERE id = $1",
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                    created_at, updated_at,
+                    email, email_verified_at, requires_email_verification, password_changed_at
+             FROM users WHERE id = $1",
         )
         .bind(id)
         .fetch_optional(&self.pool)
@@ -1950,7 +2102,10 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_user_by_username(&self, username: &str) -> Result<Option<User>, DbErr> {
         let row: Option<PgUserRow> = sqlx::query_as(
-            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token, created_at, updated_at FROM users WHERE username = $1",
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                    created_at, updated_at,
+                    email, email_verified_at, requires_email_verification, password_changed_at
+             FROM users WHERE username = $1",
         )
         .bind(username)
         .fetch_optional(&self.pool)
@@ -1960,7 +2115,9 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_users(&self, org_id: &str) -> Result<Vec<User>, DbErr> {
         let rows: Vec<PgUserRow> = sqlx::query_as(
-            "SELECT u.id, u.username, u.password, u.platform_role, u.current_org_id, u.enabled, u.refresh_token, u.created_at, u.updated_at
+            "SELECT u.id, u.username, u.password, u.platform_role, u.current_org_id, u.enabled, u.refresh_token,
+                    u.created_at, u.updated_at,
+                    u.email, u.email_verified_at, u.requires_email_verification, u.password_changed_at
              FROM users u
              JOIN members m ON m.user_id = u.id
              WHERE m.org_id = $1
@@ -2008,7 +2165,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn update_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "UPDATE users SET username = $1, password = $2, platform_role = $3, current_org_id = $4, enabled = $5, refresh_token = $6, updated_at = $7 WHERE id = $8",
+            "UPDATE users SET username = $1, password = $2, platform_role = $3, current_org_id = $4, enabled = $5, refresh_token = $6, password_changed_at = $7, updated_at = $8 WHERE id = $9",
         )
         .bind(&user.username)
         .bind(&user.password)
@@ -2016,6 +2173,7 @@ impl crate::Storage for PostgresStorage {
         .bind(&user.current_org_id)
         .bind(user.enabled)
         .bind(&user.refresh_token)
+        .bind(&user.password_changed_at)
         .bind(user.updated_at)
         .bind(&user.id)
         .execute(&self.pool)
@@ -2200,10 +2358,13 @@ impl crate::Storage for PostgresStorage {
     }
 
     async fn set_provider_models(&self, viewer_org_id: &str, provider_id: &str, models: Vec<ProviderModel>) -> Result<(), DbErr> {
-        // Only delete rows visible to this viewer (platform + own org-private).
+        // Scope the DELETE to this org's rows only. The handler always supplies
+        // `owner_org_id = Some(ctx.org_id)` on input, so platform-level rows
+        // (owner_org_id IS NULL) are never created here and must never be
+        // deleted here either — otherwise an org admin could wipe platform-wide
+        // provider↔model mappings by calling PUT /admin/providers/{id}/models.
         sqlx::query(
-            "DELETE FROM provider_models WHERE provider_id = $1
-             AND (owner_org_id IS NULL OR owner_org_id = $2)",
+            "DELETE FROM provider_models WHERE provider_id = $1 AND owner_org_id = $2",
         )
         .bind(provider_id)
         .bind(viewer_org_id)
@@ -3064,7 +3225,7 @@ impl crate::Storage for PostgresStorage {
             "INSERT INTO members (user_id, org_id, role, group_id, created_by)
              VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT (user_id, org_id) DO UPDATE
-               SET role = EXCLUDED.role, group_id = EXCLUDED.group_id
+               SET role = EXCLUDED.role, group_id = EXCLUDED.group_id, created_by = EXCLUDED.created_by
              RETURNING user_id, org_id, role, group_id, created_by, created_at",
         )
         .bind(&member.user_id)
@@ -3111,6 +3272,449 @@ impl crate::Storage for PostgresStorage {
         .fetch_one(&self.pool)
         .await?;
         Ok(row.0)
+    }
+
+    async fn touch_member_last_seen(&self, user_id: &str, org_id: &str) -> Result<(), DbErr> {
+        sqlx::query("UPDATE members SET last_seen = NOW() WHERE user_id = $1 AND org_id = $2")
+            .bind(user_id)
+            .bind(org_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    async fn delete_stale_impersonations(&self, cutoff: chrono::DateTime<chrono::Utc>) -> Result<u64, DbErr> {
+        let result = sqlx::query(
+            "DELETE FROM members WHERE created_by = 'system' AND last_seen < $1",
+        )
+        .bind(cutoff)
+        .execute(&self.pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
+    // ---- Invitations (Phase 3) ----
+
+    async fn create_invitation(
+        &self,
+        org_id: &str,
+        role: &MemberRole,
+        created_by: &str,
+        recipient_email: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Invitation, DbErr> {
+        // Owner is not assignable by invitation (DB CHECK excludes it), but
+        // guard here too so the error is friendly rather than a constraint violation.
+        let role_str = match role {
+            MemberRole::Owner => {
+                return Err(format!("cannot mint invitation for role 'owner' (org {org_id})").into());
+            }
+            MemberRole::Admin => "admin",
+            MemberRole::Member => "member",
+        };
+        let token = generate_invitation_token();
+        let row: PgInvitationRow = sqlx::query_as(
+            "INSERT INTO invitations (token, org_id, role, created_by, recipient_email, expires_at)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING id::text, token, org_id, role, created_by, recipient_email, created_at, expires_at,
+                       accepted_at, accepted_by, revoked_at",
+        )
+        .bind(&token)
+        .bind(org_id)
+        .bind(role_str)
+        .bind(created_by)
+        .bind(recipient_email)
+        .bind(expires_at)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(Invitation::from(row))
+    }
+
+    async fn get_invitation_by_token(&self, token: &str) -> Result<Option<Invitation>, DbErr> {
+        let row: Option<PgInvitationRow> = sqlx::query_as(
+            "SELECT id::text, token, org_id, role, created_by, recipient_email, created_at, expires_at,
+                    accepted_at, accepted_by, revoked_at
+             FROM invitations WHERE token = $1",
+        )
+        .bind(token)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(Invitation::from))
+    }
+
+    async fn list_invitations_for_org(&self, org_id: &str) -> Result<Vec<Invitation>, DbErr> {
+        let rows: Vec<PgInvitationRow> = sqlx::query_as(
+            "SELECT id::text, token, org_id, role, created_by, recipient_email, created_at, expires_at,
+                    accepted_at, accepted_by, revoked_at
+             FROM invitations WHERE org_id = $1 ORDER BY created_at DESC",
+        )
+        .bind(org_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(Invitation::from).collect())
+    }
+
+    async fn revoke_invitation(
+        &self,
+        org_id: &str,
+        invitation_id: &str,
+    ) -> Result<(), DbErr> {
+        // Compare `id::text` so any non-UUID string the caller passes simply
+        // matches nothing — no-op, no error. (For UPDATE row locks to use the
+        // PK index we'd need a real UUID; this is a low-frequency admin path.)
+        sqlx::query(
+            "UPDATE invitations SET revoked_at = COALESCE(revoked_at, NOW())
+             WHERE id::text = $1 AND org_id = $2",
+        )
+        .bind(invitation_id)
+        .bind(org_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn accept_invitation(
+        &self,
+        token: &str,
+        accepting_user_id: &str,
+    ) -> Result<Option<Member>, DbErr> {
+        // Single transaction: SELECT ... FOR UPDATE serializes concurrent
+        // accepts for the same token. Exactly one call hits the UPDATE;
+        // later callers see accepted_at IS NOT NULL and bail with None.
+        let mut tx = self.pool.begin().await?;
+
+        let row: Option<PgInvitationRow> = sqlx::query_as(
+            "SELECT id::text, token, org_id, role, created_by, recipient_email, created_at, expires_at,
+                    accepted_at, accepted_by, revoked_at
+             FROM invitations WHERE token = $1 FOR UPDATE",
+        )
+        .bind(token)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let Some(inv) = row else {
+            tx.rollback().await?;
+            return Ok(None);
+        };
+
+        let now = chrono::Utc::now();
+        let already_consumed = inv.accepted_at.is_some() || inv.revoked_at.is_some();
+        let expired = inv.expires_at < now;
+        if already_consumed || expired {
+            tx.rollback().await?;
+            return Ok(None);
+        }
+
+        let role = match MemberRole::parse(&inv.role) {
+            Some(r) => r,
+            None => {
+                tx.rollback().await?;
+                return Err(format!("invalid role in invitations row {}: {}", inv.id, inv.role).into());
+            }
+        };
+
+        // Upsert the membership. If the user is already a member of this org
+        // (e.g. they previously accepted a different invitation), update the
+        // role to the new invitation's role. PK is (user_id, org_id).
+        sqlx::query(
+            "INSERT INTO members (user_id, org_id, role, created_by)
+             VALUES ($1, $2, $3, $4)
+             ON CONFLICT (user_id, org_id) DO UPDATE SET role = EXCLUDED.role",
+        )
+        .bind(accepting_user_id)
+        .bind(&inv.org_id)
+        .bind(role.as_str())
+        .bind(accepting_user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "UPDATE invitations SET accepted_at = $2, accepted_by = $3 WHERE id::text = $1",
+        )
+        .bind(&inv.id)
+        .bind(now)
+        .bind(accepting_user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(Some(Member {
+            user_id: accepting_user_id.to_string(),
+            org_id: inv.org_id,
+            role,
+            group_id: None,
+            created_by: Some(accepting_user_id.to_string()),
+            created_at: now,
+        }))
+    }
+
+    // ---- Phase 4: users by email ----
+
+    async fn get_user_by_email(&self, email: &str) -> Result<Option<User>, DbErr> {
+        let row: Option<PgUserRow> = sqlx::query_as(
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                    created_at, updated_at,
+                    email, email_verified_at, requires_email_verification, password_changed_at
+             FROM users WHERE LOWER(email) = LOWER($1)",
+        )
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(User::from))
+    }
+
+    async fn set_user_platform_role(
+        &self,
+        target_user_id: &str,
+        _actor_user_id: &str,
+        role: Option<PlatformRole>,
+        allow_last_admin_override: bool,
+    ) -> Result<(), SetPlatformRoleError> {
+        let mut tx = self.pool.begin().await?;
+
+        // Lock the target row to prevent concurrent grant/demote racing the count.
+        let exists: Option<(String,)> = sqlx::query_as(
+            "SELECT id FROM users WHERE id = $1 FOR UPDATE",
+        )
+        .bind(target_user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if exists.is_none() {
+            return Err(SetPlatformRoleError::UserNotFound);
+        }
+
+        // If demoting, check the count of remaining platform_admins.
+        if role.is_none() && !allow_last_admin_override {
+            let (count,): (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM users WHERE platform_role = 'platform_admin'",
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+            if count <= 1 {
+                return Err(SetPlatformRoleError::LastPlatformAdmin);
+            }
+        }
+
+        // Apply. None -> NULL (column is TEXT NULL).
+        let sql_role: Option<&str> = role.as_ref().map(|_| "platform_admin");
+        sqlx::query(
+            "UPDATE users SET platform_role = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(sql_role)
+        .bind(target_user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn list_platform_admins(&self) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>> {
+        let rows: Vec<PgUserRow> = sqlx::query_as(
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                    created_at, updated_at,
+                    email, email_verified_at, requires_email_verification, password_changed_at
+             FROM users WHERE platform_role = 'platform_admin'
+             ORDER BY username ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(User::from).collect())
+    }
+
+    async fn search_user_candidates(
+        &self,
+        query: &str,
+    ) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>> {
+        let pattern = format!("%{}%", query.to_lowercase());
+        let rows: Vec<PgUserRow> = sqlx::query_as(
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                    created_at, updated_at,
+                    email, email_verified_at, requires_email_verification, password_changed_at
+             FROM users
+             WHERE platform_role IS NULL
+               AND (LOWER(username) LIKE $1 OR LOWER(COALESCE(email, '')) LIKE $1)
+             ORDER BY username ASC
+             LIMIT 20",
+        )
+        .bind(&pattern)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(User::from).collect())
+    }
+
+    async fn set_user_email(
+        &self,
+        user_id: &str,
+        email: &str,
+        verified_at: Option<chrono::DateTime<chrono::Utc>>,
+        requires_email_verification: bool,
+    ) -> Result<User, DbErr> {
+        sqlx::query(
+            "UPDATE users SET email = $1, email_verified_at = $2, requires_email_verification = $3,
+                              updated_at = NOW()
+             WHERE id = $4",
+        )
+        .bind(email)
+        .bind(verified_at)
+        .bind(requires_email_verification)
+        .bind(user_id)
+        .execute(&self.pool)
+        .await?;
+        // Re-read for the response — there is no RETURNING on User (PgUserRow
+        // is 13 fields, simpler to refetch than maintain a separate shape).
+        let row = self
+            .get_user(user_id)
+            .await?
+            .ok_or_else(|| format!("user {user_id} disappeared after set_user_email"))?;
+        Ok(row)
+    }
+
+    // ---- Phase 4: email_verifications ----
+
+    async fn create_email_verification(
+        &self,
+        user_id: &str,
+        email: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<EmailVerification, DbErr> {
+        let token = generate_invitation_token(); // 32-byte base64url; reuse helper
+        let row: PgEmailVerificationRow = sqlx::query_as(
+            "INSERT INTO email_verifications (token, user_id, email, expires_at)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id::text, token, user_id, email, created_at, expires_at, consumed_at",
+        )
+        .bind(&token)
+        .bind(user_id)
+        .bind(email)
+        .bind(expires_at)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(EmailVerification::from(row))
+    }
+
+    async fn get_email_verification_by_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<EmailVerification>, DbErr> {
+        let row: Option<PgEmailVerificationRow> = sqlx::query_as(
+            "SELECT id::text, token, user_id, email, created_at, expires_at, consumed_at
+             FROM email_verifications WHERE token = $1",
+        )
+        .bind(token)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(EmailVerification::from))
+    }
+
+    async fn consume_email_verification(&self, token: &str) -> Result<bool, DbErr> {
+        let mut tx = self.pool.begin().await?;
+        let row: Option<PgEmailVerificationRow> = sqlx::query_as(
+            "SELECT id::text, token, user_id, email, created_at, expires_at, consumed_at
+             FROM email_verifications WHERE token = $1 FOR UPDATE",
+        )
+        .bind(token)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let Some(row) = row else {
+            tx.rollback().await?;
+            return Ok(false);
+        };
+        if row.consumed_at.is_some() || row.expires_at < chrono::Utc::now() {
+            tx.rollback().await?;
+            return Ok(false);
+        }
+
+        // Mark consumed in the same txn as the user update so we never get a
+        // half-applied state.
+        sqlx::query("UPDATE email_verifications SET consumed_at = NOW() WHERE id::text = $1")
+            .bind(&row.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE users SET email_verified_at = NOW(), requires_email_verification = FALSE WHERE id = $1")
+            .bind(&row.user_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+        Ok(true)
+    }
+
+    // ---- Phase 4: password_resets ----
+
+    async fn create_password_reset(
+        &self,
+        user_id: &str,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<PasswordReset, DbErr> {
+        let token = generate_invitation_token();
+        let row: PgPasswordResetRow = sqlx::query_as(
+            "INSERT INTO password_resets (token, user_id, expires_at)
+             VALUES ($1, $2, $3)
+             RETURNING id::text, token, user_id, created_at, expires_at, consumed_at",
+        )
+        .bind(&token)
+        .bind(user_id)
+        .bind(expires_at)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(PasswordReset::from(row))
+    }
+
+    async fn get_password_reset_by_token(
+        &self,
+        token: &str,
+    ) -> Result<Option<PasswordReset>, DbErr> {
+        let row: Option<PgPasswordResetRow> = sqlx::query_as(
+            "SELECT id::text, token, user_id, created_at, expires_at, consumed_at
+             FROM password_resets WHERE token = $1",
+        )
+        .bind(token)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(PasswordReset::from))
+    }
+
+    async fn consume_password_reset_and_set_password(
+        &self,
+        token: &str,
+        new_password_hash: &str,
+    ) -> Result<PasswordResetOutcome, DbErr> {
+        let mut tx = self.pool.begin().await?;
+        let row: Option<PgPasswordResetRow> = sqlx::query_as(
+            "SELECT id::text, token, user_id, created_at, expires_at, consumed_at
+             FROM password_resets WHERE token = $1 FOR UPDATE",
+        )
+        .bind(token)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(row) = row else {
+            tx.rollback().await?;
+            return Ok(PasswordResetOutcome::NotFound);
+        };
+        if row.consumed_at.is_some() {
+            tx.rollback().await?;
+            return Ok(PasswordResetOutcome::Consumed);
+        }
+        if row.expires_at < chrono::Utc::now() {
+            tx.rollback().await?;
+            return Ok(PasswordResetOutcome::Expired);
+        }
+        sqlx::query("UPDATE password_resets SET consumed_at = NOW() WHERE id::text = $1")
+            .bind(&row.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            "UPDATE users SET password = $1, password_changed_at = NOW(), updated_at = NOW() WHERE id = $2",
+        )
+        .bind(new_password_hash)
+        .bind(&row.user_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(PasswordResetOutcome::Success)
     }
 
     // ---- Settings (platform + org) ----
@@ -3169,6 +3773,77 @@ impl crate::Storage for PostgresStorage {
         .fetch_all(&self.pool)
         .await?;
         Ok(rows)
+    }
+
+    async fn get_org_defaults(
+        &self,
+        org_id: &str,
+    ) -> Result<crate::types::OrgDefaults, DbErr> {
+        let rpm = self
+            .get_org_setting(org_id, "default_rate_limit_rpm")
+            .await?
+            .and_then(|s| s.parse::<i64>().ok());
+        let budget = self
+            .get_org_setting(org_id, "default_budget_monthly_usd")
+            .await?
+            .and_then(|s| s.parse::<i64>().ok());
+        Ok(crate::types::OrgDefaults {
+            default_rate_limit_rpm: rpm,
+            default_budget_monthly_usd: budget,
+        })
+    }
+
+    async fn set_org_defaults(
+        &self,
+        org_id: &str,
+        defaults: &crate::types::OrgDefaults,
+    ) -> Result<(), DbErr> {
+        // Wrap both writes in a single transaction so a pool error or crash
+        // between them can't leave partial state (the trait doc promises
+        // atomicity — see crates/storage/src/lib.rs).
+        let mut tx = self.pool.begin().await?;
+        match defaults.default_rate_limit_rpm {
+            Some(n) => {
+                sqlx::query(
+                    "INSERT INTO org_settings (org_id, key, value) VALUES ($1, 'default_rate_limit_rpm', $2)
+                     ON CONFLICT (org_id, key) DO UPDATE SET value = EXCLUDED.value",
+                )
+                .bind(org_id)
+                .bind(n.to_string())
+                .execute(&mut *tx)
+                .await?;
+            }
+            None => {
+                sqlx::query(
+                    "DELETE FROM org_settings WHERE org_id = $1 AND key = 'default_rate_limit_rpm'",
+                )
+                .bind(org_id)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+        match defaults.default_budget_monthly_usd {
+            Some(n) => {
+                sqlx::query(
+                    "INSERT INTO org_settings (org_id, key, value) VALUES ($1, 'default_budget_monthly_usd', $2)
+                     ON CONFLICT (org_id, key) DO UPDATE SET value = EXCLUDED.value",
+                )
+                .bind(org_id)
+                .bind(n.to_string())
+                .execute(&mut *tx)
+                .await?;
+            }
+            None => {
+                sqlx::query(
+                    "DELETE FROM org_settings WHERE org_id = $1 AND key = 'default_budget_monthly_usd'",
+                )
+                .bind(org_id)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+        tx.commit().await?;
+        Ok(())
     }
 }
 
@@ -3233,6 +3908,106 @@ impl std::fmt::Display for OrgNotFound {
     }
 }
 impl std::error::Error for OrgNotFound {}
+
+// ---------------------------------------------------------------------------
+// Invitation helpers
+// ---------------------------------------------------------------------------
+
+/// Generate an opaque 32-byte invitation token, base64url-encoded without
+/// padding. 256 bits of entropy from the OS CSPRNG; the `invitations.token`
+/// column has a UNIQUE constraint so collisions would surface as a DB error
+/// (and at 2^256 the probability is not a practical concern).
+fn generate_invitation_token() -> String {
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
+#[derive(sqlx::FromRow)]
+struct PgInvitationRow {
+    // Selected as `id::text` so we don't need sqlx's `uuid` feature enabled.
+    // The invitations.id column is UUID, but the rest of this crate talks to
+    // every other PK as TEXT — keep the boundary in String.
+    id: String,
+    token: String,
+    org_id: String,
+    role: String,
+    created_by: String,
+    recipient_email: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    accepted_at: Option<chrono::DateTime<chrono::Utc>>,
+    accepted_by: Option<String>,
+    revoked_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<PgInvitationRow> for Invitation {
+    fn from(r: PgInvitationRow) -> Self {
+        Invitation {
+            id: r.id,
+            token: r.token,
+            org_id: r.org_id,
+            role: MemberRole::parse(&r.role).unwrap_or(MemberRole::Member),
+            created_by: r.created_by,
+            recipient_email: r.recipient_email,
+            created_at: r.created_at,
+            expires_at: r.expires_at,
+            accepted_at: r.accepted_at,
+            accepted_by: r.accepted_by,
+            revoked_at: r.revoked_at,
+        }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct PgEmailVerificationRow {
+    id: String,
+    token: String,
+    user_id: String,
+    email: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    consumed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<PgEmailVerificationRow> for EmailVerification {
+    fn from(r: PgEmailVerificationRow) -> Self {
+        EmailVerification {
+            id: r.id,
+            token: r.token,
+            user_id: r.user_id,
+            email: r.email,
+            created_at: r.created_at,
+            expires_at: r.expires_at,
+            consumed_at: r.consumed_at,
+        }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct PgPasswordResetRow {
+    id: String,
+    token: String,
+    user_id: String,
+    created_at: chrono::DateTime<chrono::Utc>,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    consumed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl From<PgPasswordResetRow> for PasswordReset {
+    fn from(r: PgPasswordResetRow) -> Self {
+        PasswordReset {
+            id: r.id,
+            token: r.token,
+            user_id: r.user_id,
+            created_at: r.created_at,
+            expires_at: r.expires_at,
+            consumed_at: r.consumed_at,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -3638,5 +4413,910 @@ mod org_tests {
             .execute(&storage.pool)
             .await
             .expect("cleanup user");
+    }
+
+    /// Anti-shadowing check must NOT false-positive on names that are unique
+    /// across platform + org scopes. Confirms the SELECT-WHERE-owner_org_id IS NULL
+    /// predicate only matches platform-level rows.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn anti_shadowing_allows_unique_org_private_name(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+
+        // Owner user + org (required by FK on orgs.owner_id).
+        sqlx::query(
+            "INSERT INTO users (id, username, password, created_at, updated_at)
+             VALUES ('u-shadow-2', 'shadow2', 'x', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert owner user");
+        storage
+            .create_org(crate::types::CreateOrg {
+                id: "org-shadow-2".to_string(),
+                slug: "org-shadow-2".to_string(),
+                name: "Shadow Org 2".to_string(),
+                owner_id: "u-shadow-2".to_string(),
+            })
+            .await
+            .expect("create_org");
+
+        // Platform-level "gpt-4".
+        let platform = Model {
+            id: "m-platform-unique".to_string(),
+            name: "gpt-4".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: None,
+            created_at: chrono::Utc::now(),
+        };
+        storage
+            .create_model("org-shadow-2", &platform)
+            .await
+            .expect("seed platform model");
+
+        // Org-private "my-finetune" — different name, must succeed.
+        let org_private = Model {
+            id: "m-org-unique".to_string(),
+            name: "my-finetune".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: Some("org-shadow-2".to_string()),
+            created_at: chrono::Utc::now(),
+        };
+        let result = storage.create_model("org-shadow-2", &org_private).await;
+        assert!(
+            result.is_ok(),
+            "org-private model with unique name should succeed, got: {:?}",
+            result
+        );
+
+        // Cleanup.
+        sqlx::query("DELETE FROM models WHERE id IN ('m-platform-unique', 'm-org-unique')")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup models");
+        sqlx::query("DELETE FROM orgs WHERE id = 'org-shadow-2'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup org");
+        sqlx::query("DELETE FROM users WHERE id = 'u-shadow-2'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup user");
+    }
+
+    /// Platform-level entry CAN be created even if an org-private entry with the
+    /// same name already exists. The rule is directional: only org→platform
+    /// shadowing is forbidden. This matches the visibility filter
+    /// `(owner_org_id IS NULL OR owner_org_id = $1)` — platform rows are visible
+    /// to everyone, so the org-private entry simply becomes unreachable from the
+    /// creating org's perspective (acceptable; they asked for it).
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn anti_shadowing_allows_platform_to_shadow_org(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+
+        sqlx::query(
+            "INSERT INTO users (id, username, password, created_at, updated_at)
+             VALUES ('u-shadow-3', 'shadow3', 'x', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert owner user");
+        storage
+            .create_org(crate::types::CreateOrg {
+                id: "org-shadow-3".to_string(),
+                slug: "org-shadow-3".to_string(),
+                name: "Shadow Org 3".to_string(),
+                owner_id: "u-shadow-3".to_string(),
+            })
+            .await
+            .expect("create_org");
+
+        // Org-private first.
+        let org_private = Model {
+            id: "m-org-first".to_string(),
+            name: "shared-name".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: Some("org-shadow-3".to_string()),
+            created_at: chrono::Utc::now(),
+        };
+        storage
+            .create_model("org-shadow-3", &org_private)
+            .await
+            .expect("seed org-private model");
+
+        // Platform-level with same name — must succeed (directional rule).
+        let platform = Model {
+            id: "m-platform-second".to_string(),
+            name: "shared-name".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: None,
+            created_at: chrono::Utc::now(),
+        };
+        let result = storage.create_model("org-shadow-3", &platform).await;
+        assert!(
+            result.is_ok(),
+            "platform-level entry with same name as an org-private entry should succeed (rule is directional), got: {:?}",
+            result
+        );
+
+        // Cleanup.
+        sqlx::query("DELETE FROM models WHERE id IN ('m-org-first', 'm-platform-second')")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup models");
+        sqlx::query("DELETE FROM orgs WHERE id = 'org-shadow-3'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup org");
+        sqlx::query("DELETE FROM users WHERE id = 'u-shadow-3'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup user");
+    }
+
+    /// Regression: an org admin calling `set_provider_models` must NOT be able
+    /// to delete platform-level (owner_org_id IS NULL) provider↔model rows.
+    /// The previous implementation's DELETE matched both `IS NULL` and `= $2`,
+    /// which let any org admin wipe platform-wide mappings by calling
+    /// PUT /admin/providers/{id}/models with whatever payload.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn set_provider_models_preserves_platform_rows(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+
+        // ── Seed: user, two orgs, provider, model, platform-level mapping ──
+        sqlx::query(
+            "INSERT INTO users (id, username, password, created_at, updated_at)
+             VALUES ('u-pm-1', 'pmuser', 'x', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert user");
+        for org_id in ["org-pm-alpha", "org-pm-beta"] {
+            storage
+                .create_org(crate::types::CreateOrg {
+                    id: org_id.to_string(),
+                    slug: org_id.to_string(),
+                    name: format!("{org_id} name"),
+                    owner_id: "u-pm-1".to_string(),
+                })
+                .await
+                .expect("create_org");
+        }
+        let provider = crate::types::Provider {
+            id: "prov-pm-1".to_string(),
+            owner_org_id: None,
+            name: "PM Provider".into(),
+            slug: "pm-prov".into(),
+            endpoints: None,
+            proxy_url: None,
+            enabled: true,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        storage.create_provider("org-pm-alpha", &provider).await.expect("create_provider");
+        let model = crate::types::Model {
+            id: "m-pm-1".to_string(),
+            name: "pm-model".to_string(),
+            model_type: None,
+            pricing_policy_id: None,
+            owner_org_id: None,
+            created_at: chrono::Utc::now(),
+        };
+        storage.create_model("org-pm-alpha", &model).await.expect("create_model");
+
+        // Platform-level provider↔model mapping (owner_org_id IS NULL).
+        sqlx::query(
+            "INSERT INTO provider_models (provider_id, model_id, owner_org_id, upstream_name, pricing_policy_id, created_at)
+             VALUES ('prov-pm-1', 'm-pm-1', NULL, NULL, NULL, NOW())",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("seed platform provider_model");
+
+        // ── Act: org-pm-beta "replaces" its mappings with an empty set ──
+        storage
+            .set_provider_models("org-pm-beta", "prov-pm-1", vec![])
+            .await
+            .expect("set_provider_models with empty list");
+
+        // ── Assert: platform-level row is still there ──
+        let surviving: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM provider_models
+             WHERE provider_id = 'prov-pm-1' AND owner_org_id IS NULL",
+        )
+        .fetch_one(&storage.pool)
+        .await
+        .expect("count platform rows");
+        assert_eq!(
+            surviving.0, 1,
+            "platform-level provider↔model mapping must survive an org-scoped set_provider_models call"
+        );
+
+        // Cleanup.
+        sqlx::query("DELETE FROM provider_models WHERE provider_id = 'prov-pm-1'")
+            .execute(&storage.pool).await.expect("cleanup provider_models");
+        sqlx::query("DELETE FROM models WHERE id = 'm-pm-1'")
+            .execute(&storage.pool).await.expect("cleanup model");
+        sqlx::query("DELETE FROM providers WHERE id = 'prov-pm-1'")
+            .execute(&storage.pool).await.expect("cleanup provider");
+        for org_id in ["org-pm-alpha", "org-pm-beta"] {
+            sqlx::query(&format!("DELETE FROM orgs WHERE id = '{org_id}'"))
+                .execute(&storage.pool).await.expect("cleanup org");
+        }
+        sqlx::query("DELETE FROM users WHERE id = 'u-pm-1'")
+            .execute(&storage.pool).await.expect("cleanup user");
+    }
+}
+
+#[cfg(test)]
+mod invitation_tests {
+    use super::*;
+    use crate::Storage;
+
+    /// Helper: create a real Org row via the storage trait. Orgs.owner_id has
+    /// a deferred FK to users(id), so the owner must be inserted first; this
+    /// helper takes care of both. The slug/name are derived from `id` so the
+    /// caller can predict them without capturing the return value.
+    async fn make_test_org(storage: &PostgresStorage, id: &str, name: &str) -> crate::types::Org {
+        let owner_id = format!("owner-{id}");
+        sqlx::query(
+            "INSERT INTO users (id, username, password, created_at, updated_at)
+             VALUES ($1, $2, 'x', NOW(), NOW()) ON CONFLICT (id) DO NOTHING",
+        )
+        .bind(&owner_id)
+        .bind(&owner_id)
+        .execute(&storage.pool)
+        .await
+        .expect("insert owner user for org");
+        storage
+            .create_org(crate::types::CreateOrg {
+                id: id.to_string(),
+                slug: id.to_string(),
+                name: name.to_string(),
+                owner_id: owner_id.clone(),
+            })
+            .await
+            .expect("create_org")
+    }
+
+    /// Helper: create a real User row. `username` is used as the id and the
+    /// username column to keep the call sites short.
+    async fn make_test_user(storage: &PostgresStorage, username: &str) -> crate::types::User {
+        let now = chrono::Utc::now();
+        let user = crate::types::User {
+            id: username.to_string(),
+            username: username.to_string(),
+            password: "x".to_string(),
+            platform_role: None,
+            current_org_id: None,
+            enabled: true,
+            refresh_token: None,
+            created_at: now,
+            updated_at: now,
+            email: None,
+            email_verified_at: None,
+            requires_email_verification: false,
+            password_changed_at: now,
+        };
+        storage.create_user(&user).await.expect("create_user")
+    }
+
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn invitation_lifecycle_round_trip(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "acme", "Acme").await;
+        let inviter = make_test_user(&storage, "alice").await;
+        let now = chrono::Utc::now();
+
+        let invitation = storage
+            .create_invitation(
+                &org.id,
+                &crate::types::MemberRole::Admin,
+                &inviter.id,
+                "alice@example.com",
+                now + chrono::Duration::days(7),
+            )
+            .await
+            .expect("mint");
+        assert!(invitation.accepted_at.is_none());
+        assert!(invitation.revoked_at.is_none());
+        assert_eq!(
+            invitation.recipient_email.as_deref(),
+            Some("alice@example.com")
+        );
+
+        let fetched = storage
+            .get_invitation_by_token(&invitation.token)
+            .await
+            .expect("get_by_token")
+            .expect("invitation present");
+        assert_eq!(fetched.id, invitation.id);
+
+        let pending = storage.list_invitations_for_org(&org.id).await.expect("list");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, invitation.id);
+
+        storage
+            .revoke_invitation(&org.id, &invitation.id)
+            .await
+            .expect("revoke");
+        let revoked = storage
+            .get_invitation_by_token(&invitation.token)
+            .await
+            .expect("get")
+            .expect("present");
+        assert!(revoked.revoked_at.is_some());
+    }
+
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn invitation_accept_creates_membership_and_marks_consumed(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "acme", "Acme").await;
+        let inviter = make_test_user(&storage, "alice").await;
+        let invitee = make_test_user(&storage, "bob").await;
+        let now = chrono::Utc::now();
+
+        let invitation = storage
+            .create_invitation(
+                &org.id,
+                &crate::types::MemberRole::Member,
+                &inviter.id,
+                "bob@example.com",
+                now + chrono::Duration::days(7),
+            )
+            .await
+            .expect("mint");
+
+        let member = storage
+            .accept_invitation(&invitation.token, &invitee.id)
+            .await
+            .expect("accept")
+            .expect("invitation was consumable");
+        assert_eq!(member.user_id, invitee.id);
+        assert_eq!(member.org_id, org.id);
+        assert_eq!(member.role, crate::types::MemberRole::Member);
+
+        let second = storage
+            .accept_invitation(&invitation.token, &invitee.id)
+            .await
+            .expect("no db error");
+        assert!(second.is_none(), "second accept should be no-op");
+    }
+
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn invitation_token_entropy_is_unique(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "acme", "Acme").await;
+        let inviter = make_test_user(&storage, "alice").await;
+        let now = chrono::Utc::now();
+
+        let mut seen = std::collections::HashSet::new();
+        for i in 0..1000 {
+            let inv = storage
+                .create_invitation(
+                    &org.id,
+                    &crate::types::MemberRole::Member,
+                    &inviter.id,
+                    &format!("invitee-{i}@example.com"),
+                    now + chrono::Duration::days(7),
+                )
+                .await
+                .expect("mint");
+            assert!(seen.insert(inv.token), "duplicate token generated");
+        }
+    }
+
+    /// Org defaults round-trip: writes both fields, reads them back, verifies
+    /// `None` is preserved, and confirms no cross-org interference.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn org_defaults_round_trip(pool: sqlx::PgPool) {
+        use crate::types::OrgDefaults;
+
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-a", "Org A").await;
+
+        // 1. Initial state — both None.
+        let initial = storage.get_org_defaults(&org.id).await.expect("get initial");
+        assert_eq!(initial, OrgDefaults {
+            default_rate_limit_rpm: None,
+            default_budget_monthly_usd: None,
+        });
+
+        // 2. Write both fields.
+        storage
+            .set_org_defaults(&org.id, &OrgDefaults {
+                default_rate_limit_rpm: Some(100),
+                default_budget_monthly_usd: Some(5000),  // subunits (10⁸ per USD)
+            })
+            .await
+            .expect("set both");
+
+        let after = storage.get_org_defaults(&org.id).await.expect("get after set");
+        assert_eq!(after.default_rate_limit_rpm, Some(100));
+        assert_eq!(after.default_budget_monthly_usd, Some(5000));
+
+        // 3. Clear rate limit only — budget must persist.
+        storage
+            .set_org_defaults(&org.id, &OrgDefaults {
+                default_rate_limit_rpm: None,
+                default_budget_monthly_usd: Some(5000),
+            })
+            .await
+            .expect("clear rate limit");
+        let cleared = storage.get_org_defaults(&org.id).await.expect("get after clear");
+        assert_eq!(cleared.default_rate_limit_rpm, None);
+        assert_eq!(cleared.default_budget_monthly_usd, Some(5000));
+
+        // 4. Different org — independent state.
+        let org_b = make_test_org(&storage, "org-b", "Org B").await;
+        let b_initial = storage.get_org_defaults(&org_b.id).await.expect("get b initial");
+        assert_eq!(b_initial, OrgDefaults {
+            default_rate_limit_rpm: None,
+            default_budget_monthly_usd: None,
+        });
+    }
+
+    // ---- Phase 6: budget_counters ----
+
+    /// Helper: create a real org + api_key row pair so usage_records FK and
+    /// budget_counters FK are satisfied. Returns the key_id.
+    async fn make_test_key_for_budget(storage: &PostgresStorage, org_id: &str, key_id: &str) -> String {
+        let now = chrono::Utc::now();
+        sqlx::query(
+            "INSERT INTO api_keys (id, org_id, name, key_hash, enabled, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, true, $5, $6) ON CONFLICT (id) DO NOTHING",
+        )
+        .bind(key_id)
+        .bind(org_id)
+        .bind(key_id)
+        .bind(format!("{key_id:0>64}")) // 64-char placeholder hash
+        .bind(now)
+        .bind(now)
+        .execute(&storage.pool)
+        .await
+        .expect("seed api_key");
+        key_id.to_string()
+    }
+
+    /// Helper: build a minimal UsageRecord with the given org_id, key_id, cost, and
+    /// created_at. Other token fields are zeroed; only cost matters for the
+    /// budget counter logic.
+    fn mk_usage(org_id: &str, key_id: &str, cost: i64, created_at: chrono::DateTime<chrono::Utc>) -> crate::types::UsageRecord {
+        crate::types::UsageRecord {
+            id: format!("rec-{}-{}", key_id, uuid::Uuid::new_v4()),
+            org_id: org_id.to_string(),
+            request_id: None,
+            key_id: key_id.to_string(),
+            model_name: "test-model".to_string(),
+            provider_id: "test-provider".to_string(),
+            channel_id: None,
+            protocol: crate::types::Protocol::Openai,
+            input_tokens: Some(0),
+            output_tokens: Some(0),
+            cache_read_tokens: None,
+            cache_creation_tokens: None,
+            cost,
+            pricing_policy: None,
+            weighted_tokens: 0,
+            user_id: None,
+            created_at,
+        }
+    }
+
+    /// Unknown key returns 0; record_usage accumulates spend into the counter.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn budget_counters_round_trip(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-budget", "Budget Org").await;
+        let key_id = make_test_key_for_budget(&storage, &org.id, "key-round-trip").await;
+
+        // 1. Unknown key → 0.
+        let initial = storage.get_month_to_date_spend(&key_id).await.expect("initial mtd");
+        assert_eq!(initial, 0, "unknown key should report 0 spend");
+
+        // 2. After a $5 usage record, MTD should be $5 (500_000_000 subunits).
+        let five_usd = crate::money::usd_to_units(5.0);
+        storage
+            .record_usage(&org.id, &mk_usage(&org.id, &key_id, five_usd, chrono::Utc::now()))
+            .await
+            .expect("record_usage #1");
+        let after_five = storage.get_month_to_date_spend(&key_id).await.expect("mtd after 5");
+        assert_eq!(after_five, five_usd, "MTD should reflect single $5 record");
+
+        // 3. After a second $3 record, MTD should be $8 (increment, not replace).
+        let three_usd = crate::money::usd_to_units(3.0);
+        storage
+            .record_usage(&org.id, &mk_usage(&org.id, &key_id, three_usd, chrono::Utc::now()))
+            .await
+            .expect("record_usage #2");
+        let after_eight = storage.get_month_to_date_spend(&key_id).await.expect("mtd after 3");
+        assert_eq!(after_eight, five_usd + three_usd, "MTD should accumulate across records");
+    }
+
+    /// A record dated in a prior month must NOT count toward this month's MTD.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn budget_counters_month_bucketing(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-bucket", "Bucket Org").await;
+        let key_id = make_test_key_for_budget(&storage, &org.id, "key-bucket").await;
+
+        // Insert a record dated 40 days ago (prior calendar month, guaranteed — longest calendar month is 31 days).
+        let old_cost = crate::money::usd_to_units(10.0);
+        let old_ts = chrono::Utc::now() - chrono::Duration::days(40);
+        storage
+            .record_usage(&org.id, &mk_usage(&org.id, &key_id, old_cost, old_ts))
+            .await
+            .expect("record_usage old");
+
+        // Current-month MTD should be 0.
+        let mtd = storage.get_month_to_date_spend(&key_id).await.expect("current mtd");
+        assert_eq!(mtd, 0, "prior-month record must not count toward current MTD");
+
+        // Sanity: confirm the old counter row exists with a different bucket.
+        let any_row: Option<(i64,)> = sqlx::query_as(
+            "SELECT accrued FROM budget_counters WHERE key_id = $1 AND month_bucket <> $2",
+        )
+        .bind(&key_id)
+        .bind(format!("{}", chrono::Utc::now().format("%Y-%m")))
+        .fetch_optional(&storage.pool)
+        .await
+        .expect("query old counter");
+        assert_eq!(any_row.map(|(v,)| v), Some(old_cost), "old-month counter row should exist with old cost");
+    }
+
+    /// 10 parallel record_usage calls must produce MTD=$10 with no lost updates.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn budget_counters_concurrent_inserts(pool: sqlx::PgPool) {
+        let storage = std::sync::Arc::new(crate::postgres::PostgresStorage::from_pool(pool));
+        let org = make_test_org(&storage, "org-concurrent", "Concurrent Org").await;
+        let key_id = make_test_key_for_budget(&storage, &org.id, "key-concurrent").await;
+
+        let one_usd = crate::money::usd_to_units(1.0);
+        let n = 10;
+        let mut handles = Vec::with_capacity(n);
+        for _ in 0..n {
+            let storage = storage.clone();
+            let org_id = org.id.clone();
+            let key_id = key_id.clone();
+            handles.push(tokio::spawn(async move {
+                storage
+                    .record_usage(&org_id, &mk_usage(&org_id, &key_id, one_usd, chrono::Utc::now()))
+                    .await
+                    .expect("record_usage in task");
+            }));
+        }
+        for h in handles {
+            h.await.expect("task panicked");
+        }
+
+        let mtd = storage.get_month_to_date_spend(&key_id).await.expect("mtd after concurrent");
+        assert_eq!(mtd, one_usd * n as i64, "all 10 concurrent writes must be reflected (no lost updates)");
+    }
+
+    // ---- Phase 7: org-wide MTD aggregation ----
+
+    /// Unknown org → 0 (no keys, no counters).
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn get_org_mtd_returns_zero_for_unknown_org(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        // Brand-new org has no keys → SUM must be 0, not null, not an error.
+        let org = make_test_org(&storage, "org-mtd-empty", "Empty Org").await;
+        let mtd = storage
+            .get_org_month_to_date_spend(&org.id)
+            .await
+            .expect("get_org_month_to_date_spend on empty org");
+        assert_eq!(mtd, 0, "empty org must report 0 MTD");
+    }
+
+    /// 3 keys, each with $5 spend this month → org total = $15.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn get_org_mtd_sums_across_keys(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-mtd-sum", "Sum Org").await;
+
+        let five_usd = crate::money::usd_to_units(5.0);
+        for n in 0..3 {
+            let key_id = make_test_key_for_budget(&storage, &org.id, &format!("key-mtd-{n}")).await;
+            storage
+                .record_usage(
+                    &org.id,
+                    &mk_usage(&org.id, &key_id, five_usd, chrono::Utc::now()),
+                )
+                .await
+                .expect("record_usage");
+        }
+
+        let mtd = storage
+            .get_org_month_to_date_spend(&org.id)
+            .await
+            .expect("get_org_month_to_date_spend");
+        assert_eq!(mtd, five_usd * 3, "MTD must sum across all keys in the org");
+    }
+
+    /// A record dated 40 days ago lands in a prior month bucket and must NOT count.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn get_org_mtd_excludes_other_months(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-mtd-prior", "Prior Org").await;
+        let key_id = make_test_key_for_budget(&storage, &org.id, "key-prior").await;
+
+        let old_ts = chrono::Utc::now() - chrono::Duration::days(40);
+        let old_cost = crate::money::usd_to_units(10.0);
+        storage
+            .record_usage(&org.id, &mk_usage(&org.id, &key_id, old_cost, old_ts))
+            .await
+            .expect("record_usage old");
+
+        let mtd = storage
+            .get_org_month_to_date_spend(&org.id)
+            .await
+            .expect("get_org_month_to_date_spend");
+        assert_eq!(mtd, 0, "prior-month spend must not count toward current MTD");
+    }
+
+    /// Key in org A's spend must NOT bleed into org B's MTD.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn get_org_mtd_no_cross_org_leak(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org_a = make_test_org(&storage, "org-mtd-a", "Org A").await;
+        let org_b = make_test_org(&storage, "org-mtd-b", "Org B").await;
+
+        let key_a = make_test_key_for_budget(&storage, &org_a.id, "key-a").await;
+        let key_b = make_test_key_for_budget(&storage, &org_b.id, "key-b").await;
+
+        let cost = crate::money::usd_to_units(7.0);
+        storage
+            .record_usage(&org_a.id, &mk_usage(&org_a.id, &key_a, cost, chrono::Utc::now()))
+            .await
+            .expect("record_usage a");
+        storage
+            .record_usage(&org_b.id, &mk_usage(&org_b.id, &key_b, cost, chrono::Utc::now()))
+            .await
+            .expect("record_usage b");
+
+        let mtd_a = storage
+            .get_org_month_to_date_spend(&org_a.id)
+            .await
+            .expect("get_org_month_to_date_spend a");
+        assert_eq!(mtd_a, cost, "org A's MTD must exclude org B's spend");
+    }
+
+    /// Keys without spend this month report `mtd_units: 0`.
+    /// Keys with spend report the correct accrued sum.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn list_keys_with_mtd_includes_per_key_spend(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-keys-mtd", "Keys Mtd Org").await;
+
+        // key-with-cost: $4 spend this month
+        let key_with_cost =
+            make_test_key_for_budget(&storage, &org.id, "key-with-cost").await;
+        let four_usd = crate::money::usd_to_units(4.0);
+        storage
+            .record_usage(
+                &org.id,
+                &mk_usage(&org.id, &key_with_cost, four_usd, chrono::Utc::now()),
+            )
+            .await
+            .expect("record_usage");
+
+        // key-no-cost: no usage records
+        let key_no_cost =
+            make_test_key_for_budget(&storage, &org.id, "key-no-cost").await;
+
+        let result = storage
+            .list_keys_paginated_with_mtd(&org.id, 1, 50)
+            .await
+            .expect("list_keys_paginated_with_mtd");
+
+        // 2 keys total
+        assert_eq!(result.total, 2, "should see both keys");
+
+        let by_id: std::collections::HashMap<String, i64> = result
+            .items
+            .iter()
+            .map(|x| (x.key.id.clone(), x.mtd_units))
+            .collect();
+        assert_eq!(
+            by_id.get(&key_with_cost),
+            Some(&four_usd),
+            "key with $4 usage must report mtd_units = $4 in subunits"
+        );
+        assert_eq!(
+            by_id.get(&key_no_cost),
+            Some(&0),
+            "key with no usage must report mtd_units = 0"
+        );
+    }
+
+    /// A prior-month spend must NOT show up in the current month's MTD column.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn list_keys_with_mtd_excludes_other_months(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let org = make_test_org(&storage, "org-keys-prior", "Keys Prior Org").await;
+        let key_id = make_test_key_for_budget(&storage, &org.id, "key-prior-mtd").await;
+
+        let old_ts = chrono::Utc::now() - chrono::Duration::days(40);
+        let old_cost = crate::money::usd_to_units(20.0);
+        storage
+            .record_usage(&org.id, &mk_usage(&org.id, &key_id, old_cost, old_ts))
+            .await
+            .expect("record_usage old");
+
+        let result = storage
+            .list_keys_paginated_with_mtd(&org.id, 1, 50)
+            .await
+            .expect("list_keys_paginated_with_mtd");
+        let row = result
+            .items
+            .iter()
+            .find(|x| x.key.id == key_id)
+            .expect("key must be in result");
+        assert_eq!(row.mtd_units, 0, "prior-month spend must not count toward current MTD");
+    }
+}
+
+#[cfg(test)]
+mod phase4_tests {
+    use crate::Storage;
+
+    /// Helper: build a User literal with all 13 fields populated. Used by the
+    /// phase4 round-trip tests so adding a new column later is one place to
+    /// update. The 4 Phase 4 fields default sensibly for non-email flows.
+    fn mk_user(id: &str, uname: &str, email: &str) -> crate::types::User {
+        let now = chrono::Utc::now();
+        crate::types::User {
+            id: id.into(),
+            username: uname.into(),
+            password: "x".into(),
+            platform_role: None,
+            current_org_id: None,
+            enabled: true,
+            refresh_token: None,
+            created_at: now,
+            updated_at: now,
+            email: Some(email.into()),
+            email_verified_at: None,
+            requires_email_verification: true,
+            password_changed_at: now,
+        }
+    }
+
+    /// A user with an email AND a verification mints → store → lookup →
+    /// consume → email_verified_at flips and the row is marked consumed.
+    /// Single end-to-end test for the verification lifecycle.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn email_verification_round_trip(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let user = mk_user("u-evt", "evt", "evt@example.com");
+        storage.create_user(&user).await.expect("create_user");
+
+        let verification = storage
+            .create_email_verification(
+                &user.id,
+                &user.email.as_deref().unwrap(),
+                chrono::Utc::now() + chrono::Duration::hours(24),
+            )
+            .await
+            .expect("mint");
+        assert!(verification.consumed_at.is_none());
+        assert_eq!(verification.user_id, user.id);
+
+        let fetched = storage
+            .get_email_verification_by_token(&verification.token)
+            .await
+            .expect("get")
+            .expect("present");
+        assert_eq!(fetched.id, verification.id);
+        assert_eq!(fetched.email, "evt@example.com");
+
+        // Consume succeeds the first time.
+        let consumed = storage
+            .consume_email_verification(&verification.token)
+            .await
+            .expect("consume");
+        assert!(consumed, "first consume should succeed");
+        // The user's email_verified_at is now set, requires_email_verification = false.
+        let after = storage
+            .get_user(&user.id)
+            .await
+            .expect("get_user")
+            .expect("user present");
+        assert!(after.email_verified_at.is_some());
+        assert!(!after.requires_email_verification);
+
+        // Second consume is a no-op (returns false; row already consumed).
+        let second = storage
+            .consume_email_verification(&verification.token)
+            .await
+            .expect("consume again");
+        assert!(!second, "second consume must return false");
+    }
+
+    /// Atomic password reset round trip: mint → Success outcome writes the
+    /// new hash + bumps `password_changed_at`; a second consume is `Consumed`.
+    /// Exercises `consume_password_reset_and_set_password` end-to-end so the
+    /// legacy non-atomic path stays out of the test loop.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn password_reset_round_trip(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let user = mk_user("u-prt", "prt", "prt@example.com");
+        storage.create_user(&user).await.expect("create_user");
+
+        let reset = storage
+            .create_password_reset(&user.id, chrono::Utc::now() + chrono::Duration::hours(1))
+            .await
+            .expect("mint");
+        assert!(reset.consumed_at.is_none());
+
+        let fetched = storage
+            .get_password_reset_by_token(&reset.token)
+            .await
+            .expect("get")
+            .expect("present");
+        assert_eq!(fetched.id, reset.id);
+
+        let before = storage
+            .get_user(&user.id)
+            .await
+            .expect("get")
+            .expect("user")
+            .password_changed_at;
+
+        let outcome = storage
+            .consume_password_reset_and_set_password(&reset.token, "new-hash")
+            .await
+            .expect("consume");
+        assert_eq!(
+            matches!(outcome, crate::types::PasswordResetOutcome::Success),
+            true,
+            "first consume should be Success (got {outcome:?})"
+        );
+
+        let after = storage
+            .get_user(&user.id)
+            .await
+            .expect("get")
+            .expect("user");
+        assert_eq!(
+            after.password, "new-hash",
+            "consume must write the new password hash atomically"
+        );
+        assert!(
+            after.password_changed_at > before,
+            "password_changed_at must advance after consume (before={before}, after={})",
+            after.password_changed_at
+        );
+
+        let second = storage
+            .consume_password_reset_and_set_password(&reset.token, "ignored")
+            .await
+            .expect("consume again");
+        assert!(
+            matches!(second, crate::types::PasswordResetOutcome::Consumed),
+            "second consume must be Consumed (got {second:?})"
+        );
+    }
+
+    /// Case-insensitive uniqueness on users.email (the migration defines
+    /// the partial unique index as `LOWER(email)`). Inserting two rows
+    /// whose emails differ only by case must fail the second insert.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn email_unique_index(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        storage
+            .create_user(&mk_user("u3", "alpha", "dup@example.com"))
+            .await
+            .expect("first insert");
+        let err = storage
+            .create_user(&mk_user("u4", "beta", "DUP@example.com"))
+            .await;
+        assert!(
+            err.is_err(),
+            "expected unique violation on case-insensitive duplicate email, got Ok"
+        );
     }
 }

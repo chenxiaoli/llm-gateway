@@ -1,23 +1,19 @@
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::StatusCode;
 use axum::Json;
 use std::sync::Arc;
 
-use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, resolve_org_context};
+use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, can_mutate_catalog_entry, OrgContext};
 use llm_gateway_storage::{CreatePricingPolicy, PricingPolicy, PricingPolicyWithCounts, UpdatePricingPolicy};
 
 use crate::error::ApiError;
-use crate::extractors::require_auth;
 use crate::AppState;
 
 pub async fn create(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Json(input): Json<CreatePricingPolicy>,
 ) -> Result<Json<PricingPolicy>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let owner_org_id = input.owner_org_id.clone().or_else(|| {
         if can_create_platform_catalog(&ctx) { None } else { Some(ctx.org_id.clone()) }
     });
@@ -55,11 +51,8 @@ pub async fn create(
 
 pub async fn list(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
 ) -> Result<Json<Vec<PricingPolicyWithCounts>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let policies = state
         .storage
         .list_pricing_policies_with_counts(&ctx.org_id)
@@ -71,12 +64,9 @@ pub async fn list(
 
 pub async fn get(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<Json<PricingPolicy>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let policy = state
         .storage
         .get_pricing_policy(&ctx.org_id, &id)
@@ -91,12 +81,9 @@ pub async fn get(
 
 pub async fn delete(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
 ) -> Result<StatusCode, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let existing = state
         .storage
         .get_pricing_policy(&ctx.org_id, &id)
@@ -104,11 +91,7 @@ pub async fn delete(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Pricing policy '{}' not found", id)))?;
 
-    if let Some(ref owner_org_id) = existing.owner_org_id {
-        if owner_org_id != &ctx.org_id || !can_create_org_catalog(&ctx) {
-            return Err(ApiError::Forbidden);
-        }
-    } else if !can_create_platform_catalog(&ctx) {
+    if !can_mutate_catalog_entry(&ctx, existing.owner_org_id.as_deref()) {
         return Err(ApiError::Forbidden);
     }
 
@@ -123,13 +106,10 @@ pub async fn delete(
 
 pub async fn update(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, id)): Path<(String, String)>,
     Json(input): Json<UpdatePricingPolicy>,
 ) -> Result<Json<PricingPolicy>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let existing = state
         .storage
         .get_pricing_policy(&ctx.org_id, &id)
@@ -137,11 +117,7 @@ pub async fn update(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Pricing policy '{}' not found", id)))?;
 
-    if let Some(ref owner_org_id) = existing.owner_org_id {
-        if owner_org_id != &ctx.org_id || !can_create_org_catalog(&ctx) {
-            return Err(ApiError::Forbidden);
-        }
-    } else if !can_create_platform_catalog(&ctx) {
+    if !can_mutate_catalog_entry(&ctx, existing.owner_org_id.as_deref()) {
         return Err(ApiError::Forbidden);
     }
 

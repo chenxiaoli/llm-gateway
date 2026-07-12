@@ -2,10 +2,13 @@ use axum::middleware;
 use axum::routing::{get, post};
 use axum::http::{header, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
+use clap::Parser;
+use llm_gateway::cli::{Cli, Commands};
 use llm_gateway_api::{self as api, AppState, SystemInfo, InMemoryChannelRegistry, spawn_registry_refresh};
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
 use llm_gateway_storage::postgres::PostgresStorage;
+use llm_gateway_storage::types::{PlatformRole, SetPlatformRoleError};
 use rust_embed::Embed;
 use sha2::Digest;
 use std::sync::Arc;
@@ -18,6 +21,13 @@ struct Frontend;
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Init tracing
     tracing_subscriber::fmt::init();
+
+    // Parse CLI first. If a subcommand is given, dispatch to the CLI handler
+    // and skip server bootstrap entirely.
+    let cli = Cli::parse();
+    if let Some(cmd) = cli.command {
+        return run_cli_command(cmd, &cli.config).await;
+    }
 
     // Bootstrap: create data directory and default config.toml if missing
     bootstrap().await?;
@@ -43,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Init NATS publisher (required)
     let nats_cfg = config.nats.as_ref().ok_or("[nats] section is required in config.toml")?;
     let nats_publisher: Arc<llm_gateway_nats_publisher::NatsPublisher> =
-        match llm_gateway_nats_publisher::NatsPublisher::new(&nats_cfg.url, nats_cfg.token.clone()).await {
+        match llm_gateway_nats_publisher::NatsPublisher::new(&nats_cfg.url, nats_cfg.token.clone(), nats_cfg.credentials_file.clone()).await {
             Ok(pub_) => {
                 tracing::info!("Connected to NATS: {}", nats_cfg.url);
                 Arc::new(pub_)
@@ -78,6 +88,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Init rate limiter
     let rate_limiter = Arc::new(RateLimiter::new(config.rate_limit.window_size_secs));
 
+    // Init email subsystem
+    let templates = Arc::new(
+        llm_gateway_email::templates::TemplateRegistry::load(
+            config.email.from_address.clone(),
+            config.email.from_name.clone(),
+        )
+        .map_err(|e| format!("failed to load email templates: {e}"))?,
+    );
+
+    let mailer: Arc<dyn llm_gateway_email::Mailer> = match config.email.transport.as_str() {
+        "noop" => Arc::new(llm_gateway_email::noop::NoopMailer::new()),
+        "file" => {
+            std::fs::create_dir_all(&config.email.file_output_dir)
+                .map_err(|e| format!("creating email output dir {}: {e}", config.email.file_output_dir))?;
+            Arc::new(llm_gateway_email::file::FileMailer::new(
+                &config.email.file_output_dir,
+                config.email.from_address.clone(),
+                config.email.from_name.clone(),
+            ))
+        }
+        "smtp" => {
+            let host = config.email.smtp_host.clone()
+                .ok_or_else(|| "[email] smtp_host is required when transport = \"smtp\"".to_string())?;
+            let port = config.email.smtp_port.unwrap_or(587);
+            let cfg = llm_gateway_email::smtp::SmtpMailerConfig {
+                host: host.clone(),
+                port,
+                username: config.email.smtp_username.clone(),
+                password: config.email.smtp_password.clone(),
+                use_tls: config.email.smtp_use_tls,
+                from_address: config.email.from_address.clone(),
+                from_name: config.email.from_name.clone(),
+            };
+            Arc::new(
+                llm_gateway_email::smtp::SmtpMailer::new(cfg)
+                    .map_err(|e| format!("constructing SMTP mailer for {host}: {e}"))?,
+            )
+        }
+        other => return Err(format!("unknown [email] transport: {other}").into()),
+    };
+
     // App state
     let system_info = SystemInfo {
         server_bind_address: format!("{}:{}", config.server.host, config.server.port),
@@ -91,11 +142,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         storage,
         rate_limiter,
         jwt_secret: config.auth.jwt_secret.clone(),
+        auth_config: Arc::new(config.auth.clone()),
         encryption_key,
         nats_publisher: Some(nats_publisher),
         registry,
         system_info,
+        public_base_url: config
+            .server
+            .public_base_url
+            .clone()
+            .unwrap_or_else(|| "http://localhost:5173".to_string()),
+        mailer,
+        templates,
     });
+
+    // Spawn platform-admin impersonation janitor — reaps stale temp member
+    // rows (created_by='system') left behind by platform_admin visits. The
+    // 1-hour threshold is generous on purpose: the janitor is a safety net,
+    // not the primary exit signal — a stale row is an inconvenience, not a
+    // bug. Tick is 5 minutes.
+    {
+        let janitor_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
+            interval.tick().await; // skip the immediate first tick
+            loop {
+                interval.tick().await;
+                match llm_gateway_api::janitor::cleanup_stale_impersonations(
+                    &janitor_state,
+                    chrono::Duration::hours(1),
+                )
+                .await
+                {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!(
+                        rows_removed = n,
+                        "janitor: reaped stale platform-admin temp member rows"
+                    ),
+                    Err(e) => tracing::warn!(
+                        error = %e,
+                        "janitor: cleanup_stale_impersonations failed"
+                    ),
+                }
+            }
+        });
+    }
 
     // Build router
     let app = axum::Router::new()
@@ -107,7 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/messages", post(api::proxy::messages))
         .route("/v1/responses", post(api::proxy::responses))
         // Management API
-        .merge(api::management::management_router())
+        .merge(api::management::management_router(state.clone()))
         // Frontend static files (fallback for SPA)
         .fallback(get(serve_frontend))
         // State + middleware
@@ -124,6 +215,80 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .await?;
 
     Ok(())
+}
+
+/// Dispatch a CLI subcommand. Currently handles operator bootstrap of the
+/// `platform_admin` role when the first-user auto-promotion is disabled.
+///
+/// `config_path` is the value of `--config` from the CLI (defaults to
+/// `config.toml`). We re-load it here rather than carrying the parsed config
+/// through, because the subcommand path skips the server-side bootstrap.
+async fn run_cli_command(
+    cmd: Commands,
+    config_path: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    match cmd {
+        Commands::GrantPlatformAdmin {
+            username,
+            revoke,
+            allow_last_admin,
+        } => {
+            // Load and expand the config (env vars in [database].url etc.)
+            let config_str = std::fs::read_to_string(config_path)?;
+            let config_str = shellexpand::env(&config_str)?.to_string();
+            let config: AppConfig = toml::from_str(&config_str)?;
+
+            if config.database.driver.as_str() != "postgres" {
+                eprintln!("error: only 'postgres' driver is supported");
+                std::process::exit(1);
+            }
+            let url = config
+                .database
+                .url
+                .as_deref()
+                .ok_or("database.url is required")?;
+
+            let db = PostgresStorage::new(url).await?;
+
+            let user = db.get_user_by_username(&username).await?.ok_or_else(|| {
+                eprintln!("error: user '{username}' not found");
+                "user not found"
+            })?;
+            let actor = &user.id;
+
+            let role = if revoke {
+                None
+            } else {
+                Some(PlatformRole::PlatformAdmin)
+            };
+            if revoke && allow_last_admin {
+                eprintln!("warning: --allow-last-admin set; proceeding with demotion");
+            }
+
+            match db
+                .set_user_platform_role(&user.id, actor, role.clone(), allow_last_admin)
+                .await
+            {
+                Ok(()) => {
+                    if revoke {
+                        println!("user '{username}' is no longer platform_admin");
+                    } else if user.platform_role == Some(PlatformRole::PlatformAdmin) {
+                        println!("user '{username}' is already platform_admin (no change)");
+                    } else {
+                        println!("user '{username}' is now platform_admin");
+                    }
+                    Ok(())
+                }
+                Err(SetPlatformRoleError::LastPlatformAdmin) => {
+                    eprintln!(
+                        "error: cannot demote last platform admin (pass --allow-last-admin to override)"
+                    );
+                    std::process::exit(2);
+                }
+                Err(e) => Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
+            }
+        }
+    }
 }
 
 /// Bootstrap: create ./data/ directory and default config.toml if missing.
@@ -148,11 +313,16 @@ host = "0.0.0.0"
 port = 8080
 # IMPORTANT: Change this to a random 32-byte secret in production
 encryption_key = "change-me-32-byte-secret-here!"
+# Public-facing base URL used to construct invitation links and other
+# user-facing URLs. Set this to your production domain in deployed envs.
+# Defaults to http://localhost:5173 if omitted.
+# public_base_url = "https://your.domain"
 
 [auth]
 # IMPORTANT: Change this to a random JWT secret in production
 jwt_secret = "change-me-jwt-secret!"
 allow_registration = true
+# first_user_is_admin = true  # uncomment + set false to disable silent first-user promotion
 
 [database]
 driver = "postgres"

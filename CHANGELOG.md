@@ -4,6 +4,146 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added — Platform admin bootstrap & management
+
+- **Platform-admin management UI** (`/admin/platform-users`): list current
+  platform admins, search non-admin users by username/email, grant or revoke
+  `platform_role = platform_admin` from the browser. Last-admin guard refuses
+  to demote the only platform admin (409 from the backend).
+- **CLI subcommand** `cargo run -p llm-gateway -- grant-platform-admin
+  --username <name> [--revoke] [--allow-last-admin]`: operator escape hatch
+  for bootstrap when the first-user auto-promotion is disabled or when the
+  last admin needs to be demoted outside the UI.
+- **Config flag** `auth.first_user_is_admin` (default `true`, preserves
+  existing behavior). Set to `false` to disable the silent first-user
+  promotion — useful for SaaS deployments that want to bootstrap via the CLI.
+- **Top-level `/admin/*` routes** with dedicated `PlatformLayout` chrome
+  (sidebar with Settings + Platform Users links, header with back-to-org
+  link). Backend `/api/v1/admin/settings` and `/api/v1/admin/platform-users`
+  are no longer org-scoped.
+
+### Changed
+
+- `/{slug}/admin/settings` → `/admin/settings`. A client-side `<Navigate>`
+  preserves bookmarks from the just-shipped prior URL scheme.
+
+### Added — Phase 4: Email + Email-Bound Invitations (v2.1.0)
+
+- **Email subsystem** (`crates/email`, crate name `llm-gateway-email`): a
+  standalone mailer crate with three transports — `NoopMailer` (default, drops
+  mail silently), `FileMailer` (writes RFC-822 `.eml` files to a directory
+  for local dev / test token extraction), and `SmtpMailer` (real delivery via
+  `lettre`). Transport is selected by `[email] transport` in `config.toml`;
+  `file_output_dir` and `[email] from` configure the file/sender address.
+  Handlebars templates (`verification`, `password_reset`, `invitation`) render
+  both plain-text and HTML bodies.
+- **Schema additions** (migrations `20260711000001`–`20260711000004`):
+  `users.email` / `users.email_verified_at` / `users.password_changed_at`;
+  `invitations.recipient_email` (required at mint time); new
+  `email_verifications` and `password_resets` tables, both token-indexed with
+  expiry + consumed-at columns. Each migration ships a `.down.sql` companion.
+- **Email verification on signup.** `POST /api/v1/auth/register` now requires
+  an `email` field and dispatches a verification email (best-effort; delivery
+  failure never blocks registration). Brand-new users have
+  `email_verified_at = NULL`; `POST /api/v1/auth/login` rejects them with
+  `403 email_not_verified` until they click through. `POST /auth/verify-email`
+  and `POST /auth/verify-email/resend` complete / re-trigger the flow.
+- **Password reset.** `POST /auth/password-reset/request` is always-204
+  (doesn't leak whether the email is registered). `GET /auth/password-reset/
+  preview` validates a token without consuming it; `POST /auth/password-reset/
+  confirm` sets the new password and single-use consumes the token. The
+  confirm handler stores the new password and marks `password_changed_at` in
+  one atomic transaction (SELECT FOR UPDATE on the reset row), so a partial
+  failure can never leave a token re-usable. Refresh tokens issued before
+  the reset are rejected on the next `/auth/refresh` (epoch check on the
+  refresh JWT's `iat` vs `users.password_changed_at` → `401 unauthorized`),
+  forcing re-login on every active session.
+- **Email-bound invitations.** `POST /orgs/{slug}/invitations` now requires
+  `recipient_email`; the invitation is bound to that address. `POST
+  /invitations/accept` (logged-in accept) enforces `email_mismatch` /
+  `email_verification_required` (403). `POST /auth/register` with an invite
+  token runs the accept server-side and rejects on `email_mismatch` /
+  `email_required`. The Invitations admin page adds a recipient-email input
+  (Generate disabled until valid); the table shows the recipient column.
+- **`POST /api/v1/auth/me/email`** — lets an existing user (legacy account
+  with no email) set and verify an address without blocking login. Dispatch
+  is fully best-effort; a 204 is returned regardless of mailer outcome.
+- **New `ApiError` codes** (cross-ref `crates/api/src/error.rs`):
+  `email_required` (400), `email_in_use` (409), `email_mismatch` (400 on
+  register / 403 on accept), `email_not_verified` (403, login gate),
+  `email_verification_required` (403, accept gate), `verification_expired`
+  (410), `verification_not_found` (404), `reset_expired` (410),
+  `reset_consumed` (410), `reset_not_found` (404).
+- **Frontend**: `/check-email`, `/verify-email/:token`, `/forgot-password`,
+  `/reset-password/:token` routes and pages; Login page surfaces an inline
+  resend panel on `email_not_verified`; Register redirects to `/check-email`
+  post-signup; AcceptInvite branches on the signed-in user's email state
+  (missing / mismatch / unverified / verified-match); EmailBanner +
+  AddEmailModal prompt legacy users to add an email; new i18n keys under
+  `verify_email`, `check_email`, `forgot_password`, `reset_password`,
+  `emailBanner`, `addEmailModal`, and `acceptInvite`.
+
+- **Phase 5 (per-org defaults + rate-limit enforcement):**
+  - Added: `GET`/`PUT /api/v1/orgs/{slug}/defaults` for org-wide rate-limit RPM and monthly budget defaults. UI lives in Org Settings → Defaults.
+  - **Behavior change:** per-key rate limits (`api_keys.rate_limit`) are now **enforced** at request time via the existing in-memory rate limiter — previously stored but never checked. Resolution order: `key.rate_limit ?? org.default_rate_limit_rpm ?? unlimited`. Exceeding returns `429` with `Retry-After` set to the configured rate-limit window size.
+  - Org-level `default_budget_monthly_usd` is stored but **not enforced** in this phase (parity with existing per-key budget — both will be enforced in a future phase).
+  - **Upgrade note:** any existing `api_keys` rows with non-null `rate_limit` will start receiving 429s on requests beyond their limit. Audit existing keys before deploying if any have low values set.
+  - Implicit fix: `api_keys.rate_limit` Postgres decode (INT4 column was decoded as `Option<i64>`, now correctly `Option<i32>`); invisible until enforcement made the column live.
+- **Phase 6 (budget enforcement):**
+  - **Behavior change:** per-key monthly budgets (`api_keys.budget_monthly`) and org-default budgets (`default_budget_monthly_usd` from Phase 5) are now **enforced**. Resolution order: `key.budget_monthly ?? org.default_budget_monthly_usd ?? unlimited`. Exceeding returns `429` with `error.type = "budget_exceeded"` and body `{ key_id, month_bucket, limit, accrued }` (USD floats). No `Retry-After` — caller must wait until next month or have budget raised.
+  - New `budget_counters` table materializes month-to-date spend per key (UTC calendar month), updated atomically with each `usage_records` insert via app-level transaction in `record_usage`.
+  - Counting semantic is **post-completion**: the check uses MTD that excludes the current request's cost. The request that pushes MTD over budget is allowed; the next request is rejected. Industry-standard leak (matches Stripe, OpenAI).
+  - OrgSettings `budgetHelp` text updated — the previous "Not currently enforced" disclaimer is removed.
+  - **Upgrade note:** any existing `api_keys` rows with non-null `budget_monthly`, or orgs with `default_budget_monthly_usd` set, will start receiving 429s on requests once their month-to-date spend exceeds the budget. Audit existing values before deploying.
+- **Phase 7 (budget observability):**
+  - **New UI:** OrgSettings gets a "Budget status" subsection showing org MTD total (sum across all keys) against the org-default budget, with a color-coded progress bar (green <60%, yellow 60-80%, orange 80-100%, red >100%). The Keys table gets an "MTD this month" column showing per-key spend with the same color coding.
+  - **New endpoint:** `GET /api/v1/{slug}/budget-status` returns `{ accrued_units, month_bucket }` (i64 subunits, UTC calendar month). Member-gated (parity with `GET /{slug}/defaults`).
+  - **Extended endpoint:** `GET /api/v1/{slug}/keys` now includes `mtd_units: i64` per key. Additive, non-breaking — existing API consumers ignore the new field.
+  - **New storage methods:** `Storage::get_org_month_to_date_spend(org_id)` and `Storage::list_keys_paginated_with_mtd(org_id, page, page_size)`. Both read the existing `budget_counters` table (from Phase 6) — no schema changes.
+  - **No behavior change:** enforcement remains as shipped in Phase 6 (post-completion, fail-open on storage errors). This phase is purely read-side observability.
+
+### Changed
+- `POST /api/v1/auth/register` now requires `email`; without an invitation
+  token the new user starts in the unverified limbo state (cannot log in
+  until `/verify-email` completes).
+- Default `config.toml` ships with `[email] transport = "noop"` — production
+  deployments must switch to `"smtp"` (or `"file"`) to actually deliver mail.
+
+### Removed
+- The ability to mint an invitation without a `recipient_email`. **Pending
+  pre-Phase-4 invitations (NULL recipient) are revoked by the
+  `20260711000002_invitations_recipient_email.sql` migration** — admins must
+  re-mint them with a recipient address. Accepted and already-revoked
+  historical rows are retained unchanged. The old generic-token flow was
+  effectively unauthenticated, so this is a deliberate security hardening.
+
+### Added — Phase 3: Wizard-gated signup + invitations
+
+- Wizard-first signup: brand-new users land at `/onboarding` and create or join
+  an org before reaching any org-scoped UI. Pre-existing users are unaffected.
+- Generic single-use magic-link invitations. Org admins can mint a 7-day
+  invitation URL at `/{org_slug}/admin/invitations` and share it out-of-band
+  (Slack, etc.); the first user to present the token joins the org.
+- `/accept-invite?token=...` landing page renders invite metadata for logged-out
+  visitors (Sign up / Log in) and logged-in users (Accept / Decline).
+- `GET /api/v1/auth/me/onboarding` returns `{ needs_onboarding: bool }` so the
+  SPA can detect limbo users (signed in, zero org memberships) without
+  round-tripping the full `me` payload.
+- `POST /api/v1/orgs` reissues the access token with the caller's effective
+  current org. Auto-switches `current_org` only when the caller was in the
+  limbo state (preserves the working context of users adding a second org).
+
+### Changed
+- `POST /api/v1/auth/register` no longer auto-assigns a default-org membership.
+  Brand-new users have `current_org_id = NULL` and `orgs = []` until they
+  complete the onboarding wizard.
+
+### Removed
+- The "default org" bootstrap on first-user signup (was a Phase 1 holdover).
+  The migration-time default org still exists for pre-Phase-3 data.
+
 ## [2.0.0] - 2026-07-07
 
 Phase 1 of SaaS multi-tenant support. The schema now models organizations (tenants) as first-class entities; existing single-tenant deployments continue to work — every existing row is moved into a default `org_default` tenant, and the API surface for the default org is unchanged. Future phases will expose org switching and per-org admin surfaces in the UI.

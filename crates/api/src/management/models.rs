@@ -1,22 +1,17 @@
 use axum::extract::{Path, State};
-use axum::http::HeaderMap;
 use axum::Json;
 use std::sync::Arc;
 
-use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, resolve_org_context};
+use llm_gateway_org::{can_create_org_catalog, can_create_platform_catalog, can_mutate_catalog_entry, OrgContext};
 use llm_gateway_storage::{Model, ProviderModel, ProviderModelInfo, UpdateModel};
 
 use crate::error::ApiError;
-use crate::extractors::require_auth;
 use crate::AppState;
 
 pub async fn list_all_models(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
 ) -> Result<Json<Vec<llm_gateway_storage::ModelWithProvider>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let models = state
         .storage
         .list_models(&ctx.org_id)
@@ -35,12 +30,9 @@ pub struct CreateModelRequest {
 
 pub async fn create_model_global(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
+    ctx: OrgContext,
     Json(input): Json<CreateModelRequest>,
 ) -> Result<Json<Model>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     // Decide ownership: explicit body value wins, otherwise non-platform-admin
     // callers get an org-private entry; platform_admin defaults to platform-level.
     let owner_org_id = input.owner_org_id.clone().or_else(|| {
@@ -78,13 +70,10 @@ pub async fn create_model_global(
 
 pub async fn update_model(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(model_name): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, model_name)): Path<(String, String)>,
     Json(input): Json<UpdateModel>,
 ) -> Result<Json<Model>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let mut model = state
         .storage
         .get_model(&ctx.org_id, &model_name)
@@ -92,11 +81,7 @@ pub async fn update_model(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?;
 
-    if let Some(ref owner_org_id) = model.owner_org_id {
-        if owner_org_id != &ctx.org_id || !can_create_org_catalog(&ctx) {
-            return Err(ApiError::Forbidden);
-        }
-    } else if !can_create_platform_catalog(&ctx) {
+    if !can_mutate_catalog_entry(&ctx, model.owner_org_id.as_deref()) {
         return Err(ApiError::Forbidden);
     }
 
@@ -116,12 +101,9 @@ pub async fn update_model(
 
 pub async fn delete_model(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(model_name): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, model_name)): Path<(String, String)>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let model = state
         .storage
         .get_model(&ctx.org_id, &model_name)
@@ -129,11 +111,7 @@ pub async fn delete_model(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or(ApiError::NotFound(format!("Model '{}' not found", model_name)))?;
 
-    if let Some(ref owner_org_id) = model.owner_org_id {
-        if owner_org_id != &ctx.org_id || !can_create_org_catalog(&ctx) {
-            return Err(ApiError::Forbidden);
-        }
-    } else if !can_create_platform_catalog(&ctx) {
+    if !can_mutate_catalog_entry(&ctx, model.owner_org_id.as_deref()) {
         return Err(ApiError::Forbidden);
     }
 
@@ -148,12 +126,9 @@ pub async fn delete_model(
 
 pub async fn list_provider_models(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(provider_id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, provider_id)): Path<(String, String)>,
 ) -> Result<Json<Vec<ProviderModelInfo>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     let models = state
         .storage
         .list_provider_models(&ctx.org_id, &provider_id)
@@ -177,13 +152,10 @@ pub struct ProviderModelInput {
 
 pub async fn update_provider_models(
     State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-    Path(provider_id): Path<String>,
+    ctx: OrgContext,
+    Path((_org_slug, provider_id)): Path<(String, String)>,
     Json(input): Json<UpdateProviderModelsRequest>,
 ) -> Result<Json<Vec<ProviderModelInfo>>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-
     // Gate on catalog-write permission — provider_models are catalog data.
     if !can_create_org_catalog(&ctx) {
         return Err(ApiError::Forbidden);

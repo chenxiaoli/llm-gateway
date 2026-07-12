@@ -20,6 +20,7 @@ import { isAvailableNow, utcToLocalTime, utcDayToLocalDay, getBrowserTimezone } 
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
+import { useAuthStore } from '../stores/authStore';
 
 // ── Searchable Model Multi-Select ─────────────────────────────────────────────
 function ModelMultiSelect({
@@ -364,6 +365,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
   const toggleMutation = useToggleChannel();
   const { t } = useTranslation();
   const browserTz = getBrowserTimezone();
+  const slug = useAuthStore((s) => s.currentOrg?.slug);
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [testDetail, setTestDetail] = useState<ChannelTestResult[] | null>(null);
   const [testStream, setTestStream] = useState(false);
@@ -553,7 +555,7 @@ function ChannelRow({ channel, providerName, index }: ChannelRowProps) {
             {testStatus === 'loading' ? t('channels.row.testing') : testStatus === 'success' ? t('channels.row.ok') : testStatus === 'error' ? t('channels.row.fail') : t('channels.row.test')}
           </button>
           <Link
-            to={`/admin/channels/${channel.id}`}
+            to={slug ? `/${slug}/admin/channels/${channel.id}` : '/login'}
             className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-md font-medium text-base-content/50 hover:text-base-content/80 hover:bg-base-200/70 transition-all duration-100 border border-transparent hover:border-base-300/40"
           >
             <Wifi className="h-3 w-3" />

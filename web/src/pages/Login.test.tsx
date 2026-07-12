@@ -7,21 +7,25 @@ import userEvent from '@testing-library/user-event';
 import Login from './Login';
 import { clearToken } from '../api/client';
 
-const { mockNavigate, mockToastError } = vi.hoisted(() => ({
+const { mockNavigate, mockToastError, mockToastSuccess } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
   mockToastError: vi.fn(),
+  mockToastSuccess: vi.fn(),
 }));
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return { ...actual, useNavigate: () => mockNavigate };
 });
-vi.mock('sonner', () => ({ toast: { error: mockToastError, success: vi.fn() } }));
+vi.mock('sonner', () => ({
+  toast: { error: mockToastError, success: mockToastSuccess },
+}));
 
 beforeEach(() => {
   clearToken();
   mockNavigate.mockClear();
   mockToastError.mockClear();
+  mockToastSuccess.mockClear();
 });
 
 describe('Login page', () => {
@@ -49,7 +53,7 @@ describe('Login page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/console/dashboard');
+      expect(mockNavigate).toHaveBeenCalledWith('/default/dashboard');
     });
   });
 
@@ -98,6 +102,61 @@ describe('Login page', () => {
 
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith('Account locked');
+    });
+  });
+
+  it('renders resend-verification panel when login returns email_not_verified', async () => {
+    server.use(
+      http.post('*/api/v1/auth/login', () =>
+        HttpResponse.json(
+          { error: { code: 'email_not_verified', message: 'verify your email' } },
+          { status: 403 },
+        ),
+      ),
+    );
+
+    renderWithProviders(<Login />);
+
+    await userEvent.type(screen.getByPlaceholderText('Username'), 'unverified');
+    await userEvent.type(screen.getByPlaceholderText('Password'), 'password');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+
+    // The inline Alert panel renders the "please verify" message and a
+    // resend button — and crucially does NOT call navigate.
+    await waitFor(() => {
+      expect(screen.getByText('Please verify your email before logging in.')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: 'Resend verification email' })).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('resends verification email and toasts success', async () => {
+    server.use(
+      http.post('*/api/v1/auth/login', () =>
+        HttpResponse.json(
+          { error: { code: 'email_not_verified', message: 'verify your email' } },
+          { status: 403 },
+        ),
+      ),
+      http.post('*/api/v1/auth/resend-verification', () =>
+        new HttpResponse(null, { status: 204 }),
+      ),
+    );
+
+    renderWithProviders(<Login />);
+
+    await userEvent.type(screen.getByPlaceholderText('Username'), 'unverified');
+    await userEvent.type(screen.getByPlaceholderText('Password'), 'password');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Email')).toBeInTheDocument();
+    });
+    await userEvent.type(screen.getByPlaceholderText('Email'), 'me@example.com');
+    await userEvent.click(screen.getByRole('button', { name: 'Resend verification email' }));
+
+    await waitFor(() => {
+      expect(mockToastSuccess).toHaveBeenCalledWith('Verification email sent.');
     });
   });
 });

@@ -20,6 +20,21 @@ timeout_secs = 30
 
 [nats]
 url = "nats://nats:4222"
+credentials_file = "nats.creds"
 
 [audit]
 retention_days = 90
+
+[email]
+# Transport: "smtp" for production, "file" for dev/tests (writes .eml to
+# file_output_dir), "noop" for unit tests.
+transport = "noop"
+from_address = "noreply@example.com"
+from_name = "LLM Gateway"
+file_output_dir = "./dev-emails"
+# SMTP-specific (uncomment and set when transport = "smtp"):
+# smtp_host = "smtp.example.com"
+# smtp_port = 587
+# smtp_username = "user"
+# smtp_password = "pass"
+smtp_use_tls = true

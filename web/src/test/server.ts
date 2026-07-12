@@ -27,6 +27,7 @@ export const server = setupServer(
         },
       ],
       allow_registration: true,
+      impersonating: false,
     });
   }),
   http.post('*/api/v1/auth/login', () => {
@@ -81,30 +82,61 @@ export const server = setupServer(
       refresh_token: 'new-test-refresh-jwt-token',
     });
   }),
-  http.get('*/api/v1/keys', () => {
+  http.get('*/api/v1/test-org/keys', () => {
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
-  http.get('*/api/v1/providers', () => {
+  http.get('*/api/v1/test-org/admin/providers', () => {
     return HttpResponse.json([]);
   }),
-  http.get('*/api/v1/users', () => {
+  http.get('*/api/v1/test-org/admin/users', () => {
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
-  http.get('*/api/v1/settings', () => {
+  http.get('*/api/v1/test-org/members', () => {
+    return HttpResponse.json([
+      {
+        user_id: 'user-1',
+        username: 'admin',
+        role: 'owner',
+        group_id: null,
+        joined_at: '2026-01-01T00:00:00Z',
+      },
+    ]);
+  }),
+  http.post('*/api/v1/test-org/members', async ({ request }) => {
+    const body = (await request.json()) as { username?: string; role?: string };
     return HttpResponse.json({
-      allow_registration: true,
-      server_host: 'http://localhost:8080',
-      audit_log_request: true,
-      audit_log_response: true,
+      user_id: 'invited-1',
+      username: body.username ?? 'newuser',
+      role: body.role ?? 'member',
+      group_id: null,
+      joined_at: new Date().toISOString(),
     });
   }),
-  http.patch('*/api/v1/settings', () => {
+  http.patch('*/api/v1/test-org/members/*', async ({ request }) => {
+    const body = (await request.json()) as { role?: string };
     return HttpResponse.json({
-      allow_registration: true,
-      server_host: 'http://localhost:8080',
-      audit_log_request: true,
-      audit_log_response: true,
+      user_id: 'user-1',
+      username: 'admin',
+      role: body.role ?? 'member',
+      group_id: null,
+      joined_at: '2026-01-01T00:00:00Z',
     });
+  }),
+  http.delete('*/api/v1/test-org/members/*', () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
+  http.patch('*/api/v1/test-org', async ({ request }) => {
+    const body = (await request.json()) as { name?: string; slug?: string };
+    return HttpResponse.json({
+      id: 'org-1',
+      slug: body.slug ?? 'test-org',
+      name: body.name ?? 'Test Org',
+      role: 'admin',
+      group_id: null,
+    });
+  }),
+  http.delete('*/api/v1/test-org', () => {
+    return new HttpResponse(null, { status: 204 });
   }),
   http.get('*/api/v1/admin/settings', () => {
     return HttpResponse.json({
@@ -122,10 +154,10 @@ export const server = setupServer(
       audit_log_response: true,
     });
   }),
-  http.get('*/api/v1/usage', () => {
+  http.get('*/api/v1/test-org/usage', () => {
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
-  http.get('*/api/v1/logs', () => {
+  http.get('*/api/v1/test-org/admin/logs', () => {
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
   }),
   http.get('*/api/v1/version', () => {

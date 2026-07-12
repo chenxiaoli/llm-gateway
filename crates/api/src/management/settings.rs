@@ -5,9 +5,8 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::error::ApiError;
-use crate::extractors::require_auth;
+use crate::extractors::require_platform_admin;
 use crate::AppState;
-use llm_gateway_org::resolve_org_context;
 
 #[derive(Deserialize)]
 pub struct UpdateSettingsRequest {
@@ -31,15 +30,7 @@ pub async fn get_settings(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<SettingsResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-    // Phase 1: all settings exposed at /api/v1/admin/settings are platform-level
-    // (allow_registration, server_host, currency, audit toggles). Restrict to
-    // platform_admin. Org-scoped settings will land in Phase 2 via a new
-    // /api/v1/org/settings route pair.
-    if !ctx.is_platform_admin() {
-        return Err(ApiError::Forbidden);
-    }
+    let _claims = require_platform_admin(&headers, &state.jwt_secret)?;
 
     let allow_reg = state.storage.get_platform_setting("allow_registration").await.map_err(|e| ApiError::Internal(e.to_string()))?;
     let server_host = state.storage.get_platform_setting("server_host").await.map_err(|e| ApiError::Internal(e.to_string()))?;
@@ -61,11 +52,7 @@ pub async fn update_settings(
     headers: HeaderMap,
     Json(input): Json<UpdateSettingsRequest>,
 ) -> Result<Json<SettingsResponse>, ApiError> {
-    let claims = require_auth(&headers, &state.jwt_secret)?;
-    let ctx = resolve_org_context(&claims, state.storage.as_ref()).await?;
-    if !ctx.is_platform_admin() {
-        return Err(ApiError::Forbidden);
-    }
+    let _claims = require_platform_admin(&headers, &state.jwt_secret)?;
 
     if let Some(ar) = input.allow_registration {
         state.storage.set_platform_setting("allow_registration", if ar { "true" } else { "false" })

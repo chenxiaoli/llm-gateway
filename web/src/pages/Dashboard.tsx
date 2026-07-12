@@ -78,6 +78,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const reducedMotion = useReducedMotion();
   const user = useAuthStore((s) => s.user);
+  const slug = useAuthStore((s) => s.currentOrg?.slug);
   const symbol = useCurrencyStore((s) => s.symbol);
   const { data: todaySummary } = useUsageSummary({ since: startOfDay() });
   const { data: monthSummary } = useUsageSummary({ since: startOfMonth() });
@@ -155,7 +156,7 @@ export default function Dashboard() {
               )}
               {user && (
                 <button
-                  onClick={() => navigate('/console/account')}
+                  onClick={() => navigate(slug ? `/${slug}/account` : '/login')}
                   className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer"
                 >
                   {t('dashboard.viewDetails')}
@@ -300,7 +301,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold text-base-content/70">{t('dashboard.recentRequests')}</h2>
           <button
-            onClick={() => navigate('/admin/logs')}
+            onClick={() => navigate(slug ? `/${slug}/admin/logs` : '/login')}
             className="flex items-center gap-1 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer"
           >
             {t('dashboard.viewAll')}
