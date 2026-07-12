@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Platform admin bootstrap & management
+
+- **Platform-admin management UI** (`/admin/platform-users`): list current
+  platform admins, search non-admin users by username/email, grant or revoke
+  `platform_role = platform_admin` from the browser. Last-admin guard refuses
+  to demote the only platform admin (409 from the backend).
+- **CLI subcommand** `cargo run -p llm-gateway -- grant-platform-admin
+  --username <name> [--revoke] [--allow-last-admin]`: operator escape hatch
+  for bootstrap when the first-user auto-promotion is disabled or when the
+  last admin needs to be demoted outside the UI.
+- **Config flag** `auth.first_user_is_admin` (default `true`, preserves
+  existing behavior). Set to `false` to disable the silent first-user
+  promotion — useful for SaaS deployments that want to bootstrap via the CLI.
+- **Top-level `/admin/*` routes** with dedicated `PlatformLayout` chrome
+  (sidebar with Settings + Platform Users links, header with back-to-org
+  link). Backend `/api/v1/admin/settings` and `/api/v1/admin/platform-users`
+  are no longer org-scoped.
+
+### Changed
+
+- `/{slug}/admin/settings` → `/admin/settings`. A client-side `<Navigate>`
+  preserves bookmarks from the just-shipped prior URL scheme.
+
 ### Added — Phase 4: Email + Email-Bound Invitations (v2.1.0)
 
 - **Email subsystem** (`crates/email`, crate name `llm-gateway-email`): a
