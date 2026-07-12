@@ -132,6 +132,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         storage,
         rate_limiter,
         jwt_secret: config.auth.jwt_secret.clone(),
+        auth_config: Arc::new(config.auth.clone()),
         encryption_key,
         nats_publisher: Some(nats_publisher),
         registry,
@@ -237,6 +238,7 @@ encryption_key = "change-me-32-byte-secret-here!"
 # IMPORTANT: Change this to a random JWT secret in production
 jwt_secret = "change-me-jwt-secret!"
 allow_registration = true
+# first_user_is_admin = true  # uncomment + set false to disable silent first-user promotion
 
 [database]
 driver = "postgres"

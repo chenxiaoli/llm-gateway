@@ -419,7 +419,7 @@ pub async fn register(
     };
 
     let now = chrono::Utc::now();
-    let platform_role = if is_first_user {
+    let platform_role = if is_first_user && state.auth_config.first_user_is_admin {
         Some(PlatformRole::PlatformAdmin)
     } else {
         None
@@ -1776,6 +1776,11 @@ mod tests {
             storage: storage.clone() as Arc<dyn Storage>,
             rate_limiter: Arc::new(llm_gateway_ratelimit::RateLimiter::new(60)),
             jwt_secret: "test-jwt-secret".to_string(),
+            auth_config: Arc::new(llm_gateway_storage::AuthConfig {
+                jwt_secret: "test-jwt-secret".to_string(),
+                allow_registration: Some(true),
+                first_user_is_admin: true,
+            }),
             encryption_key: [0u8; 32],
             nats_publisher: None,
             registry: Arc::new(crate::InMemoryChannelRegistry::new(

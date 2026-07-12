@@ -1294,11 +1294,20 @@ pub struct ServerConfig {
     pub public_base_url: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AuthConfig {
     pub jwt_secret: String,
     pub allow_registration: Option<bool>,
+    /// When true (default), the first user to register against an empty DB
+    /// is automatically promoted to `platform_admin`. Operators who want to
+    /// bootstrap via the CLI subcommand instead should set this to false.
+    /// Self-hosted deployments typically leave this on; SaaS deployments
+    /// typically turn it off.
+    #[serde(default = "default_first_user_is_admin")]
+    pub first_user_is_admin: bool,
 }
+
+fn default_first_user_is_admin() -> bool { true }
 
 #[derive(Debug, Deserialize)]
 pub struct DatabaseConfig {
