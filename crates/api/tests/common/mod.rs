@@ -35,40 +35,7 @@ pub struct TestUser {
     pub token: String,
 }
 
-pub fn make_state(pool: PgPool) -> Arc<AppState> {
-    let db = PostgresStorage::from_pool(pool);
-    Arc::new(AppState {
-        storage: Arc::new(db) as Arc<dyn Storage>,
-        rate_limiter: Arc::new(RateLimiter::new(60)),
-        jwt_secret: TEST_JWT_SECRET.to_string(),
-        auth_config: Arc::new(llm_gateway_storage::AuthConfig {
-            jwt_secret: TEST_JWT_SECRET.to_string(),
-            allow_registration: Some(true),
-            first_user_is_admin: true,
-        }),
-        encryption_key: [0u8; 32],
-        nats_publisher: None,
-        registry: Arc::new(MockChannelRegistry),
-        system_info: SystemInfo {
-            server_bind_address: "0.0.0.0:8080".to_string(),
-            database_driver: "postgres".to_string(),
-            rate_limit_window_secs: 60,
-            rate_limit_flush_interval_secs: 30,
-            upstream_timeout_secs: 30,
-            audit_retention_days: Some(90),
-        },
-        public_base_url: "http://localhost:5173".to_string(),
-        mailer: Arc::new(NoopMailer::new()),
-        templates: Arc::new(
-            TemplateRegistry::load("noreply@test.local".to_string(), "Test".to_string())
-                .expect("load templates"),
-        ),
-    })
-}
-
-/// Like `make_state` but lets the test pin the `first_user_is_admin` flag
-/// (e.g. to verify the silent first-user promotion can be turned off).
-pub fn make_state_with_auth(pool: PgPool, first_user_is_admin: bool) -> Arc<AppState> {
+fn make_state_inner(pool: PgPool, first_user_is_admin: bool) -> Arc<AppState> {
     let db = PostgresStorage::from_pool(pool);
     Arc::new(AppState {
         storage: Arc::new(db) as Arc<dyn Storage>,
@@ -97,6 +64,16 @@ pub fn make_state_with_auth(pool: PgPool, first_user_is_admin: bool) -> Arc<AppS
                 .expect("load templates"),
         ),
     })
+}
+
+pub fn make_state(pool: PgPool) -> Arc<AppState> {
+    make_state_inner(pool, true)
+}
+
+/// Like `make_state` but lets the test pin the `first_user_is_admin` flag
+/// (e.g. to verify the silent first-user promotion can be turned off).
+pub fn make_state_with_auth(pool: PgPool, first_user_is_admin: bool) -> Arc<AppState> {
+    make_state_inner(pool, first_user_is_admin)
 }
 
 /// Insert (or replace) the canonical test admin user with id="admin-1" plus
