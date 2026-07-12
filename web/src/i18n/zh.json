@@ -1342,6 +1342,10 @@
       "brand": "TokenVis"
     }
   },
+  "orgCreate": {
+    "title": "创建新组织",
+    "subtitle": "创建后会自动切换到新组织。"
+  },
   "onboarding": {
     "title": "设置您的工作区",
     "subtitle": "创建新组织或加入您被邀请的组织。",

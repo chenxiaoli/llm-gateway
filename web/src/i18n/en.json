@@ -1342,6 +1342,10 @@
       "brand": "TokenVis"
     }
   },
+  "orgCreate": {
+    "title": "Create a new org",
+    "subtitle": "You'll switch to the new org after creating it."
+  },
   "onboarding": {
     "title": "Set up your workspace",
     "subtitle": "Create a new org or join one you've been invited to.",
