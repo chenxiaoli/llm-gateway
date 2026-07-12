@@ -522,37 +522,6 @@ impl From<PgUserRow> for User {
 }
 
 #[derive(FromRow)]
-struct PgUserWithBalanceRow {
-    id: String,
-    username: String,
-    role: String,
-    enabled: bool,
-    group_id: Option<String>,
-    group_name: Option<String>,
-    balance: Option<i64>,
-    threshold: Option<i64>,
-    created_at: chrono::DateTime<chrono::Utc>,
-    updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-impl From<PgUserWithBalanceRow> for UserWithBalance {
-    fn from(r: PgUserWithBalanceRow) -> Self {
-        UserWithBalance {
-            id: r.id,
-            username: r.username,
-            role: r.role,
-            enabled: r.enabled,
-            group_id: r.group_id,
-            group_name: r.group_name,
-            balance: r.balance.unwrap_or(0),
-            threshold: r.threshold.unwrap_or(DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS),
-            created_at: r.created_at,
-            updated_at: r.updated_at,
-        }
-    }
-}
-
-#[derive(FromRow)]
 struct PgGroupRow {
     id: String,
     org_id: String,
@@ -2129,40 +2098,6 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(User::from).collect())
     }
 
-    async fn list_users_paginated(&self, org_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<UserWithBalance>, Box<dyn std::error::Error + Send + Sync>> {
-        // TODO(Task 9): UserWithBalance still carries legacy role/group_id columns.
-        // Once the management handlers stop reading them, the struct + this query
-        // should drop them. Until then we synthesize a role/group_id from the
-        // membership row so the existing UI keeps rendering.
-        let total: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM users u JOIN members m ON m.user_id = u.id WHERE m.org_id = $1",
-        )
-        .bind(org_id)
-        .fetch_one(&self.pool)
-        .await?;
-        let offset = (page - 1) * page_size;
-        let rows: Vec<PgUserWithBalanceRow> = sqlx::query_as(
-            "SELECT u.id, u.username, COALESCE(m.role, 'member') AS role, u.enabled, m.group_id, g.name AS group_name, \
-                    COALESCE(a.balance, 0) AS balance, COALESCE(a.threshold, 0) AS threshold, u.created_at, u.updated_at \
-             FROM users u \
-             JOIN members m ON m.user_id = u.id AND m.org_id = $1 \
-             LEFT JOIN accounts a ON a.user_id = u.id AND a.org_id = $1 \
-             LEFT JOIN groups g ON g.id = m.group_id \
-             ORDER BY u.created_at DESC LIMIT $2 OFFSET $3",
-        )
-        .bind(org_id)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(PaginatedResponse {
-            items: rows.into_iter().map(UserWithBalance::from).collect(),
-            total: total.0,
-            page,
-            page_size,
-        })
-    }
-
     async fn update_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
             "UPDATE users SET username = $1, password = $2, platform_role = $3, current_org_id = $4, enabled = $5, refresh_token = $6, password_changed_at = $7, updated_at = $8 WHERE id = $9",
@@ -2179,14 +2114,6 @@ impl crate::Storage for PostgresStorage {
         .execute(&self.pool)
         .await?;
         Ok(user.clone())
-    }
-
-    async fn delete_user(&self, id: &str) -> Result<(), DbErr> {
-        sqlx::query("DELETE FROM users WHERE id = $1")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
     }
 
     // ---- Channel Models (tenant: org_id scoping) ----

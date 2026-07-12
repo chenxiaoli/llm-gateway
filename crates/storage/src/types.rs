@@ -1015,39 +1015,10 @@ pub struct User {
     pub password_changed_at: DateTime<Utc>,
 }
 
-// TODO(Task 5/8): migrate alongside User — drop role/group_id fields once
-// list_users_paginated and the management handlers stop reading them.
-// User was migrated in this commit; these sibling types were intentionally
-// left for the next task to avoid expanding scope.
-#[derive(Debug, Clone, Serialize)]
-pub struct UserWithBalance {
-    pub id: String,
-    pub username: String,
-    pub role: String,
-    pub enabled: bool,
-    pub group_id: Option<String>,
-    pub group_name: Option<String>,
-    pub balance: i64,
-    pub threshold: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct CreateUser {
     pub username: String,
     pub password: String,
-}
-
-// TODO(Task 5/8): migrate alongside User — drop role/group_id fields once
-// list_users_paginated and the management handlers stop reading them.
-// User was migrated in this commit; these sibling types were intentionally
-// left for the next task to avoid expanding scope.
-#[derive(Debug, Deserialize)]
-pub struct UpdateUser {
-    pub role: Option<String>,
-    pub enabled: Option<bool>,
-    pub group_id: Option<Option<String>>,
 }
 
 // --- Groups ---

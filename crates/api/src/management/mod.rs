@@ -12,7 +12,6 @@ pub mod logs;
 pub mod members;
 pub mod invitations;
 pub mod requests;
-pub mod users;
 pub mod settings;
 pub mod channel_models;
 pub mod pricing_policies;
@@ -282,12 +281,6 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
         .route("/admin/logs/{id}", get(logs::get_log))
         // Request details (admin)
         .route("/admin/requests/{request_id}", get(requests::get_request_details))
-        // Users (admin)
-        .route("/admin/users", get(users::list_users))
-        .route(
-            "/admin/users/{id}",
-            patch(users::update_user).delete(users::delete_user),
-        )
         // Account / Balance (admin) — moved from /admin/users/* to /admin/members/*
         // to match the per-org Members page (Task 6 of users → members refactor).
         .route(
