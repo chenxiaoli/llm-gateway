@@ -109,6 +109,43 @@ pub struct Member {
     pub created_at: DateTime<Utc>,
 }
 
+/// Default per-membership account threshold in subunits (1.00 USD at 6-decimal
+/// precision, i.e. 10⁸ per USD). Matches the migration default in
+/// 20260426000000_accounts_and_transactions.sql. Used when inserting new
+/// account rows (upsert_member / accept_invitation) and as the COALESCE
+/// fallback when joining accounts in `list_members`.
+pub const DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS: i64 = 100_000_000;
+
+/// A membership row joined with its user, optional group, and per-membership
+/// account. This is the shape `list_members` returns so the Members page UI
+/// can render balance / enabled / email / group_name columns in one round-trip
+/// (no N+1 of `get_user` / `get_account`).
+///
+/// `role` is the raw lowercase string from `members.role` (matches
+/// `MemberRole::as_str`). `balance` / `threshold` are subunits (10⁸ per USD);
+/// when no `accounts` row exists the SQL COALESCEs them to `0` and
+/// `DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS` respectively.
+#[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
+pub struct MemberWithDetails {
+    pub user_id: String,
+    pub org_id: String,
+    pub username: String,
+    pub email: Option<String>,
+    /// Raw lowercase role string from `members.role` (`"owner" | "admin" | "member"`).
+    pub role: String,
+    pub group_id: Option<String>,
+    pub group_name: Option<String>,
+    /// From `users.enabled`.
+    pub enabled: bool,
+    /// From `accounts.balance` (subunits, 10⁸ per USD). 0 when no account row.
+    pub balance: i64,
+    /// From `accounts.threshold` (subunits, 10⁸ per USD). Falls back to
+    /// `DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS` when no account row.
+    pub threshold: i64,
+    /// From `members.created_at`.
+    pub created_at: DateTime<Utc>,
+}
+
 /// Summary of a user's membership in one org.
 ///
 /// NOTE for Task 5: this struct has a nested `org: Org` field. The SQL for

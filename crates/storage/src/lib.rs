@@ -206,7 +206,7 @@ pub trait Storage: Send + Sync {
 
     // ---- Members ----
     async fn get_member(&self, user_id: &str, org_id: &str) -> Result<Option<Member>, Box<dyn std::error::Error + Send + Sync>>;
-    async fn list_members(&self, org_id: &str) -> Result<Vec<Member>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_members(&self, org_id: &str) -> Result<Vec<MemberWithDetails>, Box<dyn std::error::Error + Send + Sync>>;
     async fn upsert_member(&self, member: Member) -> Result<Member, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_member_role(&self, user_id: &str, org_id: &str, role: MemberRole) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_member(&self, user_id: &str, org_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;

@@ -545,7 +545,7 @@ impl From<PgUserWithBalanceRow> for UserWithBalance {
             group_id: r.group_id,
             group_name: r.group_name,
             balance: r.balance.unwrap_or(0),
-            threshold: r.threshold.unwrap_or(100_000_000),
+            threshold: r.threshold.unwrap_or(DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS),
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -3209,15 +3209,34 @@ impl crate::Storage for PostgresStorage {
         Ok(row.map(Member::from))
     }
 
-    async fn list_members(&self, org_id: &str) -> Result<Vec<Member>, DbErr> {
-        let rows: Vec<PgMemberRow> = sqlx::query_as(
-            "SELECT user_id, org_id, role, group_id, created_by, created_at
-             FROM members WHERE org_id = $1 ORDER BY created_at",
+    async fn list_members(&self, org_id: &str) -> Result<Vec<MemberWithDetails>, DbErr> {
+        let rows: Vec<MemberWithDetails> = sqlx::query_as::<_, MemberWithDetails>(
+            r#"
+            SELECT
+                m.user_id,
+                m.org_id,
+                u.username,
+                u.email,
+                m.role,
+                m.group_id,
+                g.name AS group_name,
+                u.enabled,
+                COALESCE(a.balance, 0) AS balance,
+                COALESCE(a.threshold, $2) AS threshold,
+                m.created_at
+            FROM members m
+            JOIN users u ON u.id = m.user_id
+            LEFT JOIN groups g ON g.id = m.group_id
+            LEFT JOIN accounts a ON a.user_id = m.user_id AND a.org_id = m.org_id
+            WHERE m.org_id = $1
+            ORDER BY m.created_at ASC
+            "#,
         )
         .bind(org_id)
+        .bind(DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS)
         .fetch_all(&self.pool)
         .await?;
-        Ok(rows.into_iter().map(Member::from).collect())
+        Ok(rows)
     }
 
     async fn upsert_member(&self, member: Member) -> Result<Member, DbErr> {
@@ -3247,12 +3266,13 @@ impl crate::Storage for PostgresStorage {
         let account_id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO accounts (id, org_id, user_id, balance, threshold, created_at, updated_at)
-             VALUES ($1, $2, $3, 0, 100000000, $4, $4)
+             VALUES ($1, $2, $3, 0, $4, $5, $5)
              ON CONFLICT (org_id, user_id) DO NOTHING",
         )
         .bind(&account_id)
         .bind(&member.org_id)
         .bind(&member.user_id)
+        .bind(DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS)
         .bind(now)
         .execute(&mut *tx)
         .await?;
@@ -3458,12 +3478,13 @@ impl crate::Storage for PostgresStorage {
         let account_id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO accounts (id, org_id, user_id, balance, threshold, created_at, updated_at)
-             VALUES ($1, $2, $3, 0, 100000000, $4, $4)
+             VALUES ($1, $2, $3, 0, $4, $5, $5)
              ON CONFLICT (org_id, user_id) DO NOTHING",
         )
         .bind(&account_id)
         .bind(&inv.org_id)
         .bind(accepting_user_id)
+        .bind(DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS)
         .bind(now)
         .execute(&mut *tx)
         .await?;
@@ -4248,14 +4269,47 @@ mod org_tests {
             .await
             .expect("upsert_member");
 
+        // Invariant (Task 2 follow-up): upsert_member must create a matching
+        // accounts row. Without this assertion the next storage refactor could
+        // silently drop the account-creation side-effect.
+        let account_balance: i64 = sqlx::query_scalar(
+            "SELECT balance FROM accounts WHERE org_id = $1 AND user_id = $2",
+        )
+        .bind("org_default")
+        .bind("u-bootstrap-test")
+        .fetch_one(&storage.pool)
+        .await
+        .expect("account row must exist after upsert_member");
+        assert_eq!(account_balance, 0);
+        let account_threshold: i64 = sqlx::query_scalar(
+            "SELECT threshold FROM accounts WHERE org_id = $1 AND user_id = $2",
+        )
+        .bind("org_default")
+        .bind("u-bootstrap-test")
+        .fetch_one(&storage.pool)
+        .await
+        .expect("account row threshold must exist");
+        assert_eq!(account_threshold, DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS);
+
         let members = storage.list_members("org_default").await.expect("list_members");
         let found = members
             .iter()
             .find(|m| m.user_id == "u-bootstrap-test")
             .expect("membership row present");
-        assert_eq!(found.role, MemberRole::Owner);
+        assert_eq!(found.role, MemberRole::Owner.as_str());
+        // The joined shape must also surface the user row.
+        assert_eq!(found.username, "bootstrap_test");
+        // Per-membership invariant surfaced through the join: every member
+        // has an accounts row (created by upsert_member), so balance is 0
+        // (not NULL → 0 via COALESCE, but a real 0).
+        assert_eq!(found.balance, 0);
+        assert_eq!(found.threshold, DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS);
 
         // cleanup
+        sqlx::query("DELETE FROM accounts WHERE user_id = 'u-bootstrap-test' AND org_id = 'org_default'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup accounts");
         sqlx::query("DELETE FROM members WHERE user_id = 'u-bootstrap-test' AND org_id = 'org_default'")
             .execute(&storage.pool)
             .await
@@ -4818,6 +4872,18 @@ mod invitation_tests {
         assert_eq!(member.user_id, invitee.id);
         assert_eq!(member.org_id, org.id);
         assert_eq!(member.role, crate::types::MemberRole::Member);
+
+        // Invariant (Task 2 follow-up): accept_invitation must create a
+        // matching accounts row alongside the membership row.
+        let account_balance: i64 = sqlx::query_scalar(
+            "SELECT balance FROM accounts WHERE org_id = $1 AND user_id = $2",
+        )
+        .bind(&org.id)
+        .bind(&invitee.id)
+        .fetch_one(&storage.pool)
+        .await
+        .expect("account row must exist after accept_invitation");
+        assert_eq!(account_balance, 0);
 
         let second = storage
             .accept_invitation(&invitation.token, &invitee.id)

@@ -63,31 +63,26 @@ pub async fn list_members(
         return Err(ApiError::Forbidden);
     }
 
+    // Storage returns the joined shape (MemberWithDetails) — no N+1 needed.
+    // Task 5 will reshape this into a richer DTO (units_to_usd conversions etc);
+    // for now we project onto the existing MemberResponse so the build stays
+    // green and the wire format is unchanged.
     let members = state
         .storage
         .list_members(&ctx.org_id)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?;
 
-    // Join username per member. Member counts are small (tens, not thousands),
-    // so the N queries are cheaper than a JOIN-on-storage-trait surface.
-    let mut out = Vec::with_capacity(members.len());
-    for m in members {
-        let username = match state
-            .storage
-            .get_user(&m.user_id)
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?
-        {
-            Some(u) => u.username,
-            None => {
-                // Orphan membership row (user deleted but member row left
-                // behind). Skip rather than 500 — listing should be resilient.
-                continue;
-            }
-        };
-        out.push(build_response(m, username));
-    }
+    let out = members
+        .into_iter()
+        .map(|m| MemberResponse {
+            user_id: m.user_id,
+            username: m.username,
+            role: m.role,
+            group_id: m.group_id,
+            joined_at: m.created_at,
+        })
+        .collect();
     Ok(Json(out))
 }
 
