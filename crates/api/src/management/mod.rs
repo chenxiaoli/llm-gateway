@@ -323,7 +323,7 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
         )
         .route(
             "/members/{user_id}",
-            patch(members::change_member_role).delete(members::remove_member),
+            patch(members::update_member).delete(members::remove_member),
         )
         // Invitations (admin-only) — list/mint/revoke.
         .route(

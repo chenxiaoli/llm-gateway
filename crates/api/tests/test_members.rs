@@ -314,6 +314,153 @@ async fn change_role_rejects_demoting_last_owner(pool: PgPool) {
 }
 
 // =====================================================================
+// Task 5: expanded MemberResponse (email/enabled/balance/threshold/etc)
+// =====================================================================
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn list_members_returns_enriched_shape(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    seed_default_member(&pool, "u-enrich", "enrich", "member").await;
+
+    let app = build_app(common::make_state(pool));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/default/members")
+                .header("authorization", bearer(&admin.token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = body_json(resp).await;
+    let arr = body.as_array().expect("response is a JSON array");
+    let target = arr
+        .iter()
+        .find(|m| m["user_id"] == "u-enrich")
+        .expect("seeded member present");
+    assert!(target.get("username").is_some());
+    assert!(target.get("email").is_some());
+    assert!(target.get("balance").is_some());
+    assert!(target.get("threshold").is_some());
+    assert!(target.get("enabled").is_some());
+    assert!(target.get("role").is_some());
+    assert!(target.get("group_id").is_some());
+    assert!(target.get("group_name").is_some());
+    assert!(target.get("created_at").is_some());
+    // Old field name must be gone.
+    assert!(target.get("joined_at").is_none());
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn patch_member_can_toggle_enabled(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    seed_default_member(&pool, "u-toggle", "toggle", "member").await;
+
+    let app = build_app(common::make_state(pool.clone()));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/v1/default/members/u-toggle")
+                .header("authorization", bearer(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"enabled": false}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Verify the underlying user row was updated.
+    let enabled: bool =
+        sqlx::query_scalar("SELECT enabled FROM users WHERE id = 'u-toggle'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(!enabled);
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn patch_member_can_assign_group(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    seed_default_member(&pool, "u-grp", "grp", "member").await;
+
+    // Seed a group in org_default.
+    sqlx::query(
+        r#"INSERT INTO groups (id, org_id, name, created_at, updated_at)
+           VALUES ('g-team', 'org_default', 'Team', NOW(), NOW())"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let app = build_app(common::make_state(pool.clone()));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/v1/default/members/u-grp")
+                .header("authorization", bearer(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"group_id": "g-team"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_json(resp).await;
+    assert_eq!(body["group_id"], "g-team");
+    assert_eq!(body["group_name"], "Team");
+
+    // Verify the underlying member row was updated.
+    let stored: Option<String> =
+        sqlx::query_scalar("SELECT group_id FROM members WHERE user_id = 'u-grp' AND org_id = 'org_default'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(stored.as_deref(), Some("g-team"));
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn patch_member_rejects_unknown_group(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    seed_default_member(&pool, "u-grp2", "grp2", "member").await;
+
+    let app = build_app(common::make_state(pool));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/v1/default/members/u-grp2")
+                .header("authorization", bearer(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({"group_id": "does-not-exist"}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+// =====================================================================
 // Task 4: remove_member
 // =====================================================================
 
