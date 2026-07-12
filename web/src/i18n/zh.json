@@ -47,6 +47,7 @@
   "sidebar": {
     "console": "控制台",
     "admin": "管理",
+    "platform": "平台",
     "dashboard": "仪表盘",
     "keys": "API 密钥",
     "modelFallbacks": "模型降级",

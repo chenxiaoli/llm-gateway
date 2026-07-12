@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useNavigat
 import { useEffect } from 'react';
 import { useAuthStore, useAuthBootstrap, useAuthGate } from './stores/authStore';
 import { getToken } from './api/client';
-import { isAdminOrAbove } from './lib/auth';
+import { isAdminOrAbove, isPlatformAdmin } from './lib/auth';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import Layout from './components/Layout';
 import { OrgRouteGuard } from './components/OrgRouteGuard';
@@ -59,6 +59,22 @@ function RequireAdmin() {
     return <Navigate to="/login" replace />;
   }
   if (!isAdminOrAbove(user, currentOrg)) {
+    const slug = currentOrg?.slug;
+    return <Navigate to={slug ? `/${slug}/dashboard` : '/login'} replace />;
+  }
+  return <Outlet />;
+}
+
+function RequirePlatformAdmin() {
+  const user = useAuthStore((s) => s.user);
+  const currentOrg = useAuthStore((s) => s.currentOrg);
+  const { isLoading } = useAuthBootstrap();
+  if (isLoading) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
+  if (!user) {
+    if (getToken()) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
+    return <Navigate to="/login" replace />;
+  }
+  if (!isPlatformAdmin(user)) {
     const slug = currentOrg?.slug;
     return <Navigate to={slug ? `/${slug}/dashboard` : '/login'} replace />;
   }
@@ -148,8 +164,16 @@ function App() {
               <Route path="admin/invitations" element={<Invitations />} />
               <Route path="admin/groups" element={<Groups />} />
               <Route path="admin/users/:userId/balance" element={<AccountBalance />} />
-              <Route path="admin/settings" element={<Settings />} />
               <Route path="admin/logs" element={<Logs />} />
+            </Route>
+          </Route>
+
+          {/* Platform-admin-only routes. URL still carries /:orgSlug/ for
+              nav consistency, but the handlers are platform-scoped
+              (is_platform_admin() gate on the backend). */}
+          <Route element={<RequirePlatformAdmin />}>
+            <Route element={<OrgRouteGuard />}>
+              <Route path="admin/settings" element={<Settings />} />
             </Route>
           </Route>
         </Route>

@@ -47,6 +47,7 @@
   "sidebar": {
     "console": "Console",
     "admin": "Admin",
+    "platform": "Platform",
     "dashboard": "Dashboard",
     "keys": "API Keys",
     "modelFallbacks": "Model Fallbacks",

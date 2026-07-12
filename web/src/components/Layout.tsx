@@ -29,7 +29,7 @@ import {
   SquareStack,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
-import { isAdminOrAbove } from '../lib/auth';
+import { isAdminOrAbove, isPlatformAdmin } from '../lib/auth';
 import { useTheme } from '../hooks/useTheme';
 import { apiClient } from '../api/client';
 import { useTranslation } from 'react-i18next';
@@ -51,6 +51,7 @@ export default function AppLayout() {
   const impersonating = useAuthStore((s) => s.impersonating);
   const logout = useAuthStore((s) => s.logout);
   const isAdmin = isAdminOrAbove(user, currentOrg);
+  const showPlatform = isPlatformAdmin(user);
   const { theme, toggleTheme } = useTheme();
   const { t, i18n } = useTranslation();
   const slug = currentOrg?.slug ?? '';
@@ -79,8 +80,15 @@ export default function AppLayout() {
     { key: `/${slug}/members`, icon: UserPlus, label: t('sidebar.members') },
     { key: `/${slug}/admin/invitations`, icon: Mail, label: t('sidebar.invitations') },
     { key: `/${slug}/admin/groups`, icon: UsersRound, label: t('groups.title') },
-    { key: `/${slug}/admin/settings`, icon: Settings, label: t('sidebar.settings') },
     { key: `/${slug}/admin/logs`, icon: FileText, label: t('sidebar.logs') },
+  ];
+
+  // Platform-admin-only items. The /{slug}/admin/settings handler is
+  // platform-scoped (is_platform_admin() gate on the backend) — org admins
+  // get 403, so this group is hidden from them and the route is gated by
+  // RequirePlatformAdmin.
+  const platformItems = [
+    { key: `/${slug}/admin/settings`, icon: Settings, label: t('sidebar.settings') },
   ];
 
   // Map paths to display names for breadcrumbs
@@ -202,6 +210,17 @@ export default function AppLayout() {
             {adminItems.map((item) => navItem(item, location.pathname === item.key || location.pathname.startsWith(item.key + '/')))}
           </>
         )}
+
+        {showPlatform && (
+          <>
+            {!collapsed && (
+              <div className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-5 pb-2">
+                {t('sidebar.platform')}
+              </div>
+            )}
+            {platformItems.map((item) => navItem(item, location.pathname === item.key || location.pathname.startsWith(item.key + '/')))}
+          </>
+        )}
       </nav>
 
       {/* Footer */}
@@ -290,6 +309,32 @@ export default function AppLayout() {
                     {t('sidebar.admin')}
                   </div>
                   {adminItems.map((item) => {
+                    const Icon = item.icon;
+                    const active = location.pathname === item.key || location.pathname.startsWith(item.key + '/');
+                    return (
+                      <button
+                        key={item.key}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-2 cursor-pointer text-base font-medium transition-all duration-150 whitespace-nowrap select-none relative ${
+                          active
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-base-content/50 hover:bg-base-200 hover:text-base-content/80'
+                        }`}
+                        onClick={() => navigate(item.key)}
+                      >
+                        {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-4 rounded-r-full bg-primary" />}
+                        <Icon className="h-[17px] w-[17px] shrink-0" strokeWidth={active ? 2 : 1.5} />
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </>
+              )}
+              {showPlatform && (
+                <>
+                  <div className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/30 px-3 pt-5 pb-2">
+                    {t('sidebar.platform')}
+                  </div>
+                  {platformItems.map((item) => {
                     const Icon = item.icon;
                     const active = location.pathname === item.key || location.pathname.startsWith(item.key + '/');
                     return (
