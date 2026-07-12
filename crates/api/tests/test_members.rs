@@ -610,3 +610,67 @@ async fn get_balance_member_under_new_route(pool: PgPool) {
     assert_eq!(body["account"]["user_id"], "u-bal");
     assert_eq!(body["account"]["balance"], 0.0);
 }
+
+/// Regression test for the column/placeholder arity bug in `add_balance`
+/// (postgres.rs). Before the fix, the INSERT INTO transactions statement
+/// listed 9 columns but only 8 placeholders, so every recharge/adjust call
+/// failed at the SQL level. This test exercises the full POST /recharge
+/// path under the new /admin/members/* route (Task 6) and would catch any
+/// future regression of the same shape.
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn recharge_member_under_new_route(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    seed_default_member(&pool, "u-rech", "rech", "member").await;
+
+    // Seed the accounts row (see note above on seed_default_member).
+    sqlx::query(
+        r#"INSERT INTO accounts (id, org_id, user_id, balance, threshold, created_at, updated_at)
+           VALUES ('acc-rech', 'org_default', 'u-rech', 0, 0, NOW(), NOW())
+           ON CONFLICT (org_id, user_id) DO NOTHING"#,
+    )
+    .execute(&pool)
+    .await
+    .expect("seed account row");
+
+    let app = build_app(common::make_state(pool.clone()));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/default/admin/members/u-rech/recharge")
+                .header("authorization", bearer(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "type": "credit",
+                        "amount": 10.0,
+                        "description": "test recharge"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Verify the balance persisted (10 USD = 1_000_000_000 subunits at 10⁸/USD).
+    let balance: i64 = sqlx::query_scalar(
+        "SELECT balance FROM accounts WHERE user_id = 'u-rech' AND org_id = 'org_default'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(balance, 1_000_000_000);
+
+    // And that a transactions row was written.
+    let tx_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM transactions WHERE account_id = 'acc-rech'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(tx_count, 1);
+}

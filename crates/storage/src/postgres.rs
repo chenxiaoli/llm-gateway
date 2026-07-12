@@ -2519,7 +2519,7 @@ impl crate::Storage for PostgresStorage {
         let tx_id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO transactions (id, org_id, account_id, type, amount, balance_after, description, reference_id, created_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
         )
         .bind(&tx_id)
         .bind(org_id)
