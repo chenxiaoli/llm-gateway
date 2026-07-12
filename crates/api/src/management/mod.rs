@@ -124,6 +124,9 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
             "/api/v1/admin/users/{id}/platform-role",
             patch(admin_users::patch_platform_role),
         )
+        // Settings — platform-scoped (gated on platform_role in the handler);
+        // mounted at /api/v1/admin/settings instead of /{org_slug}/admin/settings.
+        .route("/api/v1/admin/settings", get(settings::get_settings).patch(settings::update_settings))
         // --- Explicit 410 routes for single-segment legacy paths ---
         //
         // Pre-Phase-2 endpoints whose root lived directly at `/api/v1/<name>`
@@ -302,8 +305,6 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
             "/admin/users/{id}/threshold",
             patch(accounts::update_threshold),
         )
-        // Settings (admin)
-        .route("/admin/settings", get(settings::get_settings).patch(settings::update_settings))
         // Seed data (reads static JSON)
         .route("/admin/seed", get(seed::get_seed_data))
         // Pricing Policies (admin)
