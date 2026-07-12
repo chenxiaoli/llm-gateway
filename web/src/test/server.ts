@@ -123,15 +123,21 @@ export const server = setupServer(
     });
   }),
   http.patch('*/api/v1/test-org/members/*', async ({ request }) => {
-    const body = (await request.json()) as { role?: string };
+    // Mirror the incoming patch so callers can assert end state. Supports
+    // {role?, enabled?, group_id?} per the new members PATCH contract.
+    const body = (await request.json()) as {
+      role?: string;
+      enabled?: boolean;
+      group_id?: string | null;
+    };
     return HttpResponse.json({
       user_id: 'user-1',
       username: 'admin',
       email: null,
       role: body.role ?? 'member',
-      group_id: null,
+      group_id: body.group_id ?? null,
       group_name: null,
-      enabled: true,
+      enabled: body.enabled ?? true,
       balance: 0,
       threshold: 1,
       created_at: '2026-01-01T00:00:00Z',
@@ -139,6 +145,57 @@ export const server = setupServer(
   }),
   http.delete('*/api/v1/test-org/members/*', () => {
     return new HttpResponse(null, { status: 204 });
+  }),
+  // Groups (used by MemberDrawer's group selector).
+  http.get('*/api/v1/test-org/admin/groups', () => {
+    return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
+  }),
+  // Per-membership account balance + transactions (used by MemberDrawer).
+  http.get('*/api/v1/test-org/admin/members/*/balance', () => {
+    return HttpResponse.json({
+      account: {
+        id: 'acct-1',
+        user_id: 'user-1',
+        balance: 0,
+        threshold: 1,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+      transactions: { items: [], total: 0, page: 1, page_size: 10 },
+    });
+  }),
+  http.post('*/api/v1/test-org/admin/members/*/recharge', async ({ request }) => {
+    const body = (await request.json()) as { amount?: number; description?: string };
+    return HttpResponse.json({
+      id: 'acct-1',
+      user_id: 'user-1',
+      balance: body.amount ?? 0,
+      threshold: 1,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: new Date().toISOString(),
+    });
+  }),
+  http.post('*/api/v1/test-org/admin/members/*/adjust', async ({ request }) => {
+    const body = (await request.json()) as { amount?: number; type?: string };
+    return HttpResponse.json({
+      id: 'acct-1',
+      user_id: 'user-1',
+      balance: body.amount ?? 0,
+      threshold: 1,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: new Date().toISOString(),
+    });
+  }),
+  http.patch('*/api/v1/test-org/admin/members/*/threshold', async ({ request }) => {
+    const body = (await request.json()) as { threshold?: number };
+    return HttpResponse.json({
+      id: 'acct-1',
+      user_id: 'user-1',
+      balance: 0,
+      threshold: body.threshold ?? 1,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: new Date().toISOString(),
+    });
   }),
   http.patch('*/api/v1/test-org', async ({ request }) => {
     const body = (await request.json()) as { name?: string; slug?: string };
@@ -171,6 +228,9 @@ export const server = setupServer(
   }),
   http.get('*/api/v1/test-org/usage', () => {
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
+  }),
+  http.get('*/api/v1/test-org/usage/summary', () => {
+    return HttpResponse.json([]);
   }),
   http.get('*/api/v1/test-org/admin/logs', () => {
     return HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 });
