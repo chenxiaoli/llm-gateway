@@ -138,7 +138,7 @@ export const server = setupServer(
   http.delete('*/api/v1/test-org', () => {
     return new HttpResponse(null, { status: 204 });
   }),
-  http.get('*/api/v1/test-org/admin/settings', () => {
+  http.get('*/api/v1/admin/settings', () => {
     return HttpResponse.json({
       allow_registration: true,
       server_host: 'http://localhost:8080',
@@ -146,7 +146,7 @@ export const server = setupServer(
       audit_log_response: true,
     });
   }),
-  http.patch('*/api/v1/test-org/admin/settings', () => {
+  http.patch('*/api/v1/admin/settings', () => {
     return HttpResponse.json({
       allow_registration: true,
       server_host: 'http://localhost:8080',
