@@ -11,12 +11,16 @@ pub mod janitor;
 
 pub use crate::proxy::{ChannelRegistry, InMemoryChannelRegistry, ResolvedChannel, spawn_registry_refresh};
 use llm_gateway_ratelimit::RateLimiter;
-use llm_gateway_storage::Storage;
+use llm_gateway_storage::{AuthConfig, Storage};
 use std::sync::Arc;
 pub struct AppState {
     pub storage: Arc<dyn Storage>,
     pub rate_limiter: Arc<RateLimiter>,
     pub jwt_secret: String,
+    /// Full auth configuration. Held so handlers can read runtime flags like
+    /// `first_user_is_admin` without having to plumb each one through as a
+    /// separate AppState field.
+    pub auth_config: Arc<AuthConfig>,
     pub encryption_key: [u8; 32],
     pub nats_publisher: Option<std::sync::Arc<llm_gateway_nats_publisher::NatsPublisher>>,
     pub registry: Arc<dyn ChannelRegistry>,

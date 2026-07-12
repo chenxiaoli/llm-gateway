@@ -12,12 +12,12 @@ pub mod logs;
 pub mod members;
 pub mod invitations;
 pub mod requests;
-pub mod users;
 pub mod settings;
 pub mod channel_models;
 pub mod pricing_policies;
 pub mod seed;
 pub mod nats;
+pub mod admin_users;
 
 use axum::extract::State;
 use axum::middleware::from_fn_with_state;
@@ -118,6 +118,14 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/api/v1/version", get(version))
         .route("/api/v1/admin/system-info", get(system_info))
         .route("/api/v1/admin/nats/status", get(nats::get_nats_status))
+        .route("/api/v1/admin/platform-users", get(admin_users::list_platform_users))
+        .route(
+            "/api/v1/admin/users/{id}/platform-role",
+            patch(admin_users::patch_platform_role),
+        )
+        // Settings — platform-scoped (gated on platform_role in the handler);
+        // mounted at /api/v1/admin/settings instead of /{org_slug}/admin/settings.
+        .route("/api/v1/admin/settings", get(settings::get_settings).patch(settings::update_settings))
         // --- Explicit 410 routes for single-segment legacy paths ---
         //
         // Pre-Phase-2 endpoints whose root lived directly at `/api/v1/<name>`
@@ -273,31 +281,24 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
         .route("/admin/logs/{id}", get(logs::get_log))
         // Request details (admin)
         .route("/admin/requests/{request_id}", get(requests::get_request_details))
-        // Users (admin)
-        .route("/admin/users", get(users::list_users))
+        // Account / Balance (admin) — moved from /admin/users/* to /admin/members/*
+        // to match the per-org Members page (Task 6 of users → members refactor).
         .route(
-            "/admin/users/{id}",
-            patch(users::update_user).delete(users::delete_user),
-        )
-        // Account / Balance (admin)
-        .route(
-            "/admin/users/{id}/balance",
+            "/admin/members/{user_id}/balance",
             get(accounts::get_balance),
         )
         .route(
-            "/admin/users/{id}/recharge",
+            "/admin/members/{user_id}/recharge",
             post(accounts::recharge),
         )
         .route(
-            "/admin/users/{id}/adjust",
+            "/admin/members/{user_id}/adjust",
             post(accounts::adjust),
         )
         .route(
-            "/admin/users/{id}/threshold",
+            "/admin/members/{user_id}/threshold",
             patch(accounts::update_threshold),
         )
-        // Settings (admin)
-        .route("/admin/settings", get(settings::get_settings).patch(settings::update_settings))
         // Seed data (reads static JSON)
         .route("/admin/seed", get(seed::get_seed_data))
         // Pricing Policies (admin)
@@ -316,7 +317,7 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
         )
         .route(
             "/members/{user_id}",
-            patch(members::change_member_role).delete(members::remove_member),
+            patch(members::update_member).delete(members::remove_member),
         )
         // Invitations (admin-only) — list/mint/revoke.
         .route(

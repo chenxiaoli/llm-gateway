@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useNavigat
 import { useEffect } from 'react';
 import { useAuthStore, useAuthBootstrap, useAuthGate } from './stores/authStore';
 import { getToken } from './api/client';
-import { isAdminOrAbove } from './lib/auth';
+import { isAdminOrAbove, isPlatformAdmin } from './lib/auth';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import Layout from './components/Layout';
 import { OrgRouteGuard } from './components/OrgRouteGuard';
@@ -29,7 +29,6 @@ import Models from './pages/Models';
 import PricingPolicies from './pages/PricingPolicies';
 import Providers from './pages/Providers';
 import ProviderDetail from './pages/ProviderDetail';
-import Users from './pages/Users';
 import Members from './pages/Members';
 import Invitations from './pages/Invitations';
 import OrgSettings from './pages/OrgSettings';
@@ -41,6 +40,8 @@ import Logs from './pages/Logs';
 import AdminDashboard from './pages/AdminDashboard';
 import DocsLayout from './pages/DocsLayout';
 import DocsPage from './pages/DocsPage';
+import PlatformLayout from './components/PlatformLayout';
+import PlatformUsers from './pages/PlatformUsers';
 
 function RequireAuth() {
   const status = useAuthGate();
@@ -59,6 +60,22 @@ function RequireAdmin() {
     return <Navigate to="/login" replace />;
   }
   if (!isAdminOrAbove(user, currentOrg)) {
+    const slug = currentOrg?.slug;
+    return <Navigate to={slug ? `/${slug}/dashboard` : '/login'} replace />;
+  }
+  return <Outlet />;
+}
+
+function RequirePlatformAdmin() {
+  const user = useAuthStore((s) => s.user);
+  const currentOrg = useAuthStore((s) => s.currentOrg);
+  const { isLoading } = useAuthBootstrap();
+  if (isLoading) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
+  if (!user) {
+    if (getToken()) return <div className="flex h-screen items-center justify-center"><LoadingSpinner size="lg" /></div>;
+    return <Navigate to="/login" replace />;
+  }
+  if (!isPlatformAdmin(user)) {
     const slug = currentOrg?.slug;
     return <Navigate to={slug ? `/${slug}/dashboard` : '/login'} replace />;
   }
@@ -144,15 +161,34 @@ function App() {
               <Route path="admin/providers/:id" element={<ProviderDetail />} />
               <Route path="admin/models" element={<Models />} />
               <Route path="admin/pricing-policies" element={<PricingPolicies />} />
-              <Route path="admin/users" element={<Users />} />
               <Route path="admin/invitations" element={<Invitations />} />
               <Route path="admin/groups" element={<Groups />} />
               <Route path="admin/users/:userId/balance" element={<AccountBalance />} />
-              <Route path="admin/settings" element={<Settings />} />
               <Route path="admin/logs" element={<Logs />} />
             </Route>
           </Route>
+
+          {/* Platform-admin-only routes were previously mounted here under
+              /:orgSlug/admin/settings. They've been promoted to top-level
+              /admin/* routes (see below) — the URL no longer carries an org
+              slug because the page is platform-scoped, not org-scoped. */}
         </Route>
+
+        {/* Platform-scoped routes — top-level, no org prefix. The handlers
+            are platform-scoped (is_platform_admin() gate on the backend);
+            the URL reflects that. */}
+        <Route element={<RequirePlatformAdmin />}>
+          <Route element={<PlatformLayout />}>
+            <Route path="/admin/settings" element={<Settings />} />
+            <Route path="/admin/platform-users" element={<PlatformUsers />} />
+          </Route>
+        </Route>
+
+        {/* Backward-compat: redirect the old /{slug}/admin/settings URL to
+            the new top-level /admin/settings. Sits OUTSIDE RequirePlatformAdmin
+            so any user (including org admins with stale bookmarks) gets
+            redirected rather than 403'd at the route guard. */}
+        <Route path="/:orgSlug/admin/settings" element={<Navigate to="/admin/settings" replace />} />
 
         {/* Legacy paths — redirect to current org */}
         <Route path="/console/*" element={<LegacyRedirect />} />

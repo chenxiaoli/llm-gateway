@@ -424,6 +424,11 @@ mod tests {
             storage,
             rate_limiter: Arc::new(RateLimiter::new(60)),
             jwt_secret: "test".to_string(),
+            auth_config: Arc::new(llm_gateway_storage::AuthConfig {
+                jwt_secret: "test".to_string(),
+                allow_registration: Some(true),
+                first_user_is_admin: true,
+            }),
             encryption_key: [0u8; 32],
             nats_publisher: None,
             registry: Arc::new(crate::InMemoryChannelRegistry::new(

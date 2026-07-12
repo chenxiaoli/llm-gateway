@@ -2,10 +2,13 @@ use axum::middleware;
 use axum::routing::{get, post};
 use axum::http::{header, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
+use clap::Parser;
+use llm_gateway::cli::{Cli, Commands};
 use llm_gateway_api::{self as api, AppState, SystemInfo, InMemoryChannelRegistry, spawn_registry_refresh};
 use llm_gateway_ratelimit::RateLimiter;
 use llm_gateway_storage::{AppConfig, Storage};
 use llm_gateway_storage::postgres::PostgresStorage;
+use llm_gateway_storage::types::{PlatformRole, SetPlatformRoleError};
 use rust_embed::Embed;
 use sha2::Digest;
 use std::sync::Arc;
@@ -18,6 +21,13 @@ struct Frontend;
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Init tracing
     tracing_subscriber::fmt::init();
+
+    // Parse CLI first. If a subcommand is given, dispatch to the CLI handler
+    // and skip server bootstrap entirely.
+    let cli = Cli::parse();
+    if let Some(cmd) = cli.command {
+        return run_cli_command(cmd, &cli.config).await;
+    }
 
     // Bootstrap: create data directory and default config.toml if missing
     bootstrap().await?;
@@ -132,6 +142,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         storage,
         rate_limiter,
         jwt_secret: config.auth.jwt_secret.clone(),
+        auth_config: Arc::new(config.auth.clone()),
         encryption_key,
         nats_publisher: Some(nats_publisher),
         registry,
@@ -206,6 +217,80 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     Ok(())
 }
 
+/// Dispatch a CLI subcommand. Currently handles operator bootstrap of the
+/// `platform_admin` role when the first-user auto-promotion is disabled.
+///
+/// `config_path` is the value of `--config` from the CLI (defaults to
+/// `config.toml`). We re-load it here rather than carrying the parsed config
+/// through, because the subcommand path skips the server-side bootstrap.
+async fn run_cli_command(
+    cmd: Commands,
+    config_path: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    match cmd {
+        Commands::GrantPlatformAdmin {
+            username,
+            revoke,
+            allow_last_admin,
+        } => {
+            // Load and expand the config (env vars in [database].url etc.)
+            let config_str = std::fs::read_to_string(config_path)?;
+            let config_str = shellexpand::env(&config_str)?.to_string();
+            let config: AppConfig = toml::from_str(&config_str)?;
+
+            if config.database.driver.as_str() != "postgres" {
+                eprintln!("error: only 'postgres' driver is supported");
+                std::process::exit(1);
+            }
+            let url = config
+                .database
+                .url
+                .as_deref()
+                .ok_or("database.url is required")?;
+
+            let db = PostgresStorage::new(url).await?;
+
+            let user = db.get_user_by_username(&username).await?.ok_or_else(|| {
+                eprintln!("error: user '{username}' not found");
+                "user not found"
+            })?;
+            let actor = &user.id;
+
+            let role = if revoke {
+                None
+            } else {
+                Some(PlatformRole::PlatformAdmin)
+            };
+            if revoke && allow_last_admin {
+                eprintln!("warning: --allow-last-admin set; proceeding with demotion");
+            }
+
+            match db
+                .set_user_platform_role(&user.id, actor, role.clone(), allow_last_admin)
+                .await
+            {
+                Ok(()) => {
+                    if revoke {
+                        println!("user '{username}' is no longer platform_admin");
+                    } else if user.platform_role == Some(PlatformRole::PlatformAdmin) {
+                        println!("user '{username}' is already platform_admin (no change)");
+                    } else {
+                        println!("user '{username}' is now platform_admin");
+                    }
+                    Ok(())
+                }
+                Err(SetPlatformRoleError::LastPlatformAdmin) => {
+                    eprintln!(
+                        "error: cannot demote last platform admin (pass --allow-last-admin to override)"
+                    );
+                    std::process::exit(2);
+                }
+                Err(e) => Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
+            }
+        }
+    }
+}
+
 /// Bootstrap: create ./data/ directory and default config.toml if missing.
 /// Safe to call repeatedly — skips creation if already present.
 async fn bootstrap() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -237,6 +322,7 @@ encryption_key = "change-me-32-byte-secret-here!"
 # IMPORTANT: Change this to a random JWT secret in production
 jwt_secret = "change-me-jwt-secret!"
 allow_registration = true
+# first_user_is_admin = true  # uncomment + set false to disable silent first-user promotion
 
 [database]
 driver = "postgres"

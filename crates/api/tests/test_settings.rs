@@ -26,7 +26,7 @@ async fn test_get_settings_default_allow_registration_true(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/default/admin/settings")
+                .uri("/api/v1/admin/settings")
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),
@@ -50,7 +50,7 @@ async fn test_get_settings_without_admin_auth_returns_401(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/default/admin/settings")
+                .uri("/api/v1/admin/settings")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -70,7 +70,7 @@ async fn test_update_settings_disable_registration(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri("/api/v1/default/admin/settings")
+                .uri("/api/v1/admin/settings")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(
@@ -100,7 +100,7 @@ async fn test_get_settings_after_update(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("PATCH")
-                .uri("/api/v1/default/admin/settings")
+                .uri("/api/v1/admin/settings")
                 .header("authorization", bearer_token(&admin.token))
                 .header("content-type", "application/json")
                 .body(Body::from(
@@ -116,7 +116,7 @@ async fn test_get_settings_after_update(pool: PgPool) {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/api/v1/default/admin/settings")
+                .uri("/api/v1/admin/settings")
                 .header("authorization", bearer_token(&admin.token))
                 .body(Body::empty())
                 .unwrap(),

@@ -8,9 +8,14 @@ import type { Member } from '../types';
 const mockMember: Member = {
   user_id: 'user-1',
   username: 'admin',
+  email: null,
   role: 'owner',
   group_id: null,
-  joined_at: '2026-01-01T00:00:00Z',
+  group_name: null,
+  enabled: true,
+  balance: 0,
+  threshold: 1,
+  created_at: '2026-01-01T00:00:00Z',
 };
 
 beforeEach(() => {
@@ -38,9 +43,14 @@ describe('members API', () => {
         return HttpResponse.json({
           user_id: 'u-alice',
           username: 'alice',
+          email: null,
           role: 'admin',
           group_id: null,
-          joined_at: '2026-02-01T00:00:00Z',
+          group_name: null,
+          enabled: true,
+          balance: 0,
+          threshold: 1,
+          created_at: '2026-02-01T00:00:00Z',
         });
       }),
     );
@@ -58,9 +68,14 @@ describe('members API', () => {
         return HttpResponse.json({
           user_id: 'u-alice',
           username: 'alice',
+          email: null,
           role: 'member',
           group_id: null,
-          joined_at: '2026-02-01T00:00:00Z',
+          group_name: null,
+          enabled: true,
+          balance: 0,
+          threshold: 1,
+          created_at: '2026-02-01T00:00:00Z',
         });
       }),
     );

@@ -140,9 +140,7 @@ pub trait Storage: Send + Sync {
     async fn get_user(&self, id: &str) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_user_by_username(&self, username: &str) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_users(&self, org_id: &str) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>>;
-    async fn list_users_paginated(&self, org_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<UserWithBalance>, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_user(&self, user: &User) -> Result<User, Box<dyn std::error::Error + Send + Sync>>;
-    async fn delete_user(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn user_count(&self) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
     async fn rotate_refresh_token(&self, user_id: &str, old_token: &str, new_token: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -206,7 +204,7 @@ pub trait Storage: Send + Sync {
 
     // ---- Members ----
     async fn get_member(&self, user_id: &str, org_id: &str) -> Result<Option<Member>, Box<dyn std::error::Error + Send + Sync>>;
-    async fn list_members(&self, org_id: &str) -> Result<Vec<Member>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_members(&self, org_id: &str) -> Result<Vec<MemberWithDetails>, Box<dyn std::error::Error + Send + Sync>>;
     async fn upsert_member(&self, member: Member) -> Result<Member, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_member_role(&self, user_id: &str, org_id: &str, role: MemberRole) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_member(&self, user_id: &str, org_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
@@ -276,6 +274,43 @@ pub trait Storage: Send + Sync {
         &self,
         email: &str,
     ) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Set a user's platform-level admin role, or clear it (`role = None`).
+    ///
+    /// `actor_user_id` is the user performing the change — recorded for audit
+    /// but not enforced here; the caller (HTTP handler / CLI) is responsible
+    /// for authorizing the actor (must already be a platform admin).
+    ///
+    /// `allow_last_admin_override` bypasses the last-admin guard when true.
+    /// Pass `false` from interactive endpoints; pass `true` only from the
+    /// bootstrap / CLI escape hatches where the operator explicitly accepts
+    /// the risk of zero platform admins.
+    ///
+    /// Errors:
+    /// - `UserNotFound` — no user with `target_user_id`.
+    /// - `LastPlatformAdmin` — demoting would leave zero platform admins and
+    ///   the override was not set.
+    async fn set_user_platform_role(
+        &self,
+        target_user_id: &str,
+        actor_user_id: &str,
+        role: Option<PlatformRole>,
+        allow_last_admin_override: bool,
+    ) -> Result<(), SetPlatformRoleError>;
+
+    /// Return every user that currently holds `platform_role = 'platform_admin'`.
+    /// Used by the `GET /api/v1/admin/platform-users` handler. No pagination —
+    /// the platform_admin set is expected to stay small (typically <10).
+    async fn list_platform_admins(&self) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Substring-search users whose `platform_role IS NULL` by username or email
+    /// (case-insensitive). Returns up to 20 results. Used by the
+    /// search-to-add affordance on the PlatformUsers page; the response must
+    /// exclude existing platform_admins.
+    async fn search_user_candidates(
+        &self,
+        query: &str,
+    ) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>>;
 
     /// Set the user's email + verification metadata. `verified_at = None`
     /// + `requires = true` means the user must click the verification link

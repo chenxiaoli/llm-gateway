@@ -1,11 +1,12 @@
 use axum::extract::State;
+use axum::http::HeaderMap;
 use axum::Json;
 use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::error::ApiError;
+use crate::extractors::require_platform_admin;
 use crate::AppState;
-use llm_gateway_org::OrgContext;
 
 #[derive(Deserialize)]
 pub struct UpdateSettingsRequest {
@@ -27,15 +28,9 @@ pub struct SettingsResponse {
 
 pub async fn get_settings(
     State(state): State<Arc<AppState>>,
-    ctx: OrgContext,
+    headers: HeaderMap,
 ) -> Result<Json<SettingsResponse>, ApiError> {
-    // Phase 1: all settings exposed at /admin/settings are platform-level
-    // (allow_registration, server_host, currency, audit toggles). Restrict to
-    // platform_admin. Org-scoped settings will land in Phase 2 via a new
-    // /api/v1/{org_slug}/settings route pair.
-    if !ctx.is_platform_admin() {
-        return Err(ApiError::Forbidden);
-    }
+    let _claims = require_platform_admin(&headers, &state.jwt_secret)?;
 
     let allow_reg = state.storage.get_platform_setting("allow_registration").await.map_err(|e| ApiError::Internal(e.to_string()))?;
     let server_host = state.storage.get_platform_setting("server_host").await.map_err(|e| ApiError::Internal(e.to_string()))?;
@@ -54,12 +49,10 @@ pub async fn get_settings(
 
 pub async fn update_settings(
     State(state): State<Arc<AppState>>,
-    ctx: OrgContext,
+    headers: HeaderMap,
     Json(input): Json<UpdateSettingsRequest>,
 ) -> Result<Json<SettingsResponse>, ApiError> {
-    if !ctx.is_platform_admin() {
-        return Err(ApiError::Forbidden);
-    }
+    let _claims = require_platform_admin(&headers, &state.jwt_secret)?;
 
     if let Some(ar) = input.allow_registration {
         state.storage.set_platform_setting("allow_registration", if ar { "true" } else { "false" })

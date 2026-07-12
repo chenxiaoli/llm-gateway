@@ -249,9 +249,14 @@ export type MemberRole = 'owner' | 'admin' | 'member';
 export interface Member {
   user_id: string;
   username: string;
+  email: string | null;
   role: MemberRole;
   group_id: string | null;
-  joined_at: string; // ISO timestamp
+  group_name: string | null;
+  enabled: boolean;
+  balance: number; // USD float
+  threshold: number; // USD float
+  created_at: string; // ISO timestamp (was: joined_at)
 }
 
 // --- Groups ---
@@ -360,25 +365,6 @@ export interface RefreshResponse {
 export interface ChangePasswordRequest {
   current_password: string;
   new_password: string;
-}
-
-export interface UserResponse {
-  id: string;
-  username: string;
-  role: 'admin' | 'user';
-  enabled: boolean;
-  group_id: string | null;
-  group_name: string | null;
-  balance: number;
-  threshold: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface UpdateUserRequest {
-  role?: 'admin' | 'user';
-  enabled?: boolean;
-  group_id?: string | null;
 }
 
 export interface SettingsResponse {

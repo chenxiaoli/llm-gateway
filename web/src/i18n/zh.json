@@ -42,11 +42,14 @@
     "add": "添加",
     "remove": "移除",
     "reset": "重置",
-    "submit": "提交"
+    "submit": "提交",
+    "username": "用户名",
+    "email": "邮箱"
   },
   "sidebar": {
     "console": "控制台",
     "admin": "管理",
+    "platform": "平台",
     "dashboard": "仪表盘",
     "keys": "API 密钥",
     "modelFallbacks": "模型降级",
@@ -55,14 +58,14 @@
     "channels": "通道",
     "providers": "提供商",
     "pricingPolicies": "定价策略",
-    "users": "用户",
     "members": "成员",
     "invitations": "邀请",
     "settings": "设置",
     "orgSettings": "组织设置",
     "logs": "审计日志",
     "collapse": "收起",
-    "expand": "展开侧边栏"
+    "expand": "展开侧边栏",
+    "platformUsers": "平台管理员"
   },
   "header": {
     "account": "账户",
@@ -187,10 +190,6 @@
     "providerModelAddFailed": "添加模型失败",
     "providerModelUpdateFailed": "更新模型失败",
     "providerModelRemoveFailed": "移除模型失败",
-    "userUpdated": "用户已更新",
-    "userDeleted": "用户已删除",
-    "userUpdateFailed": "更新用户失败",
-    "userDeleteFailed": "删除用户失败",
     "groupCreated": "分组已创建",
     "groupCreateFailed": "创建分组失败",
     "groupUpdated": "分组已更新",
@@ -327,7 +326,7 @@
     "providersCount": "{{active}}/{{total}} 个提供商",
     "channelsCount": "{{active}}/{{total}} 个通道",
     "modelsCount": "{{count}} 个模型",
-    "usersCount": "{{count}} 个用户",
+    "membersCount": "{{count}} 个成员",
     "keysCount": "{{count}} 个密钥",
     "stats": {
       "todayRequests": "今日请求",
@@ -844,27 +843,13 @@
     }
   },
   "users": {
-    "title": "用户",
-    "description": "管理用户账户和权限",
     "table": {
-      "username": "用户名",
-      "role": "角色",
       "group": "分组",
       "status": "状态",
-      "balance": "余额",
-      "created": "创建时间",
-      "actions": "操作"
+      "balance": "余额"
     },
-    "roleAdmin": "管理员",
-    "roleUser": "用户",
     "enabled": "已启用",
     "disabled": "已禁用",
-    "noUsers": "暂无用户",
-    "pagination": {
-      "total": "共 {{count}} 个",
-      "previous": "上一页",
-      "next": "下一页"
-    },
     "drawer": {
       "title": "用户详情",
       "accountBalance": "账户余额",
@@ -900,7 +885,6 @@
     },
     "detail": "详情",
     "usage": "用量",
-    "deleteUser": "确定删除此用户？",
     "usageDrawer": {
       "title": "用户用量",
       "noUsage": "该用户暂无用量数据",
@@ -961,7 +945,15 @@
       "roleUpdated": "角色已更新",
       "roleUpdateFailed": "更新角色失败",
       "removed": "成员已移除",
-      "removeFailed": "移除成员失败"
+      "removeFailed": "移除成员失败",
+      "updated": "成员已更新",
+      "updateFailed": "更新成员失败",
+      "recharged": "余额已充值",
+      "rechargeFailed": "充值失败",
+      "adjusted": "余额已调整",
+      "adjustFailed": "调整失败",
+      "thresholdUpdated": "阈值已更新",
+      "thresholdUpdateFailed": "更新阈值失败"
     }
   },
   "orgSettings": {
@@ -1470,5 +1462,21 @@
     "success": "验证邮件已发送，请查收。",
     "errorInUse": "该邮箱已被使用。",
     "errorGeneric": "出错了，请重试。"
+  },
+  "platformLayout": {
+    "backTo": "返回"
+  },
+  "platformUsers": {
+    "title": "平台管理员",
+    "subtitle": "管理具有平台级别管理员权限的用户。",
+    "currentAdmins": "当前平台管理员",
+    "addAdmin": "添加平台管理员",
+    "searchPlaceholder": "按用户名或邮箱搜索",
+    "noCandidates": "未找到用户。",
+    "grant": "授予",
+    "revoke": "撤销",
+    "confirmRevoke": "确认撤销 {{username}} 的平台管理员权限？",
+    "lastAdminHint": "您是唯一的平台管理员。请先添加其他管理员再撤销。",
+    "stalenessNote": "权限变更将在用户下次登录（access-token 刷新）时生效。"
   }
 }

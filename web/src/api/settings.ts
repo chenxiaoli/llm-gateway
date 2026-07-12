@@ -1,17 +1,17 @@
-import { apiClient, adminApiClient, orgPrefix } from './client';
+import { adminApiClient } from './client';
 import type { SettingsResponse, UpdateSettingsRequest, SystemInfo, NatsStatusResponse } from '../types';
 
+// All routes here are platform-scoped (top-level /admin/* — no org prefix).
 export async function getSettings(): Promise<SettingsResponse> {
-  const { data } = await apiClient.get<SettingsResponse>(`${orgPrefix()}/admin/settings`);
+  const { data } = await adminApiClient.get<SettingsResponse>('/settings');
   return data;
 }
 
 export async function updateSettings(input: UpdateSettingsRequest): Promise<SettingsResponse> {
-  const { data } = await apiClient.patch<SettingsResponse>(`${orgPrefix()}/admin/settings`, input);
+  const { data } = await adminApiClient.patch<SettingsResponse>('/settings', input);
   return data;
 }
 
-// Platform-level routes — not org-scoped (mounted outside management_router)
 export async function getSystemInfo(): Promise<SystemInfo> {
   const { data } = await adminApiClient.get<SystemInfo>('/system-info');
   return data;

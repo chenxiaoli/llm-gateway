@@ -42,11 +42,14 @@
     "add": "Add",
     "remove": "Remove",
     "reset": "Reset",
-    "submit": "Submit"
+    "submit": "Submit",
+    "username": "Username",
+    "email": "Email"
   },
   "sidebar": {
     "console": "Console",
     "admin": "Admin",
+    "platform": "Platform",
     "dashboard": "Dashboard",
     "keys": "API Keys",
     "modelFallbacks": "Model Fallbacks",
@@ -55,14 +58,14 @@
     "channels": "Channels",
     "providers": "Providers",
     "pricingPolicies": "Pricing Policies",
-    "users": "Users",
     "members": "Members",
     "invitations": "Invitations",
     "settings": "Settings",
     "orgSettings": "Org Settings",
     "logs": "Audit Logs",
     "collapse": "Collapse",
-    "expand": "Expand sidebar"
+    "expand": "Expand sidebar",
+    "platformUsers": "Platform Users"
   },
   "header": {
     "account": "Account",
@@ -187,10 +190,6 @@
     "providerModelAddFailed": "Failed to add model",
     "providerModelUpdateFailed": "Failed to update model",
     "providerModelRemoveFailed": "Failed to remove model",
-    "userUpdated": "User updated",
-    "userDeleted": "User deleted",
-    "userUpdateFailed": "Failed to update user",
-    "userDeleteFailed": "Failed to delete user",
     "groupCreated": "Group created",
     "groupCreateFailed": "Failed to create group",
     "groupUpdated": "Group updated",
@@ -327,7 +326,7 @@
     "providersCount": "{{active}}/{{total}} providers",
     "channelsCount": "{{active}}/{{total}} channels",
     "modelsCount": "{{count}} models",
-    "usersCount": "{{count}} users",
+    "membersCount": "{{count}} members",
     "keysCount": "{{count}} keys",
     "stats": {
       "todayRequests": "Today's Requests",
@@ -844,27 +843,13 @@
     }
   },
   "users": {
-    "title": "Users",
-    "description": "Manage user accounts and permissions",
     "table": {
-      "username": "Username",
-      "role": "Role",
       "group": "Group",
       "status": "Status",
-      "balance": "Balance",
-      "created": "Created",
-      "actions": "Actions"
+      "balance": "Balance"
     },
-    "roleAdmin": "Admin",
-    "roleUser": "User",
     "enabled": "Enabled",
     "disabled": "Disabled",
-    "noUsers": "No users found",
-    "pagination": {
-      "total": "Total {{count}}",
-      "previous": "Previous",
-      "next": "Next"
-    },
     "drawer": {
       "title": "User Details",
       "accountBalance": "Account Balance",
@@ -900,7 +885,6 @@
     },
     "detail": "Detail",
     "usage": "Usage",
-    "deleteUser": "Delete this user?",
     "usageDrawer": {
       "title": "User Usage",
       "noUsage": "No usage data for this user",
@@ -961,7 +945,15 @@
       "roleUpdated": "Role updated",
       "roleUpdateFailed": "Failed to update role",
       "removed": "Member removed",
-      "removeFailed": "Failed to remove member"
+      "removeFailed": "Failed to remove member",
+      "updated": "Member updated",
+      "updateFailed": "Failed to update member",
+      "recharged": "Balance recharged",
+      "rechargeFailed": "Recharge failed",
+      "adjusted": "Balance adjusted",
+      "adjustFailed": "Adjustment failed",
+      "thresholdUpdated": "Threshold updated",
+      "thresholdUpdateFailed": "Failed to update threshold"
     }
   },
   "orgSettings": {
@@ -1470,5 +1462,21 @@
     "success": "Verification email sent — check your inbox.",
     "errorInUse": "That email is already in use.",
     "errorGeneric": "Something went wrong. Please try again."
+  },
+  "platformLayout": {
+    "backTo": "Back to"
+  },
+  "platformUsers": {
+    "title": "Platform users",
+    "subtitle": "Manage who has platform-level administrator access.",
+    "currentAdmins": "Current platform admins",
+    "addAdmin": "Add platform admin",
+    "searchPlaceholder": "Search by username or email",
+    "noCandidates": "No users found.",
+    "grant": "Grant",
+    "revoke": "Revoke",
+    "confirmRevoke": "Revoke platform admin from {{username}}?",
+    "lastAdminHint": "You are the only platform admin. Promote another user before revoking.",
+    "stalenessNote": "Role changes take effect on the user's next login (access-token refresh)."
   }
 }

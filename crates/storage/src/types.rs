@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 // --- Org / Membership ---
 
@@ -49,6 +50,16 @@ impl PlatformRole {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum SetPlatformRoleError {
+    #[error("user not found")]
+    UserNotFound,
+    #[error("cannot demote the last platform admin")]
+    LastPlatformAdmin,
+    #[error(transparent)]
+    Database(#[from] sqlx::Error),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Org {
     pub id: String,
@@ -95,6 +106,44 @@ pub struct Member {
     pub role: MemberRole,
     pub group_id: Option<String>,
     pub created_by: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Default per-membership account threshold. Structurally equal to
+/// `UNITS_PER_USD` because the intended value is "1.00 USD" expressed in
+/// subunits (10⁸ per USD). Matches the migration default in
+/// 20260426000000_accounts_and_transactions.sql. Used when inserting new
+/// account rows (upsert_member / accept_invitation) and as the COALESCE
+/// fallback when joining accounts in `list_members`.
+pub const DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS: i64 = crate::money::UNITS_PER_USD;
+
+/// A membership row joined with its user, optional group, and per-membership
+/// account. This is the shape `list_members` returns so the Members page UI
+/// can render balance / enabled / email / group_name columns in one round-trip
+/// (no N+1 of `get_user` / `get_account`).
+///
+/// `role` is the raw lowercase string from `members.role` (matches
+/// `MemberRole::as_str`). `balance` / `threshold` are subunits (10⁸ per USD);
+/// when no `accounts` row exists the SQL COALESCEs them to `0` and
+/// `DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS` respectively.
+#[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
+pub struct MemberWithDetails {
+    pub user_id: String,
+    pub org_id: String,
+    pub username: String,
+    pub email: Option<String>,
+    /// Raw lowercase role string from `members.role` (`"owner" | "admin" | "member"`).
+    pub role: String,
+    pub group_id: Option<String>,
+    pub group_name: Option<String>,
+    /// From `users.enabled`.
+    pub enabled: bool,
+    /// From `accounts.balance` (subunits, 10⁸ per USD). 0 when no account row.
+    pub balance: i64,
+    /// From `accounts.threshold` (subunits, 10⁸ per USD). Falls back to
+    /// `DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS` when no account row.
+    pub threshold: i64,
+    /// From `members.created_at`.
     pub created_at: DateTime<Utc>,
 }
 
@@ -966,39 +1015,10 @@ pub struct User {
     pub password_changed_at: DateTime<Utc>,
 }
 
-// TODO(Task 5/8): migrate alongside User — drop role/group_id fields once
-// list_users_paginated and the management handlers stop reading them.
-// User was migrated in this commit; these sibling types were intentionally
-// left for the next task to avoid expanding scope.
-#[derive(Debug, Clone, Serialize)]
-pub struct UserWithBalance {
-    pub id: String,
-    pub username: String,
-    pub role: String,
-    pub enabled: bool,
-    pub group_id: Option<String>,
-    pub group_name: Option<String>,
-    pub balance: i64,
-    pub threshold: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct CreateUser {
     pub username: String,
     pub password: String,
-}
-
-// TODO(Task 5/8): migrate alongside User — drop role/group_id fields once
-// list_users_paginated and the management handlers stop reading them.
-// User was migrated in this commit; these sibling types were intentionally
-// left for the next task to avoid expanding scope.
-#[derive(Debug, Deserialize)]
-pub struct UpdateUser {
-    pub role: Option<String>,
-    pub enabled: Option<bool>,
-    pub group_id: Option<Option<String>>,
 }
 
 // --- Groups ---
@@ -1283,11 +1303,20 @@ pub struct ServerConfig {
     pub public_base_url: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AuthConfig {
     pub jwt_secret: String,
     pub allow_registration: Option<bool>,
+    /// When true (default), the first user to register against an empty DB
+    /// is automatically promoted to `platform_admin`. Operators who want to
+    /// bootstrap via the CLI subcommand instead should set this to false.
+    /// Self-hosted deployments typically leave this on; SaaS deployments
+    /// typically turn it off.
+    #[serde(default = "default_first_user_is_admin")]
+    pub first_user_is_admin: bool,
 }
+
+fn default_first_user_is_admin() -> bool { true }
 
 #[derive(Debug, Deserialize)]
 pub struct DatabaseConfig {

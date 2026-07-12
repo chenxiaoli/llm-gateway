@@ -6,6 +6,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — Platform admin bootstrap & management
+
+- **Platform-admin management UI** (`/admin/platform-users`): list current
+  platform admins, search non-admin users by username/email, grant or revoke
+  `platform_role = platform_admin` from the browser. Last-admin guard refuses
+  to demote the only platform admin (409 from the backend).
+- **CLI subcommand** `cargo run -p llm-gateway -- grant-platform-admin
+  --username <name> [--revoke] [--allow-last-admin]`: operator escape hatch
+  for bootstrap when the first-user auto-promotion is disabled or when the
+  last admin needs to be demoted outside the UI.
+- **Config flag** `auth.first_user_is_admin` (default `true`, preserves
+  existing behavior). Set to `false` to disable the silent first-user
+  promotion — useful for SaaS deployments that want to bootstrap via the CLI.
+- **Top-level `/admin/*` routes** with dedicated `PlatformLayout` chrome
+  (sidebar with Settings + Platform Users links, header with back-to-org
+  link). Backend `/api/v1/admin/settings` and `/api/v1/admin/platform-users`
+  are no longer org-scoped.
+
+### Changed
+
+- `/{slug}/admin/settings` → `/admin/settings`. A client-side `<Navigate>`
+  preserves bookmarks from the just-shipped prior URL scheme.
+
+### Changed — Users → Members refactor (v2.1.0)
+
+- The `accounts` table is now per-membership (1:1 with `(user_id, org_id)`)
+  instead of per-user. Each org membership carries its own balance and
+  threshold; a user belonging to multiple orgs has one account per org.
+- Account-action routes moved from `/api/v1/{slug}/admin/users/{id}/*` to
+  `/api/v1/{slug}/admin/members/{user_id}/*` (`balance`, `recharge`, `adjust`,
+  `threshold`). Old routes return 410 Gone.
+- `PATCH /api/v1/{slug}/members/{user_id}` now accepts `{role?, enabled?,
+  group_id?}` (was `change_member_role` only — role-only). Last-owner guard
+  still triggers when stripping the org's last owner role.
+- `list_members` response enriched: each member now includes `enabled`,
+  `balance`, `threshold`, and `group_name`. Frontend `Member` type mirrors
+  this; `created_at` replaces the prior `joined_at` field.
+- The per-org `Members` page absorbs all capabilities of the former standalone
+  `Users` page — balance drawer, recharge/adjust modals, per-member usage
+  drawer, status toggle, group assignment.
+
+### Removed — Users → Members refactor (v2.1.0)
+
+- `GET /api/v1/{slug}/admin/users`, `POST …/admin/users`,
+  `PATCH/DELETE …/admin/users/{id}` — replaced by the `/members/*` family.
+- Storage methods `list_users_paginated` and `delete_user` (and the
+  `PgUserWithBalanceRow` row struct).
+- Frontend `pages/Users.tsx`, `api/users.ts`, `hooks/useUsers.ts`, and the
+  `UserResponse` / `UpdateUserRequest` types.
+- Sidebar entry `/{slug}/admin/users`; i18n keys `sidebar.users` and
+  `toasts.user{Updated,Deleted,UpdateFailed,DeleteFailed}`. The
+  `users.{drawer,rechargeModal,adjustModal,usageDrawer}.*` keys are kept —
+  Members.tsx still consumes them.
+
+### Fixed — Users → Members refactor (v2.1.0)
+
+- `storage::add_balance` INSERT arity bug: 9 columns but only 8 `$N`
+  placeholders. Broke every recharge / adjust call since the SaaS
+  multi-tenant refactor; regression test added.
+
 ### Added — Phase 4: Email + Email-Bound Invitations (v2.1.0)
 
 - **Email subsystem** (`crates/email`, crate name `llm-gateway-email`): a

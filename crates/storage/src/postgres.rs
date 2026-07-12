@@ -522,37 +522,6 @@ impl From<PgUserRow> for User {
 }
 
 #[derive(FromRow)]
-struct PgUserWithBalanceRow {
-    id: String,
-    username: String,
-    role: String,
-    enabled: bool,
-    group_id: Option<String>,
-    group_name: Option<String>,
-    balance: Option<i64>,
-    threshold: Option<i64>,
-    created_at: chrono::DateTime<chrono::Utc>,
-    updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-impl From<PgUserWithBalanceRow> for UserWithBalance {
-    fn from(r: PgUserWithBalanceRow) -> Self {
-        UserWithBalance {
-            id: r.id,
-            username: r.username,
-            role: r.role,
-            enabled: r.enabled,
-            group_id: r.group_id,
-            group_name: r.group_name,
-            balance: r.balance.unwrap_or(0),
-            threshold: r.threshold.unwrap_or(100_000_000),
-            created_at: r.created_at,
-            updated_at: r.updated_at,
-        }
-    }
-}
-
-#[derive(FromRow)]
 struct PgGroupRow {
     id: String,
     org_id: String,
@@ -2129,40 +2098,6 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(User::from).collect())
     }
 
-    async fn list_users_paginated(&self, org_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<UserWithBalance>, Box<dyn std::error::Error + Send + Sync>> {
-        // TODO(Task 9): UserWithBalance still carries legacy role/group_id columns.
-        // Once the management handlers stop reading them, the struct + this query
-        // should drop them. Until then we synthesize a role/group_id from the
-        // membership row so the existing UI keeps rendering.
-        let total: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM users u JOIN members m ON m.user_id = u.id WHERE m.org_id = $1",
-        )
-        .bind(org_id)
-        .fetch_one(&self.pool)
-        .await?;
-        let offset = (page - 1) * page_size;
-        let rows: Vec<PgUserWithBalanceRow> = sqlx::query_as(
-            "SELECT u.id, u.username, COALESCE(m.role, 'member') AS role, u.enabled, m.group_id, g.name AS group_name, \
-                    COALESCE(a.balance, 0) AS balance, COALESCE(a.threshold, 0) AS threshold, u.created_at, u.updated_at \
-             FROM users u \
-             JOIN members m ON m.user_id = u.id AND m.org_id = $1 \
-             LEFT JOIN accounts a ON a.user_id = u.id AND a.org_id = $1 \
-             LEFT JOIN groups g ON g.id = m.group_id \
-             ORDER BY u.created_at DESC LIMIT $2 OFFSET $3",
-        )
-        .bind(org_id)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(PaginatedResponse {
-            items: rows.into_iter().map(UserWithBalance::from).collect(),
-            total: total.0,
-            page,
-            page_size,
-        })
-    }
-
     async fn update_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
             "UPDATE users SET username = $1, password = $2, platform_role = $3, current_org_id = $4, enabled = $5, refresh_token = $6, password_changed_at = $7, updated_at = $8 WHERE id = $9",
@@ -2179,14 +2114,6 @@ impl crate::Storage for PostgresStorage {
         .execute(&self.pool)
         .await?;
         Ok(user.clone())
-    }
-
-    async fn delete_user(&self, id: &str) -> Result<(), DbErr> {
-        sqlx::query("DELETE FROM users WHERE id = $1")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
     }
 
     // ---- Channel Models (tenant: org_id scoping) ----
@@ -2519,7 +2446,7 @@ impl crate::Storage for PostgresStorage {
         let tx_id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO transactions (id, org_id, account_id, type, amount, balance_after, description, reference_id, created_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
         )
         .bind(&tx_id)
         .bind(org_id)
@@ -3209,18 +3136,48 @@ impl crate::Storage for PostgresStorage {
         Ok(row.map(Member::from))
     }
 
-    async fn list_members(&self, org_id: &str) -> Result<Vec<Member>, DbErr> {
-        let rows: Vec<PgMemberRow> = sqlx::query_as(
-            "SELECT user_id, org_id, role, group_id, created_by, created_at
-             FROM members WHERE org_id = $1 ORDER BY created_at",
+    async fn list_members(&self, org_id: &str) -> Result<Vec<MemberWithDetails>, DbErr> {
+        let rows: Vec<MemberWithDetails> = sqlx::query_as::<_, MemberWithDetails>(
+            r#"
+            SELECT
+                m.user_id,
+                m.org_id,
+                u.username,
+                u.email,
+                m.role,
+                m.group_id,
+                g.name AS group_name,
+                u.enabled,
+                COALESCE(a.balance, 0) AS balance,
+                COALESCE(a.threshold, $2) AS threshold,
+                m.created_at
+            FROM members m
+            -- INNER JOIN is safe: members.user_id has ON DELETE CASCADE
+            -- (migration 20260708000000_saas_orgs.sql), so no member row can
+            -- outlive its user. LEFT JOIN would hide FK violations rather than
+            -- fail loudly on them.
+            JOIN users u ON u.id = m.user_id
+            LEFT JOIN groups g ON g.id = m.group_id
+            LEFT JOIN accounts a ON a.user_id = m.user_id AND a.org_id = m.org_id
+            WHERE m.org_id = $1
+            ORDER BY m.created_at ASC
+            "#,
         )
         .bind(org_id)
+        .bind(DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS)
         .fetch_all(&self.pool)
         .await?;
-        Ok(rows.into_iter().map(Member::from).collect())
+        Ok(rows)
     }
 
     async fn upsert_member(&self, member: Member) -> Result<Member, DbErr> {
+        // Wrap the member upsert and the paired account INSERT in a single
+        // transaction so the per-membership invariant (every members row has
+        // a matching accounts row) holds even on partial failure. The account
+        // INSERT uses ON CONFLICT DO NOTHING so re-upserting an existing
+        // membership (e.g. role change) does not clobber the balance.
+        let mut tx = self.pool.begin().await?;
+
         let row: PgMemberRow = sqlx::query_as(
             "INSERT INTO members (user_id, org_id, role, group_id, created_by)
              VALUES ($1, $2, $3, $4, $5)
@@ -3233,8 +3190,25 @@ impl crate::Storage for PostgresStorage {
         .bind(member.role.as_str())
         .bind(&member.group_id)
         .bind(&member.created_by)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
+
+        let now = chrono::Utc::now();
+        let account_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO accounts (id, org_id, user_id, balance, threshold, created_at, updated_at)
+             VALUES ($1, $2, $3, 0, $4, $5, $5)
+             ON CONFLICT (org_id, user_id) DO NOTHING",
+        )
+        .bind(&account_id)
+        .bind(&member.org_id)
+        .bind(&member.user_id)
+        .bind(DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
         Ok(Member::from(row))
     }
 
@@ -3428,6 +3402,24 @@ impl crate::Storage for PostgresStorage {
         .execute(&mut *tx)
         .await?;
 
+        // Per-membership invariant: every members row has a matching accounts
+        // row. ON CONFLICT DO NOTHING so a re-accept (same user, same org,
+        // different invitation) does not clobber the existing balance. Same
+        // transaction as the member INSERT — partial state is impossible.
+        let account_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO accounts (id, org_id, user_id, balance, threshold, created_at, updated_at)
+             VALUES ($1, $2, $3, 0, $4, $5, $5)
+             ON CONFLICT (org_id, user_id) DO NOTHING",
+        )
+        .bind(&account_id)
+        .bind(&inv.org_id)
+        .bind(accepting_user_id)
+        .bind(DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+
         sqlx::query(
             "UPDATE invitations SET accepted_at = $2, accepted_by = $3 WHERE id::text = $1",
         )
@@ -3462,6 +3454,86 @@ impl crate::Storage for PostgresStorage {
         .fetch_optional(&self.pool)
         .await?;
         Ok(row.map(User::from))
+    }
+
+    async fn set_user_platform_role(
+        &self,
+        target_user_id: &str,
+        _actor_user_id: &str,
+        role: Option<PlatformRole>,
+        allow_last_admin_override: bool,
+    ) -> Result<(), SetPlatformRoleError> {
+        let mut tx = self.pool.begin().await?;
+
+        // Lock the target row to prevent concurrent grant/demote racing the count.
+        let exists: Option<(String,)> = sqlx::query_as(
+            "SELECT id FROM users WHERE id = $1 FOR UPDATE",
+        )
+        .bind(target_user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if exists.is_none() {
+            return Err(SetPlatformRoleError::UserNotFound);
+        }
+
+        // If demoting, check the count of remaining platform_admins.
+        if role.is_none() && !allow_last_admin_override {
+            let (count,): (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM users WHERE platform_role = 'platform_admin'",
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+            if count <= 1 {
+                return Err(SetPlatformRoleError::LastPlatformAdmin);
+            }
+        }
+
+        // Apply. None -> NULL (column is TEXT NULL).
+        let sql_role: Option<&str> = role.as_ref().map(|_| "platform_admin");
+        sqlx::query(
+            "UPDATE users SET platform_role = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(sql_role)
+        .bind(target_user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
+    async fn list_platform_admins(&self) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>> {
+        let rows: Vec<PgUserRow> = sqlx::query_as(
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                    created_at, updated_at,
+                    email, email_verified_at, requires_email_verification, password_changed_at
+             FROM users WHERE platform_role = 'platform_admin'
+             ORDER BY username ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(User::from).collect())
+    }
+
+    async fn search_user_candidates(
+        &self,
+        query: &str,
+    ) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>> {
+        let pattern = format!("%{}%", query.to_lowercase());
+        let rows: Vec<PgUserRow> = sqlx::query_as(
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                    created_at, updated_at,
+                    email, email_verified_at, requires_email_verification, password_changed_at
+             FROM users
+             WHERE platform_role IS NULL
+               AND (LOWER(username) LIKE $1 OR LOWER(COALESCE(email, '')) LIKE $1)
+             ORDER BY username ASC
+             LIMIT 20",
+        )
+        .bind(&pattern)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(User::from).collect())
     }
 
     async fn set_user_email(
@@ -4128,14 +4200,47 @@ mod org_tests {
             .await
             .expect("upsert_member");
 
+        // Invariant (Task 2 follow-up): upsert_member must create a matching
+        // accounts row. Without this assertion the next storage refactor could
+        // silently drop the account-creation side-effect.
+        let account_balance: i64 = sqlx::query_scalar(
+            "SELECT balance FROM accounts WHERE org_id = $1 AND user_id = $2",
+        )
+        .bind("org_default")
+        .bind("u-bootstrap-test")
+        .fetch_one(&storage.pool)
+        .await
+        .expect("account row must exist after upsert_member");
+        assert_eq!(account_balance, 0);
+        let account_threshold: i64 = sqlx::query_scalar(
+            "SELECT threshold FROM accounts WHERE org_id = $1 AND user_id = $2",
+        )
+        .bind("org_default")
+        .bind("u-bootstrap-test")
+        .fetch_one(&storage.pool)
+        .await
+        .expect("account row threshold must exist");
+        assert_eq!(account_threshold, DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS);
+
         let members = storage.list_members("org_default").await.expect("list_members");
         let found = members
             .iter()
             .find(|m| m.user_id == "u-bootstrap-test")
             .expect("membership row present");
-        assert_eq!(found.role, MemberRole::Owner);
+        assert_eq!(found.role, MemberRole::Owner.as_str());
+        // The joined shape must also surface the user row.
+        assert_eq!(found.username, "bootstrap_test");
+        // Per-membership invariant surfaced through the join: every member
+        // has an accounts row (created by upsert_member), so balance is 0
+        // (not NULL → 0 via COALESCE, but a real 0).
+        assert_eq!(found.balance, 0);
+        assert_eq!(found.threshold, DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS);
 
         // cleanup
+        sqlx::query("DELETE FROM accounts WHERE user_id = 'u-bootstrap-test' AND org_id = 'org_default'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup accounts");
         sqlx::query("DELETE FROM members WHERE user_id = 'u-bootstrap-test' AND org_id = 'org_default'")
             .execute(&storage.pool)
             .await
@@ -4698,6 +4803,18 @@ mod invitation_tests {
         assert_eq!(member.user_id, invitee.id);
         assert_eq!(member.org_id, org.id);
         assert_eq!(member.role, crate::types::MemberRole::Member);
+
+        // Invariant (Task 2 follow-up): accept_invitation must create a
+        // matching accounts row alongside the membership row.
+        let account_balance: i64 = sqlx::query_scalar(
+            "SELECT balance FROM accounts WHERE org_id = $1 AND user_id = $2",
+        )
+        .bind(&org.id)
+        .bind(&invitee.id)
+        .fetch_one(&storage.pool)
+        .await
+        .expect("account row must exist after accept_invitation");
+        assert_eq!(account_balance, 0);
 
         let second = storage
             .accept_invitation(&invitation.token, &invitee.id)
