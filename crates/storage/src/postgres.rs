@@ -3221,6 +3221,13 @@ impl crate::Storage for PostgresStorage {
     }
 
     async fn upsert_member(&self, member: Member) -> Result<Member, DbErr> {
+        // Wrap the member upsert and the paired account INSERT in a single
+        // transaction so the per-membership invariant (every members row has
+        // a matching accounts row) holds even on partial failure. The account
+        // INSERT uses ON CONFLICT DO NOTHING so re-upserting an existing
+        // membership (e.g. role change) does not clobber the balance.
+        let mut tx = self.pool.begin().await?;
+
         let row: PgMemberRow = sqlx::query_as(
             "INSERT INTO members (user_id, org_id, role, group_id, created_by)
              VALUES ($1, $2, $3, $4, $5)
@@ -3233,8 +3240,24 @@ impl crate::Storage for PostgresStorage {
         .bind(member.role.as_str())
         .bind(&member.group_id)
         .bind(&member.created_by)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
+
+        let now = chrono::Utc::now();
+        let account_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO accounts (id, org_id, user_id, balance, threshold, created_at, updated_at)
+             VALUES ($1, $2, $3, 0, 100000000, $4, $4)
+             ON CONFLICT (org_id, user_id) DO NOTHING",
+        )
+        .bind(&account_id)
+        .bind(&member.org_id)
+        .bind(&member.user_id)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
         Ok(Member::from(row))
     }
 
@@ -3425,6 +3448,23 @@ impl crate::Storage for PostgresStorage {
         .bind(&inv.org_id)
         .bind(role.as_str())
         .bind(accepting_user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        // Per-membership invariant: every members row has a matching accounts
+        // row. ON CONFLICT DO NOTHING so a re-accept (same user, same org,
+        // different invitation) does not clobber the existing balance. Same
+        // transaction as the member INSERT — partial state is impossible.
+        let account_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO accounts (id, org_id, user_id, balance, threshold, created_at, updated_at)
+             VALUES ($1, $2, $3, 0, 100000000, $4, $4)
+             ON CONFLICT (org_id, user_id) DO NOTHING",
+        )
+        .bind(&account_id)
+        .bind(&inv.org_id)
+        .bind(accepting_user_id)
+        .bind(now)
         .execute(&mut *tx)
         .await?;
 
