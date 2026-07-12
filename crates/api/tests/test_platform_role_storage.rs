@@ -91,4 +91,9 @@ async fn set_user_platform_role_idempotent_grant(pool: PgPool) {
         .set_user_platform_role("admin-1", "admin-1", Some(llm_gateway_storage::types::PlatformRole::PlatformAdmin), false)
         .await
         .expect("re-grant is no-op");
+    let user = storage.get_user("admin-1").await.unwrap().unwrap();
+    assert_eq!(
+        user.platform_role,
+        Some(llm_gateway_storage::types::PlatformRole::PlatformAdmin)
+    );
 }
