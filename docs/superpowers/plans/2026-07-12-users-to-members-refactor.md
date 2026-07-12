@@ -61,170 +61,95 @@
 
 ---
 
-## Task 1: Schema migration — accounts per-membership
+## Task 1: Schema cleanup — drop orphan accounts index
+
+> **Revision note (2026-07-12):** The original Task 1 was a full per-membership migration (add `org_id`, backfill, constraints). Investigation during implementation revealed that `20260708000000_saas_orgs.sql` **already did this work** — `accounts` is already 1:1 with `(org_id, user_id)`, has `org_id NOT NULL`, a `UNIQUE (org_id, user_id)` constraint, and an FK to `orgs`. The only remaining schema cleanup is dropping the orphaned `idx_accounts_user_id` index. Task 2 below is also largely already done (account methods already take `org_id`); see its revision note.
 
 **Files:**
-- Create: `crates/storage/migrations/postgres/20260712000000_accounts_per_membership.sql`
+- Create: `crates/storage/migrations/postgres/20260712000000_drop_orphan_accounts_user_id_index.sql`
 
 - [ ] **Step 1: Write the migration SQL**
 
-Create `crates/storage/migrations/postgres/20260712000000_accounts_per_membership.sql`:
+Create `crates/storage/migrations/postgres/20260712000000_drop_orphan_accounts_user_id_index.sql`:
 
 ```sql
--- accounts: from per-user (1:1 with users) to per-membership (1:1 with (user_id, org_id))
---
--- Backfill policy: for users with multiple org memberships, the oldest
--- membership (by members.created_at ASC) inherits the prior balance.
--- Other memberships get a fresh account row at default threshold/balance.
--- This is documented in the spec; operators with multi-org users should
--- reconcile manually after deploy.
-
--- 1. Add org_id column (nullable for the duration of backfill).
-ALTER TABLE accounts ADD COLUMN org_id TEXT REFERENCES orgs(id) ON DELETE CASCADE;
-
--- 2. Backfill: for each account, assign org_id from the oldest membership
---    of that user. Users with no memberships (orphans) keep NULL org_id and
---    will be caught by the runtime guard.
-UPDATE accounts a
-SET org_id = sub.org_id
-FROM (
-    SELECT DISTINCT ON (m.user_id) m.user_id, m.org_id
-    FROM members m
-    ORDER BY m.user_id, m.created_at ASC
-) sub
-WHERE a.user_id = sub.user_id;
-
--- 3. Drop the old UNIQUE constraint on user_id and the user_id-only index.
+-- idx_accounts_user_id was left behind when 20260708000000_saas_orgs.sql
+-- added accounts_org_user_unique (the per-membership UNIQUE constraint).
+-- The plain user_id index is now redundant — every account lookup goes
+-- through (org_id, user_id) via the unique constraint's btree.
 DROP INDEX IF EXISTS idx_accounts_user_id;
-
--- 4. Add NOT NULL constraint (will fail loudly if backfill missed any rows).
-ALTER TABLE accounts ALTER COLUMN org_id SET NOT NULL;
-
--- 5. Add the new UNIQUE constraint and supporting index.
-ALTER TABLE accounts ADD CONSTRAINT accounts_user_org_unique UNIQUE (user_id, org_id);
-CREATE INDEX idx_accounts_user_org ON accounts(user_id, org_id);
 ```
 
 - [ ] **Step 2: Apply the migration locally and verify**
 
-Run:
+Apply the SQL directly to the test DB:
+
 ```bash
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres cargo run -p llm-gateway-gateway -- migrate 2>&1 | tail -20
+PGPASSWORD=postgres psql -h localhost -U postgres -d postgres \
+  -f crates/storage/migrations/postgres/20260712000000_drop_orphan_accounts_user_id_index.sql
 ```
 
-If the gateway doesn't have a `migrate` subcommand, run the migration via sqlx-cli or apply at startup. The project auto-runs migrations on boot — restart the test DB or boot the server once.
+Then verify the index is gone and the per-membership constraint is intact:
 
-Expected: migration applies cleanly. Verify with:
 ```bash
 PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "\d accounts"
 ```
 
-Expected output includes: `org_id | text | not null`, `accounts_user_org_unique` constraint, `idx_accounts_user_org` index.
+Expected: `idx_accounts_user_id` is no longer listed; `accounts_org_user_unique UNIQUE (org_id, user_id)` remains; `org_id` is `NOT NULL`.
 
-- [ ] **Step 3: Add a runtime guard test**
-
-Add to `crates/storage/src/postgres.rs` (or the bootstrap path) a check that fails on NULL `org_id` rows. The simplest place is at server startup in `crates/gateway/src/lib.rs` (or wherever the bootstrap is). Find the migration runner and add a follow-up query:
-
-```rust
-// After migrations run, verify the accounts-per-membership invariant.
-let orphan_count: i64 = sqlx::query_scalar(
-    "SELECT COUNT(*) FROM accounts WHERE org_id IS NULL"
-).fetch_one(&pool).await?;
-if orphan_count > 0 {
-    anyhow::bail!(
-        "accounts table has {} row(s) with NULL org_id after migration; \
-         manual reconciliation required",
-        orphan_count
-    );
-}
-```
-
-(If the bootstrap doesn't already have a good hookpoint, this can also be enforced via a NOT NULL constraint + a CHECK constraint in the migration itself — which the migration in step 1 already does via `ALTER COLUMN org_id SET NOT NULL`. Treat the runtime guard as defense-in-depth; if the SQL guard is sufficient, skip the Rust guard.)
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git add crates/storage/migrations/postgres/20260712000000_accounts_per_membership.sql
-# plus any bootstrap guard changes
-git commit -m "feat(storage): migrate accounts to per-membership (user_id, org_id)"
+git add crates/storage/migrations/postgres/20260712000000_drop_orphan_accounts_user_id_index.sql
+git commit -m "chore(storage): drop redundant idx_accounts_user_id (subsumed by UNIQUE (org_id, user_id))"
 ```
 
 ---
 
-## Task 2: Storage trait — account methods take (user_id, org_id)
+## Task 2: Storage trait — account methods (VERIFICATION ONLY)
 
-**Files:**
-- Modify: `crates/storage/src/lib.rs` (trait definition)
-- Modify: `crates/storage/src/postgres.rs` (implementation)
-- Modify: `crates/storage/src/types.rs` (error variants if needed)
+> **Revision note (2026-07-12):** Investigation during Task 1 implementation revealed that all account-related storage methods already take `org_id` as their first parameter. This task is now a verification step, not a code change. If the verification passes, mark complete and move on. If it fails (some method doesn't take `org_id`), escalate before proceeding — that means the prior SaaS migration left an inconsistency.
 
-- [ ] **Step 1: Update the trait signatures**
+- [ ] **Step 1: Verify account methods take `org_id`**
 
-In `crates/storage/src/lib.rs`, find every method that looks up an account by `user_id` alone and change it to take `(user_id, org_id)`. The methods are typically named `get_account`, `recharge`, `adjust`, `set_threshold` (or similar — confirm by reading the file). For each:
+Inspect the storage trait in `crates/storage/src/lib.rs`. Confirm the following methods all take `org_id` as a parameter (typically first):
 
-Before:
-```rust
-async fn get_account(&self, user_id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>>;
-```
+- `create_account(org_id, account)`
+- `get_account(org_id, id)`
+- `get_account_by_user_id(org_id, user_id)`
+- `update_account(org_id, account)`
+- `list_transactions(org_id, account_id, page, page_size)`
+- `get_transaction_by_reference(org_id, account_id, reference_id)`
+- Any `recharge` / `adjust` / `set_threshold` methods (if they exist as separate methods)
 
-After:
-```rust
-async fn get_account(&self, user_id: &str, org_id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>>;
-```
-
-Apply the same parameter change to: `recharge`, `adjust` (a.k.a. `adjust_balance`), `set_threshold` (a.k.a. `update_threshold`), and any other account-by-user lookup. Read the file fully before editing — don't guess method names.
-
-- [ ] **Step 2: Update the postgres implementation**
-
-In `crates/storage/src/postgres.rs`, find each method whose signature you changed in step 1 and update both the signature and the SQL `WHERE` clause:
-
-Before:
-```rust
-WHERE user_id = $1
-```
-
-After:
-```rust
-WHERE user_id = $1 AND org_id = $2
-```
-
-Update parameter binding order to match. For methods that insert/update accounts (recharge, adjust, set_threshold), make sure the `org_id` is included in any INSERT (for `upsert`-style methods) — the new row will need it.
-
-- [ ] **Step 3: Update account creation on membership**
-
-Find where new memberships are created (typically `invite_member` or `accept_invitation` storage methods, also `register` if it creates an account). After inserting a `members` row, also insert the matching `accounts` row with `(user_id, org_id, balance=0, threshold=default, currency='USD')`.
-
-Example (within `invite_member` storage method, after the members insert):
-```rust
-sqlx::query(
-    "INSERT INTO accounts (id, user_id, org_id, balance, threshold, currency, created_at, updated_at) \
-     VALUES ($1, $2, $3, 0, 100000000, 'USD', NOW(), NOW()) \
-     ON CONFLICT (user_id, org_id) DO NOTHING"
-)
-.bind(generate_id())
-.bind(user_id)
-.bind(org_id)
-.execute(&self.pool)
-.await?;
-```
-
-(The `ON CONFLICT DO NOTHING` is defensive — idempotent across retries.)
-
-- [ ] **Step 4: Update storage tests**
-
-Find any tests in `crates/storage/tests/` (or inline `#[cfg(test)]` modules) that call the renamed methods. Update them to pass `(user_id, org_id)`. Run:
+Verify with a grep:
 
 ```bash
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres cargo test -p llm-gateway-storage 2>&1 | tail -20
+grep -nE "fn (create_account|get_account|update_account|list_transactions|recharge|adjust|set_threshold)" crates/storage/src/lib.rs
 ```
 
-Expected: all storage tests pass.
+Expected: every match includes `org_id` in its parameter list.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 2: Verify account creation on membership creation**
+
+Confirm that wherever a new membership row is created (typically `invite_member`, `accept_invitation`, or `register` storage methods), the matching `accounts` row is also inserted. Check `crates/storage/src/postgres.rs`:
+
+```bash
+grep -nB2 -A8 "INSERT INTO members" crates/storage/src/postgres.rs | head -40
+grep -nB2 -A8 "INSERT INTO accounts" crates/storage/src/postgres.rs | head -40
+```
+
+Expected: every code path that INSERTs into `members` also INSERTs into `accounts` with the same `(user_id, org_id)`. (If this is partially true — e.g., `invite_member` does it but `accept_invitation` doesn't — note which paths are missing the account creation. That's a real bug worth fixing in this task; add the missing INSERTs.)
+
+- [ ] **Step 3: If everything passes, no commit needed**
+
+Mark Task 2 complete in the task tracker. No code changes means no commit.
+
+If Step 1 or Step 2 found gaps, fix them with a focused commit:
 
 ```bash
 git add crates/storage/
-git commit -m "refactor(storage): account methods take (user_id, org_id)"
+git commit -m "fix(storage): account methods/creation aligned with per-membership model"
 ```
 
 ---
