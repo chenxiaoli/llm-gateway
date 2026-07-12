@@ -277,6 +277,29 @@ pub trait Storage: Send + Sync {
         email: &str,
     ) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>>;
 
+    /// Set a user's platform-level admin role, or clear it (`role = None`).
+    ///
+    /// `actor_user_id` is the user performing the change — recorded for audit
+    /// but not enforced here; the caller (HTTP handler / CLI) is responsible
+    /// for authorizing the actor (must already be a platform admin).
+    ///
+    /// `allow_last_admin_override` bypasses the last-admin guard when true.
+    /// Pass `false` from interactive endpoints; pass `true` only from the
+    /// bootstrap / CLI escape hatches where the operator explicitly accepts
+    /// the risk of zero platform admins.
+    ///
+    /// Errors:
+    /// - `UserNotFound` — no user with `target_user_id`.
+    /// - `LastPlatformAdmin` — demoting would leave zero platform admins and
+    ///   the override was not set.
+    async fn set_user_platform_role(
+        &self,
+        target_user_id: &str,
+        actor_user_id: &str,
+        role: Option<PlatformRole>,
+        allow_last_admin_override: bool,
+    ) -> Result<(), SetPlatformRoleError>;
+
     /// Set the user's email + verification metadata. `verified_at = None`
     /// + `requires = true` means the user must click the verification link
     /// before they can log in. Used by both register and

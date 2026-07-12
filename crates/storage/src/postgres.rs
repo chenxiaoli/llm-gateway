@@ -3464,6 +3464,52 @@ impl crate::Storage for PostgresStorage {
         Ok(row.map(User::from))
     }
 
+    async fn set_user_platform_role(
+        &self,
+        target_user_id: &str,
+        _actor_user_id: &str,
+        role: Option<PlatformRole>,
+        allow_last_admin_override: bool,
+    ) -> Result<(), SetPlatformRoleError> {
+        let mut tx = self.pool.begin().await?;
+
+        // Lock the target row to prevent concurrent grant/demote racing the count.
+        let exists: Option<(String,)> = sqlx::query_as(
+            "SELECT id FROM users WHERE id = $1 FOR UPDATE",
+        )
+        .bind(target_user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if exists.is_none() {
+            return Err(SetPlatformRoleError::UserNotFound);
+        }
+
+        // If demoting, check the count of remaining platform_admins.
+        if role.is_none() && !allow_last_admin_override {
+            let (count,): (i64,) = sqlx::query_as(
+                "SELECT COUNT(*) FROM users WHERE platform_role = 'platform_admin'",
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+            if count <= 1 {
+                return Err(SetPlatformRoleError::LastPlatformAdmin);
+            }
+        }
+
+        // Apply. None -> NULL (column is TEXT NULL).
+        let sql_role: Option<&str> = role.as_ref().map(|_| "platform_admin");
+        sqlx::query(
+            "UPDATE users SET platform_role = $1, updated_at = NOW() WHERE id = $2",
+        )
+        .bind(sql_role)
+        .bind(target_user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(())
+    }
+
     async fn set_user_email(
         &self,
         user_id: &str,

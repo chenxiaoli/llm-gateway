@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 // --- Org / Membership ---
 
@@ -47,6 +48,16 @@ impl PlatformRole {
             _ => None,
         }
     }
+}
+
+#[derive(Debug, Error)]
+pub enum SetPlatformRoleError {
+    #[error("user not found")]
+    UserNotFound,
+    #[error("cannot demote the last platform admin")]
+    LastPlatformAdmin,
+    #[error(transparent)]
+    Database(#[from] sqlx::Error),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
