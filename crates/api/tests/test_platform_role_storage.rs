@@ -97,3 +97,47 @@ async fn set_user_platform_role_idempotent_grant(pool: PgPool) {
         Some(llm_gateway_storage::types::PlatformRole::PlatformAdmin)
     );
 }
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn list_platform_admins_returns_all_admins(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    sqlx::query(
+        r#"INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, created_at, updated_at)
+           VALUES ('u-second', 'second', 'x', 'platform_admin', $1, true, NOW(), NOW())"#,
+    )
+    .bind(common::TEST_ORG)
+    .execute(&pool).await.unwrap();
+
+    let storage = llm_gateway_storage::postgres::PostgresStorage::from_pool(pool);
+    let admins = storage.list_platform_admins().await.unwrap();
+    assert_eq!(admins.len(), 2);
+    let usernames: Vec<&str> = admins.iter().map(|u| u.username.as_str()).collect();
+    assert!(usernames.contains(&"admin"));
+    assert!(usernames.contains(&"second"));
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn search_user_candidates_excludes_admins_and_matches_query(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    for (id, name, email) in [
+        ("u-a1", "alice_one", "alice1@x.com"),
+        ("u-a2", "bob_two",   "alice2@x.com"),
+        ("u-b",  "charlie",   "charlie@x.com"),
+    ] {
+        sqlx::query(
+            r#"INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, email, created_at, updated_at)
+               VALUES ($1, $2, 'x', NULL, $3, true, $4, NOW(), NOW())"#,
+        )
+        .bind(id).bind(name).bind(common::TEST_ORG).bind(email)
+        .execute(&pool).await.unwrap();
+    }
+
+    let storage = llm_gateway_storage::postgres::PostgresStorage::from_pool(pool);
+    let hits = storage.search_user_candidates("alice").await.unwrap();
+    assert_eq!(hits.len(), 2);
+    let names: Vec<&str> = hits.iter().map(|u| u.username.as_str()).collect();
+    assert!(names.contains(&"alice_one"));
+    assert!(names.contains(&"bob_two"));
+    assert!(!names.contains(&"charlie"));
+    assert!(!names.contains(&"admin")); // platform_admin excluded
+}

@@ -300,6 +300,20 @@ pub trait Storage: Send + Sync {
         allow_last_admin_override: bool,
     ) -> Result<(), SetPlatformRoleError>;
 
+    /// Return every user that currently holds `platform_role = 'platform_admin'`.
+    /// Used by the `GET /api/v1/admin/platform-users` handler. No pagination —
+    /// the platform_admin set is expected to stay small (typically <10).
+    async fn list_platform_admins(&self) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Substring-search users whose `platform_role IS NULL` by username or email
+    /// (case-insensitive). Returns up to 20 results. Used by the
+    /// search-to-add affordance on the PlatformUsers page; the response must
+    /// exclude existing platform_admins.
+    async fn search_user_candidates(
+        &self,
+        query: &str,
+    ) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>>;
+
     /// Set the user's email + verification metadata. `verified_at = None`
     /// + `requires = true` means the user must click the verification link
     /// before they can log in. Used by both register and

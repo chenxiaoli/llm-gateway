@@ -3510,6 +3510,40 @@ impl crate::Storage for PostgresStorage {
         Ok(())
     }
 
+    async fn list_platform_admins(&self) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>> {
+        let rows: Vec<PgUserRow> = sqlx::query_as(
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                    created_at, updated_at,
+                    email, email_verified_at, requires_email_verification, password_changed_at
+             FROM users WHERE platform_role = 'platform_admin'
+             ORDER BY username ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(User::from).collect())
+    }
+
+    async fn search_user_candidates(
+        &self,
+        query: &str,
+    ) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>> {
+        let pattern = format!("%{}%", query.to_lowercase());
+        let rows: Vec<PgUserRow> = sqlx::query_as(
+            "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
+                    created_at, updated_at,
+                    email, email_verified_at, requires_email_verification, password_changed_at
+             FROM users
+             WHERE platform_role IS NULL
+               AND (LOWER(username) LIKE $1 OR LOWER(COALESCE(email, '')) LIKE $1)
+             ORDER BY username ASC
+             LIMIT 20",
+        )
+        .bind(&pattern)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(User::from).collect())
+    }
+
     async fn set_user_email(
         &self,
         user_id: &str,
