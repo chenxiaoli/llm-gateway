@@ -42,7 +42,9 @@
     "add": "添加",
     "remove": "移除",
     "reset": "重置",
-    "submit": "提交"
+    "submit": "提交",
+    "username": "用户名",
+    "email": "邮箱"
   },
   "sidebar": {
     "console": "控制台",
@@ -1475,5 +1477,18 @@
   },
   "platformLayout": {
     "backTo": "返回"
+  },
+  "platformUsers": {
+    "title": "平台管理员",
+    "subtitle": "管理具有平台级别管理员权限的用户。",
+    "currentAdmins": "当前平台管理员",
+    "addAdmin": "添加平台管理员",
+    "searchPlaceholder": "按用户名或邮箱搜索",
+    "noCandidates": "未找到用户。",
+    "grant": "授予",
+    "revoke": "撤销",
+    "confirmRevoke": "确认撤销 {{username}} 的平台管理员权限？",
+    "lastAdminHint": "您是唯一的平台管理员。请先添加其他管理员再撤销。",
+    "stalenessNote": "权限变更将在用户下次登录（access-token 刷新）时生效。"
   }
 }

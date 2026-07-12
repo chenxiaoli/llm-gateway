@@ -42,7 +42,9 @@
     "add": "Add",
     "remove": "Remove",
     "reset": "Reset",
-    "submit": "Submit"
+    "submit": "Submit",
+    "username": "Username",
+    "email": "Email"
   },
   "sidebar": {
     "console": "Console",
@@ -1475,5 +1477,18 @@
   },
   "platformLayout": {
     "backTo": "Back to"
+  },
+  "platformUsers": {
+    "title": "Platform users",
+    "subtitle": "Manage who has platform-level administrator access.",
+    "currentAdmins": "Current platform admins",
+    "addAdmin": "Add platform admin",
+    "searchPlaceholder": "Search by username or email",
+    "noCandidates": "No users found.",
+    "grant": "Grant",
+    "revoke": "Revoke",
+    "confirmRevoke": "Revoke platform admin from {{username}}?",
+    "lastAdminHint": "You are the only platform admin. Promote another user before revoking.",
+    "stalenessNote": "Role changes take effect on the user's next login (access-token refresh)."
   }
 }
