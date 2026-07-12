@@ -249,9 +249,14 @@ export type MemberRole = 'owner' | 'admin' | 'member';
 export interface Member {
   user_id: string;
   username: string;
+  email: string | null;
   role: MemberRole;
   group_id: string | null;
-  joined_at: string; // ISO timestamp
+  group_name: string | null;
+  enabled: boolean;
+  balance: number; // USD float
+  threshold: number; // USD float
+  created_at: string; // ISO timestamp (was: joined_at)
 }
 
 // --- Groups ---

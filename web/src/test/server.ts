@@ -96,9 +96,14 @@ export const server = setupServer(
       {
         user_id: 'user-1',
         username: 'admin',
+        email: null,
         role: 'owner',
         group_id: null,
-        joined_at: '2026-01-01T00:00:00Z',
+        group_name: null,
+        enabled: true,
+        balance: 0,
+        threshold: 1,
+        created_at: '2026-01-01T00:00:00Z',
       },
     ]);
   }),
@@ -107,9 +112,14 @@ export const server = setupServer(
     return HttpResponse.json({
       user_id: 'invited-1',
       username: body.username ?? 'newuser',
+      email: null,
       role: body.role ?? 'member',
       group_id: null,
-      joined_at: new Date().toISOString(),
+      group_name: null,
+      enabled: true,
+      balance: 0,
+      threshold: 1,
+      created_at: new Date().toISOString(),
     });
   }),
   http.patch('*/api/v1/test-org/members/*', async ({ request }) => {
@@ -117,9 +127,14 @@ export const server = setupServer(
     return HttpResponse.json({
       user_id: 'user-1',
       username: 'admin',
+      email: null,
       role: body.role ?? 'member',
       group_id: null,
-      joined_at: '2026-01-01T00:00:00Z',
+      group_name: null,
+      enabled: true,
+      balance: 0,
+      threshold: 1,
+      created_at: '2026-01-01T00:00:00Z',
     });
   }),
   http.delete('*/api/v1/test-org/members/*', () => {

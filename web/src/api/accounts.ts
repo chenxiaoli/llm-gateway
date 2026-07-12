@@ -1,57 +1,8 @@
 import { apiClient, orgPrefix } from './client';
 import type {
-  Account,
-  AccountBalanceResponse,
-  CreateTransactionRequest,
   MeBalanceResponse,
   RequestDetailsResponse,
-  UpdateThresholdRequest,
 } from '../types';
-
-export async function getUserBalance(
-  userId: string,
-  page = 1,
-  pageSize = 20
-): Promise<AccountBalanceResponse> {
-  const response = await apiClient.get<AccountBalanceResponse>(
-    `${orgPrefix()}/admin/users/${userId}/balance`,
-    { params: { page, page_size: pageSize } }
-  );
-  return response.data;
-}
-
-export async function rechargeUser(
-  userId: string,
-  data: CreateTransactionRequest
-): Promise<Account> {
-  const response = await apiClient.post<Account>(
-    `${orgPrefix()}/admin/users/${userId}/recharge`,
-    { ...data, type: 'credit' as const }
-  );
-  return response.data;
-}
-
-export async function adjustUserBalance(
-  userId: string,
-  data: CreateTransactionRequest
-): Promise<Account> {
-  const response = await apiClient.post<Account>(
-    `${orgPrefix()}/admin/users/${userId}/adjust`,
-    data
-  );
-  return response.data;
-}
-
-export async function updateUserThreshold(
-  userId: string,
-  data: UpdateThresholdRequest
-): Promise<Account> {
-  const response = await apiClient.patch<Account>(
-    `${orgPrefix()}/admin/users/${userId}/threshold`,
-    data
-  );
-  return response.data;
-}
 
 export async function getMyBalance(
   page = 1,

@@ -331,7 +331,7 @@
     "providersCount": "{{active}}/{{total}} providers",
     "channelsCount": "{{active}}/{{total}} channels",
     "modelsCount": "{{count}} models",
-    "usersCount": "{{count}} users",
+    "membersCount": "{{count}} members",
     "keysCount": "{{count}} keys",
     "stats": {
       "todayRequests": "Today's Requests",
@@ -965,7 +965,15 @@
       "roleUpdated": "Role updated",
       "roleUpdateFailed": "Failed to update role",
       "removed": "Member removed",
-      "removeFailed": "Failed to remove member"
+      "removeFailed": "Failed to remove member",
+      "updated": "Member updated",
+      "updateFailed": "Failed to update member",
+      "recharged": "Balance recharged",
+      "rechargeFailed": "Recharge failed",
+      "adjusted": "Balance adjusted",
+      "adjustFailed": "Adjustment failed",
+      "thresholdUpdated": "Threshold updated",
+      "thresholdUpdateFailed": "Failed to update threshold"
     }
   },
   "orgSettings": {

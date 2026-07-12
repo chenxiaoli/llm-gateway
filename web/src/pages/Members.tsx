@@ -182,7 +182,7 @@ export default function Members() {
                       )}
                     </td>
                     <td className="font-mono text-sm text-base-content/55">
-                      {new Date(m.joined_at).toLocaleDateString()}
+                      {new Date(m.created_at).toLocaleDateString()}
                     </td>
                     <td>
                       {/* Self-leave is allowed for any member; removing others requires admin+. */}
