@@ -32,7 +32,7 @@ describe('Login page', () => {
   it('renders login form', () => {
     renderWithProviders(<Login />);
     expect(screen.getByText('TokenVis')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Username or email')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument();
   });
@@ -48,7 +48,7 @@ describe('Login page', () => {
   it('navigates to dashboard on valid credentials', async () => {
     renderWithProviders(<Login />);
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'admin');
+    await userEvent.type(screen.getByPlaceholderText('Username or email'), 'admin');
     await userEvent.type(screen.getByPlaceholderText('Password'), 'password');
     await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
@@ -66,7 +66,7 @@ describe('Login page', () => {
 
     renderWithProviders(<Login />);
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'wrong');
+    await userEvent.type(screen.getByPlaceholderText('Username or email'), 'wrong');
     await userEvent.type(screen.getByPlaceholderText('Password'), 'wrong');
     await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
@@ -96,7 +96,7 @@ describe('Login page', () => {
 
     renderWithProviders(<Login />);
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'locked');
+    await userEvent.type(screen.getByPlaceholderText('Username or email'), 'locked');
     await userEvent.type(screen.getByPlaceholderText('Password'), 'password');
     await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
@@ -117,7 +117,7 @@ describe('Login page', () => {
 
     renderWithProviders(<Login />);
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'unverified');
+    await userEvent.type(screen.getByPlaceholderText('Username or email'), 'unverified');
     await userEvent.type(screen.getByPlaceholderText('Password'), 'password');
     await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
@@ -145,7 +145,7 @@ describe('Login page', () => {
 
     renderWithProviders(<Login />);
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'unverified');
+    await userEvent.type(screen.getByPlaceholderText('Username or email'), 'unverified');
     await userEvent.type(screen.getByPlaceholderText('Password'), 'password');
     await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
