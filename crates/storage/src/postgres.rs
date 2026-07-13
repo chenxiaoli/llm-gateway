@@ -486,7 +486,7 @@ impl From<PgChannelRow> for Channel {
 #[derive(FromRow)]
 struct PgUserRow {
     id: String,
-    username: String,
+    username: Option<String>,
     password: String,
     platform_role: Option<String>,
     current_org_id: Option<String>,
@@ -4713,7 +4713,7 @@ mod invitation_tests {
         let now = chrono::Utc::now();
         let user = crate::types::User {
             id: username.to_string(),
-            username: username.to_string(),
+            username: Some(username.to_string()),
             password: "x".to_string(),
             platform_role: None,
             current_org_id: None,
@@ -5207,7 +5207,7 @@ mod phase4_tests {
         let now = chrono::Utc::now();
         crate::types::User {
             id: id.into(),
-            username: uname.into(),
+            username: Some(uname.to_string()),
             password: "x".into(),
             platform_role: None,
             current_org_id: None,
