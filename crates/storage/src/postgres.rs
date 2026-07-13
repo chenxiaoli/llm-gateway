@@ -4229,7 +4229,7 @@ mod org_tests {
             .expect("membership row present");
         assert_eq!(found.role, MemberRole::Owner.as_str());
         // The joined shape must also surface the user row.
-        assert_eq!(found.username, "bootstrap_test");
+        assert_eq!(found.username.as_deref(), Some("bootstrap_test"));
         // Per-membership invariant surfaced through the join: every member
         // has an accounts row (created by upsert_member), so balance is 0
         // (not NULL → 0 via COALESCE, but a real 0).

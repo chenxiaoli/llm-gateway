@@ -19,7 +19,7 @@ use crate::AppState;
 #[derive(serde::Serialize)]
 pub struct MemberResponse {
     pub user_id: String,
-    pub username: String,
+    pub username: Option<String>,
     pub email: Option<String>,
     pub role: String,
     pub group_id: Option<String>,
@@ -53,7 +53,7 @@ impl From<llm_gateway_storage::MemberWithDetails> for MemberResponse {
 /// exist; we just inserted the membership). The defaults match what storage's
 /// `list_members` SQL COALESCEs to for a freshly-created membership: zero
 /// balance, default threshold (1.0 USD), no group, enabled user.
-fn build_response(member: llm_gateway_storage::Member, username: String) -> MemberResponse {
+fn build_response(member: llm_gateway_storage::Member, username: Option<String>) -> MemberResponse {
     MemberResponse {
         user_id: member.user_id,
         username,

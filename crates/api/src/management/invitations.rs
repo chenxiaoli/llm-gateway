@@ -113,7 +113,7 @@ pub async fn create_invitation(
         .await
         .ok()
         .flatten()
-        .map(|u| u.username)
+        .map(|u| u.username.or(u.email.clone()).unwrap_or_else(|| ctx.user_id.clone()))
         .unwrap_or_else(|| ctx.user_id.clone());
     let response = InvitationResponse {
         id: invitation.id,
@@ -184,7 +184,7 @@ pub async fn list_invitations(
                 .get_user(uid)
                 .await
                 .map_err(|e| ApiError::Internal(e.to_string()))?
-                .map(|u| u.username),
+                .and_then(|u| u.username.or(u.email)),
             None => None,
         };
         out.push(InvitationResponse {
@@ -273,14 +273,14 @@ pub async fn preview_invitation(
         .get_user(&inv.created_by)
         .await
         .map_err(|e| ApiError::Internal(e.to_string()))?
-        .map(|u| u.username)
-        .unwrap_or_default();
+        .ok_or_else(|| ApiError::Internal("invitation references missing inviter".into()))?;
+    let inviter_username = inviter.username.clone().or(inviter.email.clone());
 
     let preview = InvitationPreview {
         org_name: org.name,
         org_slug: org.slug,
         role: inv.role.as_str().to_string(),
-        inviter_username: inviter,
+        inviter_username,
         recipient_email: inv.recipient_email.clone(),
         expires_at: inv.expires_at,
     };
@@ -481,7 +481,7 @@ mod tests {
         storage
             .create_user(&llm_gateway_storage::User {
                 id: id.to_string(),
-                username: id.to_string(),
+                username: Some(id.to_string()),
                 password: "x".to_string(),
                 platform_role: None,
                 current_org_id: None,
@@ -509,7 +509,7 @@ mod tests {
         storage
             .create_user(&llm_gateway_storage::User {
                 id: id.to_string(),
-                username: id.to_string(),
+                username: Some(id.to_string()),
                 password: "x".to_string(),
                 platform_role: None,
                 current_org_id: None,
@@ -792,7 +792,7 @@ mod tests {
         assert_eq!(body.org_name, "acme");
         assert_eq!(body.org_slug, "acme");
         assert_eq!(body.role, "admin");
-        assert_eq!(body.inviter_username, "owner-acme");
+        assert_eq!(body.inviter_username.as_deref(), Some("owner-acme"));
         assert_eq!(
             body.recipient_email.as_deref(),
             Some("preview@example.com"),

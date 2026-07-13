@@ -130,7 +130,7 @@ pub const DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS: i64 = crate::money::UNITS_PER_USD;
 pub struct MemberWithDetails {
     pub user_id: String,
     pub org_id: String,
-    pub username: String,
+    pub username: Option<String>,
     pub email: Option<String>,
     /// Raw lowercase role string from `members.role` (`"owner" | "admin" | "member"`).
     pub role: String,

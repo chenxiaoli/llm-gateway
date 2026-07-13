@@ -111,9 +111,9 @@ async fn list_platform_admins_returns_all_admins(pool: PgPool) {
     let storage = llm_gateway_storage::postgres::PostgresStorage::from_pool(pool);
     let admins = storage.list_platform_admins().await.unwrap();
     assert_eq!(admins.len(), 2);
-    let usernames: Vec<&str> = admins.iter().map(|u| u.username.as_str()).collect();
-    assert!(usernames.contains(&"admin"));
-    assert!(usernames.contains(&"second"));
+    let usernames: Vec<String> = admins.iter().map(|u| u.username.clone().unwrap_or_default()).collect();
+    assert!(usernames.contains(&"admin".to_string()));
+    assert!(usernames.contains(&"second".to_string()));
 }
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
@@ -135,9 +135,9 @@ async fn search_user_candidates_excludes_admins_and_matches_query(pool: PgPool) 
     let storage = llm_gateway_storage::postgres::PostgresStorage::from_pool(pool);
     let hits = storage.search_user_candidates("alice").await.unwrap();
     assert_eq!(hits.len(), 2);
-    let names: Vec<&str> = hits.iter().map(|u| u.username.as_str()).collect();
-    assert!(names.contains(&"alice_one"));
-    assert!(names.contains(&"bob_two"));
-    assert!(!names.contains(&"charlie"));
-    assert!(!names.contains(&"admin")); // platform_admin excluded
+    let names: Vec<String> = hits.iter().map(|u| u.username.clone().unwrap_or_default()).collect();
+    assert!(names.contains(&"alice_one".to_string()));
+    assert!(names.contains(&"bob_two".to_string()));
+    assert!(!names.contains(&"charlie".to_string()));
+    assert!(!names.contains(&"admin".to_string())); // platform_admin excluded
 }

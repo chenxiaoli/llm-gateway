@@ -73,33 +73,32 @@ async fn post_authed(
 
 /// Register a user, peek their initial verification token via direct SQL,
 /// consume it through the public `/auth/verify-email` endpoint, then log in.
-/// Returns the login bearer token + the user's username.
+/// Returns the login bearer token. Lookups are by email (the row has
+/// username = NULL after email-only signup).
 async fn register_verify_and_login(
     app: &axum::Router,
     pool: &PgPool,
-    username: &str,
     email: &str,
 ) -> String {
     let resp = post(
         app,
         "/api/v1/auth/register",
         json!({
-            "username": username,
             "password": "password123",
             "email": email,
         }),
     )
     .await;
-    assert_eq!(resp.status(), StatusCode::OK, "register failed for {username}");
+    assert_eq!(resp.status(), StatusCode::OK, "register failed for {email}");
 
     // Peek the verification token (same approach as `verify_email_round_trip`
     // in phase4_auth.rs — no public list method on the storage trait).
     let token: String = sqlx::query_scalar(
         "SELECT token FROM email_verifications WHERE user_id = \
-         (SELECT id FROM users WHERE username = $1) \
+         (SELECT id FROM users WHERE email = $1) \
          ORDER BY created_at DESC LIMIT 1",
     )
-    .bind(username)
+    .bind(email)
     .fetch_one(pool)
     .await
     .expect("verification row");
@@ -110,16 +109,16 @@ async fn register_verify_and_login(
         json!({ "token": token }),
     )
     .await;
-    assert_eq!(resp.status(), StatusCode::NO_CONTENT, "verify failed for {username}");
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT, "verify failed for {email}");
 
     // Login now that the email is verified.
     let resp = post(
         app,
         "/api/v1/auth/login",
-        json!({"username": username, "password": "password123"}),
+        json!({"username": email, "password": "password123"}),
     )
     .await;
-    assert_eq!(resp.status(), StatusCode::OK, "login failed for {username}");
+    assert_eq!(resp.status(), StatusCode::OK, "login failed for {email}");
     let body = body_json(resp).await;
     body["token"].as_str().unwrap().to_string()
 }
@@ -130,7 +129,7 @@ async fn register_verify_and_login(
 async fn set_my_email_dispatches_verification(pool: PgPool) {
     let app = build_app(common::make_state(pool.clone()));
 
-    let token = register_verify_and_login(&app, &pool, "alice", "alice@example.com").await;
+    let token = register_verify_and_login(&app, &pool, "alice@example.com").await;
 
     // Set a new email.
     let resp = post_authed(
@@ -150,7 +149,7 @@ async fn set_my_email_dispatches_verification(pool: PgPool) {
     // A fresh verification row exists for the new address.
     let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM email_verifications \
-         WHERE user_id = (SELECT id FROM users WHERE username = 'alice') \
+         WHERE user_id = (SELECT id FROM users WHERE email = 'alice-new@example.com') \
          AND email = 'alice-new@example.com'",
     )
     .fetch_one(&pool)
@@ -166,7 +165,7 @@ async fn set_my_email_dispatches_verification(pool: PgPool) {
     // don't assert that here, but the row at minimum must reflect the new
     // email value.
     let stored: Option<String> = sqlx::query_scalar(
-        "SELECT email FROM users WHERE username = 'alice'",
+        "SELECT email FROM users WHERE email = 'alice-new@example.com'",
     )
     .fetch_one(&pool)
     .await
@@ -181,7 +180,7 @@ async fn set_my_email_does_not_block_login(pool: PgPool) {
     let app = build_app(common::make_state(pool.clone()));
 
     let token =
-        register_verify_and_login(&app, &pool, "bob", "bob@example.com").await;
+        register_verify_and_login(&app, &pool, "bob@example.com").await;
 
     // Change the email — the new address is pending verification.
     let resp = post_authed(
@@ -194,11 +193,11 @@ async fn set_my_email_does_not_block_login(pool: PgPool) {
     assert_eq!(resp.status(), StatusCode::OK);
 
     // A fresh login must still succeed (the gate doesn't flip on for an
-    // existing user who already cleared it once).
+    // existing user who already cleared it once). Login by the new email.
     let resp = post(
         &app,
         "/api/v1/auth/login",
-        json!({"username": "bob", "password": "password123"}),
+        json!({"username": "bob-new@example.com", "password": "password123"}),
     )
     .await;
     assert_eq!(
@@ -216,9 +215,9 @@ async fn set_my_email_rejects_duplicate(pool: PgPool) {
     let app = build_app(common::make_state(pool.clone()));
 
     let _token_a =
-        register_verify_and_login(&app, &pool, "alice", "alice@example.com").await;
+        register_verify_and_login(&app, &pool, "alice@example.com").await;
     let token_b =
-        register_verify_and_login(&app, &pool, "bob", "bob@example.com").await;
+        register_verify_and_login(&app, &pool, "bob@example.com").await;
 
     // Bob tries to claim Alice's email.
     let resp = post_authed(
@@ -237,7 +236,7 @@ async fn set_my_email_rejects_duplicate(pool: PgPool) {
 
     // Bob's own email is untouched.
     let bob_email: Option<String> =
-        sqlx::query_scalar("SELECT email FROM users WHERE username = 'bob'")
+        sqlx::query_scalar("SELECT email FROM users WHERE email = 'bob@example.com'")
             .fetch_one(&pool)
             .await
             .expect("bob email");
@@ -254,7 +253,7 @@ async fn set_my_email_rejects_invalid(pool: PgPool) {
     let app = build_app(common::make_state(pool.clone()));
 
     let token =
-        register_verify_and_login(&app, &pool, "carol", "carol@example.com").await;
+        register_verify_and_login(&app, &pool, "carol@example.com").await;
 
     let resp = post_authed(
         &app,

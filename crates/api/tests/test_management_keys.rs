@@ -331,7 +331,7 @@ async fn test_register_first_user_is_admin(pool: PgPool) {
                 .method("POST")
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
-                .body(Body::from(json!({"username": "admin", "password": "password123", "email": "admin@example.com"}).to_string()))
+                .body(Body::from(json!({"password": "password123", "email": "admin@example.com"}).to_string()))
                 .unwrap(),
         )
         .await
@@ -366,7 +366,7 @@ async fn test_login_and_me(pool: PgPool) {
                 .method("POST")
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
-                .body(Body::from(json!({"username": "testuser", "password": "password123", "email": "testuser@example.com"}).to_string()))
+                .body(Body::from(json!({"password": "password123", "email": "testuser@example.com"}).to_string()))
                 .unwrap(),
         )
         .await
@@ -377,7 +377,7 @@ async fn test_login_and_me(pool: PgPool) {
     .unwrap();
     let token = body["token"].as_str().unwrap();
     // Phase 4: bypass the verification gate for this test (not about it).
-    common::mark_user_verified(&pool, "testuser").await;
+    common::mark_user_verified(&pool, "testuser@example.com").await;
 
     // Get me
     let me_resp = app
@@ -396,5 +396,5 @@ async fn test_login_and_me(pool: PgPool) {
         &to_bytes(me_resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
-    assert_eq!(me_body["username"], "testuser");
+    assert_eq!(me_body["email"], "testuser@example.com");
 }
