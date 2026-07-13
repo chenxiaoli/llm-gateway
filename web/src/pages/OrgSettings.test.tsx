@@ -26,12 +26,6 @@ const adminUser: User = {
   email_verified_at: '2026-07-09T00:00:00Z',
 };
 
-const memberUser: User = {
-  ...adminUser,
-  id: 'u2',
-  username: 'bob',
-};
-
 const adminOrg: OrgSummary = {
   id: 'org-1',
   slug: 'org-1',
@@ -39,8 +33,6 @@ const adminOrg: OrgSummary = {
   role: 'admin',
   group_id: null,
 };
-
-const memberOrg: OrgSummary = { ...adminOrg, role: 'member' };
 
 function renderAt(path: string) {
   return renderWithProviders(
@@ -75,25 +67,6 @@ describe('OrgSettings — Defaults section', () => {
       expect(screen.getByLabelText('Default rate limit (RPM)')).toHaveValue(100);
     });
     expect(screen.getByLabelText('Default monthly budget (USD)')).toHaveValue(50);
-  });
-
-  it('disables inputs for a member (read-only)', async () => {
-    useAuthStore.setState({ user: memberUser, currentOrg: memberOrg });
-    server.use(
-      http.get('*/api/v1/org-1/defaults', () =>
-        HttpResponse.json({
-          default_rate_limit_rpm: 100,
-          default_budget_monthly_usd: null,
-        }),
-      ),
-    );
-
-    renderAt('/org-1/settings');
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Default rate limit (RPM)')).toBeDisabled();
-    });
-    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
   it('shows error state when GET fails', async () => {

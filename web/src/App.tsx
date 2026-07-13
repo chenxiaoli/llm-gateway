@@ -148,7 +148,6 @@ function App() {
               <Route path="models" element={<ConsoleModels />} />
               <Route path="usage" element={<Usage />} />
               <Route path="members" element={<Members />} />
-              <Route path="settings" element={<OrgSettings />} />
               <Route path="account" element={<Account />} />
               <Route path="change-password" element={<ChangePassword />} />
             </Route>
@@ -167,6 +166,7 @@ function App() {
               <Route path="admin/groups" element={<Groups />} />
               <Route path="admin/users/:userId/balance" element={<AccountBalance />} />
               <Route path="admin/logs" element={<Logs />} />
+              <Route path="settings" element={<OrgSettings />} />
             </Route>
           </Route>
 

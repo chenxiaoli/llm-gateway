@@ -5,7 +5,6 @@ import { AlertTriangle, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
-import { isAdminOrAbove } from '../lib/auth';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { updateOrg, deleteOrg } from '../api/orgs';
 import { getErrorMessage } from '../api/client';
@@ -30,11 +29,8 @@ export default function OrgSettings() {
   const setCurrentOrg = useAuthStore((s) => s.setCurrentOrg);
   const logout = useAuthStore((s) => s.logout);
 
-  // General section — admin+ can edit. We always render the inputs so members
-  // can see the current values; members get disabled inputs + no Save button
-  // (per the "read-only" option in the task spec).
-  const canEdit = isAdminOrAbove(user, currentOrg);
-  // Owner (or platform_admin) can delete the org.
+  // Route is gated by RequireAdmin — every visitor can edit. Owner (or
+  // platform_admin) can additionally delete the org.
   const canDelete =
     currentOrg?.role === 'owner' || user?.platform_role === 'platform_admin';
 
@@ -55,7 +51,7 @@ export default function OrgSettings() {
 
   const nameChanged = name.trim() !== currentOrg.name;
   const slugChanged = slug.trim() !== currentOrg.slug && slug.trim().length > 0;
-  const generalDirty = canEdit && (nameChanged || slugChanged);
+  const generalDirty = nameChanged || slugChanged;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,7 +204,7 @@ export default function OrgSettings() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('orgSettings.general.namePlaceholder')}
-                disabled={!canEdit || saving}
+                disabled={saving}
                 autoComplete="off"
                 className={INPUT_CLASS}
               />
@@ -222,7 +218,7 @@ export default function OrgSettings() {
                 value={slug}
                 onChange={(e) => setSlug(e.target.value)}
                 placeholder={t('orgSettings.general.slugHint')}
-                disabled={!canEdit || saving}
+                disabled={saving}
                 autoComplete="off"
                 spellCheck={false}
                 className={`${INPUT_CLASS} font-mono`}
@@ -233,24 +229,17 @@ export default function OrgSettings() {
             </div>
 
             <div className="flex items-center justify-between gap-3 pt-1">
-              {!canEdit && (
-                <span className="text-xs text-base-content/40">
-                  {t('orgSettings.general.readOnlyNotice')}
-                </span>
-              )}
-              {canEdit && (
-                <Button type="submit" loading={saving} disabled={!generalDirty}>
-                  {t('orgSettings.general.save')}
-                </Button>
-              )}
+              <Button type="submit" loading={saving} disabled={!generalDirty}>
+                {t('orgSettings.general.save')}
+              </Button>
             </div>
           </form>
         </motion.section>
 
-        {/* Defaults section — admin can edit; member is read-only. */}
-        <DefaultsSection canEdit={canEdit} />
+        {/* Defaults section — admin can edit. */}
+        <DefaultsSection />
 
-        {/* Phase 7: Budget status — read-only MTD card. Admin+ and member both see it. */}
+        {/* Phase 7: Budget status — read-only MTD card. */}
         <BudgetStatusSection />
 
         {/* Danger zone — owner-only. Hidden entirely for non-owners. */}
@@ -332,7 +321,7 @@ export default function OrgSettings() {
   );
 }
 
-function DefaultsSection({ canEdit }: { canEdit: boolean }) {
+function DefaultsSection() {
   const { t } = useTranslation();
   const reducedMotion = useReducedMotion();
   const { data, isLoading, isError } = useGetOrgDefaults();
@@ -417,7 +406,7 @@ function DefaultsSection({ canEdit }: { canEdit: boolean }) {
             type="number"
             min="1"
             placeholder="Unlimited"
-            disabled={!canEdit || updateDefaults.isPending}
+            disabled={updateDefaults.isPending}
             value={rpm}
             onChange={(e) => setRpm(e.target.value)}
             className={INPUT_CLASS}
@@ -435,7 +424,7 @@ function DefaultsSection({ canEdit }: { canEdit: boolean }) {
             min="0"
             step="0.01"
             placeholder="No budget"
-            disabled={!canEdit || updateDefaults.isPending}
+            disabled={updateDefaults.isPending}
             value={budget}
             onChange={(e) => setBudget(e.target.value)}
             className={INPUT_CLASS}
@@ -444,26 +433,24 @@ function DefaultsSection({ canEdit }: { canEdit: boolean }) {
         </div>
       </div>
 
-      {canEdit && (
-        <div className="flex justify-end gap-2 mt-4">
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setRpm(data?.default_rate_limit_rpm?.toString() ?? '');
-              setBudget(data?.default_budget_monthly_usd?.toString() ?? '');
-            }}
-            disabled={!dirty || updateDefaults.isPending}
-          >
-            {t('orgSettings.defaults.cancel')}
-          </Button>
-          <Button
-            onClick={onSave}
-            disabled={!canSave}
-          >
-            {t('orgSettings.defaults.save')}
-          </Button>
-        </div>
-      )}
+      <div className="flex justify-end gap-2 mt-4">
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setRpm(data?.default_rate_limit_rpm?.toString() ?? '');
+            setBudget(data?.default_budget_monthly_usd?.toString() ?? '');
+          }}
+          disabled={!dirty || updateDefaults.isPending}
+        >
+          {t('orgSettings.defaults.cancel')}
+        </Button>
+        <Button
+          onClick={onSave}
+          disabled={!canSave}
+        >
+          {t('orgSettings.defaults.save')}
+        </Button>
+      </div>
     </motion.section>
   );
 }

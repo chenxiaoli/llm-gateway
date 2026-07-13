@@ -965,8 +965,7 @@
       "namePlaceholder": "例如：Acme Inc.",
       "slug": "组织 Slug",
       "slugHint": "小写字母、数字和连字符，3-64 个字符。",
-      "save": "保存更改",
-      "readOnlyNotice": "仅管理员可更改组织设置。"
+      "save": "保存更改"
     },
     "defaults": {
       "title": "默认值",

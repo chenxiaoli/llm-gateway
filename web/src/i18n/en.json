@@ -965,8 +965,7 @@
       "namePlaceholder": "e.g., Acme Inc.",
       "slug": "Org Slug",
       "slugHint": "Lowercase letters, digits, and hyphens. 3-64 chars.",
-      "save": "Save Changes",
-      "readOnlyNotice": "Only admins can change org settings."
+      "save": "Save Changes"
     },
     "defaults": {
       "title": "Defaults",
