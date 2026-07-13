@@ -217,7 +217,7 @@ export interface LogFilter {
 
 export interface User {
   id: string;
-  username: string;
+  username: string | null;
   platform_role: 'platform_admin' | null;
   balance?: number;
   threshold?: number;
@@ -248,7 +248,7 @@ export type MemberRole = 'owner' | 'admin' | 'member';
 
 export interface Member {
   user_id: string;
-  username: string;
+  username: string | null;
   email: string | null;
   role: MemberRole;
   group_id: string | null;
@@ -290,7 +290,6 @@ export interface LoginRequest {
 }
 
 export interface RegisterRequest {
-  username: string;
   password: string;
   /**
    * Required email address (Phase 4). A verification email is sent on
@@ -319,7 +318,7 @@ export interface AuthResponse {
 
 export interface MeResponse {
   id: string;
-  username: string;
+  username: string | null;
   platform_role: 'platform_admin' | null;
   /**
    * null when the user has no memberships (e.g. just self-left their last
@@ -780,7 +779,7 @@ export interface InvitationPreview {
   org_name: string;
   org_slug: string;
   role: 'member' | 'admin';
-  inviter_username: string;
+  inviter_username: string | null;
   /**
    * Phase 4: the email the admin bound this invitation to. The landing page
    * surfaces it so the recipient can confirm the address matches their account.
