@@ -12,7 +12,6 @@ export async function register(input: RegisterRequest): Promise<AuthResponse> {
   // server-side-accept the invitation in the same transaction — so the
   // previous client-side accept is no longer needed.
   const body: Record<string, unknown> = {
-    username: input.username,
     password: input.password,
     email: input.email,
   };
