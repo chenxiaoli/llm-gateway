@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { apiClient, getErrorMessage } from '../api/client';
 import { useAuthStore } from '../stores/authStore';
-import { displayName } from '../lib/displayName';
 import { Button } from './ui/Button';
 import type { AuthResponse } from '../types';
 
@@ -31,8 +30,8 @@ export function OnboardingCreateCard() {
   const user = useAuthStore((s) => s.user);
   const applyAuthResponse = useAuthStore((s) => s.applyAuthResponse);
 
-  const [name, setName] = useState(user ? displayName(user) : '');
-  const [slug, setSlug] = useState(slugify(user ? displayName(user) : ''));
+  const [name, setName] = useState(user?.username ?? '');
+  const [slug, setSlug] = useState(slugify(user?.username ?? ''));
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
