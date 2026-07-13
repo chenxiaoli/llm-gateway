@@ -67,7 +67,6 @@ export default function AppLayout() {
     { key: `/${slug}/model-fallbacks`, icon: ArrowRightLeft, label: t('sidebar.modelFallbacks') },
     { key: `/${slug}/models`, icon: SquareStack, label: t('sidebar.models') },
     { key: `/${slug}/usage`, icon: BarChart3, label: t('sidebar.usage') },
-    { key: `/${slug}/settings`, icon: Settings, label: t('sidebar.orgSettings') },
   ];
 
   const adminItems = [
@@ -80,6 +79,7 @@ export default function AppLayout() {
     { key: `/${slug}/admin/invitations`, icon: Mail, label: t('sidebar.invitations') },
     { key: `/${slug}/admin/groups`, icon: UsersRound, label: t('groups.title') },
     { key: `/${slug}/admin/logs`, icon: FileText, label: t('sidebar.logs') },
+    { key: `/${slug}/settings`, icon: Settings, label: t('sidebar.orgSettings') },
   ];
 
   // Platform-admin-only items. The /{slug}/admin/settings handler is
