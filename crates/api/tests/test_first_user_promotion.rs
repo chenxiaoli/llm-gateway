@@ -16,7 +16,6 @@ async fn register_first_user(state: Arc<AppState>) -> Response<Body> {
             .uri("/api/v1/auth/register")
             .header("content-type", "application/json")
             .body(Body::from(json!({
-                "username": "first",
                 "password": "supersecret123",
                 "email": "first@test.local"
             }).to_string()))
@@ -33,7 +32,7 @@ async fn first_user_is_admin_true_promotes(pool: PgPool) {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let user = sqlx::query_as::<_, (Option<String>,)>(
-        "SELECT platform_role FROM users WHERE username = 'first'"
+        "SELECT platform_role FROM users WHERE email = 'first@test.local'"
     )
     .fetch_one(&pool).await.unwrap();
     assert_eq!(user.0, Some("platform_admin".to_string()));
@@ -46,7 +45,7 @@ async fn first_user_is_admin_false_skips_promotion(pool: PgPool) {
     assert_eq!(resp.status(), StatusCode::OK);
 
     let user = sqlx::query_as::<_, (Option<String>,)>(
-        "SELECT platform_role FROM users WHERE username = 'first'"
+        "SELECT platform_role FROM users WHERE email = 'first@test.local'"
     )
     .fetch_one(&pool).await.unwrap();
     assert_eq!(user.0, None);

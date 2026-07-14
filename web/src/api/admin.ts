@@ -2,7 +2,7 @@ import { adminApiClient } from './client';
 
 export interface PlatformUserBrief {
   id: string;
-  username: string;
+  username: string | null;
   email: string | null;
   platform_role: 'platform_admin' | null;
 }

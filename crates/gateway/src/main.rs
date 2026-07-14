@@ -250,7 +250,12 @@ async fn run_cli_command(
 
             let db = PostgresStorage::new(url).await?;
 
-            let user = db.get_user_by_username(&username).await?.ok_or_else(|| {
+            let user = if username.contains('@') {
+                db.get_user_by_email(&username).await?
+            } else {
+                db.get_user_by_username(&username).await?
+            }
+            .ok_or_else(|| {
                 eprintln!("error: user '{username}' not found");
                 "user not found"
             })?;

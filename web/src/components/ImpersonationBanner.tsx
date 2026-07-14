@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { ShieldAlert } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
+import { displayName } from '../lib/displayName';
 
 /**
  * Top-of-page amber banner shown when a platform_admin is operating in an
@@ -28,7 +29,7 @@ export function ImpersonationBanner() {
       <span className="truncate">
         {t('impersonation.banner', {
           org: currentOrg.name,
-          user: user?.username ?? '',
+          user: user ? displayName(user) : '',
         })}
       </span>
     </div>

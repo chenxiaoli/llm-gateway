@@ -31,6 +31,7 @@ import {
 import { useAuthStore } from '../stores/authStore';
 import { isAdminOrAbove, isPlatformAdmin } from '../lib/auth';
 import { useTheme } from '../hooks/useTheme';
+import { displayName } from '../lib/displayName';
 import { apiClient } from '../api/client';
 import { useTranslation } from 'react-i18next';
 import { Globe } from 'lucide-react';
@@ -425,10 +426,14 @@ export default function AppLayout() {
                 >
                   <div className="avatar placeholder">
                     <div className="bg-primary/15 text-primary w-7 rounded-md flex items-center justify-center">
-                      <span className="text-xs font-semibold">{user?.username?.charAt(0).toUpperCase()}</span>
+                      <span className="text-xs font-semibold">
+                        {(user ? displayName(user) : '').charAt(0).toUpperCase() || '?'}
+                      </span>
                     </div>
                   </div>
-                  <span className="hidden sm:inline text-[13px] font-medium text-base-content/60">{user?.username}</span>
+                  <span className="hidden sm:inline text-[13px] font-medium text-base-content/60">
+                    {user ? displayName(user) : ''}
+                  </span>
                   <ChevronDown className={`h-3 w-3 text-base-content/30 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 

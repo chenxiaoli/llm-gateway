@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use llm_gateway_auth::{
-    create_jwt, create_refresh_jwt, hash_password, validate_password, validate_username,
-    verify_password, verify_refresh_jwt,
+    create_jwt, create_refresh_jwt, hash_password, validate_password, verify_password,
+    verify_refresh_jwt,
 };
 use llm_gateway_email::dispatch_with_retry;
 use llm_gateway_email::templates::VerificationCtx;
@@ -23,18 +23,20 @@ use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
+    /// Identifier supplied by the user. May be a username or an email —
+    /// the login handler branches on `@` to pick the lookup. Field name
+    /// is `username` for wire-format backward compat with existing clients.
     pub username: String,
     pub password: String,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RegisterRequest {
-    pub username: String,
     pub password: String,
-    /// Phase 4: required — the new user must have a verified email before
-    /// they can log in. `Option<String>` so a missing field deserializes to
-    /// `None` and we can return the typed `EmailRequired` (400) error
-    /// instead of Axum's default 422 for malformed JSON.
+    /// Required — the new user must verify this email before they can log in.
+    /// `Option<String>` so a missing field deserializes to `None` and we return
+    /// the typed `EmailRequired` (400) error instead of Axum's default 422.
     #[serde(default)]
     pub email: Option<String>,
     /// Optional invitation token. When present, the new account is
@@ -103,7 +105,7 @@ pub struct AuthResponse {
 #[derive(Serialize, Clone)]
 pub struct UserInfo {
     pub id: String,
-    pub username: String,
+    pub username: Option<String>,
     pub platform_role: Option<String>,
 }
 
@@ -132,7 +134,7 @@ impl From<MembershipSummary> for OrgSummary {
 #[derive(Serialize)]
 pub struct MeResponse {
     pub id: String,
-    pub username: String,
+    pub username: Option<String>,
     pub platform_role: Option<String>,
     /// null when the user has no memberships (e.g. just self-left their last
     /// org). Callers (frontend `refreshOrgs`) treat null as "send to /login".
@@ -271,12 +273,20 @@ pub async fn login(
 ) -> Result<Json<AuthResponse>, ApiError> {
     validate_password(&input.password).map_err(ApiError::BadRequest)?;
 
-    let user = state
-        .storage
-        .get_user_by_username(&input.username)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or(ApiError::Unauthorized)?;
+    let user = if input.username.contains('@') {
+        state
+            .storage
+            .get_user_by_email(&input.username)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+    } else {
+        state
+            .storage
+            .get_user_by_username(&input.username)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+    }
+    .ok_or(ApiError::Unauthorized)?;
 
     if !user.enabled {
         return Err(ApiError::Unauthorized);
@@ -355,7 +365,6 @@ pub async fn register(
         return Err(ApiError::Forbidden);
     }
 
-    validate_username(&input.username).map_err(ApiError::BadRequest)?;
     validate_password(&input.password).map_err(ApiError::BadRequest)?;
     // Phase 4: email is required for every new account. We validate the
     // shape here (not just the presence) so a malformed string never makes
@@ -368,15 +377,6 @@ pub async fn register(
     }
     validate_email(&email_trimmed).map_err(ApiError::BadRequest)?;
 
-    if state
-        .storage
-        .get_user_by_username(&input.username)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .is_some()
-    {
-        return Err(ApiError::BadRequest("Username already exists".to_string()));
-    }
     if state
         .storage
         .get_user_by_email(&email_trimmed)
@@ -426,7 +426,7 @@ pub async fn register(
     };
     let user = User {
         id: uuid::Uuid::new_v4().to_string(),
-        username: input.username.clone(),
+        username: None, // Email-only registration; username may be added later via profile UI.
         password: hash_password(&input.password).map_err(|e| ApiError::Internal(e.to_string()))?,
         platform_role,
         current_org_id: None,
@@ -496,7 +496,7 @@ pub async fn register(
                 verification.token
             );
             let ctx = VerificationCtx {
-                username: user.username.clone(),
+                username: user.username.clone().unwrap_or_default(),
                 recipient_email: email_trimmed.clone(),
                 verification_url,
                 expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
@@ -664,7 +664,7 @@ pub async fn resend_verification(
         verification.token
     );
     let ctx = VerificationCtx {
-        username: user.username.clone(),
+        username: user.username.clone().unwrap_or_default(),
         recipient_email: email.to_string(),
         verification_url,
         expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
@@ -718,7 +718,7 @@ pub async fn password_reset_request(
         reset.token
     );
     let ctx = llm_gateway_email::templates::PasswordResetCtx {
-        username: user.username.clone(),
+        username: user.username.clone().unwrap_or_default(),
         recipient_email: email,
         reset_url,
         expires_in_hours: PASSWORD_RESET_TTL_HOURS as u32,
@@ -905,7 +905,7 @@ pub async fn set_my_email(
                 verification.token
             );
             let ctx = VerificationCtx {
-                username: updated.username.clone(),
+                username: updated.username.clone().unwrap_or_default(),
                 recipient_email: email.clone(),
                 verification_url,
                 expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
@@ -1863,35 +1863,29 @@ mod tests {
 
     #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
     async fn register_returns_jwt_with_null_current_org(pool: PgPool) {
-        // POST /auth/register → 200. Response has current_org: None, orgs: [].
-        // The user row in DB has current_org_id = NULL.
         let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
         let app = build_router(storage);
         let resp = post_json(
             &app,
             "/api/v1/auth/register",
             None,
-            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
+            json!({"password": "password123", "email": "alice@example.com"}),
         )
         .await;
         assert_eq!(resp.status(), axum::http::StatusCode::OK);
         let body = body_json(resp).await;
-        assert!(
-            body["current_org"].is_null(),
-            "limbo user should have null current_org, got {}",
-            body["current_org"]
-        );
+        assert!(body["current_org"].is_null());
         assert!(body["orgs"].as_array().unwrap().is_empty());
         assert!(body["token"].is_string());
 
-        // DB row should have current_org_id = NULL.
-        // Look up the user we just created (id is generated; look up by username).
-        let row: (String, Option<String>) = sqlx::query_as(
-            "SELECT id, current_org_id FROM users WHERE username = 'alice'",
+        // Look up the user by email (the row has username = NULL).
+        let row: (Option<String>, Option<String>) = sqlx::query_as(
+            "SELECT username, current_org_id FROM users WHERE email = 'alice@example.com'",
         )
         .fetch_one(&pool)
         .await
         .expect("user row");
+        assert!(row.0.is_none(), "username must be NULL for email-only signup");
         assert!(row.1.is_none(), "DB current_org_id must be NULL for limbo user");
     }
 
@@ -1906,12 +1900,12 @@ mod tests {
             &app,
             "/api/v1/auth/register",
             None,
-            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
+            json!({"password": "password123", "email": "alice@example.com"}),
         )
         .await;
         let body = body_json(resp).await;
         let token = body["token"].as_str().unwrap().to_string();
-        let user_id: String = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
+        let user_id: String = sqlx::query_scalar("SELECT id FROM users WHERE email = 'alice@example.com'")
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -2041,7 +2035,7 @@ mod tests {
             &app,
             "/api/v1/auth/register",
             None,
-            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
+            json!({"password": "password123", "email": "alice@example.com"}),
         )
         .await;
         let body = body_json(resp).await;
@@ -2062,7 +2056,7 @@ mod tests {
             &app,
             "/api/v1/auth/register",
             None,
-            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
+            json!({"password": "password123", "email": "alice@example.com"}),
         )
         .await;
         let body = body_json(resp).await;
@@ -2085,5 +2079,104 @@ mod tests {
         assert_eq!(resp.status(), axum::http::StatusCode::OK);
         let body = body_json(resp).await;
         assert_eq!(body["needs_onboarding"], false);
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn login_accepts_email_identifier(pool: PgPool) {
+        // Register an email-only user, then log in by email. Verifies the '@'
+        // branch in the login handler resolves to the right row.
+        let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
+        let app = build_router(storage);
+
+        let _ = post_json(
+            &app,
+            "/api/v1/auth/register",
+            None,
+            json!({"password": "password123", "email": "alice@example.com"}),
+        )
+        .await;
+
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/login",
+            None,
+            json!({"username": "alice@example.com", "password": "password123"}),
+        )
+        .await;
+        // User hasn't verified email — expect 403 email_not_verified (proves the
+        // email branch resolved the row, otherwise we'd get 401 invalid creds).
+        assert_eq!(resp.status(), axum::http::StatusCode::FORBIDDEN);
+        let body = body_json(resp).await;
+        assert_eq!(body["error"]["code"], "email_not_verified");
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn login_accepts_username_identifier_for_legacy_user(pool: PgPool) {
+        // Convert a freshly-registered email-only user into a "legacy-style
+        // verified user with a username" by SQL UPDATE, then log in by username.
+        // This avoids hardcoding an argon2 hash in the test.
+        let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
+        let app = build_router(storage);
+
+        let _ = post_json(
+            &app,
+            "/api/v1/auth/register",
+            None,
+            json!({"password": "password123", "email": "alice@example.com"}),
+        )
+        .await;
+
+        // Mutate the row: set username, mark email verified, disable the
+        // verification gate (mirrors a legacy user who predates Phase 4).
+        sqlx::query(
+            "UPDATE users SET username = 'alice', email_verified_at = NOW(), \
+             requires_email_verification = FALSE \
+             WHERE email = 'alice@example.com'",
+        )
+        .execute(&pool)
+        .await
+        .expect("update user");
+
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/login",
+            None,
+            json!({"username": "alice", "password": "password123"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body = body_json(resp).await;
+        assert_eq!(body["user"]["username"], "alice");
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn login_rejects_unknown_identifier_with_401(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/login",
+            None,
+            json!({"username": "ghost@example.com", "password": "password123"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn register_rejects_request_with_username_field(pool: PgPool) {
+        // The wire format change is breaking by design — stale clients still
+        // sending `username` get a 422 thanks to deny_unknown_fields.
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/register",
+            None,
+            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
     }
 }

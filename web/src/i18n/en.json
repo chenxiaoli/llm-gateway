@@ -76,7 +76,7 @@
     "signIn": "Sign In",
     "signUp": "Create Account",
     "register": "Register",
-    "username": "Username",
+    "usernameOrEmail": "Username or email",
     "password": "Password",
     "confirmPassword": "Confirm Password",
     "currentPassword": "Current Password",

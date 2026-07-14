@@ -110,12 +110,12 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">
             <div className="form-control">
-              <label className="label"><span className="label-text font-medium">{t('auth.username')}</span></label>
+              <label className="label"><span className="label-text font-medium">{t('auth.usernameOrEmail')}</span></label>
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder={t('auth.username')}
+                placeholder={t('auth.usernameOrEmail')}
                 required
                 className="input input-bordered w-full"
               />

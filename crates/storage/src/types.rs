@@ -130,7 +130,7 @@ pub const DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS: i64 = crate::money::UNITS_PER_USD;
 pub struct MemberWithDetails {
     pub user_id: String,
     pub org_id: String,
-    pub username: String,
+    pub username: Option<String>,
     pub email: Option<String>,
     /// Raw lowercase role string from `members.role` (`"owner" | "admin" | "member"`).
     pub role: String,
@@ -260,7 +260,7 @@ pub struct InvitationPreview {
     pub org_name: String,
     pub org_slug: String,
     pub role: String,
-    pub inviter_username: String,
+    pub inviter_username: Option<String>,
     pub recipient_email: Option<String>,
     pub expires_at: DateTime<Utc>,
 }
@@ -1000,7 +1000,7 @@ pub struct LogFilter {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: String,
-    pub username: String,
+    pub username: Option<String>,
     pub password: String,
     pub platform_role: Option<PlatformRole>,
     pub current_org_id: Option<String>,
@@ -1017,7 +1017,7 @@ pub struct User {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateUser {
-    pub username: String,
+    pub username: Option<String>,
     pub password: String,
 }
 

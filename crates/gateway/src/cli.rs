@@ -18,7 +18,7 @@ pub enum Commands {
     /// Grant or revoke platform_admin for a user. Operator escape hatch for
     /// bootstrap when the first-user auto-promotion is disabled.
     GrantPlatformAdmin {
-        /// Username to grant/revoke. Must already exist in the users table.
+        /// Username or email of the target user. Must already exist in the users table.
         #[arg(long)]
         username: String,
         /// Revoke instead of grant. Sets platform_role = NULL.

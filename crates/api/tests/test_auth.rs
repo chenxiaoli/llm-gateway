@@ -29,7 +29,7 @@ async fn test_register_first_user_becomes_admin(pool: PgPool) {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "admin", "password": "password123", "email": "admin@example.com"}).to_string(),
+                    json!({"password": "password123", "email": "admin@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -65,7 +65,7 @@ async fn test_register_second_user_becomes_regular(pool: PgPool) {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "admin", "password": "password123", "email": "admin@example.com"}).to_string(),
+                    json!({"password": "password123", "email": "admin@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -80,7 +80,7 @@ async fn test_register_second_user_becomes_regular(pool: PgPool) {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "regular", "password": "password123", "email": "regular@example.com"}).to_string(),
+                    json!({"password": "password123", "email": "regular@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -111,7 +111,7 @@ async fn test_login_with_valid_credentials(pool: PgPool) {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "password123", "email": "testuser@example.com"}).to_string(),
+                    json!({"password": "password123", "email": "testuser@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -119,9 +119,9 @@ async fn test_login_with_valid_credentials(pool: PgPool) {
         .unwrap();
 
     // Phase 4: bypass the verification gate (this test isn't about that).
-    common::mark_user_verified(&pool, "testuser").await;
+    common::mark_user_verified(&pool, "testuser@example.com").await;
 
-    // Login
+    // Login with email
     let resp = app
         .oneshot(
             Request::builder()
@@ -129,7 +129,7 @@ async fn test_login_with_valid_credentials(pool: PgPool) {
                 .uri("/api/v1/auth/login")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "password123", "email": "testuser@example.com"}).to_string(),
+                    json!({"username": "testuser@example.com", "password": "password123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -142,7 +142,6 @@ async fn test_login_with_valid_credentials(pool: PgPool) {
     )
     .unwrap();
     assert!(body["token"].is_string());
-    assert_eq!(body["user"]["username"], "testuser");
 }
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
@@ -157,7 +156,7 @@ async fn test_login_with_wrong_password_returns_401(pool: PgPool) {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "password123", "email": "testuser@example.com"}).to_string(),
+                    json!({"password": "password123", "email": "testuser@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -172,7 +171,7 @@ async fn test_login_with_wrong_password_returns_401(pool: PgPool) {
                 .uri("/api/v1/auth/login")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "wrongpassword"}).to_string(),
+                    json!({"username": "testuser@example.com", "password": "wrongpassword"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -193,7 +192,7 @@ async fn test_login_with_nonexistent_user_returns_401(pool: PgPool) {
                 .uri("/api/v1/auth/login")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "nonexistent", "password": "password123"}).to_string(),
+                    json!({"username": "ghost@example.com", "password": "password123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -204,7 +203,7 @@ async fn test_login_with_nonexistent_user_returns_401(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
-async fn test_register_duplicate_username_returns_400(pool: PgPool) {
+async fn test_register_duplicate_email_returns_409(pool: PgPool) {
     let app = build_app(common::make_state(pool));
 
     // Register first user
@@ -215,14 +214,14 @@ async fn test_register_duplicate_username_returns_400(pool: PgPool) {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "password123", "email": "testuser@example.com"}).to_string(),
+                    json!({"password": "password123", "email": "testuser@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    // Try to register with same username
+    // Try to register with the same email
     let resp = app
         .oneshot(
             Request::builder()
@@ -230,14 +229,15 @@ async fn test_register_duplicate_username_returns_400(pool: PgPool) {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "differentpass", "email": "testuser2@example.com"}).to_string(),
+                    json!({"password": "differentpass", "email": "testuser@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    // EmailInUse → 409 Conflict.
+    assert_eq!(resp.status(), StatusCode::CONFLICT);
 }
 
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
@@ -276,7 +276,7 @@ async fn test_auth_me_returns_user_info_when_authenticated(pool: PgPool) {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "password123", "email": "testuser@example.com"}).to_string(),
+                    json!({"password": "password123", "email": "testuser@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -306,7 +306,9 @@ async fn test_auth_me_returns_user_info_when_authenticated(pool: PgPool) {
         &to_bytes(me_resp.into_body(), usize::MAX).await.unwrap(),
     )
     .unwrap();
-    assert_eq!(me_body["username"], "testuser");
+    // Email-only signup: username is null on the wire.
+    assert_eq!(me_body["username"], serde_json::Value::Null);
+    assert_eq!(me_body["email"], "testuser@example.com");
     assert!(me_body["id"].is_string());
     // Phase 3: limbo user has no current_org and no memberships.
     assert!(me_body["current_org"].is_null());
@@ -387,7 +389,7 @@ async fn test_refresh_returns_new_tokens(pool: PgPool) {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "password123", "email": "testuser@example.com"}).to_string(),
+                    json!({"password": "password123", "email": "testuser@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -496,7 +498,7 @@ async fn test_change_password_success(pool: PgPool) {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "password123", "email": "testuser@example.com"}).to_string(),
+                    json!({"password": "password123", "email": "testuser@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -509,7 +511,7 @@ async fn test_change_password_success(pool: PgPool) {
     let token = body["token"].as_str().unwrap().to_string();
     // Phase 4: bypass the verification gate so the post-change-password
     // login attempt succeeds.
-    common::mark_user_verified(&pool, "testuser").await;
+    common::mark_user_verified(&pool, "testuser@example.com").await;
 
     // Change password
     let change_resp = app
@@ -538,7 +540,7 @@ async fn test_change_password_success(pool: PgPool) {
                 .uri("/api/v1/auth/login")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "newpass456"}).to_string(),
+                    json!({"username": "testuser@example.com", "password": "newpass456"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -554,7 +556,7 @@ async fn test_change_password_success(pool: PgPool) {
                 .uri("/api/v1/auth/login")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "password123", "email": "testuser@example.com"}).to_string(),
+                    json!({"username": "testuser@example.com", "password": "password123"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -576,7 +578,7 @@ async fn test_change_password_wrong_current_returns_400(pool: PgPool) {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "password123", "email": "testuser@example.com"}).to_string(),
+                    json!({"password": "password123", "email": "testuser@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -638,28 +640,7 @@ async fn test_register_short_password_returns_400(pool: PgPool) {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "short"}).to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-}
-
-#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
-async fn test_register_invalid_username_returns_400(pool: PgPool) {
-    let app = build_app(common::make_state(pool));
-
-    let resp = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/v1/auth/register")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({"username": "invalid user!", "password": "password123"}).to_string(),
+                    json!({"password": "short", "email": "testuser@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -683,7 +664,7 @@ async fn test_refresh_with_revoked_token_returns_401(pool: PgPool) {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "testuser", "password": "password123", "email": "testuser@example.com"}).to_string(),
+                    json!({"password": "password123", "email": "testuser@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )
@@ -697,7 +678,7 @@ async fn test_refresh_with_revoked_token_returns_401(pool: PgPool) {
     let refresh_token = body["refresh_token"].as_str().unwrap().to_string();
 
     // Revoke the refresh token by clearing it in the DB directly
-    let user = db.get_user_by_username("testuser").await.unwrap().unwrap();
+    let user = db.get_user_by_email("testuser@example.com").await.unwrap().unwrap();
     let mut revoked_user = user.clone();
     revoked_user.refresh_token = None;
     revoked_user.updated_at = chrono::Utc::now();

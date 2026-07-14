@@ -18,11 +18,10 @@ vi.mock('react-router-dom', async () => {
 vi.mock('sonner', () => ({ toast: { error: mockToastError, success: vi.fn() } }));
 
 describe('Register page', () => {
-  it('renders registration form with username, email, password, and confirm password fields', () => {
+  it('renders registration form with email, password, and confirm password fields', () => {
     renderWithProviders(<Register />, { route: '/console/register' });
 
     expect(screen.getByText('Create Account')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Username')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Email')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Confirm Password')).toBeInTheDocument();
@@ -32,7 +31,6 @@ describe('Register page', () => {
   it('shows confirm password validation error when passwords do not match', async () => {
     renderWithProviders(<Register />, { route: '/console/register' });
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'testuser');
     await userEvent.type(screen.getByPlaceholderText('Email'), 'test@example.com');
     await userEvent.type(screen.getByPlaceholderText('Password'), 'password123');
     await userEvent.type(screen.getByPlaceholderText('Confirm Password'), 'different');
@@ -89,7 +87,6 @@ describe('Register page', () => {
 
     renderWithProviders(<Register />, { route: '/console/register' });
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'taken');
     await userEvent.type(screen.getByPlaceholderText('Email'), 'taken@example.com');
     await userEvent.type(screen.getByPlaceholderText('Password'), 'password123');
     await userEvent.type(screen.getByPlaceholderText('Confirm Password'), 'password123');
@@ -108,7 +105,7 @@ describe('Register page', () => {
         return HttpResponse.json({
           token: 'test-jwt-token',
           refresh_token: 'test-refresh-jwt-token',
-          user: { id: 'user-1', username: 'newuser', platform_role: null },
+          user: { id: 'user-1', username: null, platform_role: null },
           current_org: null,
           orgs: [],
         });
@@ -117,7 +114,6 @@ describe('Register page', () => {
 
     renderWithProviders(<Register />, { route: '/register' });
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'newuser');
     await userEvent.type(screen.getByPlaceholderText('Email'), 'new@example.com');
     await userEvent.type(screen.getByPlaceholderText('Password'), 'password123');
     await userEvent.type(screen.getByPlaceholderText('Confirm Password'), 'password123');
@@ -127,7 +123,6 @@ describe('Register page', () => {
       expect(capturedBody).toBeDefined();
     });
     expect(capturedBody).toMatchObject({
-      username: 'newuser',
       email: 'new@example.com',
       password: 'password123',
     });
@@ -150,7 +145,6 @@ describe('Register page', () => {
 
     renderWithProviders(<Register />, { route: '/register' });
 
-    await userEvent.type(screen.getByPlaceholderText('Username'), 'dupe');
     await userEvent.type(screen.getByPlaceholderText('Email'), 'dupe@example.com');
     await userEvent.type(screen.getByPlaceholderText('Password'), 'password123');
     await userEvent.type(screen.getByPlaceholderText('Confirm Password'), 'password123');

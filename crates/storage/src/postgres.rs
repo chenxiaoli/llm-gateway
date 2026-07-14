@@ -486,7 +486,7 @@ impl From<PgChannelRow> for Channel {
 #[derive(FromRow)]
 struct PgUserRow {
     id: String,
-    username: String,
+    username: Option<String>,
     password: String,
     platform_role: Option<String>,
     current_org_id: Option<String>,
@@ -4229,7 +4229,7 @@ mod org_tests {
             .expect("membership row present");
         assert_eq!(found.role, MemberRole::Owner.as_str());
         // The joined shape must also surface the user row.
-        assert_eq!(found.username, "bootstrap_test");
+        assert_eq!(found.username.as_deref(), Some("bootstrap_test"));
         // Per-membership invariant surfaced through the join: every member
         // has an accounts row (created by upsert_member), so balance is 0
         // (not NULL → 0 via COALESCE, but a real 0).
@@ -4713,7 +4713,7 @@ mod invitation_tests {
         let now = chrono::Utc::now();
         let user = crate::types::User {
             id: username.to_string(),
-            username: username.to_string(),
+            username: Some(username.to_string()),
             password: "x".to_string(),
             platform_role: None,
             current_org_id: None,
@@ -5207,7 +5207,7 @@ mod phase4_tests {
         let now = chrono::Utc::now();
         crate::types::User {
             id: id.into(),
-            username: uname.into(),
+            username: Some(uname.to_string()),
             password: "x".into(),
             platform_role: None,
             current_org_id: None,

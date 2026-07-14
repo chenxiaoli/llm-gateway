@@ -19,6 +19,7 @@ import { useUsage, useUsageSummary } from '../hooks/useUsage';
 import { useAuthStore } from '../stores/authStore';
 import { useCurrencyStore, formatCurrency } from '../stores/currency';
 import { isAdminOrAbove } from '../lib/auth';
+import { displayName } from '../lib/displayName';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import type { Member, MemberRole } from '../types';
 import { Button } from '../components/ui/Button';
@@ -656,7 +657,7 @@ export default function Members() {
                         className="font-medium text-left cursor-pointer hover:text-accent transition-colors"
                         onClick={() => setDrawerMember(m)}
                       >
-                        {m.username}
+                        {displayName(m)}
                         {isSelf && (
                           <span className="ml-2 text-xs text-base-content/40">{t('members.selfLabel')}</span>
                         )}
@@ -744,7 +745,7 @@ export default function Members() {
                           </ConfirmDialog>
                         ) : canManage ? (
                           <ConfirmDialog
-                            title={t('members.confirmRemove', { name: m.username })}
+                            title={t('members.confirmRemove', { name: displayName(m) })}
                             okText={t('common.remove')}
                             variant="danger"
                             onConfirm={() => handleRemove(m)}

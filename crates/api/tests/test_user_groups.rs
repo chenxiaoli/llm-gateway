@@ -27,7 +27,7 @@ async fn register_admin(app: &axum::Router) -> Value {
                 .uri("/api/v1/auth/register")
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    json!({"username": "admin", "password": "password123", "email": "admin@example.com"}).to_string(),
+                    json!({"password": "password123", "email": "admin@example.com"}).to_string(),
                 ))
                 .unwrap(),
         )

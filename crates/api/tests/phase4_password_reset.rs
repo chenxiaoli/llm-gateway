@@ -80,7 +80,6 @@ async fn password_reset_request_returns_204_for_unverified_email(pool: PgPool) {
         &app,
         "/api/v1/auth/register",
         json!({
-            "username": "unverified",
             "password": "password123",
             "email": "unverified@example.com",
         }),
@@ -99,7 +98,7 @@ async fn password_reset_request_returns_204_for_unverified_email(pool: PgPool) {
     let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM password_resets pr \
          JOIN users u ON u.id = pr.user_id \
-         WHERE u.username = 'unverified'",
+         WHERE u.email = 'unverified@example.com'",
     )
     .fetch_one(&pool)
     .await
@@ -111,17 +110,18 @@ async fn password_reset_request_returns_204_for_unverified_email(pool: PgPool) {
 }
 
 /// Helper: register + verify + request reset, returning the peeked token.
-async fn mint_reset_token(app: &axum::Router, pool: &PgPool, username: &str) -> String {
-    let email = format!("{username}@example.com");
+/// Lookups by email (row has username = NULL after email-only signup).
+async fn mint_reset_token(app: &axum::Router, pool: &PgPool, handle: &str) -> String {
+    let email = format!("{handle}@example.com");
     let resp = post(
         app,
         "/api/v1/auth/register",
-        json!({"username": username, "password": "password123", "email": email}),
+        json!({"password": "password123", "email": email}),
     )
     .await;
-    assert_eq!(resp.status(), StatusCode::OK, "register failed for {username}");
+    assert_eq!(resp.status(), StatusCode::OK, "register failed for {handle}");
 
-    common::mark_user_verified(pool, username).await;
+    common::mark_user_verified(pool, &email).await;
 
     let resp = post(
         app,
@@ -129,15 +129,15 @@ async fn mint_reset_token(app: &axum::Router, pool: &PgPool, username: &str) -> 
         json!({"email": email}),
     )
     .await;
-    assert_eq!(resp.status(), StatusCode::NO_CONTENT, "request failed for {username}");
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT, "request failed for {handle}");
 
     let token: String = sqlx::query_scalar(
         "SELECT pr.token FROM password_resets pr \
          JOIN users u ON u.id = pr.user_id \
-         WHERE u.username = $1 \
+         WHERE u.email = $1 \
          ORDER BY pr.created_at DESC LIMIT 1",
     )
-    .bind(username)
+    .bind(&email)
     .fetch_one(pool)
     .await
     .expect("reset row");
@@ -177,7 +177,7 @@ async fn password_reset_full_round_trip(pool: PgPool) {
     let resp = post(
         &app,
         "/api/v1/auth/login",
-        json!({"username": "roundtrip", "password": "password123"}),
+        json!({"username": "roundtrip@example.com", "password": "password123"}),
     )
     .await;
     assert_eq!(
@@ -190,7 +190,7 @@ async fn password_reset_full_round_trip(pool: PgPool) {
     let resp = post(
         &app,
         "/api/v1/auth/login",
-        json!({"username": "roundtrip", "password": "new-password-456"}),
+        json!({"username": "roundtrip@example.com", "password": "new-password-456"}),
     )
     .await;
     assert_eq!(resp.status(), StatusCode::OK, "new password should work");
@@ -265,19 +265,18 @@ async fn refresh_after_password_reset_returns_401(pool: PgPool) {
         &app,
         "/api/v1/auth/register",
         json!({
-            "username": "epoch",
             "password": "password123",
             "email": "epoch@example.com",
         }),
     )
     .await;
     assert_eq!(resp.status(), StatusCode::OK);
-    common::mark_user_verified(&pool, "epoch").await;
+    common::mark_user_verified(&pool, "epoch@example.com").await;
 
     let resp = post(
         &app,
         "/api/v1/auth/login",
-        json!({"username": "epoch", "password": "password123"}),
+        json!({"username": "epoch@example.com", "password": "password123"}),
     )
     .await;
     assert_eq!(resp.status(), StatusCode::OK);
@@ -300,7 +299,7 @@ async fn refresh_after_password_reset_returns_401(pool: PgPool) {
     let token: String = sqlx::query_scalar(
         "SELECT pr.token FROM password_resets pr \
          JOIN users u ON u.id = pr.user_id \
-         WHERE u.username = 'epoch' \
+         WHERE u.email = 'epoch@example.com' \
          ORDER BY pr.created_at DESC LIMIT 1",
     )
     .fetch_one(&pool)
@@ -344,19 +343,18 @@ async fn change_password_invalidates_existing_refresh_tokens(pool: PgPool) {
         &app,
         "/api/v1/auth/register",
         json!({
-            "username": "chgpass",
             "password": "password123",
             "email": "chgpass@example.com",
         }),
     )
     .await;
     assert_eq!(resp.status(), StatusCode::OK);
-    common::mark_user_verified(&pool, "chgpass").await;
+    common::mark_user_verified(&pool, "chgpass@example.com").await;
 
     let resp = post(
         &app,
         "/api/v1/auth/login",
-        json!({"username": "chgpass", "password": "password123"}),
+        json!({"username": "chgpass@example.com", "password": "password123"}),
     )
     .await;
     assert_eq!(resp.status(), StatusCode::OK);

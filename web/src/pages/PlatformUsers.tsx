@@ -8,6 +8,7 @@ import {
   setPlatformRole,
   type PlatformUserBrief,
 } from '../api/admin';
+import { displayName } from '../lib/displayName';
 
 export default function PlatformUsers() {
   const { t } = useTranslation();
@@ -56,7 +57,7 @@ export default function PlatformUsers() {
             <tbody>
               {admins.map((u) => (
                 <tr key={u.id} className="border-t border-base-300/40">
-                  <td className="px-4 py-3 font-medium">{u.username}</td>
+                  <td className="px-4 py-3 font-medium">{displayName(u)}</td>
                   <td className="px-4 py-3 text-base-content/60">{u.email ?? '—'}</td>
                   <td className="px-4 py-3 text-right">
                     {isLastAdmin ? (
@@ -65,7 +66,7 @@ export default function PlatformUsers() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (window.confirm(t('platformUsers.confirmRevoke', { username: u.username }))) {
+                          if (window.confirm(t('platformUsers.confirmRevoke', { username: displayName(u) }))) {
                             grantMutation.mutate({ userId: u.id, role: null });
                           }
                         }}
@@ -107,7 +108,7 @@ export default function PlatformUsers() {
                 {candidates.map((u: PlatformUserBrief) => (
                   <li key={u.id} className="flex items-center justify-between px-4 py-2.5 border-t border-base-300/40 first:border-t-0">
                     <div>
-                      <div className="font-medium text-sm">{u.username}</div>
+                      <div className="font-medium text-sm">{displayName(u)}</div>
                       <div className="text-xs text-base-content/50">{u.email ?? '—'}</div>
                     </div>
                     <button
