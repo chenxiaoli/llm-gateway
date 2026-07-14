@@ -578,13 +578,59 @@ pub struct DailyUsageRecord {
     pub request_count: i64,
 }
 
-fn deserialize_datetime_opt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<DateTime<Utc>>, D::Error> {
+// Accepts RFC3339 (passthrough) or `YYYY-MM-DD` (treated as that day's UTC
+// midnight). The HTML `<input type="date">` picker produces `YYYY-MM-DD`,
+// which `DateTime::parse_from_rfc3339` rejects with "premature end of input".
+fn parse_since(s: &str) -> Result<DateTime<Utc>, String> {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        return Ok(dt.with_timezone(&Utc));
+    }
+    match chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+        Ok(d) => Ok(d.and_hms_opt(0, 0, 0).unwrap().and_utc()),
+        Err(_) => Err(format!(
+            "invalid datetime '{}': expected RFC3339 or YYYY-MM-DD",
+            s
+        )),
+    }
+}
+
+// Like `parse_since` but a date-only input becomes end-of-day (23:59:59.999999
+// UTC) so the SQL `created_at <= $N` comparison includes logs from that date.
+// Without this adjustment, `until=2026-07-13` would parse as midnight and
+// exclude every log on 2026-07-13 after 00:00:00.
+fn parse_until(s: &str) -> Result<DateTime<Utc>, String> {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        return Ok(dt.with_timezone(&Utc));
+    }
+    match chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+        Ok(d) => Ok(d
+            .and_hms_micro_opt(23, 59, 59, 999_999)
+            .unwrap()
+            .and_utc()),
+        Err(_) => Err(format!(
+            "invalid datetime '{}': expected RFC3339 or YYYY-MM-DD",
+            s
+        )),
+    }
+}
+
+fn deserialize_since_opt<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<DateTime<Utc>>, D::Error> {
     let s: Option<String> = Option::deserialize(d)?;
     match s {
         None => Ok(None),
-        Some(v) => DateTime::parse_from_rfc3339(&v)
-            .map(|dt| Some(dt.with_timezone(&Utc)))
-            .map_err(serde::de::Error::custom),
+        Some(v) => parse_since(&v).map(Some).map_err(serde::de::Error::custom),
+    }
+}
+
+fn deserialize_until_opt<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<DateTime<Utc>>, D::Error> {
+    let s: Option<String> = Option::deserialize(d)?;
+    match s {
+        None => Ok(None),
+        Some(v) => parse_until(&v).map(Some).map_err(serde::de::Error::custom),
     }
 }
 
@@ -593,9 +639,9 @@ pub struct UsageFilter {
     pub key_id: Option<String>,
     pub user_id: Option<String>,
     pub model_name: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_datetime_opt")]
+    #[serde(default, deserialize_with = "deserialize_since_opt")]
     pub since: Option<DateTime<Utc>>,
-    #[serde(default, deserialize_with = "deserialize_datetime_opt")]
+    #[serde(default, deserialize_with = "deserialize_until_opt")]
     pub until: Option<DateTime<Utc>>,
     #[serde(default)]
     pub tz: Option<String>,
@@ -693,9 +739,9 @@ pub struct LogFilter {
     #[serde(skip)]
     pub user_id: Option<String>,
     pub model_name: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_datetime_opt")]
+    #[serde(default, deserialize_with = "deserialize_since_opt")]
     pub since: Option<DateTime<Utc>>,
-    #[serde(default, deserialize_with = "deserialize_datetime_opt")]
+    #[serde(default, deserialize_with = "deserialize_until_opt")]
     pub until: Option<DateTime<Utc>>,
     #[serde(default, deserialize_with = "deserialize_i64_opt")]
     pub offset: Option<i64>,

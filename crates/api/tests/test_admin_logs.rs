@@ -126,3 +126,60 @@ async fn test_admin_logs_with_only_until_returns_200(pool: PgPool) {
     .unwrap();
     assert_eq!(body["total"], 1);
 }
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_admin_logs_with_date_only_until_returns_200(pool: PgPool) {
+    let app = build_app(common::make_state(pool.clone()));
+    let admin = common::make_admin_token();
+
+    seed_audit_log(&pool, "log-date-only", "2026-07-13T10:00:00Z".parse::<DateTime<Utc>>().unwrap()).await;
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/admin/logs?page=1&page_size=20&until=2026-07-13")
+                .header("authorization", bearer_token(&admin.token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let body_bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body_str = String::from_utf8_lossy(&body_bytes);
+    assert_eq!(status, StatusCode::OK, "body was: {body_str}");
+    let body: Value = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(body["total"], 1, "until=2026-07-13 should include logs from that day");
+    assert_eq!(body["items"][0]["id"], "log-date-only");
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_admin_logs_with_date_only_since_excludes_logs_before(pool: PgPool) {
+    let app = build_app(common::make_state(pool.clone()));
+    let admin = common::make_admin_token();
+
+    seed_audit_log(&pool, "log-before", "2026-07-12T23:59:00Z".parse::<DateTime<Utc>>().unwrap()).await;
+    seed_audit_log(&pool, "log-on-day", "2026-07-13T08:00:00Z".parse::<DateTime<Utc>>().unwrap()).await;
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/admin/logs?page=1&page_size=20&since=2026-07-13")
+                .header("authorization", bearer_token(&admin.token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let body_bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body_str = String::from_utf8_lossy(&body_bytes);
+    assert_eq!(status, StatusCode::OK, "body was: {body_str}");
+    let body: Value = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(body["total"], 1, "since=2026-07-13 should exclude logs from before that day");
+    assert_eq!(body["items"][0]["id"], "log-on-day");
+}

@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.6] - 2026-07-14
+
+### Fixed
+- `/api/v1/admin/logs` time filter (`since`/`until`) now accepts date-only `YYYY-MM-DD` input, not just RFC3339. The HTML `<input type="date">` picker (used by the Logs page) produces `YYYY-MM-DD`; the deserializer previously called `DateTime::parse_from_rfc3339` which rejected this with "Failed to deserialize query string: premature end of input" — a bug that predated v1.8.5 but was masked by the more dramatic postgres type-binding error fixed in v1.8.5. The deserializer is now split into `deserialize_since_opt` (date-only → UTC midnight) and `deserialize_until_opt` (date-only → end-of-day UTC) so the existing SQL `created_at <= $N` comparison includes all logs from the `until` date. RFC3339 inputs are still passed through unchanged. Same fix applies to `UsageFilter`.
+
 ## [1.8.5] - 2026-07-13
 
 ### Fixed
