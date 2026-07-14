@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.5] - 2026-07-13
+
+### Fixed
+- `/api/v1/admin/logs` time filter (`since`/`until`) no longer returns 400 with `operator does not exist: timestamp with time zone >= text`. `query_logs_paginated` was binding `since`/`until` as RFC3339 strings via a homogeneous `Vec<String>`, so sqlx sent them as postgres `text` and the `audit_logs.created_at >= $N` comparison failed. The filter values are now bound as typed `DateTime<Utc>` (matching the `query_usage_paginated` pattern), so postgres receives `timestamptz`.
+
 ## [1.8.4] - 2026-07-04
 
 ### Changed
