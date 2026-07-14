@@ -60,6 +60,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `users.{drawer,rechargeModal,adjustModal,usageDrawer}.*` keys are kept —
   Members.tsx still consumes them.
 
+### Fixed
+
+- `/api/v1/{slug}/admin/logs` time filter (`since`/`until`) no longer returns 400 with `operator does not exist: timestamp with time zone >= text`. `query_logs_paginated` was binding `since`/`until` as RFC3339 strings via a homogeneous `Vec<String>`, so sqlx sent them as postgres `text` and the `audit_logs.created_at >= $N` comparison failed. Filter values are now bound as typed `DateTime<Utc>` (matching the `query_usage_paginated` pattern), so postgres receives `timestamptz`. Same fix applied to the v1.x maintenance line as v1.8.5.
+
 ### Fixed — Users → Members refactor (v2.1.0)
 
 - `storage::add_balance` INSERT arity bug: 9 columns but only 8 `$N`

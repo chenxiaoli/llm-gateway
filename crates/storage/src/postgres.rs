@@ -1886,37 +1886,54 @@ impl crate::Storage for PostgresStorage {
     async fn query_logs_paginated(&self, org_id: &str, filter: &LogFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<AuditLogSummary>, Box<dyn std::error::Error + Send + Sync>> {
         // org_id is always $1; subsequent filter params take $2.. and are
         // rebound in the same order for both count and data queries below.
+        // Bind since/until as typed DateTime<Utc> (not to_rfc3339() strings)
+        // so postgres sees timestamptz, not text — otherwise
+        // `created_at >= $N` fails with "operator does not exist: timestamp
+        // with time zone >= text".
         let mut conditions = vec!["a.org_id = $1".to_string()];
-        let mut bind_vals: Vec<String> = Vec::new();
+        let mut param_idx = 2;
+        let mut bind_request_id: Option<String> = None;
+        let mut bind_user_id: Option<String> = None;
+        let mut bind_key_id: Option<String> = None;
+        let mut bind_channel_id: Option<String> = None;
+        let mut bind_model_name: Option<String> = None;
+        let mut bind_since: Option<chrono::DateTime<chrono::Utc>> = None;
+        let mut bind_until: Option<chrono::DateTime<chrono::Utc>> = None;
 
         if let Some(ref request_id) = filter.request_id {
-            conditions.push(format!("a.request_id = ${}", bind_vals.len() + 2));
-            bind_vals.push(request_id.clone());
+            conditions.push(format!("a.request_id = ${}", param_idx));
+            bind_request_id = Some(request_id.clone());
+            param_idx += 1;
         }
-
         if let Some(ref user_id) = filter.user_id {
-            conditions.push(format!("a.user_id = ${}", bind_vals.len() + 2));
-            bind_vals.push(user_id.clone());
+            conditions.push(format!("a.user_id = ${}", param_idx));
+            bind_user_id = Some(user_id.clone());
+            param_idx += 1;
         }
         if let Some(ref key_id) = filter.key_id {
-            conditions.push(format!("a.key_id = ${}", bind_vals.len() + 2));
-            bind_vals.push(key_id.clone());
+            conditions.push(format!("a.key_id = ${}", param_idx));
+            bind_key_id = Some(key_id.clone());
+            param_idx += 1;
         }
         if let Some(ref channel_id) = filter.channel_id {
-            conditions.push(format!("a.channel_id = ${}", bind_vals.len() + 2));
-            bind_vals.push(channel_id.clone());
+            conditions.push(format!("a.channel_id = ${}", param_idx));
+            bind_channel_id = Some(channel_id.clone());
+            param_idx += 1;
         }
         if let Some(ref model_name) = filter.model_name {
-            conditions.push(format!("a.model_name = ${}", bind_vals.len() + 2));
-            bind_vals.push(model_name.clone());
+            conditions.push(format!("a.model_name = ${}", param_idx));
+            bind_model_name = Some(model_name.clone());
+            param_idx += 1;
         }
         if let Some(since) = filter.since {
-            conditions.push(format!("a.created_at >= ${}", bind_vals.len() + 2));
-            bind_vals.push(since.to_rfc3339());
+            conditions.push(format!("a.created_at >= ${}", param_idx));
+            bind_since = Some(since);
+            param_idx += 1;
         }
         if let Some(until) = filter.until {
-            conditions.push(format!("a.created_at <= ${}", bind_vals.len() + 2));
-            bind_vals.push(until.to_rfc3339());
+            conditions.push(format!("a.created_at <= ${}", param_idx));
+            bind_until = Some(until);
+            param_idx += 1;
         }
 
         let where_clause = format!(" WHERE {}", conditions.join(" AND "));
@@ -1924,9 +1941,13 @@ impl crate::Storage for PostgresStorage {
         let count_sql = format!("SELECT COUNT(*) FROM audit_logs a{}", where_clause);
         let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
         count_query = count_query.bind(org_id);
-        for val in &bind_vals {
-            count_query = count_query.bind(val);
-        }
+        if let Some(ref v) = bind_request_id { count_query = count_query.bind(v); }
+        if let Some(ref v) = bind_user_id { count_query = count_query.bind(v); }
+        if let Some(ref v) = bind_key_id { count_query = count_query.bind(v); }
+        if let Some(ref v) = bind_channel_id { count_query = count_query.bind(v); }
+        if let Some(ref v) = bind_model_name { count_query = count_query.bind(v); }
+        if let Some(ref v) = bind_since { count_query = count_query.bind(*v); }
+        if let Some(ref v) = bind_until { count_query = count_query.bind(*v); }
         let total = count_query.fetch_one(&self.pool).await?.0;
 
         let offset = (page - 1) * page_size;
@@ -1936,14 +1957,18 @@ impl crate::Storage for PostgresStorage {
              a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id, a.routes
              FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id{} ORDER BY a.created_at DESC LIMIT ${} OFFSET ${}",
             where_clause,
-            bind_vals.len() + 2,
-            bind_vals.len() + 3
+            param_idx,
+            param_idx + 1
         );
         let mut data_query = sqlx::query_as::<_, PgAuditSummaryRow>(&data_sql);
         data_query = data_query.bind(org_id);
-        for val in bind_vals {
-            data_query = data_query.bind(val);
-        }
+        if let Some(v) = bind_request_id { data_query = data_query.bind(v); }
+        if let Some(v) = bind_user_id { data_query = data_query.bind(v); }
+        if let Some(v) = bind_key_id { data_query = data_query.bind(v); }
+        if let Some(v) = bind_channel_id { data_query = data_query.bind(v); }
+        if let Some(v) = bind_model_name { data_query = data_query.bind(v); }
+        if let Some(v) = bind_since { data_query = data_query.bind(v); }
+        if let Some(v) = bind_until { data_query = data_query.bind(v); }
         data_query = data_query.bind(page_size).bind(offset);
         let rows = data_query.fetch_all(&self.pool).await?;
 
