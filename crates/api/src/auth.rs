@@ -204,6 +204,16 @@ pub struct SetMyEmailRequest {
     pub email: String,
 }
 
+/// Body for `POST /api/v1/auth/me/nickname`. Lets an already-authenticated
+/// user set or clear their own nickname. An empty/whitespace string after
+/// trim is the explicit "clear" signal — the handler writes NULL. Unknown
+/// fields are rejected so a typo'd key (e.g. `name`) doesn't silently no-op.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SetMyNicknameRequest {
+    pub nickname: String,
+}
+
 #[derive(Deserialize)]
 pub struct CreateOrgRequest {
     pub slug: String,
@@ -966,6 +976,64 @@ pub async fn set_my_email(
     }))
 }
 
+/// POST /api/v1/auth/me/nickname — authenticated.
+///
+/// Sets or clears the user's nickname. An empty/whitespace string after
+/// trim clears it (writes NULL). Validation: 1-32 Unicode scalar values
+/// after trim, no control / zero-width characters. Returns the refreshed
+/// `MeResponse` (same shape as `me()` and `set_my_email()`).
+pub async fn set_my_nickname(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(input): Json<SetMyNicknameRequest>,
+) -> Result<Json<MeResponse>, ApiError> {
+    let nickname = validate_nickname(&input.nickname).map_err(|_| ApiError::InvalidNickname)?;
+
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let user = state
+        .storage
+        .get_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::Unauthorized)?;
+
+    let updated = state
+        .storage
+        .set_user_nickname(&user.id, nickname.as_deref())
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Build the fresh MeResponse — mirror `set_my_email`'s pattern so the
+    // response shape is identical across the three "self-mutation" endpoints
+    // (me/email, me/nickname). Hardcoded `false` for impersonating would hide
+    // the platform-admin-mode banner.
+    let (current_org, orgs) = current_membership(&state, &updated).await?;
+    let impersonating = match &current_org {
+        Some(org) => state
+            .storage
+            .get_member(&updated.id, &org.id)
+            .await
+            .map_err(|e| ApiError::Internal(format!("member lookup failed: {e}")))?
+            .map(|m| m.created_by.as_deref() == Some("system"))
+            .unwrap_or(false),
+        None => false,
+    };
+
+    Ok(Json(MeResponse {
+        id: updated.id,
+        username: updated.username,
+        platform_role: updated.platform_role.as_ref().map(|p| p.as_str().to_string()),
+        current_org,
+        orgs,
+        allow_registration: get_allow_registration(&state).await,
+        impersonating,
+        email: updated.email.clone(),
+        nickname: updated.nickname.clone(),
+        email_verified_at: updated.email_verified_at.map(|t| t.to_rfc3339()),
+        requires_email_verification: updated.requires_email_verification,
+    }))
+}
+
 #[derive(Debug, Serialize)]
 pub struct OnboardingStatus {
     pub needs_onboarding: bool,
@@ -1307,6 +1375,40 @@ pub fn validate_email(s: &str) -> Result<(), String> {
         return Err("email domain contains invalid characters".into());
     }
     Ok(())
+}
+
+/// Validate a nickname submitted via `POST /auth/me/nickname`. Returns the
+/// trimmed nickname to persist, or `None` when the input clears it (empty
+/// after trim — the handler writes NULL). Returns `Err(())` on validation
+/// failure: longer than 32 Unicode scalar values after trim, or containing
+/// control / zero-width characters. The caller maps `Err(())` to
+/// `ApiError::InvalidNickname`.
+///
+/// `chars().count()` counts Unicode scalar values (not grapheme clusters) —
+/// good enough for our purposes and matches what most platforms do. Emoji
+/// (even multi-codepoint sequences like a flag) and CJK characters are
+/// allowed as-is.
+fn validate_nickname(input: &str) -> Result<Option<String>, ()> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if trimmed.chars().count() > 32 {
+        return Err(());
+    }
+    for c in trimmed.chars() {
+        if c.is_control() {
+            return Err(());
+        }
+        // U+200B (ZWSP), U+200C (ZWNJ), U+200D (ZWJ), U+FEFF (BOM/ZWNBSP).
+        // These are not `is_control()` but are equally nasty: invisible,
+        // exploitable in display names (homograph-style attacks, broken
+        // layouts, identifier spoofing).
+        if matches!(c, '\u{200B}'..='\u{200D}' | '\u{FEFF}') {
+            return Err(());
+        }
+    }
+    Ok(Some(trimmed.to_string()))
 }
 
 /// Validate an org slug against the same rule as the DB CHECK constraint:
@@ -2233,5 +2335,151 @@ mod tests {
             serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
                 .unwrap();
         assert_eq!(me_resp["nickname"], "Alice");
+    }
+
+    // ─── Task 5: POST /auth/me/nickname tests ───
+
+    async fn register_and_get_token(app: &axum::Router, email: &str) -> String {
+        let resp = post_json(
+            app,
+            "/api/v1/auth/register",
+            None,
+            json!({"password": "password123", "email": email}),
+        )
+        .await;
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        body["token"].as_str().unwrap().to_string()
+    }
+
+    /// GET helper that returns the parsed JSON body. Used by nickname tests
+    /// to verify the side effect of POST /auth/me/nickname shows up in /me.
+    async fn read_json(app: &axum::Router, uri: &str, token: &str) -> serde_json::Value {
+        let resp = get_authed(app, uri, token).await;
+        serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+            .unwrap()
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn set_my_nickname_persists_and_appears_in_me(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+        let token = register_and_get_token(&app, "nick1@example.com").await;
+
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            Some(&token),
+            json!({"nickname": "Alice"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(body["nickname"], "Alice");
+
+        // GET /me also reflects it.
+        let me_resp = read_json(&app, "/api/v1/auth/me", &token).await;
+        assert_eq!(me_resp["nickname"], "Alice");
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn set_my_nickname_empty_string_clears(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+        let token = register_and_get_token(&app, "nick2@example.com").await;
+
+        // Set first.
+        post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            Some(&token),
+            json!({"nickname": "Bob"}),
+        )
+        .await;
+        // Then clear.
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            Some(&token),
+            json!({"nickname": ""}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert!(body["nickname"].is_null());
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn set_my_nickname_rejects_too_long(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+        let token = register_and_get_token(&app, "nick3@example.com").await;
+
+        let too_long = "x".repeat(33);
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            Some(&token),
+            json!({"nickname": too_long}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn set_my_nickname_rejects_control_chars(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+        let token = register_and_get_token(&app, "nick4@example.com").await;
+
+        // U+200B (zero-width space) must be rejected.
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            Some(&token),
+            json!({"nickname": "bad\u{200B}name"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn set_my_nickname_rejects_unauthenticated(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            None,
+            json!({"nickname": "Anon"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn set_my_nickname_accepts_emoji_and_cjk(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+        let token = register_and_get_token(&app, "nick5@example.com").await;
+
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            Some(&token),
+            json!({"nickname": "🌟小明"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(body["nickname"], "🌟小明");
     }
 }

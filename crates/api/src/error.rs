@@ -36,6 +36,7 @@ pub enum ApiError {
     ResetConsumed,              // 410 reset_consumed
     ResetNotFound,              // 404 reset_not_found
     LastPlatformAdmin,          // 409 last_platform_admin
+    InvalidNickname,            // 400 invalid_nickname
 }
 
 impl From<llm_gateway_org::OrgError> for ApiError {
@@ -171,6 +172,11 @@ impl IntoResponse for ApiError {
                 StatusCode::CONFLICT,
                 "Cannot demote the last platform admin",
                 Some("last_platform_admin"),
+            ),
+            ApiError::InvalidNickname => (
+                StatusCode::BAD_REQUEST,
+                "Nickname must be 1-32 characters and contain no control or zero-width characters",
+                Some("invalid_nickname"),
             ),
             // Handled by the early-return above; unreachable here.
             ApiError::RateLimited { .. } => unreachable!("RateLimited handled above"),

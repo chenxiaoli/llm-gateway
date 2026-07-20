@@ -74,6 +74,10 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // is NOT flipped, they keep using the platform while the new address
         // is pending verification.
         .route("/api/v1/auth/me/email", post(auth::set_my_email))
+        // Self-service nickname set/clear. Empty string clears (writes NULL).
+        // Validation lives in `auth::validate_nickname` (1-32 chars, no
+        // control / zero-width chars) so the rule lives in exactly one place.
+        .route("/api/v1/auth/me/nickname", post(auth::set_my_nickname))
         .route("/api/v1/auth/refresh", post(auth::refresh))
         .route("/api/v1/auth/change-password", post(auth::change_password))
         // Phase 4: email verification — public (no auth required) so the
