@@ -24,6 +24,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   link). Backend `/api/v1/admin/settings` and `/api/v1/admin/platform-users`
   are no longer org-scoped.
 
+### Added — User nickname field
+
+- **User nickname field** + `POST /api/v1/auth/me/nickname` endpoint + new
+  `/{slug}/profile` page. Optional display name; NULL by default for existing
+  rows. Non-unique, validated to 1–32 UTF-8 chars after trim (empty string =
+  clear, writes NULL). Rejects ASCII control chars, Unicode Cc/Cf category
+  chars (including bidi overrides like U+202E), and zero-width chars. The
+  frontend `displayName()` helper falls back `nickname → username → email`.
+
 ### Changed
 
 - `/{slug}/admin/settings` → `/admin/settings`. A client-side `<Navigate>`
