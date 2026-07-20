@@ -107,6 +107,7 @@ pub struct UserInfo {
     pub id: String,
     pub username: Option<String>,
     pub platform_role: Option<String>,
+    pub nickname: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -151,6 +152,10 @@ pub struct MeResponse {
     /// the "Add email" banner when this is null and the policy requires it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
+    /// Display name the user chose for themselves (None when unset). The
+    /// frontend `displayName()` helper prefers nickname → username → email.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nickname: Option<String>,
     /// RFC3339 timestamp of when the email was verified, or null if the
     /// email isn't verified yet (or there is no email).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -211,6 +216,7 @@ impl From<&User> for UserInfo {
             id: u.id.clone(),
             username: u.username.clone(),
             platform_role: u.platform_role.as_ref().map(|p| p.as_str().to_string()),
+            nickname: u.nickname.clone(),
         }
     }
 }
@@ -832,6 +838,7 @@ pub async fn me(
         allow_registration: allow_reg,
         impersonating,
         email: user.email.clone(),
+        nickname: user.nickname.clone(),
         email_verified_at: user.email_verified_at.map(|t| t.to_rfc3339()),
         requires_email_verification: user.requires_email_verification,
     }))
@@ -953,6 +960,7 @@ pub async fn set_my_email(
         allow_registration: get_allow_registration(&state).await,
         impersonating,
         email: updated.email.clone(),
+        nickname: updated.nickname.clone(),
         email_verified_at: updated.email_verified_at.map(|t| t.to_rfc3339()),
         requires_email_verification: updated.requires_email_verification,
     }))
@@ -2179,5 +2187,51 @@ mod tests {
         )
         .await;
         assert_eq!(resp.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn me_returns_nickname_field_null_for_fresh_user(pool: PgPool) {
+        // A freshly-registered user has no nickname; GET /auth/me must surface
+        // nickname as null/absent (matching the existing `email` field's
+        // skip_serializing_if = "Option::is_none" contract) so the frontend's
+        // displayName() helper can fall back to username/email. Then we set a
+        // nickname via the storage layer (Task 3) and verify it round-trips
+        // through /auth/me — proving the field is wired end-to-end.
+        let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
+        let app = build_router(storage.clone());
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/register",
+            None,
+            json!({"password": "password123", "email": "nick-fresh@example.com"}),
+        )
+        .await;
+        let body: serde_json::Value = serde_json::from_slice(
+            &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
+        )
+        .unwrap();
+        let token = body["token"].as_str().unwrap();
+        let user_id = body["user"]["id"].as_str().unwrap().to_string();
+
+        // Fresh user: nickname is absent from the payload (skip_serializing_if
+        // omits None). Indexing a Value with an absent key yields Null, so this
+        // asserts both the omission and the explicit-null representations.
+        let resp = get_authed(&app, "/api/v1/auth/me", token).await;
+        let me_resp: serde_json::Value =
+            serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(me_resp["nickname"], serde_json::Value::Null);
+
+        // Set a nickname directly via storage, then re-fetch /auth/me. The
+        // nickname must round-trip through the API layer.
+        storage
+            .set_user_nickname(&user_id, Some("Alice"))
+            .await
+            .expect("set_user_nickname");
+        let resp = get_authed(&app, "/api/v1/auth/me", token).await;
+        let me_resp: serde_json::Value =
+            serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(me_resp["nickname"], "Alice");
     }
 }
