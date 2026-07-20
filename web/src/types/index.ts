@@ -222,6 +222,12 @@ export interface User {
   balance?: number;
   threshold?: number;
   /**
+   * User-chosen friendly display name. null/empty when unset (user hasn't
+   * visited /profile yet). When set, takes priority over username and email
+   * in displayName().
+   */
+  nickname?: string | null;
+  /**
    * User's email address. null until the user sets one (Phase 4 email flow:
    * registration collects it, but legacy accounts may have none yet).
    */
