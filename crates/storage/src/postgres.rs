@@ -3597,6 +3597,26 @@ impl crate::Storage for PostgresStorage {
         Ok(row)
     }
 
+    async fn set_user_nickname(
+        &self,
+        user_id: &str,
+        nickname: Option<&str>,
+    ) -> Result<User, DbErr> {
+        sqlx::query("UPDATE users SET nickname = $1, updated_at = NOW() WHERE id = $2")
+            .bind(nickname)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+        // Re-read for the response — same pattern as set_user_email
+        // (PgUserRow shape is large enough that maintaining a separate
+        // RETURNING-bind is more error-prone than refetching).
+        let row = self
+            .get_user(user_id)
+            .await?
+            .ok_or_else(|| format!("user {user_id} disappeared after set_user_nickname"))?;
+        Ok(row)
+    }
+
     // ---- Phase 4: email_verifications ----
 
     async fn create_email_verification(
@@ -5391,5 +5411,30 @@ mod phase4_tests {
             err.is_err(),
             "expected unique violation on case-insensitive duplicate email, got Ok"
         );
+    }
+
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn set_user_nickname_persists_and_clears(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let user = mk_user("nick-test", "nick-test", "nick-test@example.com");
+        storage.create_user(&user).await.expect("create_user");
+
+        // Set a nickname.
+        let updated = storage
+            .set_user_nickname(&user.id, Some("小明🌟"))
+            .await
+            .unwrap();
+        assert_eq!(updated.nickname.as_deref(), Some("小明🌟"));
+
+        // Refetch via get_user — must see the same value (covers SELECT roundtrip).
+        let refetched = storage.get_user(&user.id).await.unwrap().unwrap();
+        assert_eq!(refetched.nickname.as_deref(), Some("小明🌟"));
+
+        // Clear via None.
+        let cleared = storage
+            .set_user_nickname(&user.id, None)
+            .await
+            .unwrap();
+        assert!(cleared.nickname.is_none());
     }
 }

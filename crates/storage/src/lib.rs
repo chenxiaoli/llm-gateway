@@ -324,6 +324,16 @@ pub trait Storage: Send + Sync {
         requires_email_verification: bool,
     ) -> Result<User, Box<dyn std::error::Error + Send + Sync>>;
 
+    /// Set or clear the user's nickname. Pass `None` to clear (write NULL).
+    /// Storage does NOT validate length/charset — that's the API layer's
+    /// job (so the rule lives in exactly one place). Returns the full
+    /// updated User row.
+    async fn set_user_nickname(
+        &self,
+        user_id: &str,
+        nickname: Option<&str>,
+    ) -> Result<User, Box<dyn std::error::Error + Send + Sync>>;
+
     // ---- Phase 4: email_verifications ----
 
     /// Mint a fresh verification token. The token is the lookup key for
