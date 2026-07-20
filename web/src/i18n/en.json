@@ -70,7 +70,21 @@
   "header": {
     "account": "Account",
     "changePassword": "Change Password",
+    "profile": "Profile",
     "logout": "Logout"
+  },
+  "profile": {
+    "title": "Profile",
+    "nickname": "Nickname",
+    "nicknameHint": "Shown wherever you appear in the UI. 1–32 characters.",
+    "nicknamePlaceholder": "Your nickname",
+    "save": "Save",
+    "savedShort": "Nickname updated",
+    "clearedShort": "Nickname cleared",
+    "invalidTooLong": "Nickname must be 1–32 characters",
+    "invalidControlChars": "Nickname contains invalid characters",
+    "username": "Username",
+    "email": "Email"
   },
   "auth": {
     "signIn": "Sign In",

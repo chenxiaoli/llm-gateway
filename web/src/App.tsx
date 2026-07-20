@@ -20,6 +20,7 @@ import AcceptInvite from './pages/AcceptInvite';
 import Dashboard from './pages/Dashboard';
 import Account from './pages/Account';
 import ChangePassword from './pages/ChangePassword';
+import Profile from './pages/Profile';
 import Keys from './pages/Keys';
 import KeyDetail from './pages/KeyDetail';
 import ModelFallbacks from './pages/ModelFallbacks';
@@ -150,6 +151,7 @@ function App() {
               <Route path="members" element={<Members />} />
               <Route path="account" element={<Account />} />
               <Route path="change-password" element={<ChangePassword />} />
+              <Route path="profile" element={<Profile />} />
             </Route>
           </Route>
 

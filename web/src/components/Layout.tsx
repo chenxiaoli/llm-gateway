@@ -22,6 +22,7 @@ import {
   Moon,
   ChevronRight,
   User,
+  UserCircle,
   Lock,
   ChevronDown,
   Menu,
@@ -445,6 +446,13 @@ export default function AppLayout() {
                     >
                       <User className="h-4 w-4 text-base-content/40" />
                       {t('header.account')}
+                    </button>
+                    <button
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors cursor-pointer"
+                      onClick={() => { setDropdownOpen(false); navigate(slug ? `/${slug}/profile` : '/login'); }}
+                    >
+                      <UserCircle className="h-4 w-4 text-base-content/40" />
+                      {t('header.profile')}
                     </button>
                     <button
                       className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors cursor-pointer"

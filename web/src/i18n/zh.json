@@ -70,7 +70,21 @@
   "header": {
     "account": "账户",
     "changePassword": "修改密码",
+    "profile": "个人资料",
     "logout": "退出登录"
+  },
+  "profile": {
+    "title": "个人资料",
+    "nickname": "昵称",
+    "nicknameHint": "在界面中显示你的称呼,1–32 字符。",
+    "nicknamePlaceholder": "你的昵称",
+    "save": "保存",
+    "savedShort": "昵称已更新",
+    "clearedShort": "昵称已清除",
+    "invalidTooLong": "昵称需在 1–32 字符之间",
+    "invalidControlChars": "昵称包含无效字符",
+    "username": "用户名",
+    "email": "邮箱"
   },
   "auth": {
     "signIn": "登录",
