@@ -10,6 +10,10 @@ import type { User } from '../types';
  *
  * Callers should handle the empty-string case explicitly (e.g. show
  * "Unnamed user").
+ *
+ * Note: `Member` does not carry `nickname`. Callers passing a `Member`
+ * will silently fall back to username/email — extend `Member` if a
+ * surface actually needs the user's nickname.
  */
 export function displayName(
   user: Pick<User, 'nickname' | 'username' | 'email'>,
