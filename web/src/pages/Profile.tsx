@@ -11,22 +11,30 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 
 const NICKNAME_MAX = 32;
 
-function validateNickname(raw: string): string | null | Error {
+// Mirrors backend `validate_nickname` in crates/api/src/auth.rs.
+// Returns the trimmed nickname to save, `null` to clear, or an error key.
+function validateNickname(raw: string): string | null | 'too_long' | 'invalid' {
   const trimmed = raw.trim();
   if (trimmed.length === 0) return null; // clear
-  if ([...trimmed].length > NICKNAME_MAX) {
-    return new Error('too_long');
-  }
-  // Reject ASCII control chars (0x00-0x1F), DEL (0x7F), C1 control chars
-  // (0x80-0x9F), zero-width chars (U+200B-200D, U+FEFF). for...of iterates
-  // Unicode code points so emoji are treated as single chars (allowed).
-  for (const c of trimmed) {
-    const code = c.codePointAt(0)!;
-    if (code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f)) {
-      return new Error('control');
-    }
-    if (code >= 0x200b && code <= 0x200d) return new Error('control');
-    if (code === 0xfeff) return new Error('control');
+  // Array.from iterates by Unicode code point (matches Rust's chars()).
+  const chars = Array.from(trimmed);
+  if (chars.length > NICKNAME_MAX) return 'too_long';
+  for (const ch of chars) {
+    const code = ch.codePointAt(0)!;
+    // C0 controls (U+00-U+1F) + DEL (U+7F) + C1 controls (U+80-U+9F).
+    if (code < 0x20 || code === 0x7f || (code >= 0x80 && code <= 0x9f)) return 'invalid';
+    // Mirrors backend's explicit zero-width ranges.
+    if (code >= 0x200b && code <= 0x200d) return 'invalid';
+    if (code === 0xfeff) return 'invalid';
+    // Mirrors backend's `char::is_control()` which covers Unicode categories
+    // Cc and Cf. C0/C1 are handled above; reject the remaining Cf chars the
+    // backend would reject: SHY, bidirectional marks, bidi overrides (a real
+    // spoofing risk — U+202E can flip "admin" to "nimda"), WJ, and the
+    // deprecated U+2060-U+206F format range.
+    if (code === 0x00ad) return 'invalid';
+    if (code === 0x200e || code === 0x200f) return 'invalid';
+    if (code >= 0x202a && code <= 0x202e) return 'invalid';
+    if (code >= 0x2060 && code <= 0x206f) return 'invalid';
   }
   return trimmed;
 }
@@ -46,8 +54,12 @@ export default function Profile() {
 
   const handleSave = () => {
     const validated = validateNickname(input);
-    if (validated instanceof Error) {
-      setErrorKey(validated.message === 'too_long' ? 'invalidTooLong' : 'invalidControlChars');
+    if (validated === 'too_long') {
+      setErrorKey('invalidTooLong');
+      return;
+    }
+    if (validated === 'invalid') {
+      setErrorKey('invalidControlChars');
       return;
     }
     setErrorKey(null);
