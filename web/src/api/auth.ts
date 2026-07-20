@@ -109,3 +109,19 @@ export async function setMyEmail(email: string): Promise<MeResponse> {
   const { data } = await apiClient.post<MeResponse>('/auth/me/email', { email });
   return data;
 }
+
+/**
+ * Set or clear the current user's nickname. Pass an empty/whitespace string
+ * to clear (server trims + writes NULL). Validation is server-side: 1–32
+ * Unicode scalar values after trim, no control / zero-width characters.
+ *
+ * Mirrors `setMyEmail` — returns the refreshed `MeResponse` so the caller can
+ * push the fresh user fields into the auth store without waiting for the
+ * `/auth/me` refetch.
+ *
+ * Rejects with 400 `invalid_nickname` on validation failure.
+ */
+export async function setMyNickname(nickname: string): Promise<MeResponse> {
+  const { data } = await apiClient.post<MeResponse>('/auth/me/nickname', { nickname });
+  return data;
+}

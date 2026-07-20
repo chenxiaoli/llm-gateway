@@ -351,6 +351,13 @@ export interface MeResponse {
    */
   email_verified_at: string | null;
   /**
+   * The signed-in user's chosen friendly name (mirrors `User.nickname`).
+   * null/undefined when unset. Backend serializes via `skip_serializing_if =
+   * Option::is_none`, so the field is absent on the wire when not set — keep
+   * this optional on the client side too.
+   */
+  nickname?: string | null;
+  /**
    * True when this server requires email verification before login. The
    * frontend surfaces UI hints (e.g. an "Add email" banner) based on this.
    */
