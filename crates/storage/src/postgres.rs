@@ -499,6 +499,7 @@ struct PgUserRow {
     email_verified_at: Option<chrono::DateTime<chrono::Utc>>,
     requires_email_verification: bool,
     password_changed_at: chrono::DateTime<chrono::Utc>,
+    nickname: Option<String>,
 }
 
 impl From<PgUserRow> for User {
@@ -517,6 +518,7 @@ impl From<PgUserRow> for User {
             email_verified_at: r.email_verified_at,
             requires_email_verification: r.requires_email_verification,
             password_changed_at: r.password_changed_at,
+            nickname: r.nickname,
         }
     }
 }
@@ -2060,8 +2062,9 @@ impl crate::Storage for PostgresStorage {
         sqlx::query(
             "INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, refresh_token,
                                 created_at, updated_at,
-                                email, email_verified_at, requires_email_verification, password_changed_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+                                email, email_verified_at, requires_email_verification, password_changed_at,
+                                nickname)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
         )
         .bind(&user.id)
         .bind(&user.username)
@@ -2076,6 +2079,7 @@ impl crate::Storage for PostgresStorage {
         .bind(user.email_verified_at)
         .bind(user.requires_email_verification)
         .bind(user.password_changed_at)
+        .bind(&user.nickname)
         .execute(&self.pool)
         .await?;
         Ok(user.clone())
@@ -2085,7 +2089,8 @@ impl crate::Storage for PostgresStorage {
         let row: Option<PgUserRow> = sqlx::query_as(
             "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
                     created_at, updated_at,
-                    email, email_verified_at, requires_email_verification, password_changed_at
+                    email, email_verified_at, requires_email_verification, password_changed_at,
+                    nickname
              FROM users WHERE id = $1",
         )
         .bind(id)
@@ -2098,7 +2103,8 @@ impl crate::Storage for PostgresStorage {
         let row: Option<PgUserRow> = sqlx::query_as(
             "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
                     created_at, updated_at,
-                    email, email_verified_at, requires_email_verification, password_changed_at
+                    email, email_verified_at, requires_email_verification, password_changed_at,
+                    nickname
              FROM users WHERE username = $1",
         )
         .bind(username)
@@ -2111,7 +2117,8 @@ impl crate::Storage for PostgresStorage {
         let rows: Vec<PgUserRow> = sqlx::query_as(
             "SELECT u.id, u.username, u.password, u.platform_role, u.current_org_id, u.enabled, u.refresh_token,
                     u.created_at, u.updated_at,
-                    u.email, u.email_verified_at, u.requires_email_verification, u.password_changed_at
+                    u.email, u.email_verified_at, u.requires_email_verification, u.password_changed_at,
+                    u.nickname
              FROM users u
              JOIN members m ON m.user_id = u.id
              WHERE m.org_id = $1
@@ -2125,7 +2132,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn update_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "UPDATE users SET username = $1, password = $2, platform_role = $3, current_org_id = $4, enabled = $5, refresh_token = $6, password_changed_at = $7, updated_at = $8 WHERE id = $9",
+            "UPDATE users SET username = $1, password = $2, platform_role = $3, current_org_id = $4, enabled = $5, refresh_token = $6, password_changed_at = $7, nickname = $8, updated_at = $9 WHERE id = $10",
         )
         .bind(&user.username)
         .bind(&user.password)
@@ -2134,6 +2141,7 @@ impl crate::Storage for PostgresStorage {
         .bind(user.enabled)
         .bind(&user.refresh_token)
         .bind(&user.password_changed_at)
+        .bind(&user.nickname)
         .bind(user.updated_at)
         .bind(&user.id)
         .execute(&self.pool)
@@ -3472,7 +3480,8 @@ impl crate::Storage for PostgresStorage {
         let row: Option<PgUserRow> = sqlx::query_as(
             "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
                     created_at, updated_at,
-                    email, email_verified_at, requires_email_verification, password_changed_at
+                    email, email_verified_at, requires_email_verification, password_changed_at,
+                    nickname
              FROM users WHERE LOWER(email) = LOWER($1)",
         )
         .bind(email)
@@ -4750,6 +4759,7 @@ mod invitation_tests {
             email_verified_at: None,
             requires_email_verification: false,
             password_changed_at: now,
+            nickname: None,
         };
         storage.create_user(&user).await.expect("create_user")
     }
@@ -5244,6 +5254,7 @@ mod phase4_tests {
             email_verified_at: None,
             requires_email_verification: true,
             password_changed_at: now,
+            nickname: None,
         }
     }
 

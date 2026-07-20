@@ -1059,12 +1059,17 @@ pub struct User {
     pub email_verified_at: Option<DateTime<Utc>>,
     pub requires_email_verification: bool,
     pub password_changed_at: DateTime<Utc>,
+    /// User-chosen friendly name. Optional — display code falls back via
+    /// the frontend `displayName()` helper (nickname → username → email).
+    /// Not unique; validated to 1-32 UTF-8 chars when set via the API.
+    pub nickname: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateUser {
     pub username: Option<String>,
     pub password: String,
+    pub nickname: Option<String>,
 }
 
 // --- Groups ---

@@ -497,6 +497,7 @@ mod tests {
                 email_verified_at: Some(now),
                 requires_email_verification: false,
                 password_changed_at: now,
+                nickname: None,
             })
             .await
             .expect("create_user");
@@ -521,6 +522,7 @@ mod tests {
                 email_verified_at: None,
                 requires_email_verification: true,
                 password_changed_at: now,
+                nickname: None,
             })
             .await
             .expect("create_user");

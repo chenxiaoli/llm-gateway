@@ -441,6 +441,7 @@ pub async fn register(
         email_verified_at: None,
         requires_email_verification: true,
         password_changed_at: now,
+        nickname: None,
     };
 
     state
