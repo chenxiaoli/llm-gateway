@@ -357,6 +357,53 @@ async fn list_members_returns_enriched_shape(pool: PgPool) {
     assert!(target.get("joined_at").is_none());
 }
 
+/// The Members page calls `displayName(member)` which expects `nickname`
+/// to be present on the payload. Regression-guards the join →
+/// `MemberWithDetails` → `MemberResponse` → JSON pipeline.
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn list_members_surfaces_user_nickname(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    seed_default_member(&pool, "u-nick-api", "nick_api", "member").await;
+
+    // Set the user's nickname via raw SQL (storage layer roundtrip is
+    // exercised separately in postgres.rs tests).
+    sqlx::query("UPDATE users SET nickname = 'Nicky Api' WHERE id = 'u-nick-api'")
+        .execute(&pool)
+        .await
+        .expect("set nickname");
+
+    let app = build_app(common::make_state(pool));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/default/members")
+                .header("authorization", bearer(&admin.token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = body_json(resp).await;
+    let arr = body.as_array().expect("response is a JSON array");
+    let target = arr
+        .iter()
+        .find(|m| m["user_id"] == "u-nick-api")
+        .expect("seeded member present");
+    assert_eq!(target["nickname"], "Nicky Api");
+    // Other members with NULL nickname should serialize to JSON null, not
+    // be omitted.
+    let admin_row = arr
+        .iter()
+        .find(|m| m["user_id"] == "admin-1")
+        .expect("admin-1 present");
+    assert!(admin_row["nickname"].is_null());
+}
+
 #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
 async fn patch_member_can_toggle_enabled(pool: PgPool) {
     common::seed_admin_user(&pool).await;

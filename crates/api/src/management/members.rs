@@ -21,6 +21,7 @@ pub struct MemberResponse {
     pub user_id: String,
     pub username: Option<String>,
     pub email: Option<String>,
+    pub nickname: Option<String>,
     pub role: String,
     pub group_id: Option<String>,
     pub group_name: Option<String>,
@@ -36,6 +37,7 @@ impl From<llm_gateway_storage::MemberWithDetails> for MemberResponse {
             user_id: m.user_id,
             username: m.username,
             email: m.email,
+            nickname: m.nickname,
             role: m.role,
             group_id: m.group_id,
             group_name: m.group_name,
@@ -58,6 +60,10 @@ fn build_response(member: llm_gateway_storage::Member, username: Option<String>)
         user_id: member.user_id,
         username,
         email: None,
+        // Plain `Member` doesn't carry the joined-from-`users` nickname; the
+        // freshly-invited member will surface it on the next `list_members`
+        // call. This matches the email/`group_name` pattern above.
+        nickname: None,
         role: member.role.as_str().to_string(),
         group_id: member.group_id,
         group_name: None,

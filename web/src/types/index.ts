@@ -256,6 +256,7 @@ export interface Member {
   user_id: string;
   username: string | null;
   email: string | null;
+  nickname?: string | null;
   role: MemberRole;
   group_id: string | null;
   group_name: string | null;

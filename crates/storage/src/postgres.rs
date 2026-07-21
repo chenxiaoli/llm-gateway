@@ -3177,6 +3177,7 @@ impl crate::Storage for PostgresStorage {
                 m.org_id,
                 u.username,
                 u.email,
+                u.nickname,
                 m.role,
                 m.group_id,
                 g.name AS group_name,
@@ -4303,6 +4304,91 @@ mod org_tests {
             .execute(&storage.pool)
             .await
             .expect("cleanup users");
+    }
+
+    /// `list_members` joins `users.nickname` so the Members page can call
+    /// `displayName(member)` and get the user-chosen friendly name. This
+    /// regression-guards the SELECT column and the `MemberWithDetails` field
+    /// against accidental drops.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn list_members_surfaces_user_nickname(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+
+        // Seed a user with a nickname.
+        sqlx::query(
+            "INSERT INTO users (id, username, password, nickname, created_at, updated_at)
+             VALUES ('u-nick-list', 'nick_list', 'x', 'Nicky', NOW(), NOW())
+             ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert user with nickname");
+
+        storage
+            .upsert_member(Member {
+                user_id: "u-nick-list".to_string(),
+                org_id: "org_default".to_string(),
+                role: MemberRole::Member,
+                group_id: None,
+                created_by: Some("u-nick-list".to_string()),
+                created_at: chrono::Utc::now(),
+            })
+            .await
+            .expect("upsert_member");
+
+        let members = storage.list_members("org_default").await.expect("list_members");
+        let found = members
+            .iter()
+            .find(|m| m.user_id == "u-nick-list")
+            .expect("membership row present");
+        assert_eq!(found.nickname.as_deref(), Some("Nicky"));
+
+        // Also confirm a user with NULL nickname surfaces as None (not a panic
+        // from a missing column or a NULL→default skew).
+        sqlx::query(
+            "INSERT INTO users (id, username, password, nickname, created_at, updated_at)
+             VALUES ('u-nonick-list', 'nonick_list', 'x', NULL, NOW(), NOW())
+             ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert user without nickname");
+        storage
+            .upsert_member(Member {
+                user_id: "u-nonick-list".to_string(),
+                org_id: "org_default".to_string(),
+                role: MemberRole::Member,
+                group_id: None,
+                created_by: Some("u-nonick-list".to_string()),
+                created_at: chrono::Utc::now(),
+            })
+            .await
+            .expect("upsert_member");
+        let members = storage.list_members("org_default").await.expect("list_members again");
+        let found_null = members
+            .iter()
+            .find(|m| m.user_id == "u-nonick-list")
+            .expect("null-nickname membership present");
+        assert!(found_null.nickname.is_none());
+
+        // cleanup
+        for uid in &["u-nick-list", "u-nonick-list"] {
+            sqlx::query("DELETE FROM accounts WHERE user_id = $1 AND org_id = 'org_default'")
+                .bind(uid)
+                .execute(&storage.pool)
+                .await
+                .expect("cleanup accounts");
+            sqlx::query("DELETE FROM members WHERE user_id = $1 AND org_id = 'org_default'")
+                .bind(uid)
+                .execute(&storage.pool)
+                .await
+                .expect("cleanup members");
+            sqlx::query("DELETE FROM users WHERE id = $1")
+                .bind(uid)
+                .execute(&storage.pool)
+                .await
+                .expect("cleanup users");
+        }
     }
 
     /// Catalog visibility: platform-level rows (owner_org_id IS NULL) are visible

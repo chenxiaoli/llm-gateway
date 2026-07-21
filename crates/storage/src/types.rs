@@ -132,6 +132,9 @@ pub struct MemberWithDetails {
     pub org_id: String,
     pub username: Option<String>,
     pub email: Option<String>,
+    /// User-chosen friendly name (joined from `users.nickname`). NULL when
+    /// unset; see `displayName` in the frontend for the fallback chain.
+    pub nickname: Option<String>,
     /// Raw lowercase role string from `members.role` (`"owner" | "admin" | "member"`).
     pub role: String,
     pub group_id: Option<String>,

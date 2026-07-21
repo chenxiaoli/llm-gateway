@@ -32,6 +32,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   clear, writes NULL). Rejects ASCII control chars, Unicode Cc/Cf category
   chars (including bidi overrides like U+202E), and zero-width chars. The
   frontend `displayName()` helper falls back `nickname → username → email`.
+  The `list_members` pipeline joins `users.nickname`, so the Members table
+  surfaces the nickname alongside `username`/`email`.
 
 ### Changed
 
