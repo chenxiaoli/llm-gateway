@@ -24,6 +24,7 @@ import Profile from './pages/Profile';
 import Keys from './pages/Keys';
 import KeyDetail from './pages/KeyDetail';
 import ModelFallbacks from './pages/ModelFallbacks';
+import AutoRoutes from './pages/AutoRoutes';
 import ConsoleModels from './pages/ConsoleModels';
 import Channels from './pages/Channels';
 import ChannelDetail from './pages/ChannelDetail';
@@ -146,6 +147,7 @@ function App() {
               <Route path="keys" element={<Keys />} />
               <Route path="keys/:id" element={<KeyDetail />} />
               <Route path="model-fallbacks" element={<ModelFallbacks />} />
+              <Route path="auto-routes" element={<AutoRoutes />} />
               <Route path="models" element={<ConsoleModels />} />
               <Route path="usage" element={<Usage />} />
               <Route path="members" element={<Members />} />

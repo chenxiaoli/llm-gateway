@@ -53,6 +53,7 @@
     "dashboard": "仪表盘",
     "keys": "API 密钥",
     "modelFallbacks": "模型降级",
+    "autoRoutes": "自动路由",
     "models": "模型",
     "usage": "用量",
     "channels": "通道",
@@ -218,6 +219,12 @@
     "fallbackCreateFailed": "创建模型降级失败",
     "fallbackUpdateFailed": "更新模型降级失败",
     "fallbackDeleteFailed": "删除模型降级失败",
+    "autoRouteCreated": "自动路由已创建",
+    "autoRouteCreateFailed": "创建自动路由失败",
+    "autoRouteUpdated": "自动路由已更新",
+    "autoRouteUpdateFailed": "更新自动路由失败",
+    "autoRouteDeleted": "自动路由已删除",
+    "autoRouteDeleteFailed": "删除自动路由失败",
     "pricingCreated": "定价策略已创建",
     "pricingUpdated": "定价策略已更新",
     "pricingDeleted": "定价策略已删除",
@@ -1222,6 +1229,33 @@
     "deleteModal": {
       "title": "删除模型降级",
       "message": "确定删除？引用此配置的 API 密钥将失去降级链。"
+    }
+  },
+  "autoRoutes": {
+    "title": "自动路由",
+    "subtitle": "为 model=auto 配置按钥匙的能力感知模型池",
+    "createBtn": "新建自动路由",
+    "createFirst": "创建第一个自动路由",
+    "edit": "编辑",
+    "deleteLabel": "删除 {{name}}",
+    "empty": "尚未配置自动路由。",
+    "editModal": {
+      "createTitle": "创建自动路由",
+      "editTitle": "编辑自动路由",
+      "name": "名称",
+      "namePlaceholder": "例如：支持视觉的模型池",
+      "nameRequired": "名称为必填项",
+      "models": "池中模型",
+      "modelsDesc": "选择此钥匙 model=auto 请求可用的模型。",
+      "noModels": "没有可用模型。请联系管理员先创建模型。",
+      "atLeastOneModel": "请至少选择一个模型",
+      "save": "保存",
+      "create": "创建"
+    },
+    "deleteConfirm": {
+      "title": "删除自动路由？",
+      "message": "将删除此配置。引用它的钥匙在重新分配前会返回 auto_not_configured。",
+      "confirm": "删除"
     }
   },
   "pricingPolicies": {

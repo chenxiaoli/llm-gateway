@@ -28,6 +28,7 @@ import {
   Menu,
   X,
   SquareStack,
+  Compass,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { isAdminOrAbove, isPlatformAdmin } from '../lib/auth';
@@ -67,6 +68,7 @@ export default function AppLayout() {
     { key: `/${slug}/dashboard`, icon: LayoutDashboard, label: t('sidebar.dashboard') },
     { key: `/${slug}/keys`, icon: KeyRound, label: t('sidebar.keys') },
     { key: `/${slug}/model-fallbacks`, icon: ArrowRightLeft, label: t('sidebar.modelFallbacks') },
+    { key: `/${slug}/auto-routes`, icon: Compass, label: t('sidebar.autoRoutes') },
     { key: `/${slug}/models`, icon: SquareStack, label: t('sidebar.models') },
     { key: `/${slug}/usage`, icon: BarChart3, label: t('sidebar.usage') },
   ];
@@ -98,6 +100,7 @@ export default function AppLayout() {
     dashboard: t('sidebar.dashboard'),
     keys: t('sidebar.keys'),
     'model-fallbacks': t('sidebar.modelFallbacks'),
+    'auto-routes': t('sidebar.autoRoutes'),
     usage: t('sidebar.usage'),
     providers: t('sidebar.providers'),
     channels: t('sidebar.channels'),

@@ -7,6 +7,7 @@ export interface ApiKey {
   budget_monthly: number | null;
   enabled: boolean;
   model_fallback_id: string | null;
+  auto_route_id: string | null;
   created_at: string;
   updated_at: string;
   /** Phase 7: current UTC-month MTD spend in 10^8 subunits per USD.
@@ -19,6 +20,7 @@ export interface CreateKeyRequest {
   rate_limit?: number | null;
   budget_monthly?: number | null;
   model_fallback_id?: string | null;
+  auto_route_id?: string | null;
 }
 
 export interface CreateKeyResponse {
@@ -37,6 +39,7 @@ export interface UpdateKeyRequest {
   budget_monthly?: number | null;
   enabled?: boolean;
   model_fallback_id?: string | null;
+  auto_route_id?: string | null;
 }
 
 export interface Provider {
@@ -70,6 +73,8 @@ export interface Model {
   name: string;
   model_type?: string | null;
   pricing_policy_id?: string | null;
+  supports_vision: boolean;
+  supports_tools: boolean;
   created_at: string;
 }
 
@@ -520,6 +525,30 @@ export interface CreateModelFallbackRequest {
 export interface UpdateModelFallbackRequest {
   name?: string;
   config?: ModelFallbackGroup[];
+}
+
+// ── Auto Route Config Types ───────────────────────────────────────────────
+
+export interface AutoRouteConfigData {
+  model_names: string[];
+}
+
+export interface AutoRouteConfig {
+  id: string;
+  name: string;
+  config: AutoRouteConfigData;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface CreateAutoRouteConfigRequest {
+  name: string;
+  config: AutoRouteConfigData;
+}
+
+export interface UpdateAutoRouteConfigRequest {
+  name?: string;
+  config?: AutoRouteConfigData;
 }
 
 // ── Pricing Config Types ───────────────────────────────────────────────────────

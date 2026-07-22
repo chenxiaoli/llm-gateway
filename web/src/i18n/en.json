@@ -53,6 +53,7 @@
     "dashboard": "Dashboard",
     "keys": "API Keys",
     "modelFallbacks": "Model Fallbacks",
+    "autoRoutes": "Auto Routes",
     "models": "Models",
     "usage": "Usage",
     "channels": "Channels",
@@ -218,6 +219,12 @@
     "fallbackCreateFailed": "Failed to create model fallback",
     "fallbackUpdateFailed": "Failed to update model fallback",
     "fallbackDeleteFailed": "Failed to delete model fallback",
+    "autoRouteCreated": "Auto route created",
+    "autoRouteCreateFailed": "Failed to create auto route",
+    "autoRouteUpdated": "Auto route updated",
+    "autoRouteUpdateFailed": "Failed to update auto route",
+    "autoRouteDeleted": "Auto route deleted",
+    "autoRouteDeleteFailed": "Failed to delete auto route",
     "pricingCreated": "Pricing policy created",
     "pricingUpdated": "Pricing policy updated",
     "pricingDeleted": "Pricing policy deleted",
@@ -1222,6 +1229,33 @@
     "deleteModal": {
       "title": "Delete Model Fallback",
       "message": "Are you sure? API keys referencing this config will lose their fallback chain."
+    }
+  },
+  "autoRoutes": {
+    "title": "Auto Routes",
+    "subtitle": "Per-key capability-aware model pools for model=auto",
+    "createBtn": "New Auto Route",
+    "createFirst": "Create your first auto route",
+    "edit": "Edit",
+    "deleteLabel": "Delete {{name}}",
+    "empty": "No auto routes configured.",
+    "editModal": {
+      "createTitle": "Create Auto Route",
+      "editTitle": "Edit Auto Route",
+      "name": "Name",
+      "namePlaceholder": "e.g., Vision-capable pool",
+      "nameRequired": "Name is required",
+      "models": "Models in pool",
+      "modelsDesc": "Select models eligible for this key's model=auto requests.",
+      "noModels": "No models available. Ask an admin to create models first.",
+      "atLeastOneModel": "Select at least one model",
+      "save": "Save",
+      "create": "Create"
+    },
+    "deleteConfirm": {
+      "title": "Delete auto route?",
+      "message": "This will remove the config. Keys referencing it will return auto_not_configured until reassigned.",
+      "confirm": "Delete"
     }
   },
   "pricingPolicies": {
