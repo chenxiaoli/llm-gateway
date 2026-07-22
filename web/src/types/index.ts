@@ -96,6 +96,8 @@ export interface CreateGlobalModelRequest {
 
 export interface UpdateModelRequest {
   pricing_policy_id?: string | null;
+  supports_vision?: boolean;
+  supports_tools?: boolean;
 }
 
 export interface UserPricingInfo {

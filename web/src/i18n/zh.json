@@ -390,6 +390,8 @@
     "description": "注册 AI 模型以通过网关路由请求",
     "summary": "{{active}} 个活跃 · {{idle}} 个空闲 · {{policies}} 个策略",
     "addModel": "添加模型",
+    "supportsVision": "视觉",
+    "supportsTools": "工具",
     "stats": {
       "total": "总计",
       "live": "活跃",
@@ -428,6 +430,7 @@
       "readOnly": "只读",
       "pricingPolicy": "定价策略",
       "noPolicy": "无策略",
+      "capabilities": "能力",
       "saveChanges": "保存更改"
     }
   },

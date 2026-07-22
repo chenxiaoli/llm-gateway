@@ -14,6 +14,8 @@ export async function listAllModels(): Promise<ModelWithProvider[]> {
     name: item.model.name,
     model_type: item.model.model_type,
     pricing_policy_id: item.model.pricing_policy_id,
+    supports_vision: item.model.supports_vision,
+    supports_tools: item.model.supports_tools,
     created_at: item.model.created_at,
     pricing_policy_name: item.pricing_policy_name,
     channel_ids: item.channel_ids,

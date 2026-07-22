@@ -390,6 +390,8 @@
     "description": "Register AI models to route requests through the gateway",
     "summary": "{{active}} live · {{idle}} idle · {{policies}} pricing policies",
     "addModel": "Add Model",
+    "supportsVision": "Vision",
+    "supportsTools": "Tools",
     "stats": {
       "total": "Total",
       "live": "Live",
@@ -428,6 +430,7 @@
       "readOnly": "read-only",
       "pricingPolicy": "Pricing Policy",
       "noPolicy": "No policy",
+      "capabilities": "Capabilities",
       "saveChanges": "Save Changes"
     }
   },
