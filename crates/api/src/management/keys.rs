@@ -22,6 +22,7 @@ pub struct CreateKeyRequest {
     pub rate_limit: Option<i64>,
     pub budget_monthly: Option<f64>,
     pub model_fallback_id: Option<String>,
+    pub auto_route_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,6 +32,7 @@ pub struct UpdateKeyRequest {
     pub budget_monthly: Option<Option<f64>>,
     pub enabled: Option<bool>,
     pub model_fallback_id: Option<Option<String>>,
+    pub auto_route_id: Option<Option<String>>,
 }
 
 // --- JSON response structs (f64 for API boundary) ---
@@ -56,6 +58,7 @@ pub struct KeyResponse {
     pub enabled: bool,
     pub created_by: Option<String>,
     pub model_fallback_id: Option<String>,
+    pub auto_route_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     /// Phase 7: current UTC-month MTD spend in 10^8 subunits per USD. `0`
@@ -75,6 +78,7 @@ impl From<ApiKey> for KeyResponse {
             enabled: k.enabled,
             created_by: k.created_by,
             model_fallback_id: k.model_fallback_id,
+            auto_route_id: k.auto_route_id,
             created_at: k.created_at,
             updated_at: k.updated_at,
             mtd_units: 0,
@@ -94,6 +98,7 @@ impl From<ApiKeyWithMtd> for KeyResponse {
             enabled: k.enabled,
             created_by: k.created_by,
             model_fallback_id: k.model_fallback_id,
+            auto_route_id: k.auto_route_id,
             created_at: k.created_at,
             updated_at: k.updated_at,
             mtd_units: x.mtd_units,
@@ -122,6 +127,7 @@ pub async fn create_key(
         enabled: true,
         created_by: Some(ctx.user_id.clone()),
         model_fallback_id: input.model_fallback_id,
+        auto_route_id: input.auto_route_id,
         created_at: now,
         updated_at: now,
     };
@@ -220,6 +226,7 @@ pub async fn update_key(
     if let Some(budget_monthly) = input.budget_monthly { key.budget_monthly = opt_usd_to_units(budget_monthly); }
     if let Some(enabled) = input.enabled { key.enabled = enabled; }
     if let Some(model_fallback_id) = input.model_fallback_id { key.model_fallback_id = model_fallback_id; }
+    if let Some(auto_route_id) = input.auto_route_id { key.auto_route_id = auto_route_id; }
     key.updated_at = chrono::Utc::now();
 
     let updated = state
