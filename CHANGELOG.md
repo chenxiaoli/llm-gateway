@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — `model=auto` capability-aware routing
+
+- **`model=auto` request routing**: clients can send `model=auto` on
+  `/v1/chat/completions` and `/v1/messages` requests, and the gateway
+  resolves a model from a per-key admin-defined pool based on capabilities
+  the request actually needs. Vision is required when the body contains an
+  `image_url` (OpenAI) or `image` (Anthropic) content block; tools is
+  required when the body carries a non-empty `tools` array. The existing
+  channel priority + weighted routing then runs over the resulting
+  candidate pool, with failover across models on 5xx/429/conn-error.
+- New `auto_route_configs` platform-level table (mirrors `model_fallbacks`)
+  + `api_keys.auto_route_id` FK for binding a config to a key. Management
+  endpoints at `/api/v1/{slug}/auto-route-configs` (CRUD).
+- New `supports_vision` / `supports_tools` BOOLEAN columns on `models`,
+  populated by admin manual entry on the Models page (no upstream call, no
+  sync job, no auto-discovery — admin ticks the checkboxes for each model
+  they want eligible for auto-routing).
+- New `Auto Routes` admin page + sidebar entry under Console.
+- New API errors: `auto_not_configured` (400, key has no `auto_route_id`),
+  `auto_no_matching_model` (400, pool has 0 models with the required
+  capabilities), `auto_all_candidates_failed` (502, every (model, channel)
+  candidate failed), `model_name_reserved` (400, model creation rejects the
+  name `auto`).
+
 ### Added — Platform admin bootstrap & management
 
 - **Platform-admin management UI** (`/admin/platform-users`): list current
