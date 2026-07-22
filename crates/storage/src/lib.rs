@@ -191,6 +191,38 @@ pub trait Storage: Send + Sync {
     async fn update_model_fallback(&self, config: &ModelFallbackConfig) -> Result<ModelFallbackConfig, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_model_fallback(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+    // Auto Route Configs
+    async fn get_auto_route_config(
+        &self,
+        id: &str,
+    ) -> Result<Option<AutoRouteConfig>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_auto_route_configs(
+        &self,
+    ) -> Result<Vec<AutoRouteConfig>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn create_auto_route_config(
+        &self,
+        config: &AutoRouteConfig,
+    ) -> Result<AutoRouteConfig, Box<dyn std::error::Error + Send + Sync>>;
+    async fn update_auto_route_config(
+        &self,
+        config: &AutoRouteConfig,
+    ) -> Result<AutoRouteConfig, Box<dyn std::error::Error + Send + Sync>>;
+    async fn delete_auto_route_config(
+        &self,
+        id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    /// Returns models in `candidate_names` that belong to `org_id` and satisfy
+    /// the required capabilities. When `require_vision` is false, the
+    /// `supports_vision` filter is NOT applied (so text-only models stay
+    /// eligible). Same for `require_tools`.
+    async fn list_models_with_capabilities(
+        &self,
+        org_id: &str,
+        require_vision: bool,
+        require_tools: bool,
+        candidate_names: &[String],
+    ) -> Result<Vec<Model>, Box<dyn std::error::Error + Send + Sync>>;
+
     // Seed data
     async fn seed_data(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 

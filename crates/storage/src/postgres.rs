@@ -53,6 +53,7 @@ struct PgKeyRow {
     enabled: bool,
     created_by: Option<String>,
     model_fallback_id: Option<String>,
+    auto_route_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -70,6 +71,7 @@ impl From<PgKeyRow> for ApiKey {
             enabled: r.enabled,
             created_by: r.created_by,
             model_fallback_id: r.model_fallback_id,
+            auto_route_id: r.auto_route_id,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -88,6 +90,7 @@ struct PgKeyWithMtdRow {
     enabled: bool,
     created_by: Option<String>,
     model_fallback_id: Option<String>,
+    auto_route_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
     mtd_units: i64,
@@ -107,6 +110,7 @@ impl From<PgKeyWithMtdRow> for crate::types::ApiKeyWithMtd {
                 enabled: r.enabled,
                 created_by: r.created_by,
                 model_fallback_id: r.model_fallback_id,
+                auto_route_id: r.auto_route_id,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
             },
@@ -153,6 +157,8 @@ struct PgModelRow {
     name: String,
     model_type: Option<String>,
     pricing_policy_id: Option<String>,
+    supports_vision: bool,
+    supports_tools: bool,
     created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -164,6 +170,8 @@ struct PgModelEnrichedRow {
     model_type: Option<String>,
     pp_id: Option<String>,
     pp_name: Option<String>,
+    supports_vision: bool,
+    supports_tools: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     channel_ids_csv: Option<String>,
     channel_names_csv: Option<String>,
@@ -177,6 +185,8 @@ impl From<PgModelRow> for Model {
             name: r.name,
             model_type: r.model_type,
             pricing_policy_id: r.pricing_policy_id,
+            supports_vision: r.supports_vision,
+            supports_tools: r.supports_tools,
             created_at: r.created_at,
         }
     }
@@ -189,6 +199,8 @@ struct PgModelWithProviderRow {
     name: String,
     model_type: Option<String>,
     pricing_policy_id: Option<String>,
+    supports_vision: bool,
+    supports_tools: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     provider_name: String,
     #[allow(dead_code)]
@@ -205,6 +217,8 @@ impl From<PgModelWithProviderRow> for ModelWithProvider {
                 name: r.name,
                 model_type: r.model_type,
                 pricing_policy_id: r.pricing_policy_id,
+                supports_vision: r.supports_vision,
+                supports_tools: r.supports_tools,
                 created_at: r.created_at,
             },
             pricing_policy_name: None,
@@ -731,8 +745,8 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_key(&self, org_id: &str, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
-            "INSERT INTO api_keys (id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+            "INSERT INTO api_keys (id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, auto_route_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
         )
         .bind(&key.id)
         .bind(org_id)
@@ -744,6 +758,7 @@ impl crate::Storage for PostgresStorage {
         .bind(key.enabled)
         .bind(&key.created_by)
         .bind(&key.model_fallback_id)
+        .bind(key.auto_route_id.as_deref())
         .bind(key.created_at)
         .bind(key.updated_at)
         .execute(&self.pool)
@@ -756,7 +771,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_key(&self, org_id: &str, id: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<PgKeyRow> = sqlx::query_as(
-            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, auto_route_id, created_at, updated_at
              FROM api_keys WHERE org_id = $1 AND id = $2",
         )
         .bind(org_id)
@@ -769,7 +784,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_key_by_hash(&self, hash: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<PgKeyRow> = sqlx::query_as(
-            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, auto_route_id, created_at, updated_at
              FROM api_keys WHERE key_hash = $1",
         )
         .bind(hash)
@@ -781,7 +796,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_keys(&self, org_id: &str) -> Result<Vec<ApiKey>, DbErr> {
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, auto_route_id, created_at, updated_at
              FROM api_keys WHERE org_id = $1",
         )
         .bind(org_id)
@@ -798,7 +813,7 @@ impl crate::Storage for PostgresStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, auto_route_id, created_at, updated_at
              FROM api_keys WHERE org_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         )
         .bind(org_id)
@@ -822,7 +837,7 @@ impl crate::Storage for PostgresStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, auto_route_id, created_at, updated_at
              FROM api_keys WHERE org_id = $1 AND created_by = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
         )
         .bind(org_id)
@@ -854,7 +869,7 @@ impl crate::Storage for PostgresStorage {
         let rows: Vec<PgKeyWithMtdRow> = sqlx::query_as(
             "SELECT ak.id, ak.org_id, ak.name, ak.key_hash, ak.key_prefix,
                     ak.rate_limit, ak.budget_monthly, ak.enabled, ak.created_by,
-                    ak.model_fallback_id, ak.created_at, ak.updated_at,
+                    ak.model_fallback_id, ak.auto_route_id, ak.created_at, ak.updated_at,
                     COALESCE(bc.accrued, 0) AS mtd_units
              FROM api_keys ak
              LEFT JOIN budget_counters bc
@@ -880,7 +895,7 @@ impl crate::Storage for PostgresStorage {
     async fn update_key(&self, org_id: &str, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
             "UPDATE api_keys SET name = $1, key_hash = $2, rate_limit = $3, budget_monthly = $4,
-             enabled = $5, created_by = $6, model_fallback_id = $7, updated_at = $8 WHERE org_id = $9 AND id = $10",
+             enabled = $5, created_by = $6, model_fallback_id = $7, auto_route_id = $8, updated_at = $9 WHERE org_id = $10 AND id = $11",
         )
         .bind(&key.name)
         .bind(&key.key_hash)
@@ -889,6 +904,7 @@ impl crate::Storage for PostgresStorage {
         .bind(key.enabled)
         .bind(&key.created_by)
         .bind(&key.model_fallback_id)
+        .bind(key.auto_route_id.as_deref())
         .bind(key.updated_at)
         .bind(org_id)
         .bind(&key.id)
@@ -1213,14 +1229,16 @@ impl crate::Storage for PostgresStorage {
         }
 
         sqlx::query(
-            "INSERT INTO models (id, owner_org_id, name, model_type, pricing_policy_id, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6)",
+            "INSERT INTO models (id, owner_org_id, name, model_type, pricing_policy_id, supports_vision, supports_tools, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(&model.id)
         .bind(&model.owner_org_id)
         .bind(&model.name)
         .bind(&model.model_type)
         .bind(&model.pricing_policy_id)
+        .bind(model.supports_vision)
+        .bind(model.supports_tools)
         .bind(model.created_at)
         .execute(&self.pool)
         .await?;
@@ -1231,7 +1249,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_model(&self, viewer_org_id: &str, name: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<PgModelRow> = sqlx::query_as(
-            "SELECT id, owner_org_id, name, model_type, pricing_policy_id, created_at
+            "SELECT id, owner_org_id, name, model_type, pricing_policy_id, supports_vision, supports_tools, created_at
              FROM models
              WHERE name = $1 AND (owner_org_id IS NULL OR owner_org_id = $2)",
         )
@@ -1245,7 +1263,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_model_by_id(&self, viewer_org_id: &str, id: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<PgModelRow> = sqlx::query_as(
-            "SELECT id, owner_org_id, name, model_type, pricing_policy_id, created_at
+            "SELECT id, owner_org_id, name, model_type, pricing_policy_id, supports_vision, supports_tools, created_at
              FROM models
              WHERE id = $1 AND (owner_org_id IS NULL OR owner_org_id = $2)",
         )
@@ -1273,6 +1291,8 @@ impl crate::Storage for PostgresStorage {
                 m.model_type,
                 m.pricing_policy_id AS pp_id,
                 pp.name AS pp_name,
+                m.supports_vision,
+                m.supports_tools,
                 m.created_at,
                 STRING_AGG(DISTINCT cm.id, ',') AS channel_ids_csv,
                 STRING_AGG(DISTINCT c.name, ',') AS channel_names_csv
@@ -1281,7 +1301,7 @@ impl crate::Storage for PostgresStorage {
             LEFT JOIN channel_models cm ON cm.model_id = m.id
             LEFT JOIN channels c ON c.id = cm.channel_id
             WHERE m.owner_org_id IS NULL OR m.owner_org_id = $1
-            GROUP BY m.id, m.owner_org_id, m.name, m.model_type, m.pricing_policy_id, m.created_at, pp.name
+            GROUP BY m.id, m.owner_org_id, m.name, m.model_type, m.pricing_policy_id, m.supports_vision, m.supports_tools, m.created_at, pp.name
             ORDER BY m.name
             "#
         )
@@ -1306,6 +1326,8 @@ impl crate::Storage for PostgresStorage {
                     name: r.name,
                     model_type: r.model_type,
                     pricing_policy_id: r.pp_id,
+                    supports_vision: r.supports_vision,
+                    supports_tools: r.supports_tools,
                     created_at: r.created_at,
                 },
                 pricing_policy_name: r.pp_name,
@@ -1325,11 +1347,13 @@ impl crate::Storage for PostgresStorage {
 
     async fn update_model(&self, viewer_org_id: &str, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "UPDATE models SET name = $1, pricing_policy_id = $2
-             WHERE id = $3 AND (owner_org_id IS NULL OR owner_org_id = $4)",
+            "UPDATE models SET name = $1, pricing_policy_id = $2, supports_vision = $3, supports_tools = $4
+             WHERE id = $5 AND (owner_org_id IS NULL OR owner_org_id = $6)",
         )
         .bind(&model.name)
         .bind(&model.pricing_policy_id)
+        .bind(model.supports_vision)
+        .bind(model.supports_tools)
         .bind(&model.id)
         .bind(viewer_org_id)
         .execute(&self.pool)
@@ -4427,6 +4451,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: None,
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         storage
@@ -4441,6 +4467,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: Some("org-a-vis".to_string()),
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         storage
@@ -4536,6 +4564,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: None,
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         storage
@@ -4550,6 +4580,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: Some("org-shadow".to_string()),
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         let res = storage.create_model("org-shadow", &attempt).await;
@@ -4612,6 +4644,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: None,
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         storage
@@ -4626,6 +4660,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: Some("org-shadow-2".to_string()),
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         let result = storage.create_model("org-shadow-2", &org_private).await;
@@ -4684,6 +4720,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: Some("org-shadow-3".to_string()),
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         storage
@@ -4698,6 +4736,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: None,
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         let result = storage.create_model("org-shadow-3", &platform).await;
@@ -4768,6 +4808,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: None,
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         storage.create_model("org-pm-alpha", &model).await.expect("create_model");

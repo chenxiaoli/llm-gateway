@@ -316,6 +316,7 @@ pub struct ApiKey {
     pub enabled: bool,
     pub created_by: Option<String>,
     pub model_fallback_id: Option<String>,
+    pub auto_route_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -516,6 +517,8 @@ pub struct Model {
     pub name: String,          // display name
     pub model_type: Option<String>,
     pub pricing_policy_id: Option<String>,
+    pub supports_vision: bool,
+    pub supports_tools: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -724,6 +727,8 @@ pub struct CreateModel {
 #[derive(Debug, Deserialize)]
 pub struct UpdateModel {
     pub pricing_policy_id: Option<Option<String>>,  // None=keep, Some(None)=clear
+    pub supports_vision: Option<bool>,
+    pub supports_tools: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1321,6 +1326,34 @@ pub struct CreateModelFallback {
 pub struct UpdateModelFallback {
     pub name: Option<String>,
     pub config: Option<Vec<ModelFallbackGroup>>,
+}
+
+// --- Auto Route Config ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoRouteConfigData {
+    pub model_names: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoRouteConfig {
+    pub id: String,
+    pub name: String,
+    pub config: AutoRouteConfigData,
+    pub created_by: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateAutoRouteConfig {
+    pub name: String,
+    pub config: AutoRouteConfigData,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateAutoRouteConfig {
+    pub name: Option<String>,
+    pub config: Option<AutoRouteConfigData>,
 }
 
 // --- Settings ---
