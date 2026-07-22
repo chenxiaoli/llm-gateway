@@ -19,7 +19,7 @@ Today every request must name a specific model. Clients that want the gateway to
 - New `auto_route_configs` platform-level table + `api_keys.auto_route_id` FK.
 - `model=auto` resolution path: load the key's `auto_route_config` → filter by capability → existing channel-priority+weighted routing over the resulting candidate pool.
 - Two capability dimensions only: `vision` and `tools`. Detected by introspecting the request body (one extra pass during the existing body-parse step).
-- Capability data on `models` via two new `BOOLEAN` columns, populated by auto-discovery using a built-in lookup table; admin can override on the Models page.
+- Capability data on `models` via two new `BOOLEAN` columns, populated by admin manual entry on the Models page.
 - New API errors: `auto_not_configured`, `auto_no_matching_model`, `auto_all_candidates_failed`, `model_name_reserved`.
 - Reserve the keyword `auto` — model creation rejects the name.
 - Tests (Rust integration + storage + unit for helpers).
@@ -44,7 +44,7 @@ Today every request must name a specific model. Clients that want the gateway to
 |---|---|---|
 | Trigger | `model == "auto"` (case-insensitive) | Simple, conventional, easy for clients |
 | Capability dimensions | `vision`, `tools` | Covers most routing decisions; small MVP surface |
-| Capability source | Auto-discovery + built-in lookup | OpenAI/Anthropic `/v1/models` doesn't expose caps; small per-provider table in code is the cheapest reliable source |
+| Capability source | Admin manual entry | Simplest V1 — admin ticks `supports_vision` / `supports_tools` checkboxes on the Models page. No upstream call, no sync job, no sticky-override logic. Can be extended with auto-discovery later if maintenance burden grows. |
 | Capability detection | Implicit body introspection | Zero client change; one extra pass at the existing body-parse step |
 | Pool source | Per-key `auto_route_config` (platform-level, model-name-keyed) | Symmetric with `model_fallbacks`; admin gets explicit control; no surprise routes to expensive/experimental models |
 | Pool resolution | Filter by capability → existing channel priority+weight | Reuses existing machinery; no new schema column for priority |
@@ -137,10 +137,6 @@ Mirrors `model_fallbacks` shape exactly so the CRUD + UI patterns copy-paste.
   - Vision: walk `messages[]`, for each message inspect `content` (string or array). If array, look for any block with `type` in `{"image_url", "image", "input_audio"}` — but only image types trigger vision in V1. Specifically: `{"image_url", "image"}`.
   - Tools: `body["tools"]` is array and non-empty.
   - Anthropic-format `messages[].content[]` uses `type: "image"`; OpenAI uses `type: "image_url"`. Detect both.
-- `builtin_capabilities(model_name: &str) -> Option<CapabilitySet>`:
-  - Lowercase prefix match against `&[(&str, CapabilitySet)]` table.
-  - Covers common OpenAI / Anthropic / Google models (full list in implementation).
-  - Returns `None` for unknown names → auto-discovery leaves both flags as `false`; admin can override.
 
 **`crates/api/src/error.rs`:**
 - `ApiError::AutoNotConfigured` → 400 `auto_not_configured`
@@ -205,12 +201,6 @@ The failover loop is unchanged: iterate candidates, terminal on 4xx, failover on
 **`crates/api/src/management/api_keys.rs`:**
 - API key create/update DTO gains `auto_route_id: Option<String>`. Persisted to `api_keys.auto_route_id`.
 
-#### Auto-discovery extension
-
-**`crates/api/src/...` (the auto-discovery module that currently populates `model_type` from upstream):**
-- After fetching the model list and creating `Model` rows, for each new model call `builtin_capabilities(&model.name)`. If `Some(caps)`, populate `supports_vision` / `supports_tools` accordingly. If `None`, leave both `false`.
-- Existing discovered rows are not re-touched on subsequent discoveries (avoids clobbering admin overrides). Admin override is sticky.
-
 #### Frontend
 
 **`web/src/types/index.ts`:**
@@ -258,12 +248,6 @@ The failover loop is unchanged: iterate candidates, terminal on 4xx, failover on
   - Anthropic with `type: "image"` → vision
   - Anthropic with `tools` → tools
   - malformed content (string instead of array, missing type) → no crash, no capabilities
-- `builtin_capabilities`:
-  - "gpt-4o" → vision+tools
-  - "GPT-4O" (case) → vision+tools
-  - "gpt-4o-2024-08-06" (suffix) → vision+tools
-  - "gpt-4" → tools only
-  - "some-internal-name" → None
 
 **Storage:**
 - `list_models_with_capabilities` filter logic across (vision, tools) × (require, don't require) × (in pool, not in pool).
@@ -288,7 +272,7 @@ The failover loop is unchanged: iterate candidates, terminal on 4xx, failover on
 ## Migration notes
 
 - Two migrations, both purely additive. No data movement. No risk to existing flows.
-- Existing `models` rows get `supports_vision = FALSE`, `supports_tools = FALSE`. Admin must discover or manually set these for auto to have any pool to draw from.
+- Existing `models` rows get `supports_vision = FALSE`, `supports_tools = FALSE`. Admin must manually tick these on the Models page for any model they want eligible for auto-routing.
 - Existing `api_keys` rows get `auto_route_id = NULL`. Sending `model=auto` against such a key returns `auto_not_configured` until an admin assigns a config.
 
 ## Open questions
