@@ -38,7 +38,9 @@ sqlx = { workspace = true }
 [dev-dependencies]
 llm-gateway-storage = { path = "../storage" }
 llm-gateway-ratelimit = { path = "../ratelimit" }
+llm-gateway-encryption = { workspace = true }
 sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "postgres", "migrate", "macros"] }
 tower = { workspace = true }
 hyper = { workspace = true }
 serde_json = { workspace = true }
+wiremock = "0.6"
