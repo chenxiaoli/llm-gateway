@@ -279,6 +279,7 @@
       "rateLimit": "Rate Limit (RPM)",
       "monthlyBudget": "Monthly Budget ($)",
       "modelFallback": "Model Fallback",
+      "autoRouteConfig": "Auto Route Config",
       "noneOption": "None"
     }
   },
@@ -292,6 +293,7 @@
       "rateLimit": "Rate Limit (RPM, empty = unlimited)",
       "monthlyBudget": "Monthly Budget ($, empty = unlimited)",
       "modelFallback": "Model Fallback",
+      "autoRouteConfig": "Auto Route Config",
       "noneOption": "None"
     },
     "deleteKey": "Delete Key",

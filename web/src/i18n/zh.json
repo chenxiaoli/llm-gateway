@@ -279,6 +279,7 @@
       "rateLimit": "速率限制 (RPM)",
       "monthlyBudget": "月度预算 ($)",
       "modelFallback": "模型降级",
+      "autoRouteConfig": "自动路由配置",
       "noneOption": "无"
     }
   },
@@ -292,6 +293,7 @@
       "rateLimit": "速率限制 (RPM，留空表示无限制)",
       "monthlyBudget": "月度预算 ($，留空表示无限制)",
       "modelFallback": "模型降级",
+      "autoRouteConfig": "自动路由配置",
       "noneOption": "无"
     },
     "deleteKey": "删除密钥",

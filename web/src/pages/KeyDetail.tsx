@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useKey, useUpdateKey, useDeleteKey } from '../hooks/useKeys';
 import { useModelFallbacks } from '../hooks/useModelFallbacks';
+import { useAutoRouteConfigs } from '../hooks/useAutoRouteConfigs';
 import { Button } from '../components/ui/Button';
 import { Toggle } from '../components/ui/Toggle';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
@@ -18,12 +19,14 @@ export default function KeyDetail() {
   const updateMutation = useUpdateKey();
   const deleteMutation = useDeleteKey();
   const { data: fallbacks } = useModelFallbacks();
+  const { data: autoRouteConfigs } = useAutoRouteConfigs();
 
   const [name, setName] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [rateLimit, setRateLimit] = useState('');
   const [budgetMonthly, setBudgetMonthly] = useState('');
   const [fallbackId, setFallbackId] = useState('');
+  const [autoRouteId, setAutoRouteId] = useState('');
 
   useEffect(() => {
     if (key) {
@@ -32,6 +35,7 @@ export default function KeyDetail() {
       setRateLimit(key.rate_limit != null ? String(key.rate_limit) : '');
       setBudgetMonthly(key.budget_monthly != null ? String(key.budget_monthly) : '');
       setFallbackId(key.model_fallback_id ?? '');
+      setAutoRouteId(key.auto_route_id ?? '');
     }
   }, [key]);
 
@@ -48,6 +52,7 @@ export default function KeyDetail() {
         budget_monthly: budgetMonthly ? Number(budgetMonthly) : null,
         enabled,
         model_fallback_id: fallbackId || null,
+        auto_route_id: autoRouteId || null,
       },
     });
   };
@@ -108,6 +113,13 @@ export default function KeyDetail() {
           <select value={fallbackId} onChange={(e) => setFallbackId(e.target.value)} className="select select-bordered w-full">
             <option value="">{t('keyDetail.form.noneOption')}</option>
             {fallbacks?.map((fb) => (<option key={fb.id} value={fb.id}>{fb.name}</option>))}
+          </select>
+        </div>
+        <div className="form-control">
+          <label className="label"><span className="label-text">{t('keyDetail.form.autoRouteConfig')}</span></label>
+          <select value={autoRouteId} onChange={(e) => setAutoRouteId(e.target.value)} className="select select-bordered w-full">
+            <option value="">{t('keyDetail.form.noneOption')}</option>
+            {autoRouteConfigs?.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
           </select>
         </div>
         <div className="flex gap-2">
