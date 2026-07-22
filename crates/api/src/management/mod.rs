@@ -1,5 +1,6 @@
 pub mod accounts;
 pub mod auth;
+pub mod auto_routes;
 pub mod budget;
 pub mod channels;
 pub mod groups;
@@ -211,6 +212,17 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
         .route(
             "/model-fallbacks/{id}",
             get(model_fallbacks::get_model_fallback).patch(model_fallbacks::update_model_fallback).delete(model_fallbacks::delete_model_fallback),
+        )
+        // Auto Route Configs (authenticated)
+        .route(
+            "/auto-route-configs",
+            post(auto_routes::create_auto_route_config).get(auto_routes::list_auto_route_configs),
+        )
+        .route(
+            "/auto-route-configs/{id}",
+            get(auto_routes::get_auto_route_config)
+                .patch(auto_routes::update_auto_route_config)
+                .delete(auto_routes::delete_auto_route_config),
         )
         // Providers (admin)
         .route(
