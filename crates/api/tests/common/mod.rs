@@ -18,6 +18,9 @@ impl ChannelRegistry for MockChannelRegistry {
     async fn resolve_by_model(&self, _model: &str) -> Vec<ResolvedChannel> {
         Vec::new()
     }
+    async fn resolve_by_pool(&self, _model_names: &[String]) -> Vec<(String, ResolvedChannel)> {
+        Vec::new()
+    }
     async fn reload(&self) {}
     fn disable_channel_model(&self, _channel_id: &str, _model_name: &str, _until: std::time::Instant) {}
     fn is_circuit_broken(&self, _channel_id: &str, _model_name: &str) -> bool { false }
