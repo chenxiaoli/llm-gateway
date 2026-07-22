@@ -706,6 +706,31 @@ impl From<PgModelFallbackRow> for ModelFallbackConfig {
     }
 }
 
+#[derive(FromRow)]
+struct PgAutoRouteConfigRow {
+    id: String,
+    name: String,
+    config: String,
+    created_by: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<PgAutoRouteConfigRow> for AutoRouteConfig {
+    fn from(r: PgAutoRouteConfigRow) -> Self {
+        let config: AutoRouteConfigData =
+            serde_json::from_str(&r.config).unwrap_or(AutoRouteConfigData {
+                model_names: Vec::new(),
+            });
+        AutoRouteConfig {
+            id: r.id,
+            name: r.name,
+            config,
+            created_by: r.created_by,
+            created_at: r.created_at,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -1279,6 +1304,31 @@ impl crate::Storage for PostgresStorage {
         // No longer supported - models are now N:N with providers
         let _ = viewer_org_id;
         Ok(None)
+    }
+
+    async fn list_models_with_capabilities(
+        &self,
+        org_id: &str,
+        require_vision: bool,
+        require_tools: bool,
+        candidate_names: &[String],
+    ) -> Result<Vec<Model>, DbErr> {
+        let rows = sqlx::query_as::<_, PgModelRow>(
+            r#"SELECT id, owner_org_id, name, model_type, pricing_policy_id,
+                      supports_vision, supports_tools, created_at
+               FROM models
+               WHERE owner_org_id = $1
+                 AND (NOT $2 OR supports_vision)
+                 AND (NOT $3 OR supports_tools)
+                 AND name = ANY($4::text[])"#,
+        )
+        .bind(org_id)
+        .bind(require_vision)
+        .bind(require_tools)
+        .bind(candidate_names)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(Into::into).collect())
     }
 
     async fn list_models(&self, viewer_org_id: &str) -> Result<Vec<ModelWithProvider>, DbErr> {
@@ -2589,6 +2639,76 @@ impl crate::Storage for PostgresStorage {
 
     async fn delete_model_fallback(&self, id: &str) -> Result<(), DbErr> {
         sqlx::query("DELETE FROM model_fallbacks WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    // ---- Auto Route Configs ----
+
+    async fn get_auto_route_config(&self, id: &str) -> Result<Option<AutoRouteConfig>, DbErr> {
+        let row: Option<PgAutoRouteConfigRow> = sqlx::query_as(
+            "SELECT id, name, config, created_by, created_at FROM auto_route_configs WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(AutoRouteConfig::from))
+    }
+
+    async fn list_auto_route_configs(&self) -> Result<Vec<AutoRouteConfig>, DbErr> {
+        let rows: Vec<PgAutoRouteConfigRow> = sqlx::query_as(
+            "SELECT id, name, config, created_by, created_at FROM auto_route_configs ORDER BY created_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(AutoRouteConfig::from).collect())
+    }
+
+    async fn create_auto_route_config(
+        &self,
+        config: &AutoRouteConfig,
+    ) -> Result<AutoRouteConfig, DbErr> {
+        let config_json = serde_json::to_string(&config.config)?;
+        let row = sqlx::query_as::<_, PgAutoRouteConfigRow>(
+            r#"INSERT INTO auto_route_configs (id, name, config, created_by, created_at)
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id, name, config, created_by, created_at"#,
+        )
+        .bind(&config.id)
+        .bind(&config.name)
+        .bind(&config_json)
+        .bind(config.created_by.as_deref())
+        .bind(config.created_at)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.into())
+    }
+
+    async fn update_auto_route_config(
+        &self,
+        config: &AutoRouteConfig,
+    ) -> Result<AutoRouteConfig, DbErr> {
+        let config_json = serde_json::to_string(&config.config)?;
+        let row = sqlx::query_as::<_, PgAutoRouteConfigRow>(
+            r#"UPDATE auto_route_configs
+               SET name = $2, config = $3
+               WHERE id = $1
+               RETURNING id, name, config, created_by, created_at"#,
+        )
+        .bind(&config.id)
+        .bind(&config.name)
+        .bind(&config_json)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.into())
+    }
+
+    async fn delete_auto_route_config(&self, id: &str) -> Result<(), DbErr> {
+        sqlx::query("DELETE FROM auto_route_configs WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;
