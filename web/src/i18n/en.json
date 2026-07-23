@@ -53,12 +53,12 @@
     "dashboard": "Dashboard",
     "keys": "API Keys",
     "modelFallbacks": "Model Fallbacks",
+    "autoRoutes": "Auto Routes",
     "models": "Models",
     "usage": "Usage",
     "channels": "Channels",
     "providers": "Providers",
     "pricingPolicies": "Pricing Policies",
-    "users": "Users",
     "members": "Members",
     "invitations": "Invitations",
     "settings": "Settings",
@@ -71,13 +71,27 @@
   "header": {
     "account": "Account",
     "changePassword": "Change Password",
+    "profile": "Profile",
     "logout": "Logout"
+  },
+  "profile": {
+    "title": "Profile",
+    "nickname": "Nickname",
+    "nicknameHint": "Shown wherever you appear in the UI. 1–32 characters.",
+    "nicknamePlaceholder": "Your nickname",
+    "save": "Save",
+    "savedShort": "Nickname updated",
+    "clearedShort": "Nickname cleared",
+    "invalidTooLong": "Nickname must be 1–32 characters",
+    "invalidControlChars": "Nickname contains invalid characters",
+    "username": "Username",
+    "email": "Email"
   },
   "auth": {
     "signIn": "Sign In",
     "signUp": "Create Account",
     "register": "Register",
-    "username": "Username",
+    "usernameOrEmail": "Username or email",
     "password": "Password",
     "confirmPassword": "Confirm Password",
     "currentPassword": "Current Password",
@@ -191,10 +205,6 @@
     "providerModelAddFailed": "Failed to add model",
     "providerModelUpdateFailed": "Failed to update model",
     "providerModelRemoveFailed": "Failed to remove model",
-    "userUpdated": "User updated",
-    "userDeleted": "User deleted",
-    "userUpdateFailed": "Failed to update user",
-    "userDeleteFailed": "Failed to delete user",
     "groupCreated": "Group created",
     "groupCreateFailed": "Failed to create group",
     "groupUpdated": "Group updated",
@@ -209,6 +219,12 @@
     "fallbackCreateFailed": "Failed to create model fallback",
     "fallbackUpdateFailed": "Failed to update model fallback",
     "fallbackDeleteFailed": "Failed to delete model fallback",
+    "autoRouteCreated": "Auto route created",
+    "autoRouteCreateFailed": "Failed to create auto route",
+    "autoRouteUpdated": "Auto route updated",
+    "autoRouteUpdateFailed": "Failed to update auto route",
+    "autoRouteDeleted": "Auto route deleted",
+    "autoRouteDeleteFailed": "Failed to delete auto route",
     "pricingCreated": "Pricing policy created",
     "pricingUpdated": "Pricing policy updated",
     "pricingDeleted": "Pricing policy deleted",
@@ -263,6 +279,7 @@
       "rateLimit": "Rate Limit (RPM)",
       "monthlyBudget": "Monthly Budget ($)",
       "modelFallback": "Model Fallback",
+      "autoRouteConfig": "Auto Route Config",
       "noneOption": "None"
     }
   },
@@ -276,6 +293,7 @@
       "rateLimit": "Rate Limit (RPM, empty = unlimited)",
       "monthlyBudget": "Monthly Budget ($, empty = unlimited)",
       "modelFallback": "Model Fallback",
+      "autoRouteConfig": "Auto Route Config",
       "noneOption": "None"
     },
     "deleteKey": "Delete Key",
@@ -331,7 +349,7 @@
     "providersCount": "{{active}}/{{total}} providers",
     "channelsCount": "{{active}}/{{total}} channels",
     "modelsCount": "{{count}} models",
-    "usersCount": "{{count}} users",
+    "membersCount": "{{count}} members",
     "keysCount": "{{count}} keys",
     "stats": {
       "todayRequests": "Today's Requests",
@@ -374,6 +392,8 @@
     "description": "Register AI models to route requests through the gateway",
     "summary": "{{active}} live · {{idle}} idle · {{policies}} pricing policies",
     "addModel": "Add Model",
+    "supportsVision": "Vision",
+    "supportsTools": "Tools",
     "stats": {
       "total": "Total",
       "live": "Live",
@@ -412,6 +432,7 @@
       "readOnly": "read-only",
       "pricingPolicy": "Pricing Policy",
       "noPolicy": "No policy",
+      "capabilities": "Capabilities",
       "saveChanges": "Save Changes"
     }
   },
@@ -848,27 +869,13 @@
     }
   },
   "users": {
-    "title": "Users",
-    "description": "Manage user accounts and permissions",
     "table": {
-      "username": "Username",
-      "role": "Role",
       "group": "Group",
       "status": "Status",
-      "balance": "Balance",
-      "created": "Created",
-      "actions": "Actions"
+      "balance": "Balance"
     },
-    "roleAdmin": "Admin",
-    "roleUser": "User",
     "enabled": "Enabled",
     "disabled": "Disabled",
-    "noUsers": "No users found",
-    "pagination": {
-      "total": "Total {{count}}",
-      "previous": "Previous",
-      "next": "Next"
-    },
     "drawer": {
       "title": "User Details",
       "accountBalance": "Account Balance",
@@ -904,7 +911,6 @@
     },
     "detail": "Detail",
     "usage": "Usage",
-    "deleteUser": "Delete this user?",
     "usageDrawer": {
       "title": "User Usage",
       "noUsage": "No usage data for this user",
@@ -965,7 +971,15 @@
       "roleUpdated": "Role updated",
       "roleUpdateFailed": "Failed to update role",
       "removed": "Member removed",
-      "removeFailed": "Failed to remove member"
+      "removeFailed": "Failed to remove member",
+      "updated": "Member updated",
+      "updateFailed": "Failed to update member",
+      "recharged": "Balance recharged",
+      "rechargeFailed": "Recharge failed",
+      "adjusted": "Balance adjusted",
+      "adjustFailed": "Adjustment failed",
+      "thresholdUpdated": "Threshold updated",
+      "thresholdUpdateFailed": "Failed to update threshold"
     }
   },
   "orgSettings": {
@@ -977,8 +991,7 @@
       "namePlaceholder": "e.g., Acme Inc.",
       "slug": "Org Slug",
       "slugHint": "Lowercase letters, digits, and hyphens. 3-64 chars.",
-      "save": "Save Changes",
-      "readOnlyNotice": "Only admins can change org settings."
+      "save": "Save Changes"
     },
     "defaults": {
       "title": "Defaults",
@@ -1223,6 +1236,33 @@
       "message": "Are you sure? API keys referencing this config will lose their fallback chain."
     }
   },
+  "autoRoutes": {
+    "title": "Auto Routes",
+    "subtitle": "Per-key capability-aware model pools for model=auto",
+    "createBtn": "New Auto Route",
+    "createFirst": "Create your first auto route",
+    "edit": "Edit",
+    "deleteLabel": "Delete {{name}}",
+    "empty": "No auto routes configured.",
+    "editModal": {
+      "createTitle": "Create Auto Route",
+      "editTitle": "Edit Auto Route",
+      "name": "Name",
+      "namePlaceholder": "e.g., Vision-capable pool",
+      "nameRequired": "Name is required",
+      "models": "Models in pool",
+      "modelsDesc": "Select models eligible for this key's model=auto requests.",
+      "noModels": "No models available. Ask an admin to create models first.",
+      "atLeastOneModel": "Select at least one model",
+      "save": "Save",
+      "create": "Create"
+    },
+    "deleteConfirm": {
+      "title": "Delete auto route?",
+      "message": "This will remove the config. Keys referencing it will return auto_not_configured until reassigned.",
+      "confirm": "Delete"
+    }
+  },
   "pricingPolicies": {
     "title": "Pricing Policies",
     "description": "Configure pricing rules for models and channels",
@@ -1353,6 +1393,10 @@
     "footer": {
       "brand": "TokenVis"
     }
+  },
+  "orgCreate": {
+    "title": "Create a new org",
+    "subtitle": "You'll switch to the new org after creating it."
   },
   "onboarding": {
     "title": "Set up your workspace",

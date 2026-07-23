@@ -140,9 +140,7 @@ pub trait Storage: Send + Sync {
     async fn get_user(&self, id: &str) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_user_by_username(&self, username: &str) -> Result<Option<User>, Box<dyn std::error::Error + Send + Sync>>;
     async fn list_users(&self, org_id: &str) -> Result<Vec<User>, Box<dyn std::error::Error + Send + Sync>>;
-    async fn list_users_paginated(&self, org_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<UserWithBalance>, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_user(&self, user: &User) -> Result<User, Box<dyn std::error::Error + Send + Sync>>;
-    async fn delete_user(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn user_count(&self) -> Result<i64, Box<dyn std::error::Error + Send + Sync>>;
     async fn rotate_refresh_token(&self, user_id: &str, old_token: &str, new_token: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -193,6 +191,38 @@ pub trait Storage: Send + Sync {
     async fn update_model_fallback(&self, config: &ModelFallbackConfig) -> Result<ModelFallbackConfig, Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_model_fallback(&self, id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+    // Auto Route Configs
+    async fn get_auto_route_config(
+        &self,
+        id: &str,
+    ) -> Result<Option<AutoRouteConfig>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_auto_route_configs(
+        &self,
+    ) -> Result<Vec<AutoRouteConfig>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn create_auto_route_config(
+        &self,
+        config: &AutoRouteConfig,
+    ) -> Result<AutoRouteConfig, Box<dyn std::error::Error + Send + Sync>>;
+    async fn update_auto_route_config(
+        &self,
+        config: &AutoRouteConfig,
+    ) -> Result<AutoRouteConfig, Box<dyn std::error::Error + Send + Sync>>;
+    async fn delete_auto_route_config(
+        &self,
+        id: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+    /// Returns models in `candidate_names` that belong to `org_id` and satisfy
+    /// the required capabilities. When `require_vision` is false, the
+    /// `supports_vision` filter is NOT applied (so text-only models stay
+    /// eligible). Same for `require_tools`.
+    async fn list_models_with_capabilities(
+        &self,
+        org_id: &str,
+        require_vision: bool,
+        require_tools: bool,
+        candidate_names: &[String],
+    ) -> Result<Vec<Model>, Box<dyn std::error::Error + Send + Sync>>;
+
     // Seed data
     async fn seed_data(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
@@ -206,7 +236,7 @@ pub trait Storage: Send + Sync {
 
     // ---- Members ----
     async fn get_member(&self, user_id: &str, org_id: &str) -> Result<Option<Member>, Box<dyn std::error::Error + Send + Sync>>;
-    async fn list_members(&self, org_id: &str) -> Result<Vec<Member>, Box<dyn std::error::Error + Send + Sync>>;
+    async fn list_members(&self, org_id: &str) -> Result<Vec<MemberWithDetails>, Box<dyn std::error::Error + Send + Sync>>;
     async fn upsert_member(&self, member: Member) -> Result<Member, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_member_role(&self, user_id: &str, org_id: &str, role: MemberRole) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
     async fn delete_member(&self, user_id: &str, org_id: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
@@ -324,6 +354,16 @@ pub trait Storage: Send + Sync {
         email: &str,
         verified_at: Option<chrono::DateTime<chrono::Utc>>,
         requires_email_verification: bool,
+    ) -> Result<User, Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Set or clear the user's nickname. Pass `None` to clear (write NULL).
+    /// Storage does NOT validate length/charset — that's the API layer's
+    /// job (so the rule lives in exactly one place). Returns the full
+    /// updated User row.
+    async fn set_user_nickname(
+        &self,
+        user_id: &str,
+        nickname: Option<&str>,
     ) -> Result<User, Box<dyn std::error::Error + Send + Sync>>;
 
     // ---- Phase 4: email_verifications ----

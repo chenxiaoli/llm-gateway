@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use llm_gateway_auth::{
-    create_jwt, create_refresh_jwt, hash_password, validate_password, validate_username,
-    verify_password, verify_refresh_jwt,
+    create_jwt, create_refresh_jwt, hash_password, validate_password, verify_password,
+    verify_refresh_jwt,
 };
 use llm_gateway_email::dispatch_with_retry;
 use llm_gateway_email::templates::VerificationCtx;
@@ -23,18 +23,20 @@ use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
+    /// Identifier supplied by the user. May be a username or an email —
+    /// the login handler branches on `@` to pick the lookup. Field name
+    /// is `username` for wire-format backward compat with existing clients.
     pub username: String,
     pub password: String,
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RegisterRequest {
-    pub username: String,
     pub password: String,
-    /// Phase 4: required — the new user must have a verified email before
-    /// they can log in. `Option<String>` so a missing field deserializes to
-    /// `None` and we can return the typed `EmailRequired` (400) error
-    /// instead of Axum's default 422 for malformed JSON.
+    /// Required — the new user must verify this email before they can log in.
+    /// `Option<String>` so a missing field deserializes to `None` and we return
+    /// the typed `EmailRequired` (400) error instead of Axum's default 422.
     #[serde(default)]
     pub email: Option<String>,
     /// Optional invitation token. When present, the new account is
@@ -103,8 +105,9 @@ pub struct AuthResponse {
 #[derive(Serialize, Clone)]
 pub struct UserInfo {
     pub id: String,
-    pub username: String,
+    pub username: Option<String>,
     pub platform_role: Option<String>,
+    pub nickname: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -132,7 +135,7 @@ impl From<MembershipSummary> for OrgSummary {
 #[derive(Serialize)]
 pub struct MeResponse {
     pub id: String,
-    pub username: String,
+    pub username: Option<String>,
     pub platform_role: Option<String>,
     /// null when the user has no memberships (e.g. just self-left their last
     /// org). Callers (frontend `refreshOrgs`) treat null as "send to /login".
@@ -149,6 +152,10 @@ pub struct MeResponse {
     /// the "Add email" banner when this is null and the policy requires it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
+    /// Display name the user chose for themselves (None when unset). The
+    /// frontend `displayName()` helper prefers nickname → username → email.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nickname: Option<String>,
     /// RFC3339 timestamp of when the email was verified, or null if the
     /// email isn't verified yet (or there is no email).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -197,6 +204,16 @@ pub struct SetMyEmailRequest {
     pub email: String,
 }
 
+/// Body for `POST /api/v1/auth/me/nickname`. Lets an already-authenticated
+/// user set or clear their own nickname. An empty/whitespace string after
+/// trim is the explicit "clear" signal — the handler writes NULL. Unknown
+/// fields are rejected so a typo'd key (e.g. `name`) doesn't silently no-op.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SetMyNicknameRequest {
+    pub nickname: String,
+}
+
 #[derive(Deserialize)]
 pub struct CreateOrgRequest {
     pub slug: String,
@@ -209,6 +226,7 @@ impl From<&User> for UserInfo {
             id: u.id.clone(),
             username: u.username.clone(),
             platform_role: u.platform_role.as_ref().map(|p| p.as_str().to_string()),
+            nickname: u.nickname.clone(),
         }
     }
 }
@@ -271,12 +289,20 @@ pub async fn login(
 ) -> Result<Json<AuthResponse>, ApiError> {
     validate_password(&input.password).map_err(ApiError::BadRequest)?;
 
-    let user = state
-        .storage
-        .get_user_by_username(&input.username)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or(ApiError::Unauthorized)?;
+    let user = if input.username.contains('@') {
+        state
+            .storage
+            .get_user_by_email(&input.username)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+    } else {
+        state
+            .storage
+            .get_user_by_username(&input.username)
+            .await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+    }
+    .ok_or(ApiError::Unauthorized)?;
 
     if !user.enabled {
         return Err(ApiError::Unauthorized);
@@ -355,7 +381,6 @@ pub async fn register(
         return Err(ApiError::Forbidden);
     }
 
-    validate_username(&input.username).map_err(ApiError::BadRequest)?;
     validate_password(&input.password).map_err(ApiError::BadRequest)?;
     // Phase 4: email is required for every new account. We validate the
     // shape here (not just the presence) so a malformed string never makes
@@ -368,15 +393,6 @@ pub async fn register(
     }
     validate_email(&email_trimmed).map_err(ApiError::BadRequest)?;
 
-    if state
-        .storage
-        .get_user_by_username(&input.username)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .is_some()
-    {
-        return Err(ApiError::BadRequest("Username already exists".to_string()));
-    }
     if state
         .storage
         .get_user_by_email(&email_trimmed)
@@ -426,7 +442,7 @@ pub async fn register(
     };
     let user = User {
         id: uuid::Uuid::new_v4().to_string(),
-        username: input.username.clone(),
+        username: None, // Email-only registration; username may be added later via profile UI.
         password: hash_password(&input.password).map_err(|e| ApiError::Internal(e.to_string()))?,
         platform_role,
         current_org_id: None,
@@ -441,6 +457,7 @@ pub async fn register(
         email_verified_at: None,
         requires_email_verification: true,
         password_changed_at: now,
+        nickname: None,
     };
 
     state
@@ -496,7 +513,7 @@ pub async fn register(
                 verification.token
             );
             let ctx = VerificationCtx {
-                username: user.username.clone(),
+                username: user.username.clone().unwrap_or_default(),
                 recipient_email: email_trimmed.clone(),
                 verification_url,
                 expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
@@ -664,7 +681,7 @@ pub async fn resend_verification(
         verification.token
     );
     let ctx = VerificationCtx {
-        username: user.username.clone(),
+        username: user.username.clone().unwrap_or_default(),
         recipient_email: email.to_string(),
         verification_url,
         expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
@@ -718,7 +735,7 @@ pub async fn password_reset_request(
         reset.token
     );
     let ctx = llm_gateway_email::templates::PasswordResetCtx {
-        username: user.username.clone(),
+        username: user.username.clone().unwrap_or_default(),
         recipient_email: email,
         reset_url,
         expires_in_hours: PASSWORD_RESET_TTL_HOURS as u32,
@@ -831,6 +848,7 @@ pub async fn me(
         allow_registration: allow_reg,
         impersonating,
         email: user.email.clone(),
+        nickname: user.nickname.clone(),
         email_verified_at: user.email_verified_at.map(|t| t.to_rfc3339()),
         requires_email_verification: user.requires_email_verification,
     }))
@@ -905,7 +923,7 @@ pub async fn set_my_email(
                 verification.token
             );
             let ctx = VerificationCtx {
-                username: updated.username.clone(),
+                username: updated.username.clone().unwrap_or_default(),
                 recipient_email: email.clone(),
                 verification_url,
                 expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
@@ -952,6 +970,65 @@ pub async fn set_my_email(
         allow_registration: get_allow_registration(&state).await,
         impersonating,
         email: updated.email.clone(),
+        nickname: updated.nickname.clone(),
+        email_verified_at: updated.email_verified_at.map(|t| t.to_rfc3339()),
+        requires_email_verification: updated.requires_email_verification,
+    }))
+}
+
+/// POST /api/v1/auth/me/nickname — authenticated.
+///
+/// Sets or clears the user's nickname. An empty/whitespace string after
+/// trim clears it (writes NULL). Validation: 1-32 Unicode scalar values
+/// after trim, no control / zero-width characters. Returns the refreshed
+/// `MeResponse` (same shape as `me()` and `set_my_email()`).
+pub async fn set_my_nickname(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(input): Json<SetMyNicknameRequest>,
+) -> Result<Json<MeResponse>, ApiError> {
+    let nickname = validate_nickname(&input.nickname).map_err(|_| ApiError::InvalidNickname)?;
+
+    let claims = require_auth(&headers, &state.jwt_secret)?;
+    let user = state
+        .storage
+        .get_user(&claims.sub)
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?
+        .ok_or(ApiError::Unauthorized)?;
+
+    let updated = state
+        .storage
+        .set_user_nickname(&user.id, nickname.as_deref())
+        .await
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+    // Build the fresh MeResponse — mirror `set_my_email`'s pattern so the
+    // response shape is identical across the three "self-mutation" endpoints
+    // (me/email, me/nickname). Hardcoded `false` for impersonating would hide
+    // the platform-admin-mode banner.
+    let (current_org, orgs) = current_membership(&state, &updated).await?;
+    let impersonating = match &current_org {
+        Some(org) => state
+            .storage
+            .get_member(&updated.id, &org.id)
+            .await
+            .map_err(|e| ApiError::Internal(format!("member lookup failed: {e}")))?
+            .map(|m| m.created_by.as_deref() == Some("system"))
+            .unwrap_or(false),
+        None => false,
+    };
+
+    Ok(Json(MeResponse {
+        id: updated.id,
+        username: updated.username,
+        platform_role: updated.platform_role.as_ref().map(|p| p.as_str().to_string()),
+        current_org,
+        orgs,
+        allow_registration: get_allow_registration(&state).await,
+        impersonating,
+        email: updated.email.clone(),
+        nickname: updated.nickname.clone(),
         email_verified_at: updated.email_verified_at.map(|t| t.to_rfc3339()),
         requires_email_verification: updated.requires_email_verification,
     }))
@@ -1298,6 +1375,40 @@ pub fn validate_email(s: &str) -> Result<(), String> {
         return Err("email domain contains invalid characters".into());
     }
     Ok(())
+}
+
+/// Validate a nickname submitted via `POST /auth/me/nickname`. Returns the
+/// trimmed nickname to persist, or `None` when the input clears it (empty
+/// after trim — the handler writes NULL). Returns `Err(())` on validation
+/// failure: longer than 32 Unicode scalar values after trim, or containing
+/// control / zero-width characters. The caller maps `Err(())` to
+/// `ApiError::InvalidNickname`.
+///
+/// `chars().count()` counts Unicode scalar values (not grapheme clusters) —
+/// good enough for our purposes and matches what most platforms do. Emoji
+/// (even multi-codepoint sequences like a flag) and CJK characters are
+/// allowed as-is.
+fn validate_nickname(input: &str) -> Result<Option<String>, ()> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if trimmed.chars().count() > 32 {
+        return Err(());
+    }
+    for c in trimmed.chars() {
+        if c.is_control() {
+            return Err(());
+        }
+        // U+200B (ZWSP), U+200C (ZWNJ), U+200D (ZWJ), U+FEFF (BOM/ZWNBSP).
+        // These are not `is_control()` but are equally nasty: invisible,
+        // exploitable in display names (homograph-style attacks, broken
+        // layouts, identifier spoofing).
+        if matches!(c, '\u{200B}'..='\u{200D}' | '\u{FEFF}') {
+            return Err(());
+        }
+    }
+    Ok(Some(trimmed.to_string()))
 }
 
 /// Validate an org slug against the same rule as the DB CHECK constraint:
@@ -1863,35 +1974,29 @@ mod tests {
 
     #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
     async fn register_returns_jwt_with_null_current_org(pool: PgPool) {
-        // POST /auth/register → 200. Response has current_org: None, orgs: [].
-        // The user row in DB has current_org_id = NULL.
         let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
         let app = build_router(storage);
         let resp = post_json(
             &app,
             "/api/v1/auth/register",
             None,
-            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
+            json!({"password": "password123", "email": "alice@example.com"}),
         )
         .await;
         assert_eq!(resp.status(), axum::http::StatusCode::OK);
         let body = body_json(resp).await;
-        assert!(
-            body["current_org"].is_null(),
-            "limbo user should have null current_org, got {}",
-            body["current_org"]
-        );
+        assert!(body["current_org"].is_null());
         assert!(body["orgs"].as_array().unwrap().is_empty());
         assert!(body["token"].is_string());
 
-        // DB row should have current_org_id = NULL.
-        // Look up the user we just created (id is generated; look up by username).
-        let row: (String, Option<String>) = sqlx::query_as(
-            "SELECT id, current_org_id FROM users WHERE username = 'alice'",
+        // Look up the user by email (the row has username = NULL).
+        let row: (Option<String>, Option<String>) = sqlx::query_as(
+            "SELECT username, current_org_id FROM users WHERE email = 'alice@example.com'",
         )
         .fetch_one(&pool)
         .await
         .expect("user row");
+        assert!(row.0.is_none(), "username must be NULL for email-only signup");
         assert!(row.1.is_none(), "DB current_org_id must be NULL for limbo user");
     }
 
@@ -1906,12 +2011,12 @@ mod tests {
             &app,
             "/api/v1/auth/register",
             None,
-            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
+            json!({"password": "password123", "email": "alice@example.com"}),
         )
         .await;
         let body = body_json(resp).await;
         let token = body["token"].as_str().unwrap().to_string();
-        let user_id: String = sqlx::query_scalar("SELECT id FROM users WHERE username = 'alice'")
+        let user_id: String = sqlx::query_scalar("SELECT id FROM users WHERE email = 'alice@example.com'")
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -2041,7 +2146,7 @@ mod tests {
             &app,
             "/api/v1/auth/register",
             None,
-            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
+            json!({"password": "password123", "email": "alice@example.com"}),
         )
         .await;
         let body = body_json(resp).await;
@@ -2062,7 +2167,7 @@ mod tests {
             &app,
             "/api/v1/auth/register",
             None,
-            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
+            json!({"password": "password123", "email": "alice@example.com"}),
         )
         .await;
         let body = body_json(resp).await;
@@ -2085,5 +2190,296 @@ mod tests {
         assert_eq!(resp.status(), axum::http::StatusCode::OK);
         let body = body_json(resp).await;
         assert_eq!(body["needs_onboarding"], false);
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn login_accepts_email_identifier(pool: PgPool) {
+        // Register an email-only user, then log in by email. Verifies the '@'
+        // branch in the login handler resolves to the right row.
+        let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
+        let app = build_router(storage);
+
+        let _ = post_json(
+            &app,
+            "/api/v1/auth/register",
+            None,
+            json!({"password": "password123", "email": "alice@example.com"}),
+        )
+        .await;
+
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/login",
+            None,
+            json!({"username": "alice@example.com", "password": "password123"}),
+        )
+        .await;
+        // User hasn't verified email — expect 403 email_not_verified (proves the
+        // email branch resolved the row, otherwise we'd get 401 invalid creds).
+        assert_eq!(resp.status(), axum::http::StatusCode::FORBIDDEN);
+        let body = body_json(resp).await;
+        assert_eq!(body["error"]["code"], "email_not_verified");
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn login_accepts_username_identifier_for_legacy_user(pool: PgPool) {
+        // Convert a freshly-registered email-only user into a "legacy-style
+        // verified user with a username" by SQL UPDATE, then log in by username.
+        // This avoids hardcoding an argon2 hash in the test.
+        let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
+        let app = build_router(storage);
+
+        let _ = post_json(
+            &app,
+            "/api/v1/auth/register",
+            None,
+            json!({"password": "password123", "email": "alice@example.com"}),
+        )
+        .await;
+
+        // Mutate the row: set username, mark email verified, disable the
+        // verification gate (mirrors a legacy user who predates Phase 4).
+        sqlx::query(
+            "UPDATE users SET username = 'alice', email_verified_at = NOW(), \
+             requires_email_verification = FALSE \
+             WHERE email = 'alice@example.com'",
+        )
+        .execute(&pool)
+        .await
+        .expect("update user");
+
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/login",
+            None,
+            json!({"username": "alice", "password": "password123"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body = body_json(resp).await;
+        assert_eq!(body["user"]["username"], "alice");
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn login_rejects_unknown_identifier_with_401(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/login",
+            None,
+            json!({"username": "ghost@example.com", "password": "password123"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn register_rejects_request_with_username_field(pool: PgPool) {
+        // The wire format change is breaking by design — stale clients still
+        // sending `username` get a 422 thanks to deny_unknown_fields.
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/register",
+            None,
+            json!({"username": "alice", "password": "password123", "email": "alice@example.com"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn me_returns_nickname_field_null_for_fresh_user(pool: PgPool) {
+        // A freshly-registered user has no nickname; GET /auth/me must surface
+        // nickname as null/absent (matching the existing `email` field's
+        // skip_serializing_if = "Option::is_none" contract) so the frontend's
+        // displayName() helper can fall back to username/email. Then we set a
+        // nickname via the storage layer (Task 3) and verify it round-trips
+        // through /auth/me — proving the field is wired end-to-end.
+        let storage = Arc::new(PostgresStorage::from_pool(pool.clone()));
+        let app = build_router(storage.clone());
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/register",
+            None,
+            json!({"password": "password123", "email": "nick-fresh@example.com"}),
+        )
+        .await;
+        let body: serde_json::Value = serde_json::from_slice(
+            &to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
+        )
+        .unwrap();
+        let token = body["token"].as_str().unwrap();
+        let user_id = body["user"]["id"].as_str().unwrap().to_string();
+
+        // Fresh user: nickname is absent from the payload (skip_serializing_if
+        // omits None). Indexing a Value with an absent key yields Null, so this
+        // asserts both the omission and the explicit-null representations.
+        let resp = get_authed(&app, "/api/v1/auth/me", token).await;
+        let me_resp: serde_json::Value =
+            serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(me_resp["nickname"], serde_json::Value::Null);
+
+        // Set a nickname directly via storage, then re-fetch /auth/me. The
+        // nickname must round-trip through the API layer.
+        storage
+            .set_user_nickname(&user_id, Some("Alice"))
+            .await
+            .expect("set_user_nickname");
+        let resp = get_authed(&app, "/api/v1/auth/me", token).await;
+        let me_resp: serde_json::Value =
+            serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(me_resp["nickname"], "Alice");
+    }
+
+    // ─── Task 5: POST /auth/me/nickname tests ───
+
+    async fn register_and_get_token(app: &axum::Router, email: &str) -> String {
+        let resp = post_json(
+            app,
+            "/api/v1/auth/register",
+            None,
+            json!({"password": "password123", "email": email}),
+        )
+        .await;
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        body["token"].as_str().unwrap().to_string()
+    }
+
+    /// GET helper that returns the parsed JSON body. Used by nickname tests
+    /// to verify the side effect of POST /auth/me/nickname shows up in /me.
+    async fn read_json(app: &axum::Router, uri: &str, token: &str) -> serde_json::Value {
+        let resp = get_authed(app, uri, token).await;
+        serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+            .unwrap()
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn set_my_nickname_persists_and_appears_in_me(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+        let token = register_and_get_token(&app, "nick1@example.com").await;
+
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            Some(&token),
+            json!({"nickname": "Alice"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(body["nickname"], "Alice");
+
+        // GET /me also reflects it.
+        let me_resp = read_json(&app, "/api/v1/auth/me", &token).await;
+        assert_eq!(me_resp["nickname"], "Alice");
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn set_my_nickname_empty_string_clears(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+        let token = register_and_get_token(&app, "nick2@example.com").await;
+
+        // Set first.
+        post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            Some(&token),
+            json!({"nickname": "Bob"}),
+        )
+        .await;
+        // Then clear.
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            Some(&token),
+            json!({"nickname": ""}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert!(body["nickname"].is_null());
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn set_my_nickname_rejects_too_long(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+        let token = register_and_get_token(&app, "nick3@example.com").await;
+
+        let too_long = "x".repeat(33);
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            Some(&token),
+            json!({"nickname": too_long}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn set_my_nickname_rejects_control_chars(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+        let token = register_and_get_token(&app, "nick4@example.com").await;
+
+        // U+200B (zero-width space) must be rejected.
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            Some(&token),
+            json!({"nickname": "bad\u{200B}name"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::BAD_REQUEST);
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn set_my_nickname_rejects_unauthenticated(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            None,
+            json!({"nickname": "Anon"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::UNAUTHORIZED);
+    }
+
+    #[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+    async fn set_my_nickname_accepts_emoji_and_cjk(pool: PgPool) {
+        let storage = Arc::new(PostgresStorage::from_pool(pool));
+        let app = build_router(storage);
+        let token = register_and_get_token(&app, "nick5@example.com").await;
+
+        let resp = post_json(
+            &app,
+            "/api/v1/auth/me/nickname",
+            Some(&token),
+            json!({"nickname": "🌟小明"}),
+        )
+        .await;
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(resp.into_body(), usize::MAX).await.unwrap())
+                .unwrap();
+        assert_eq!(body["nickname"], "🌟小明");
     }
 }

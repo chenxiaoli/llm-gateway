@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores/authStore';
 import { isAdminOrAbove } from '../lib/auth';
+import { displayName } from '../lib/displayName';
 import { useCurrencyStore, formatCurrency } from '../stores/currency';
 import { useMyBalance } from '../hooks/useAccounts';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -46,11 +47,13 @@ export default function Account() {
       >
         <div className="flex items-center gap-5">
           <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
-            <span className="text-2xl font-bold text-primary">{user?.username?.charAt(0).toUpperCase()}</span>
+            <span className="text-2xl font-bold text-primary">
+              {(user ? displayName(user) : '').charAt(0).toUpperCase() || '?'}
+            </span>
           </div>
           <div>
             <h1 className="text-3xl font-black tracking-tight text-base-content leading-none mb-1.5">
-              {user?.username}
+              {user ? displayName(user) : ''}
             </h1>
             <div className="flex items-center gap-2">
               <Badge variant={isAdmin ? 'green' : 'blue'}>

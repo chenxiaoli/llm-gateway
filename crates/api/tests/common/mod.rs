@@ -18,6 +18,9 @@ impl ChannelRegistry for MockChannelRegistry {
     async fn resolve_by_model(&self, _model: &str) -> Vec<ResolvedChannel> {
         Vec::new()
     }
+    async fn resolve_by_pool(&self, _model_names: &[String]) -> Vec<(String, ResolvedChannel)> {
+        Vec::new()
+    }
     async fn reload(&self) {}
     fn disable_channel_model(&self, _channel_id: &str, _model_name: &str, _until: std::time::Instant) {}
     fn is_circuit_broken(&self, _channel_id: &str, _model_name: &str) -> bool { false }
@@ -111,11 +114,11 @@ pub async fn seed_admin_user(pool: &PgPool) {
 /// /auth/login succeeds. Tests that don't care about the verification
 /// flow call this after registration; tests that DO care leave the user
 /// un-verified and assert the login gate.
-pub async fn mark_user_verified(pool: &PgPool, username: &str) {
+pub async fn mark_user_verified(pool: &PgPool, email: &str) {
     sqlx::query(
-        "UPDATE users SET email_verified_at = NOW() WHERE username = $1",
+        "UPDATE users SET email_verified_at = NOW() WHERE email = $1",
     )
-    .bind(username)
+    .bind(email)
     .execute(pool)
     .await
     .expect("mark user verified");

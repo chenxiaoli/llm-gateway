@@ -109,6 +109,47 @@ pub struct Member {
     pub created_at: DateTime<Utc>,
 }
 
+/// Default per-membership account threshold. Structurally equal to
+/// `UNITS_PER_USD` because the intended value is "1.00 USD" expressed in
+/// subunits (10⁸ per USD). Matches the migration default in
+/// 20260426000000_accounts_and_transactions.sql. Used when inserting new
+/// account rows (upsert_member / accept_invitation) and as the COALESCE
+/// fallback when joining accounts in `list_members`.
+pub const DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS: i64 = crate::money::UNITS_PER_USD;
+
+/// A membership row joined with its user, optional group, and per-membership
+/// account. This is the shape `list_members` returns so the Members page UI
+/// can render balance / enabled / email / group_name columns in one round-trip
+/// (no N+1 of `get_user` / `get_account`).
+///
+/// `role` is the raw lowercase string from `members.role` (matches
+/// `MemberRole::as_str`). `balance` / `threshold` are subunits (10⁸ per USD);
+/// when no `accounts` row exists the SQL COALESCEs them to `0` and
+/// `DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS` respectively.
+#[derive(Debug, Clone, serde::Serialize, sqlx::FromRow)]
+pub struct MemberWithDetails {
+    pub user_id: String,
+    pub org_id: String,
+    pub username: Option<String>,
+    pub email: Option<String>,
+    /// User-chosen friendly name (joined from `users.nickname`). NULL when
+    /// unset; see `displayName` in the frontend for the fallback chain.
+    pub nickname: Option<String>,
+    /// Raw lowercase role string from `members.role` (`"owner" | "admin" | "member"`).
+    pub role: String,
+    pub group_id: Option<String>,
+    pub group_name: Option<String>,
+    /// From `users.enabled`.
+    pub enabled: bool,
+    /// From `accounts.balance` (subunits, 10⁸ per USD). 0 when no account row.
+    pub balance: i64,
+    /// From `accounts.threshold` (subunits, 10⁸ per USD). Falls back to
+    /// `DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS` when no account row.
+    pub threshold: i64,
+    /// From `members.created_at`.
+    pub created_at: DateTime<Utc>,
+}
+
 /// Summary of a user's membership in one org.
 ///
 /// NOTE for Task 5: this struct has a nested `org: Org` field. The SQL for
@@ -222,7 +263,7 @@ pub struct InvitationPreview {
     pub org_name: String,
     pub org_slug: String,
     pub role: String,
-    pub inviter_username: String,
+    pub inviter_username: Option<String>,
     pub recipient_email: Option<String>,
     pub expires_at: DateTime<Utc>,
 }
@@ -275,6 +316,7 @@ pub struct ApiKey {
     pub enabled: bool,
     pub created_by: Option<String>,
     pub model_fallback_id: Option<String>,
+    pub auto_route_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -475,6 +517,8 @@ pub struct Model {
     pub name: String,          // display name
     pub model_type: Option<String>,
     pub pricing_policy_id: Option<String>,
+    pub supports_vision: bool,
+    pub supports_tools: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -683,6 +727,8 @@ pub struct CreateModel {
 #[derive(Debug, Deserialize)]
 pub struct UpdateModel {
     pub pricing_policy_id: Option<Option<String>>,  // None=keep, Some(None)=clear
+    pub supports_vision: Option<bool>,
+    pub supports_tools: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -830,13 +876,59 @@ pub struct DailyUsageRecord {
     pub request_count: i64,
 }
 
-fn deserialize_datetime_opt<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<DateTime<Utc>>, D::Error> {
+// Accepts RFC3339 (passthrough) or `YYYY-MM-DD` (treated as that day's UTC
+// midnight). The HTML `<input type="date">` picker produces `YYYY-MM-DD`,
+// which `DateTime::parse_from_rfc3339` rejects with "premature end of input".
+fn parse_since(s: &str) -> Result<DateTime<Utc>, String> {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        return Ok(dt.with_timezone(&Utc));
+    }
+    match chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+        Ok(d) => Ok(d.and_hms_opt(0, 0, 0).unwrap().and_utc()),
+        Err(_) => Err(format!(
+            "invalid datetime '{}': expected RFC3339 or YYYY-MM-DD",
+            s
+        )),
+    }
+}
+
+// Like `parse_since` but a date-only input becomes end-of-day (23:59:59.999999
+// UTC) so the SQL `created_at <= $N` comparison includes logs from that date.
+// Without this adjustment, `until=2026-07-13` would parse as midnight and
+// exclude every log on 2026-07-13 after 00:00:00.
+fn parse_until(s: &str) -> Result<DateTime<Utc>, String> {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(s) {
+        return Ok(dt.with_timezone(&Utc));
+    }
+    match chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+        Ok(d) => Ok(d
+            .and_hms_micro_opt(23, 59, 59, 999_999)
+            .unwrap()
+            .and_utc()),
+        Err(_) => Err(format!(
+            "invalid datetime '{}': expected RFC3339 or YYYY-MM-DD",
+            s
+        )),
+    }
+}
+
+fn deserialize_since_opt<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<DateTime<Utc>>, D::Error> {
     let s: Option<String> = Option::deserialize(d)?;
     match s {
         None => Ok(None),
-        Some(v) => DateTime::parse_from_rfc3339(&v)
-            .map(|dt| Some(dt.with_timezone(&Utc)))
-            .map_err(serde::de::Error::custom),
+        Some(v) => parse_since(&v).map(Some).map_err(serde::de::Error::custom),
+    }
+}
+
+fn deserialize_until_opt<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<DateTime<Utc>>, D::Error> {
+    let s: Option<String> = Option::deserialize(d)?;
+    match s {
+        None => Ok(None),
+        Some(v) => parse_until(&v).map(Some).map_err(serde::de::Error::custom),
     }
 }
 
@@ -845,9 +937,9 @@ pub struct UsageFilter {
     pub key_id: Option<String>,
     pub user_id: Option<String>,
     pub model_name: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_datetime_opt")]
+    #[serde(default, deserialize_with = "deserialize_since_opt")]
     pub since: Option<DateTime<Utc>>,
-    #[serde(default, deserialize_with = "deserialize_datetime_opt")]
+    #[serde(default, deserialize_with = "deserialize_until_opt")]
     pub until: Option<DateTime<Utc>>,
     #[serde(default)]
     pub tz: Option<String>,
@@ -947,9 +1039,9 @@ pub struct LogFilter {
     #[serde(skip)]
     pub user_id: Option<String>,
     pub model_name: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_datetime_opt")]
+    #[serde(default, deserialize_with = "deserialize_since_opt")]
     pub since: Option<DateTime<Utc>>,
-    #[serde(default, deserialize_with = "deserialize_datetime_opt")]
+    #[serde(default, deserialize_with = "deserialize_until_opt")]
     pub until: Option<DateTime<Utc>>,
     #[serde(default, deserialize_with = "deserialize_i64_opt")]
     pub offset: Option<i64>,
@@ -962,7 +1054,7 @@ pub struct LogFilter {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: String,
-    pub username: String,
+    pub username: Option<String>,
     pub password: String,
     pub platform_role: Option<PlatformRole>,
     pub current_org_id: Option<String>,
@@ -975,41 +1067,17 @@ pub struct User {
     pub email_verified_at: Option<DateTime<Utc>>,
     pub requires_email_verification: bool,
     pub password_changed_at: DateTime<Utc>,
-}
-
-// TODO(Task 5/8): migrate alongside User — drop role/group_id fields once
-// list_users_paginated and the management handlers stop reading them.
-// User was migrated in this commit; these sibling types were intentionally
-// left for the next task to avoid expanding scope.
-#[derive(Debug, Clone, Serialize)]
-pub struct UserWithBalance {
-    pub id: String,
-    pub username: String,
-    pub role: String,
-    pub enabled: bool,
-    pub group_id: Option<String>,
-    pub group_name: Option<String>,
-    pub balance: i64,
-    pub threshold: i64,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    /// User-chosen friendly name. Optional — display code falls back via
+    /// the frontend `displayName()` helper (nickname → username → email).
+    /// Not unique; validated to 1-32 UTF-8 chars when set via the API.
+    pub nickname: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateUser {
-    pub username: String,
+    pub username: Option<String>,
     pub password: String,
-}
-
-// TODO(Task 5/8): migrate alongside User — drop role/group_id fields once
-// list_users_paginated and the management handlers stop reading them.
-// User was migrated in this commit; these sibling types were intentionally
-// left for the next task to avoid expanding scope.
-#[derive(Debug, Deserialize)]
-pub struct UpdateUser {
-    pub role: Option<String>,
-    pub enabled: Option<bool>,
-    pub group_id: Option<Option<String>>,
+    pub nickname: Option<String>,
 }
 
 // --- Groups ---
@@ -1258,6 +1326,34 @@ pub struct CreateModelFallback {
 pub struct UpdateModelFallback {
     pub name: Option<String>,
     pub config: Option<Vec<ModelFallbackGroup>>,
+}
+
+// --- Auto Route Config ---
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoRouteConfigData {
+    pub model_names: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AutoRouteConfig {
+    pub id: String,
+    pub name: String,
+    pub config: AutoRouteConfigData,
+    pub created_by: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateAutoRouteConfig {
+    pub name: String,
+    pub config: AutoRouteConfigData,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateAutoRouteConfig {
+    pub name: Option<String>,
+    pub config: Option<AutoRouteConfigData>,
 }
 
 // --- Settings ---

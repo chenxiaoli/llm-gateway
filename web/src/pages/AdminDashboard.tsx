@@ -6,7 +6,7 @@ import { useLogs } from '../hooks/useLogs';
 import { useProviders } from '../hooks/useProviders';
 import { useAllChannels } from '../hooks/useChannels';
 import { useAllModels } from '../hooks/useModels';
-import { useUsers } from '../hooks/useUsers';
+import { useMembers } from '../hooks/useMembers';
 import { useKeys } from '../hooks/useKeys';
 import { useSystemInfo, useNatsStatus } from '../hooks/useSettings';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -80,7 +80,7 @@ export default function AdminDashboard() {
   const { data: providers } = useProviders();
   const { data: channels } = useAllChannels();
   const { data: models } = useAllModels();
-  const { data: users } = useUsers(1, 1);
+  const { data: members } = useMembers();
   const { data: keys } = useKeys(1, 1);
   const { data: systemInfo } = useSystemInfo();
   const { data: natsStatus } = useNatsStatus();
@@ -155,9 +155,9 @@ export default function AdminDashboard() {
               <Cpu className="h-3.5 w-3.5" />
               {t('adminDashboard.modelsCount', { count: models?.length ?? 0 })}
             </button>
-            <button onClick={() => navigate(slug ? `/${slug}/admin/users` : '/login')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
+            <button onClick={() => navigate(slug ? `/${slug}/members` : '/login')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               <Users className="h-3.5 w-3.5" />
-              {t('adminDashboard.usersCount', { count: users?.total ?? 0 })}
+              {t('adminDashboard.membersCount', { count: members?.length ?? 0 })}
             </button>
             <button onClick={() => navigate(slug ? `/${slug}/keys` : '/login')} className="flex items-center gap-1.5 text-xs text-base-content/40 hover:text-accent transition-colors cursor-pointer">
               <KeyRound className="h-3.5 w-3.5" />

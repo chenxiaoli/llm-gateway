@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod auto_route;
 pub mod error;
 pub mod extractors;
 pub mod models;

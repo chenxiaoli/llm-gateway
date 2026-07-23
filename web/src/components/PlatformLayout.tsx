@@ -1,6 +1,7 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { isPlatformAdmin } from '../lib/auth';
+import { displayName } from '../lib/displayName';
 import { useTranslation } from 'react-i18next';
 import { Settings, Users, PanelLeftClose } from 'lucide-react';
 
@@ -71,7 +72,7 @@ export default function PlatformLayout() {
                 {t('platformLayout.backTo')} {currentOrg.name}
               </button>
             )}
-            <div className="ml-auto text-xs text-base-content/40">{user?.username}</div>
+            <div className="ml-auto text-xs text-base-content/40">{user ? displayName(user) : ''}</div>
           </div>
         </header>
         <main className="flex-1 p-4 md:p-6 overflow-y-auto pt-16 pb-8">

@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — `model=auto` capability-aware routing
+
+- **`model=auto` request routing**: clients can send `model=auto` on
+  `/v1/chat/completions` and `/v1/messages` requests, and the gateway
+  resolves a model from a per-key admin-defined pool based on capabilities
+  the request actually needs. Vision is required when the body contains an
+  `image_url` (OpenAI) or `image` (Anthropic) content block; tools is
+  required when the body carries a non-empty `tools` array. The existing
+  channel priority + weighted routing then runs over the resulting
+  candidate pool, with failover across models on 5xx/429/conn-error.
+- New `auto_route_configs` platform-level table (mirrors `model_fallbacks`)
+  + `api_keys.auto_route_id` FK for binding a config to a key. Management
+  endpoints at `/api/v1/{slug}/auto-route-configs` (CRUD).
+- New `supports_vision` / `supports_tools` BOOLEAN columns on `models`,
+  populated by admin manual entry on the Models page (no upstream call, no
+  sync job, no auto-discovery — admin ticks the checkboxes for each model
+  they want eligible for auto-routing).
+- New `Auto Routes` admin page + sidebar entry under Console.
+- New API errors: `auto_not_configured` (400, key has no `auto_route_id`),
+  `auto_no_matching_model` (400, pool has 0 models with the required
+  capabilities), `auto_all_candidates_failed` (502, every (model, channel)
+  candidate failed), `model_name_reserved` (400, model creation rejects the
+  name `auto`).
+
 ### Added — Platform admin bootstrap & management
 
 - **Platform-admin management UI** (`/admin/platform-users`): list current
@@ -24,10 +48,64 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   link). Backend `/api/v1/admin/settings` and `/api/v1/admin/platform-users`
   are no longer org-scoped.
 
+### Added — User nickname field
+
+- **User nickname field** + `POST /api/v1/auth/me/nickname` endpoint + new
+  `/{slug}/profile` page. Optional display name; NULL by default for existing
+  rows. Non-unique, validated to 1–32 UTF-8 chars after trim (empty string =
+  clear, writes NULL). Rejects ASCII control chars, Unicode Cc/Cf category
+  chars (including bidi overrides like U+202E), and zero-width chars. The
+  frontend `displayName()` helper falls back `nickname → username → email`.
+  The `list_members` pipeline joins `users.nickname`, so the Members table
+  surfaces the nickname alongside `username`/`email`.
+
 ### Changed
 
 - `/{slug}/admin/settings` → `/admin/settings`. A client-side `<Navigate>`
   preserves bookmarks from the just-shipped prior URL scheme.
+
+### Changed — Users → Members refactor (v2.1.0)
+
+- The `accounts` table is now per-membership (1:1 with `(user_id, org_id)`)
+  instead of per-user. Each org membership carries its own balance and
+  threshold; a user belonging to multiple orgs has one account per org.
+- Account-action routes moved from `/api/v1/{slug}/admin/users/{id}/*` to
+  `/api/v1/{slug}/admin/members/{user_id}/*` (`balance`, `recharge`, `adjust`,
+  `threshold`). Old routes return 410 Gone.
+- `PATCH /api/v1/{slug}/members/{user_id}` now accepts `{role?, enabled?,
+  group_id?}` (was `change_member_role` only — role-only). Last-owner guard
+  still triggers when stripping the org's last owner role.
+- `list_members` response enriched: each member now includes `enabled`,
+  `balance`, `threshold`, and `group_name`. Frontend `Member` type mirrors
+  this; `created_at` replaces the prior `joined_at` field.
+- The per-org `Members` page absorbs all capabilities of the former standalone
+  `Users` page — balance drawer, recharge/adjust modals, per-member usage
+  drawer, status toggle, group assignment.
+
+### Removed — Users → Members refactor (v2.1.0)
+
+- `GET /api/v1/{slug}/admin/users`, `POST …/admin/users`,
+  `PATCH/DELETE …/admin/users/{id}` — replaced by the `/members/*` family.
+- Storage methods `list_users_paginated` and `delete_user` (and the
+  `PgUserWithBalanceRow` row struct).
+- Frontend `pages/Users.tsx`, `api/users.ts`, `hooks/useUsers.ts`, and the
+  `UserResponse` / `UpdateUserRequest` types.
+- Sidebar entry `/{slug}/admin/users`; i18n keys `sidebar.users` and
+  `toasts.user{Updated,Deleted,UpdateFailed,DeleteFailed}`. The
+  `users.{drawer,rechargeModal,adjustModal,usageDrawer}.*` keys are kept —
+  Members.tsx still consumes them.
+
+### Fixed
+
+- `/api/v1/{slug}/admin/logs` time filter (`since`/`until`) no longer returns 400 with `operator does not exist: timestamp with time zone >= text`. `query_logs_paginated` was binding `since`/`until` as RFC3339 strings via a homogeneous `Vec<String>`, so sqlx sent them as postgres `text` and the `audit_logs.created_at >= $N` comparison failed. Filter values are now bound as typed `DateTime<Utc>` (matching the `query_usage_paginated` pattern), so postgres receives `timestamptz`. Same fix applied to the v1.x maintenance line as v1.8.5.
+- `/api/v1/{slug}/admin/logs` time filter now accepts date-only values (`YYYY-MM-DD`, as produced by the frontend's `<input type="date">` picker). Previously the filter deserialized `since`/`until` with `DateTime::parse_from_rfc3339`, which rejects date-only strings with `Failed to deserialize query string: premature end of input`. `since` is parsed as that day's UTC midnight, `until` as that day's UTC end-of-day (23:59:59.999999) so logs from the entire day are included. RFC3339 input continues to work as before. Same fix applied to the v1.x maintenance line as v1.8.6.
+- Frontend `orgPrefix()` helper returned `/api/v1/${slug}` while `apiClient` already had `baseURL: '/api/v1'`, so axios combined them into `/api/v1/api/v1/${slug}/...` for every org-scoped endpoint. The backend's v2.1.0 `legacy_gone` 410 fallback then surfaced this as "endpoint moved in v2.1.0" on every channel/member/key/usage/etc. call. `orgPrefix()` now returns `/${slug}` and lets `baseURL` carry the `/api/v1` prefix.
+
+### Fixed — Users → Members refactor (v2.1.0)
+
+- `storage::add_balance` INSERT arity bug: 9 columns but only 8 `$N`
+  placeholders. Broke every recharge / adjust call since the SaaS
+  multi-tenant refactor; regression test added.
 
 ### Added — Phase 4: Email + Email-Bound Invitations (v2.1.0)
 

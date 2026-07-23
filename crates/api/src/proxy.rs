@@ -83,6 +83,10 @@ impl ResolvedChannel {
 #[async_trait]
 pub trait ChannelRegistry: Send + Sync {
     async fn resolve_by_model(&self, model: &str) -> Vec<ResolvedChannel>;
+    /// Resolve channels across multiple model names, returning `(model_name, ResolvedChannel)` pairs.
+    /// A channel may appear multiple times if it serves multiple pool models — that's correct;
+    /// the caller deduplicates per attempt by `(model_name, channel_id)`.
+    async fn resolve_by_pool(&self, model_names: &[String]) -> Vec<(String, ResolvedChannel)>;
     async fn resolve(&self, channel_id: &str) -> Option<ResolvedChannel>;
     async fn reload(&self);
     fn disable_channel_model(&self, channel_id: &str, model_name: &str, until: Instant);
@@ -322,19 +326,19 @@ fn select_weighted_order<T>(items: &mut Vec<T>, weight_fn: impl Fn(&T) -> i32) {
     }
 }
 
-fn apply_weighted_routing(candidates: &mut Vec<(ResolvedChannel, llm_gateway_storage::ChannelModel)>) {
-    candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
+fn apply_weighted_routing(candidates: &mut Vec<(String, ResolvedChannel, llm_gateway_storage::ChannelModel)>) {
+    candidates.sort_by(|a, b| a.1.priority.cmp(&b.1.priority));
     let mut result = Vec::with_capacity(candidates.len());
     let mut i = 0;
     while i < candidates.len() {
-        let prio = candidates[i].0.priority;
+        let prio = candidates[i].1.priority;
         let start = i;
-        while i < candidates.len() && candidates[i].0.priority == prio {
+        while i < candidates.len() && candidates[i].1.priority == prio {
             i += 1;
         }
         let mut tier: Vec<_> = candidates[start..i].to_vec();
         if tier.len() > 1 {
-            select_weighted_order(&mut tier, |c| c.0.weight.unwrap_or(100));
+            select_weighted_order(&mut tier, |c| c.1.weight.unwrap_or(100));
         }
         result.extend(tier);
     }
@@ -369,6 +373,16 @@ impl ChannelRegistry for InMemoryChannelRegistry {
             }
             None => Vec::new(),
         }
+    }
+
+    async fn resolve_by_pool(&self, model_names: &[String]) -> Vec<(String, ResolvedChannel)> {
+        let mut out = Vec::new();
+        for name in model_names {
+            for rc in self.resolve_by_model(name).await {
+                out.push((name.clone(), rc));
+            }
+        }
+        out
     }
 
     async fn resolve(&self, channel_id: &str) -> Option<ResolvedChannel> {
@@ -1092,6 +1106,38 @@ async fn proxy_route_and_forward(
         model_name, protocol, fallback_depth
     );
 
+    // === model=auto: load config + capability-filter the pool ===
+    // Auto routing is independent of model_fallback — auto requests never fall
+    // through to per-key fallbacks. We capture the filtered pool here so the
+    // candidate-gathering step below can branch on `is_auto`.
+    let is_auto = client_requested_model.eq_ignore_ascii_case("auto");
+
+    let auto_pool: Vec<llm_gateway_storage::Model> = if is_auto {
+        let config_id = api_key.auto_route_id.as_deref()
+            .ok_or(ApiError::AutoNotConfigured)?;
+        let config = state.storage.get_auto_route_config(config_id).await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+            .ok_or(ApiError::AutoNotConfigured)?;
+        let required = crate::auto_route::detect_required_capabilities(&req_json);
+        state.storage.list_models_with_capabilities(
+            &api_key.org_id,
+            required.vision,
+            required.tools,
+            &config.config.model_names,
+        ).await
+            .map_err(|e| ApiError::Internal(e.to_string()))?
+    } else {
+        Vec::new()
+    };
+
+    if is_auto && auto_pool.is_empty() {
+        let required = crate::auto_route::detect_required_capabilities(&req_json);
+        return Err(ApiError::AutoNoMatchingModel {
+            required_vision: required.vision,
+            required_tools: required.tools,
+        });
+    }
+
     // === Step 3: Find model → provider → channels ===
     let models = state
         .storage
@@ -1106,56 +1152,83 @@ async fn proxy_route_and_forward(
         .and_then(|s| s.as_bool())
         .unwrap_or(false);
 
-    let model_entry = match models
-        .iter()
-        .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase())
-    {
-        Some(m) => m,
-        None => {
-            // Record the routing miss so the chain shows why we fell back.
-            routes.push(llm_gateway_storage::RouteAttempt {
-                model: model_name.clone(),
-                channel_id: String::new(),
-                channel_name: None,
-                provider_id: String::new(),
-                status_code: 0,
-                error_message: Some(format!("Model '{}' not in registry", model_name)),
-                latency_ms: 0,
-                started_at: chrono::Utc::now(),
-            });
-            if fallback_depth == 0 {
-                if let Some(resp) = try_model_fallback(
-                    &state, &headers, &body, &client_requested_model, &api_key,
-                    &request_user_id, request_is_admin, &request_id,
-                    protocol, &request_path,
-                    routes,
-                ).await {
-                    return Ok(resp);
+    // In auto mode we skip the single-model registry lookup; the failover loop
+    // still references `model_entry.model.pricing_policy_id` as a per-attempt
+    // fallback (channel_model.pricing_policy_id takes priority), so we point
+    // `model_entry` at the first pool model for that best-effort fallback.
+    let model_entry: llm_gateway_storage::ModelWithProvider = if is_auto {
+        let first = &auto_pool[0];
+        llm_gateway_storage::ModelWithProvider {
+            model: first.clone(),
+            pricing_policy_name: None,
+            channel_ids: Vec::new(),
+            channel_names: Vec::new(),
+        }
+    } else {
+        match models
+            .iter()
+            .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase())
+        {
+            Some(m) => m.clone(),
+            None => {
+                // Record the routing miss so the chain shows why we fell back.
+                routes.push(llm_gateway_storage::RouteAttempt {
+                    model: model_name.clone(),
+                    channel_id: String::new(),
+                    channel_name: None,
+                    provider_id: String::new(),
+                    status_code: 0,
+                    error_message: Some(format!("Model '{}' not in registry", model_name)),
+                    latency_ms: 0,
+                    started_at: chrono::Utc::now(),
+                });
+                if !is_auto && fallback_depth == 0 {
+                    if let Some(resp) = try_model_fallback(
+                        &state, &headers, &body, &client_requested_model, &api_key,
+                        &request_user_id, request_is_admin, &request_id,
+                        protocol, &request_path,
+                        routes,
+                    ).await {
+                        return Ok(resp);
+                    }
                 }
+                return Err(ApiError::NotFound(format!("Model '{}' not found", model_name)));
             }
-            return Err(ApiError::NotFound(format!("Model '{}' not found", model_name)));
         }
     };
 
-    // Normalize model_name to database canonical form for consistent usage/audit records
+    // Normalize model_name to database canonical form for consistent usage/audit records.
+    // In auto mode this is the first pool model's canonical name; per-candidate
+    // names ride along in `routing_candidates` tuples.
     let model_name = model_entry.model.name.clone();
 
     tracing::debug!("[PROXY] Found model: {} (id: {})", model_entry.model.name, model_entry.model.id);
 
     // === Step 3: Route via ChannelRegistry (cache-first) ===
-    let resolved_channels = state.registry.resolve_by_model(&model_name).await;
+    // Auto mode skips the single-model cache lookup; it pulls candidates from
+    // the entire pool via `resolve_by_pool`. Each candidate carries its own
+    // model name (first tuple element) so the failover loop audit-logs the
+    // correct per-attempt model.
+    let mut routing_candidates: Vec<(String, ResolvedChannel, llm_gateway_storage::ChannelModel)> = if is_auto {
+        // AUTO PATH: gather candidates from the entire capability-filtered pool.
+        let pool_names: Vec<String> = auto_pool.iter().map(|m| m.name.clone()).collect();
+        let pool_index: std::collections::HashMap<String, &llm_gateway_storage::Model> =
+            auto_pool.iter().map(|m| (m.name.to_lowercase(), m)).collect();
 
-    let mut routing_candidates: Vec<(ResolvedChannel, llm_gateway_storage::ChannelModel)> = if !resolved_channels.is_empty() {
-        // Cache hit: use pre-enriched per-model data (no DB call needed)
-        let model_key = model_name.to_lowercase();
-        let mut candidates = Vec::new();
-        for rc in resolved_channels {
+        let resolved_pairs = state.registry.resolve_by_pool(&pool_names).await;
+        let mut candidates: Vec<(String, ResolvedChannel, llm_gateway_storage::ChannelModel)> = Vec::new();
+        for (model_name_lc, rc) in resolved_pairs {
+            let model_key = model_name_lc.to_lowercase();
             if let Some(enriched) = rc.model_overrides.get(&model_key) {
+                let model_entry_for_cm = match pool_index.get(&model_key) {
+                    Some(m) => *m,
+                    None => continue,
+                };
                 let cm = llm_gateway_storage::ChannelModel {
-                    id: Uuid::new_v4().to_string(), // not used in routing path
+                    id: Uuid::new_v4().to_string(),
                     org_id: api_key.org_id.clone(),
                     channel_id: rc.channel_id.to_string(),
-                    model_id: model_entry.model.id.clone(),
+                    model_id: model_entry_for_cm.id.clone(),
                     enabled: true,
                     upstream_model_name: enriched.upstream_model_name.clone(),
                     pricing_policy_id: enriched.pricing_policy_id.clone(),
@@ -1164,206 +1237,259 @@ async fn proxy_route_and_forward(
                     created_at: Utc::now(),
                     updated_at: Utc::now(),
                 };
-                candidates.push((rc, cm));
+                candidates.push((model_name_lc, rc, cm));
             }
         }
         if candidates.is_empty() {
-            routes.push(llm_gateway_storage::RouteAttempt {
-                model: model_name.clone(),
-                channel_id: String::new(),
-                channel_name: None,
-                provider_id: String::new(),
-                status_code: 0,
-                error_message: Some(format!("No enabled channels for model '{}' (cache empty)", model_name)),
-                latency_ms: 0,
-                started_at: chrono::Utc::now(),
+            // Pool had models but no resolvable channels — surface as no-match.
+            // The capability filter already passed; the issue is channel wiring,
+            // which the admin should fix. Reuse AutoNoMatchingModel (4xx) so the
+            // user sees a clear error rather than a generic 502.
+            return Err(ApiError::AutoNoMatchingModel {
+                required_vision: false,
+                required_tools: false,
             });
-            if fallback_depth == 0 {
-                if let Some(resp) = try_model_fallback(
-                    &state, &headers, &body, &client_requested_model, &api_key,
-                    &request_user_id, request_is_admin, &request_id,
-                    protocol, &request_path,
-                    routes,
-                ).await {
-                    return Ok(resp);
-                }
-            }
-            return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
         }
-        // Apply user-group routing filter
+        // Apply user-group filter (mirror single-model cache-hit path).
         if let Some(ref user_id) = request_user_id {
             if !request_is_admin {
                 match state.storage.get_user_group_id(user_id, &api_key.org_id).await {
                     Ok(Some(allowed_group_id)) => {
-                        candidates.retain(|(rc, _)| {
+                        candidates.retain(|(_, rc, _)| {
                             rc.group_id.is_none() || rc.group_id.as_deref() == Some(&allowed_group_id)
                         });
                     }
-                    Ok(None) => { /* User has no group — unrestricted */ }
+                    Ok(None) => {}
                     Err(e) => {
                         tracing::warn!("[PROXY] Failed to look up group for user {}: {}", user_id, e);
-                        /* Fail-open: don't filter */
                     }
                 }
             }
         }
-        // Already sorted by priority in do_reload()
         candidates
     } else {
-        // Cache miss: use original DB routing logic
-        let channel_models = state
-            .storage
-            .get_channel_models_for_model(&api_key.org_id, &model_entry.model.id)
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-        let all_channels = state
-            .storage
-            .list_channels(&api_key.org_id)
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?;
-
-        let channel_map: std::collections::HashMap<&str, &llm_gateway_storage::Channel> = all_channels
-            .iter()
-            .map(|c| (c.id.as_str(), c))
-            .collect();
-
-        // Collect enabled + available channels first
-        let mut available_channels: Vec<(&llm_gateway_storage::ChannelModel, &llm_gateway_storage::Channel)> =
-            channel_models.iter()
-                .filter(|cm| cm.enabled)
-                .filter_map(|cm| {
-                    channel_map.get(cm.channel_id.as_str()).and_then(|ch| {
-                        if ch.enabled && is_available_now(&ch.available_hours) {
-                            Some((cm, *ch))
-                        } else {
-                            None
+        // NON-AUTO PATH: existing single-model flow, wrapped with per-candidate model name.
+        let resolved_channels = state.registry.resolve_by_model(&model_name).await;
+        if !resolved_channels.is_empty() {
+            // Cache hit: use pre-enriched per-model data (no DB call needed)
+            let model_key = model_name.to_lowercase();
+            let mut candidates: Vec<(String, ResolvedChannel, llm_gateway_storage::ChannelModel)> = Vec::new();
+            for rc in resolved_channels {
+                if let Some(enriched) = rc.model_overrides.get(&model_key) {
+                    let cm = llm_gateway_storage::ChannelModel {
+                        id: Uuid::new_v4().to_string(), // not used in routing path
+                        org_id: api_key.org_id.clone(),
+                        channel_id: rc.channel_id.to_string(),
+                        model_id: model_entry.model.id.clone(),
+                        enabled: true,
+                        upstream_model_name: enriched.upstream_model_name.clone(),
+                        pricing_policy_id: enriched.pricing_policy_id.clone(),
+                        markup_ratio: enriched.markup_ratio,
+                        priority_override: None,
+                        created_at: Utc::now(),
+                        updated_at: Utc::now(),
+                    };
+                    candidates.push((model_name.clone(), rc, cm));
+                }
+            }
+            if candidates.is_empty() {
+                routes.push(llm_gateway_storage::RouteAttempt {
+                    model: model_name.clone(),
+                    channel_id: String::new(),
+                    channel_name: None,
+                    provider_id: String::new(),
+                    status_code: 0,
+                    error_message: Some(format!("No enabled channels for model '{}' (cache empty)", model_name)),
+                    latency_ms: 0,
+                    started_at: chrono::Utc::now(),
+                });
+                if fallback_depth == 0 {
+                    if let Some(resp) = try_model_fallback(
+                        &state, &headers, &body, &client_requested_model, &api_key,
+                        &request_user_id, request_is_admin, &request_id,
+                        protocol, &request_path,
+                        routes,
+                    ).await {
+                        return Ok(resp);
+                    }
+                }
+                return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
+            }
+            // Apply user-group routing filter
+            if let Some(ref user_id) = request_user_id {
+                if !request_is_admin {
+                    match state.storage.get_user_group_id(user_id, &api_key.org_id).await {
+                        Ok(Some(allowed_group_id)) => {
+                            candidates.retain(|(_, rc, _)| {
+                                rc.group_id.is_none() || rc.group_id.as_deref() == Some(&allowed_group_id)
+                            });
                         }
-                    })
-                })
+                        Ok(None) => { /* User has no group — unrestricted */ }
+                        Err(e) => {
+                            tracing::warn!("[PROXY] Failed to look up group for user {}: {}", user_id, e);
+                            /* Fail-open: don't filter */
+                        }
+                    }
+                }
+            }
+            // Already sorted by priority in do_reload()
+            candidates
+        } else {
+            // Cache miss: use original DB routing logic
+            let channel_models = state
+                .storage
+                .get_channel_models_for_model(&api_key.org_id, &model_entry.model.id)
+                .await
+                .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+            let all_channels = state
+                .storage
+                .list_channels(&api_key.org_id)
+                .await
+                .map_err(|e| ApiError::Internal(e.to_string()))?;
+
+            let channel_map: std::collections::HashMap<&str, &llm_gateway_storage::Channel> = all_channels
+                .iter()
+                .map(|c| (c.id.as_str(), c))
                 .collect();
 
-        // Apply user-group routing filter
-        if let Some(ref user_id) = request_user_id {
-            if !request_is_admin {
-                if let Ok(Some(allowed_group_id)) = state.storage.get_user_group_id(user_id, &api_key.org_id).await {
-                    available_channels.retain(|(_, ch)| {
-                        ch.group_id.is_none() || ch.group_id.as_deref() == Some(&allowed_group_id)
-                    });
+            // Collect enabled + available channels first
+            let mut available_channels: Vec<(&llm_gateway_storage::ChannelModel, &llm_gateway_storage::Channel)> =
+                channel_models.iter()
+                    .filter(|cm| cm.enabled)
+                    .filter_map(|cm| {
+                        channel_map.get(cm.channel_id.as_str()).and_then(|ch| {
+                            if ch.enabled && is_available_now(&ch.available_hours) {
+                                Some((cm, *ch))
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .collect();
+
+            // Apply user-group routing filter
+            if let Some(ref user_id) = request_user_id {
+                if !request_is_admin {
+                    if let Ok(Some(allowed_group_id)) = state.storage.get_user_group_id(user_id, &api_key.org_id).await {
+                        available_channels.retain(|(_, ch)| {
+                            ch.group_id.is_none() || ch.group_id.as_deref() == Some(&allowed_group_id)
+                        });
+                    }
                 }
             }
-        }
 
-        if available_channels.is_empty() {
-            routes.push(llm_gateway_storage::RouteAttempt {
-                model: model_name.clone(),
-                channel_id: String::new(),
-                channel_name: None,
-                provider_id: String::new(),
-                status_code: 0,
-                error_message: Some(format!("No enabled channels for model '{}' (DB routing empty)", model_name)),
-                latency_ms: 0,
-                started_at: chrono::Utc::now(),
+            if available_channels.is_empty() {
+                routes.push(llm_gateway_storage::RouteAttempt {
+                    model: model_name.clone(),
+                    channel_id: String::new(),
+                    channel_name: None,
+                    provider_id: String::new(),
+                    status_code: 0,
+                    error_message: Some(format!("No enabled channels for model '{}' (DB routing empty)", model_name)),
+                    latency_ms: 0,
+                    started_at: chrono::Utc::now(),
+                });
+                if fallback_depth == 0 {
+                    if let Some(resp) = try_model_fallback(
+                        &state, &headers, &body, &client_requested_model, &api_key,
+                        &request_user_id, request_is_admin, &request_id,
+                        protocol, &request_path,
+                        routes,
+                    ).await {
+                        return Ok(resp);
+                    }
+                }
+                return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
+            }
+
+            let provider_id = available_channels[0].1.provider_id.as_str();
+            let provider = state
+                .storage
+                .get_provider(&api_key.org_id, provider_id)
+                .await
+                .map_err(|e| ApiError::Internal(e.to_string()))?
+                .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
+
+            let mut candidates: Vec<(String, ResolvedChannel, llm_gateway_storage::ChannelModel)> = Vec::new();
+            for (cm, channel) in &available_channels {
+                let endpoints: serde_json::Value = provider
+                    .endpoints
+                    .as_ref()
+                    .and_then(|e| serde_json::from_str(e).ok())
+                    .unwrap_or(serde_json::Value::Null);
+                let endpoint_openai = endpoints
+                    .get("openai")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
+                    .map(|s| s.to_string());
+                let endpoint_anthropic = endpoints
+                    .get("anthropic")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
+                    .map(|s| s.to_string());
+
+                let proxy_url = provider.proxy_url.clone();
+
+                let api_key = llm_gateway_encryption::decrypt(&channel.api_key, &state.encryption_key)
+                    .unwrap_or_else(|_| channel.api_key.clone());
+
+                let resolved = ResolvedChannel {
+                    channel_id: Uuid::parse_str(&channel.id).unwrap_or_else(|_| Uuid::new_v4()),
+                    provider_id: channel.provider_id.clone(),
+                    name: channel.name.clone(),
+                    endpoint_openai,
+                    endpoint_anthropic,
+                    upstream_api_key: api_key,
+                    adapter: protocol,
+                    timeout_ms: 60_000,
+                    priority: channel.priority,
+                    weight: channel.weight,
+                    model_overrides: HashMap::new(), // not used in cache-miss path
+                    proxy_url,
+                    group_id: channel.group_id.clone(),
+                    available_hours: channel.available_hours.clone(),
+                };
+                candidates.push((model_name.clone(), resolved, (*cm).clone()));
+            }
+            candidates.sort_by(|a, b| a.1.priority.cmp(&b.1.priority));
+            // Filter out circuit-broken (channel, model) combinations
+            let model_lower = model_name.to_lowercase();
+            candidates.retain(|(_, ch, _)| {
+                !state.registry.is_circuit_broken(&ch.channel_id.to_string(), &model_lower)
             });
-            if fallback_depth == 0 {
-                if let Some(resp) = try_model_fallback(
-                    &state, &headers, &body, &client_requested_model, &api_key,
-                    &request_user_id, request_is_admin, &request_id,
-                    protocol, &request_path,
-                    routes,
-                ).await {
-                    return Ok(resp);
+            if candidates.is_empty() {
+                routes.push(llm_gateway_storage::RouteAttempt {
+                    model: model_name.clone(),
+                    channel_id: String::new(),
+                    channel_name: None,
+                    provider_id: String::new(),
+                    status_code: 0,
+                    error_message: Some(format!("No enabled channels for model '{}' (all circuit-broken)", model_name)),
+                    latency_ms: 0,
+                    started_at: chrono::Utc::now(),
+                });
+                if fallback_depth == 0 {
+                    if let Some(resp) = try_model_fallback(
+                        &state, &headers, &body, &client_requested_model, &api_key,
+                        &request_user_id, request_is_admin, &request_id,
+                        protocol, &request_path,
+                        routes,
+                    ).await {
+                        return Ok(resp);
+                    }
                 }
+                return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
             }
-            return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
+            candidates
         }
-
-        let provider_id = available_channels[0].1.provider_id.as_str();
-        let provider = state
-            .storage
-            .get_provider(&api_key.org_id, provider_id)
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?
-            .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
-
-        let mut candidates: Vec<(ResolvedChannel, llm_gateway_storage::ChannelModel)> = Vec::new();
-        for (cm, channel) in &available_channels {
-            let endpoints: serde_json::Value = provider
-                .endpoints
-                .as_ref()
-                .and_then(|e| serde_json::from_str(e).ok())
-                .unwrap_or(serde_json::Value::Null);
-            let endpoint_openai = endpoints
-                .get("openai")
-                .and_then(|v| v.as_str())
-                .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
-                .map(|s| s.to_string());
-            let endpoint_anthropic = endpoints
-                .get("anthropic")
-                .and_then(|v| v.as_str())
-                .or_else(|| endpoints.get("default").and_then(|v| v.as_str()))
-                .map(|s| s.to_string());
-
-            let proxy_url = provider.proxy_url.clone();
-
-            let api_key = llm_gateway_encryption::decrypt(&channel.api_key, &state.encryption_key)
-                .unwrap_or_else(|_| channel.api_key.clone());
-
-            let resolved = ResolvedChannel {
-                channel_id: Uuid::parse_str(&channel.id).unwrap_or_else(|_| Uuid::new_v4()),
-                provider_id: channel.provider_id.clone(),
-                name: channel.name.clone(),
-                endpoint_openai,
-                endpoint_anthropic,
-                upstream_api_key: api_key,
-                adapter: protocol,
-                timeout_ms: 60_000,
-                priority: channel.priority,
-                weight: channel.weight,
-                model_overrides: HashMap::new(), // not used in cache-miss path
-                proxy_url,
-                group_id: channel.group_id.clone(),
-                available_hours: channel.available_hours.clone(),
-            };
-            candidates.push((resolved, (*cm).clone()));
-        }
-        candidates.sort_by(|a, b| a.0.priority.cmp(&b.0.priority));
-        // Filter out circuit-broken (channel, model) combinations
-        let model_lower = model_name.to_lowercase();
-        candidates.retain(|(ch, _)| {
-            !state.registry.is_circuit_broken(&ch.channel_id.to_string(), &model_lower)
-        });
-        if candidates.is_empty() {
-            routes.push(llm_gateway_storage::RouteAttempt {
-                model: model_name.clone(),
-                channel_id: String::new(),
-                channel_name: None,
-                provider_id: String::new(),
-                status_code: 0,
-                error_message: Some(format!("No enabled channels for model '{}' (all circuit-broken)", model_name)),
-                latency_ms: 0,
-                started_at: chrono::Utc::now(),
-            });
-            if fallback_depth == 0 {
-                if let Some(resp) = try_model_fallback(
-                    &state, &headers, &body, &client_requested_model, &api_key,
-                    &request_user_id, request_is_admin, &request_id,
-                    protocol, &request_path,
-                    routes,
-                ).await {
-                    return Ok(resp);
-                }
-            }
-            return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
-        }
-        candidates
     };
 
     apply_weighted_routing(&mut routing_candidates);
 
     // Extract provider_id from resolved channel for audit/billing
     let provider_id = routing_candidates.first()
-        .map(|(c, _)| c.provider_id.clone())
+        .map(|(_, c, _)| c.provider_id.clone())
         .ok_or_else(|| ApiError::Internal("No channels available".to_string()))?;
 
     let default_client = reqwest::Client::new();
@@ -1376,15 +1502,22 @@ async fn proxy_route_and_forward(
     // the top of the chain sees every attempt — including fallbacks — in order.
     let start_total = Instant::now();
 
-    for (channel, channel_model) in &routing_candidates {
-        // Use upstream_model_name if provided, otherwise use the model name from request
-        let upstream_name = channel_model.upstream_model_name.as_deref().unwrap_or(&model_name);
+    for (candidate_model_name, channel, channel_model) in &routing_candidates {
+        // Use upstream_model_name if provided, otherwise use the per-candidate
+        // model name (in auto mode each candidate may target a different model).
+        let upstream_name = channel_model.upstream_model_name.as_deref().unwrap_or(candidate_model_name);
 
         let modified_body = {
             let mut req_json_modified = req_json.clone();
-            if upstream_name != &model_name {
+            if upstream_name != candidate_model_name {
                 if let Some(model_obj) = req_json_modified.get_mut("model") {
                     *model_obj = serde_json::Value::String(upstream_name.to_string());
+                }
+            } else {
+                // Make sure the model field matches the candidate's model name
+                // exactly (auto mode: original body had "model":"auto").
+                if let Some(model_obj) = req_json_modified.get_mut("model") {
+                    *model_obj = serde_json::Value::String(candidate_model_name.clone());
                 }
             }
             if is_stream && matches!(protocol, ProxyProtocol::OpenAI) && req_json_modified.get("stream_options").is_none() {
@@ -1576,7 +1709,7 @@ async fn proxy_route_and_forward(
             };
             state.registry.disable_channel_model(
                 &channel.channel_id.to_string(),
-                &model_name,
+                candidate_model_name,
                 recovery_instant,
             );
 
@@ -1689,8 +1822,8 @@ if status != 200 && status < 500 {
                 markup_ratio: channel_model.markup_ratio,
                 channel_id: Some(channel.channel_id.to_string()),
                 original_model: Some(client_requested_model.clone()),
-                upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
-                model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
+                upstream_model: if upstream_name != candidate_model_name { Some(upstream_name.to_string()) } else { None },
+                model_override_reason: if upstream_name != candidate_model_name { Some("channel_mapping".to_string()) } else { None },
                 request_path: Some(request_path.clone()),
                 upstream_url: Some(upstream_url.clone()),
                 request_headers: Some(request_headers_for_worker),
@@ -1768,8 +1901,8 @@ if status != 200 && status < 500 {
                 markup_ratio: channel_model.markup_ratio,
                 channel_id: channel.channel_id.to_string(),
                 original_model: Some(client_requested_model.clone()),
-                upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
-                model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
+                upstream_model: if upstream_name != candidate_model_name { Some(upstream_name.to_string()) } else { None },
+                model_override_reason: if upstream_name != candidate_model_name { Some("channel_mapping".to_string()) } else { None },
                 request_path: request_path.clone(),
                 upstream_url: upstream_url.clone(),
                 request_headers: request_headers_for_worker.clone(),
@@ -1889,8 +2022,9 @@ if status != 200 && status < 500 {
         return Ok(response_bytes.into_response());
     }
 
-    // All channels failed — try model fallback
-    if fallback_depth == 0 {
+    // All channels failed — try model fallback (auto and fallback are independent:
+    // auto requests never fall through to per-key model_fallbacks).
+    if !is_auto && fallback_depth == 0 {
         if let Some(resp) = try_model_fallback(
             &state, &headers, &body, &client_requested_model, &api_key,
             &request_user_id, request_is_admin, &request_id,
@@ -1955,6 +2089,13 @@ if status != 200 && status < 500 {
         }
     }
 
+    if is_auto {
+        // Auto-routed requests report a typed terminal failure instead of the
+        // generic 502 — the client gets a stable `auto_all_candidates_failed`
+        // code to branch on.
+        return Err(ApiError::AutoAllCandidatesFailed);
+    }
+
     Err(ApiError::UpstreamError(502, format!("All channels failed. Last error: {}", last_error)))
 }
 /// Axum handler for proxy requests.
@@ -2009,6 +2150,9 @@ mod tests {
         }
         async fn resolve_by_model(&self, _model: &str) -> Vec<ResolvedChannel> {
             self.0.clone()
+        }
+        async fn resolve_by_pool(&self, _model_names: &[String]) -> Vec<(String, ResolvedChannel)> {
+            Vec::new()
         }
         async fn reload(&self) {}
         fn disable_channel_model(&self, _channel_id: &str, _model_name: &str, _until: Instant) {}

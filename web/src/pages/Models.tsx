@@ -11,7 +11,7 @@ import { Modal } from '../components/ui/Modal';
 import { CatalogFilter, type CatalogScope } from '../components/CatalogFilter';
 import { CatalogNoMatches } from '../components/CatalogNoMatches';
 import { Plus, Cpu, Pencil, Sparkles, Radio } from 'lucide-react';
-import type { CreateGlobalModelRequest, ModelWithProvider, PricingPolicy } from '../types';
+import type { CreateGlobalModelRequest, ModelWithProvider, PricingPolicy, UpdateModelRequest } from '../types';
 import { motion } from 'framer-motion';
 
 // ── Price formatter ───────────────��────────────────────────────────────────────
@@ -107,8 +107,16 @@ function ModelCard({ model, index, onEdit, policies, reducedMotion }: ModelCardP
 
               {/* Model name */}
               <div className="min-w-0">
-                <div className="font-mono text-lg font-bold text-base-content leading-tight truncate max-w-[200px]" title={model.name}>
-                  {model.name}
+                <div className="flex items-center gap-1.5">
+                  <div className="font-mono text-lg font-bold text-base-content leading-tight truncate max-w-[200px]" title={model.name}>
+                    {model.name}
+                  </div>
+                  {model.supports_vision && (
+                    <span className="badge badge-xs badge-ghost shrink-0 font-mono">{t('models.supportsVision')}</span>
+                  )}
+                  {model.supports_tools && (
+                    <span className="badge badge-xs badge-ghost shrink-0 font-mono">{t('models.supportsTools')}</span>
+                  )}
                 </div>
                 <div className="text-xs mt-0.5 text-base-content/50">
                   {isActive ? t('models.card.channelsActive', { count: model.channel_names.length }) : t('models.card.noRouting')}
@@ -381,16 +389,20 @@ function EditModelModal({
   model: ModelWithProvider | null;
   open: boolean;
   onClose: () => void;
-  onSave: (data: { pricing_policy_id?: string | null }) => Promise<void>;
+  onSave: (data: UpdateModelRequest) => Promise<void>;
   isPending: boolean;
 }) {
   const { t } = useTranslation();
   const { data: policies } = usePricingPolicies();
   const [pricingPolicyId, setPricingPolicyId] = useState('');
+  const [supportsVision, setSupportsVision] = useState(false);
+  const [supportsTools, setSupportsTools] = useState(false);
 
   useEffect(() => {
     if (model) {
       setPricingPolicyId(model.pricing_policy_id ?? '');
+      setSupportsVision(model.supports_vision);
+      setSupportsTools(model.supports_tools);
     }
   }, [model]);
 
@@ -398,6 +410,8 @@ function EditModelModal({
     e.preventDefault();
     await onSave({
       pricing_policy_id: pricingPolicyId || undefined,
+      supports_vision: supportsVision,
+      supports_tools: supportsTools,
     });
     onClose();
   };
@@ -427,6 +441,32 @@ function EditModelModal({
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+            {t('models.editModal.capabilities')}
+          </label>
+          <div className="flex items-center gap-6 px-3 py-2.5 rounded-lg border border-base-300 bg-base-200/50">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-sm"
+                checked={supportsVision}
+                onChange={(e) => setSupportsVision(e.target.checked)}
+              />
+              <span className="text-sm text-base-content/80">{t('models.supportsVision')}</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-sm"
+                checked={supportsTools}
+                onChange={(e) => setSupportsTools(e.target.checked)}
+              />
+              <span className="text-sm text-base-content/80">{t('models.supportsTools')}</span>
+            </label>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 pt-1">

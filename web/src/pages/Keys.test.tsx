@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderWithProviders } from '../test/render';
 import { server } from '../test/server';
 import { http, HttpResponse } from 'msw';
@@ -180,4 +180,85 @@ describe('Keys page', () => {
     const fillB = within(rowB).getByTestId('progress-fill');
     expect(fillB.className).toContain('bg-muted');
   });
+
+  it('lists auto-route configs in the create-key select', async () => {
+    server.use(
+      http.get('*/api/v1/test-org/keys', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
+      http.get('*/api/v1/test-org/model-fallbacks', () => HttpResponse.json([])),
+      http.get('*/api/v1/test-org/auto-route-configs', () =>
+        HttpResponse.json([
+          { id: 'cfg-1', name: 'Vision pool', config: { model_names: ['gpt-4o'] }, created_by: null, created_at: '2026-07-15T00:00:00Z' },
+        ]),
+      ),
+    );
+
+    renderWithProviders(<Keys />, { route: '/console/keys' });
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'API Keys' })).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    await userEvent.click(screen.getByRole('button', { name: /Create Key/i }));
+
+    // The auto-route select should be present and list the config
+    expect(screen.getByText('Auto Route Config')).toBeInTheDocument();
+    const autoRouteSelect = screen.getAllByRole('combobox').find((s) =>
+      Array.from(s.querySelectorAll('option')).some((o) => (o as HTMLOptionElement).value === 'cfg-1'),
+    );
+    expect(autoRouteSelect).toBeDefined();
+  });
+
+  it('submits auto_route_id when creating a key', async () => {
+    const createSpy = vi.fn();
+    server.use(
+      http.get('*/api/v1/test-org/keys', () => HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 })),
+      http.get('*/api/v1/test-org/model-fallbacks', () => HttpResponse.json([])),
+      http.get('*/api/v1/test-org/auto-route-configs', () =>
+        HttpResponse.json([
+          { id: 'cfg-9', name: 'Submitted pool', config: { model_names: ['claude'] }, created_by: null, created_at: '2026-07-15T00:00:00Z' },
+        ]),
+      ),
+      http.post('*/api/v1/test-org/keys', async ({ request }) => {
+        const body = await request.json();
+        createSpy(body);
+        return HttpResponse.json({
+          id: 'key-new', name: body.name, key: 'sk-live-xyz',
+          rate_limit: null, budget_monthly: null, enabled: true, created_at: '2026-07-22T00:00:00Z',
+        });
+      }),
+    );
+
+    renderWithProviders(<Keys />, { route: '/console/keys' });
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'API Keys' })).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    await userEvent.click(screen.getByRole('button', { name: /Create Key/i }));
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('e.g., production-app')).toBeInTheDocument();
+    }, { timeout: 5000 });
+
+    await userEvent.type(screen.getByPlaceholderText('e.g., production-app'), 'routed-key');
+
+    // Find the auto-route select (the one with cfg-9 as an option) and select it
+    const selects = screen.getAllByRole('combobox');
+    const autoRouteSelect = selects.find((s) =>
+      Array.from(s.querySelectorAll('option')).some((o) => (o as HTMLOptionElement).value === 'cfg-9'),
+    )!;
+    await userEvent.selectOptions(autoRouteSelect, 'cfg-9');
+
+    // Submit the form (last .btn-primary button is the form submit)
+    const allPrimaryBtns = document.querySelectorAll('button.btn-primary');
+    const createBtn = allPrimaryBtns[allPrimaryBtns.length - 1] as HTMLButtonElement;
+    await userEvent.click(createBtn);
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalled();
+    }, { timeout: 10000 });
+
+    const submitted = createSpy.mock.calls[0][0];
+    expect(submitted.auto_route_id).toBe('cfg-9');
+  }, 15000);
 });

@@ -53,6 +53,7 @@ struct PgKeyRow {
     enabled: bool,
     created_by: Option<String>,
     model_fallback_id: Option<String>,
+    auto_route_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
 }
@@ -70,6 +71,7 @@ impl From<PgKeyRow> for ApiKey {
             enabled: r.enabled,
             created_by: r.created_by,
             model_fallback_id: r.model_fallback_id,
+            auto_route_id: r.auto_route_id,
             created_at: r.created_at,
             updated_at: r.updated_at,
         }
@@ -88,6 +90,7 @@ struct PgKeyWithMtdRow {
     enabled: bool,
     created_by: Option<String>,
     model_fallback_id: Option<String>,
+    auto_route_id: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
     mtd_units: i64,
@@ -107,6 +110,7 @@ impl From<PgKeyWithMtdRow> for crate::types::ApiKeyWithMtd {
                 enabled: r.enabled,
                 created_by: r.created_by,
                 model_fallback_id: r.model_fallback_id,
+                auto_route_id: r.auto_route_id,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
             },
@@ -153,6 +157,8 @@ struct PgModelRow {
     name: String,
     model_type: Option<String>,
     pricing_policy_id: Option<String>,
+    supports_vision: bool,
+    supports_tools: bool,
     created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -164,6 +170,8 @@ struct PgModelEnrichedRow {
     model_type: Option<String>,
     pp_id: Option<String>,
     pp_name: Option<String>,
+    supports_vision: bool,
+    supports_tools: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     channel_ids_csv: Option<String>,
     channel_names_csv: Option<String>,
@@ -177,6 +185,8 @@ impl From<PgModelRow> for Model {
             name: r.name,
             model_type: r.model_type,
             pricing_policy_id: r.pricing_policy_id,
+            supports_vision: r.supports_vision,
+            supports_tools: r.supports_tools,
             created_at: r.created_at,
         }
     }
@@ -189,6 +199,8 @@ struct PgModelWithProviderRow {
     name: String,
     model_type: Option<String>,
     pricing_policy_id: Option<String>,
+    supports_vision: bool,
+    supports_tools: bool,
     created_at: chrono::DateTime<chrono::Utc>,
     provider_name: String,
     #[allow(dead_code)]
@@ -205,6 +217,8 @@ impl From<PgModelWithProviderRow> for ModelWithProvider {
                 name: r.name,
                 model_type: r.model_type,
                 pricing_policy_id: r.pricing_policy_id,
+                supports_vision: r.supports_vision,
+                supports_tools: r.supports_tools,
                 created_at: r.created_at,
             },
             pricing_policy_name: None,
@@ -486,7 +500,7 @@ impl From<PgChannelRow> for Channel {
 #[derive(FromRow)]
 struct PgUserRow {
     id: String,
-    username: String,
+    username: Option<String>,
     password: String,
     platform_role: Option<String>,
     current_org_id: Option<String>,
@@ -499,6 +513,7 @@ struct PgUserRow {
     email_verified_at: Option<chrono::DateTime<chrono::Utc>>,
     requires_email_verification: bool,
     password_changed_at: chrono::DateTime<chrono::Utc>,
+    nickname: Option<String>,
 }
 
 impl From<PgUserRow> for User {
@@ -517,37 +532,7 @@ impl From<PgUserRow> for User {
             email_verified_at: r.email_verified_at,
             requires_email_verification: r.requires_email_verification,
             password_changed_at: r.password_changed_at,
-        }
-    }
-}
-
-#[derive(FromRow)]
-struct PgUserWithBalanceRow {
-    id: String,
-    username: String,
-    role: String,
-    enabled: bool,
-    group_id: Option<String>,
-    group_name: Option<String>,
-    balance: Option<i64>,
-    threshold: Option<i64>,
-    created_at: chrono::DateTime<chrono::Utc>,
-    updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-impl From<PgUserWithBalanceRow> for UserWithBalance {
-    fn from(r: PgUserWithBalanceRow) -> Self {
-        UserWithBalance {
-            id: r.id,
-            username: r.username,
-            role: r.role,
-            enabled: r.enabled,
-            group_id: r.group_id,
-            group_name: r.group_name,
-            balance: r.balance.unwrap_or(0),
-            threshold: r.threshold.unwrap_or(100_000_000),
-            created_at: r.created_at,
-            updated_at: r.updated_at,
+            nickname: r.nickname,
         }
     }
 }
@@ -721,6 +706,31 @@ impl From<PgModelFallbackRow> for ModelFallbackConfig {
     }
 }
 
+#[derive(FromRow)]
+struct PgAutoRouteConfigRow {
+    id: String,
+    name: String,
+    config: String,
+    created_by: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl From<PgAutoRouteConfigRow> for AutoRouteConfig {
+    fn from(r: PgAutoRouteConfigRow) -> Self {
+        let config: AutoRouteConfigData =
+            serde_json::from_str(&r.config).unwrap_or(AutoRouteConfigData {
+                model_names: Vec::new(),
+            });
+        AutoRouteConfig {
+            id: r.id,
+            name: r.name,
+            config,
+            created_by: r.created_by,
+            created_at: r.created_at,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -760,8 +770,8 @@ impl crate::Storage for PostgresStorage {
 
     async fn create_key(&self, org_id: &str, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
-            "INSERT INTO api_keys (id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+            "INSERT INTO api_keys (id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, auto_route_id, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
         )
         .bind(&key.id)
         .bind(org_id)
@@ -773,6 +783,7 @@ impl crate::Storage for PostgresStorage {
         .bind(key.enabled)
         .bind(&key.created_by)
         .bind(&key.model_fallback_id)
+        .bind(key.auto_route_id.as_deref())
         .bind(key.created_at)
         .bind(key.updated_at)
         .execute(&self.pool)
@@ -785,7 +796,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_key(&self, org_id: &str, id: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<PgKeyRow> = sqlx::query_as(
-            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, auto_route_id, created_at, updated_at
              FROM api_keys WHERE org_id = $1 AND id = $2",
         )
         .bind(org_id)
@@ -798,7 +809,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_key_by_hash(&self, hash: &str) -> Result<Option<ApiKey>, DbErr> {
         let row: Option<PgKeyRow> = sqlx::query_as(
-            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, auto_route_id, created_at, updated_at
              FROM api_keys WHERE key_hash = $1",
         )
         .bind(hash)
@@ -810,7 +821,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn list_keys(&self, org_id: &str) -> Result<Vec<ApiKey>, DbErr> {
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, auto_route_id, created_at, updated_at
              FROM api_keys WHERE org_id = $1",
         )
         .bind(org_id)
@@ -827,7 +838,7 @@ impl crate::Storage for PostgresStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, auto_route_id, created_at, updated_at
              FROM api_keys WHERE org_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         )
         .bind(org_id)
@@ -851,7 +862,7 @@ impl crate::Storage for PostgresStorage {
             .await?;
         let offset = (page - 1) * page_size;
         let rows: Vec<PgKeyRow> = sqlx::query_as(
-            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, created_at, updated_at
+            "SELECT id, org_id, name, key_hash, key_prefix, rate_limit, budget_monthly, enabled, created_by, model_fallback_id, auto_route_id, created_at, updated_at
              FROM api_keys WHERE org_id = $1 AND created_by = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4",
         )
         .bind(org_id)
@@ -883,7 +894,7 @@ impl crate::Storage for PostgresStorage {
         let rows: Vec<PgKeyWithMtdRow> = sqlx::query_as(
             "SELECT ak.id, ak.org_id, ak.name, ak.key_hash, ak.key_prefix,
                     ak.rate_limit, ak.budget_monthly, ak.enabled, ak.created_by,
-                    ak.model_fallback_id, ak.created_at, ak.updated_at,
+                    ak.model_fallback_id, ak.auto_route_id, ak.created_at, ak.updated_at,
                     COALESCE(bc.accrued, 0) AS mtd_units
              FROM api_keys ak
              LEFT JOIN budget_counters bc
@@ -909,7 +920,7 @@ impl crate::Storage for PostgresStorage {
     async fn update_key(&self, org_id: &str, key: &ApiKey) -> Result<ApiKey, DbErr> {
         sqlx::query(
             "UPDATE api_keys SET name = $1, key_hash = $2, rate_limit = $3, budget_monthly = $4,
-             enabled = $5, created_by = $6, model_fallback_id = $7, updated_at = $8 WHERE org_id = $9 AND id = $10",
+             enabled = $5, created_by = $6, model_fallback_id = $7, auto_route_id = $8, updated_at = $9 WHERE org_id = $10 AND id = $11",
         )
         .bind(&key.name)
         .bind(&key.key_hash)
@@ -918,6 +929,7 @@ impl crate::Storage for PostgresStorage {
         .bind(key.enabled)
         .bind(&key.created_by)
         .bind(&key.model_fallback_id)
+        .bind(key.auto_route_id.as_deref())
         .bind(key.updated_at)
         .bind(org_id)
         .bind(&key.id)
@@ -1242,14 +1254,16 @@ impl crate::Storage for PostgresStorage {
         }
 
         sqlx::query(
-            "INSERT INTO models (id, owner_org_id, name, model_type, pricing_policy_id, created_at)
-             VALUES ($1, $2, $3, $4, $5, $6)",
+            "INSERT INTO models (id, owner_org_id, name, model_type, pricing_policy_id, supports_vision, supports_tools, created_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(&model.id)
         .bind(&model.owner_org_id)
         .bind(&model.name)
         .bind(&model.model_type)
         .bind(&model.pricing_policy_id)
+        .bind(model.supports_vision)
+        .bind(model.supports_tools)
         .bind(model.created_at)
         .execute(&self.pool)
         .await?;
@@ -1260,7 +1274,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_model(&self, viewer_org_id: &str, name: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<PgModelRow> = sqlx::query_as(
-            "SELECT id, owner_org_id, name, model_type, pricing_policy_id, created_at
+            "SELECT id, owner_org_id, name, model_type, pricing_policy_id, supports_vision, supports_tools, created_at
              FROM models
              WHERE name = $1 AND (owner_org_id IS NULL OR owner_org_id = $2)",
         )
@@ -1274,7 +1288,7 @@ impl crate::Storage for PostgresStorage {
 
     async fn get_model_by_id(&self, viewer_org_id: &str, id: &str) -> Result<Option<Model>, DbErr> {
         let row: Option<PgModelRow> = sqlx::query_as(
-            "SELECT id, owner_org_id, name, model_type, pricing_policy_id, created_at
+            "SELECT id, owner_org_id, name, model_type, pricing_policy_id, supports_vision, supports_tools, created_at
              FROM models
              WHERE id = $1 AND (owner_org_id IS NULL OR owner_org_id = $2)",
         )
@@ -1292,6 +1306,31 @@ impl crate::Storage for PostgresStorage {
         Ok(None)
     }
 
+    async fn list_models_with_capabilities(
+        &self,
+        org_id: &str,
+        require_vision: bool,
+        require_tools: bool,
+        candidate_names: &[String],
+    ) -> Result<Vec<Model>, DbErr> {
+        let rows = sqlx::query_as::<_, PgModelRow>(
+            r#"SELECT id, owner_org_id, name, model_type, pricing_policy_id,
+                      supports_vision, supports_tools, created_at
+               FROM models
+               WHERE owner_org_id = $1
+                 AND (NOT $2 OR supports_vision)
+                 AND (NOT $3 OR supports_tools)
+                 AND name = ANY($4::text[])"#,
+        )
+        .bind(org_id)
+        .bind(require_vision)
+        .bind(require_tools)
+        .bind(candidate_names)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(Into::into).collect())
+    }
+
     async fn list_models(&self, viewer_org_id: &str) -> Result<Vec<ModelWithProvider>, DbErr> {
         let rows = sqlx::query_as::<_, PgModelEnrichedRow>(
             r#"
@@ -1302,6 +1341,8 @@ impl crate::Storage for PostgresStorage {
                 m.model_type,
                 m.pricing_policy_id AS pp_id,
                 pp.name AS pp_name,
+                m.supports_vision,
+                m.supports_tools,
                 m.created_at,
                 STRING_AGG(DISTINCT cm.id, ',') AS channel_ids_csv,
                 STRING_AGG(DISTINCT c.name, ',') AS channel_names_csv
@@ -1310,7 +1351,7 @@ impl crate::Storage for PostgresStorage {
             LEFT JOIN channel_models cm ON cm.model_id = m.id
             LEFT JOIN channels c ON c.id = cm.channel_id
             WHERE m.owner_org_id IS NULL OR m.owner_org_id = $1
-            GROUP BY m.id, m.owner_org_id, m.name, m.model_type, m.pricing_policy_id, m.created_at, pp.name
+            GROUP BY m.id, m.owner_org_id, m.name, m.model_type, m.pricing_policy_id, m.supports_vision, m.supports_tools, m.created_at, pp.name
             ORDER BY m.name
             "#
         )
@@ -1335,6 +1376,8 @@ impl crate::Storage for PostgresStorage {
                     name: r.name,
                     model_type: r.model_type,
                     pricing_policy_id: r.pp_id,
+                    supports_vision: r.supports_vision,
+                    supports_tools: r.supports_tools,
                     created_at: r.created_at,
                 },
                 pricing_policy_name: r.pp_name,
@@ -1354,11 +1397,13 @@ impl crate::Storage for PostgresStorage {
 
     async fn update_model(&self, viewer_org_id: &str, model: &Model) -> Result<Model, DbErr> {
         sqlx::query(
-            "UPDATE models SET name = $1, pricing_policy_id = $2
-             WHERE id = $3 AND (owner_org_id IS NULL OR owner_org_id = $4)",
+            "UPDATE models SET name = $1, pricing_policy_id = $2, supports_vision = $3, supports_tools = $4
+             WHERE id = $5 AND (owner_org_id IS NULL OR owner_org_id = $6)",
         )
         .bind(&model.name)
         .bind(&model.pricing_policy_id)
+        .bind(model.supports_vision)
+        .bind(model.supports_tools)
         .bind(&model.id)
         .bind(viewer_org_id)
         .execute(&self.pool)
@@ -1917,37 +1962,54 @@ impl crate::Storage for PostgresStorage {
     async fn query_logs_paginated(&self, org_id: &str, filter: &LogFilter, page: i64, page_size: i64) -> Result<PaginatedResponse<AuditLogSummary>, Box<dyn std::error::Error + Send + Sync>> {
         // org_id is always $1; subsequent filter params take $2.. and are
         // rebound in the same order for both count and data queries below.
+        // Bind since/until as typed DateTime<Utc> (not to_rfc3339() strings)
+        // so postgres sees timestamptz, not text — otherwise
+        // `created_at >= $N` fails with "operator does not exist: timestamp
+        // with time zone >= text".
         let mut conditions = vec!["a.org_id = $1".to_string()];
-        let mut bind_vals: Vec<String> = Vec::new();
+        let mut param_idx = 2;
+        let mut bind_request_id: Option<String> = None;
+        let mut bind_user_id: Option<String> = None;
+        let mut bind_key_id: Option<String> = None;
+        let mut bind_channel_id: Option<String> = None;
+        let mut bind_model_name: Option<String> = None;
+        let mut bind_since: Option<chrono::DateTime<chrono::Utc>> = None;
+        let mut bind_until: Option<chrono::DateTime<chrono::Utc>> = None;
 
         if let Some(ref request_id) = filter.request_id {
-            conditions.push(format!("a.request_id = ${}", bind_vals.len() + 2));
-            bind_vals.push(request_id.clone());
+            conditions.push(format!("a.request_id = ${}", param_idx));
+            bind_request_id = Some(request_id.clone());
+            param_idx += 1;
         }
-
         if let Some(ref user_id) = filter.user_id {
-            conditions.push(format!("a.user_id = ${}", bind_vals.len() + 2));
-            bind_vals.push(user_id.clone());
+            conditions.push(format!("a.user_id = ${}", param_idx));
+            bind_user_id = Some(user_id.clone());
+            param_idx += 1;
         }
         if let Some(ref key_id) = filter.key_id {
-            conditions.push(format!("a.key_id = ${}", bind_vals.len() + 2));
-            bind_vals.push(key_id.clone());
+            conditions.push(format!("a.key_id = ${}", param_idx));
+            bind_key_id = Some(key_id.clone());
+            param_idx += 1;
         }
         if let Some(ref channel_id) = filter.channel_id {
-            conditions.push(format!("a.channel_id = ${}", bind_vals.len() + 2));
-            bind_vals.push(channel_id.clone());
+            conditions.push(format!("a.channel_id = ${}", param_idx));
+            bind_channel_id = Some(channel_id.clone());
+            param_idx += 1;
         }
         if let Some(ref model_name) = filter.model_name {
-            conditions.push(format!("a.model_name = ${}", bind_vals.len() + 2));
-            bind_vals.push(model_name.clone());
+            conditions.push(format!("a.model_name = ${}", param_idx));
+            bind_model_name = Some(model_name.clone());
+            param_idx += 1;
         }
         if let Some(since) = filter.since {
-            conditions.push(format!("a.created_at >= ${}", bind_vals.len() + 2));
-            bind_vals.push(since.to_rfc3339());
+            conditions.push(format!("a.created_at >= ${}", param_idx));
+            bind_since = Some(since);
+            param_idx += 1;
         }
         if let Some(until) = filter.until {
-            conditions.push(format!("a.created_at <= ${}", bind_vals.len() + 2));
-            bind_vals.push(until.to_rfc3339());
+            conditions.push(format!("a.created_at <= ${}", param_idx));
+            bind_until = Some(until);
+            param_idx += 1;
         }
 
         let where_clause = format!(" WHERE {}", conditions.join(" AND "));
@@ -1955,9 +2017,13 @@ impl crate::Storage for PostgresStorage {
         let count_sql = format!("SELECT COUNT(*) FROM audit_logs a{}", where_clause);
         let mut count_query = sqlx::query_as::<_, (i64,)>(&count_sql);
         count_query = count_query.bind(org_id);
-        for val in &bind_vals {
-            count_query = count_query.bind(val);
-        }
+        if let Some(ref v) = bind_request_id { count_query = count_query.bind(v); }
+        if let Some(ref v) = bind_user_id { count_query = count_query.bind(v); }
+        if let Some(ref v) = bind_key_id { count_query = count_query.bind(v); }
+        if let Some(ref v) = bind_channel_id { count_query = count_query.bind(v); }
+        if let Some(ref v) = bind_model_name { count_query = count_query.bind(v); }
+        if let Some(ref v) = bind_since { count_query = count_query.bind(*v); }
+        if let Some(ref v) = bind_until { count_query = count_query.bind(*v); }
         let total = count_query.fetch_one(&self.pool).await?.0;
 
         let offset = (page - 1) * page_size;
@@ -1967,14 +2033,18 @@ impl crate::Storage for PostgresStorage {
              a.request_path, a.upstream_url, a.request_headers, a.response_headers, a.user_id, a.routes
              FROM audit_logs a LEFT JOIN channels c ON a.channel_id = c.id{} ORDER BY a.created_at DESC LIMIT ${} OFFSET ${}",
             where_clause,
-            bind_vals.len() + 2,
-            bind_vals.len() + 3
+            param_idx,
+            param_idx + 1
         );
         let mut data_query = sqlx::query_as::<_, PgAuditSummaryRow>(&data_sql);
         data_query = data_query.bind(org_id);
-        for val in bind_vals {
-            data_query = data_query.bind(val);
-        }
+        if let Some(v) = bind_request_id { data_query = data_query.bind(v); }
+        if let Some(v) = bind_user_id { data_query = data_query.bind(v); }
+        if let Some(v) = bind_key_id { data_query = data_query.bind(v); }
+        if let Some(v) = bind_channel_id { data_query = data_query.bind(v); }
+        if let Some(v) = bind_model_name { data_query = data_query.bind(v); }
+        if let Some(v) = bind_since { data_query = data_query.bind(v); }
+        if let Some(v) = bind_until { data_query = data_query.bind(v); }
         data_query = data_query.bind(page_size).bind(offset);
         let rows = data_query.fetch_all(&self.pool).await?;
 
@@ -2066,8 +2136,9 @@ impl crate::Storage for PostgresStorage {
         sqlx::query(
             "INSERT INTO users (id, username, password, platform_role, current_org_id, enabled, refresh_token,
                                 created_at, updated_at,
-                                email, email_verified_at, requires_email_verification, password_changed_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+                                email, email_verified_at, requires_email_verification, password_changed_at,
+                                nickname)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
         )
         .bind(&user.id)
         .bind(&user.username)
@@ -2082,6 +2153,7 @@ impl crate::Storage for PostgresStorage {
         .bind(user.email_verified_at)
         .bind(user.requires_email_verification)
         .bind(user.password_changed_at)
+        .bind(&user.nickname)
         .execute(&self.pool)
         .await?;
         Ok(user.clone())
@@ -2091,7 +2163,8 @@ impl crate::Storage for PostgresStorage {
         let row: Option<PgUserRow> = sqlx::query_as(
             "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
                     created_at, updated_at,
-                    email, email_verified_at, requires_email_verification, password_changed_at
+                    email, email_verified_at, requires_email_verification, password_changed_at,
+                    nickname
              FROM users WHERE id = $1",
         )
         .bind(id)
@@ -2104,7 +2177,8 @@ impl crate::Storage for PostgresStorage {
         let row: Option<PgUserRow> = sqlx::query_as(
             "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
                     created_at, updated_at,
-                    email, email_verified_at, requires_email_verification, password_changed_at
+                    email, email_verified_at, requires_email_verification, password_changed_at,
+                    nickname
              FROM users WHERE username = $1",
         )
         .bind(username)
@@ -2117,7 +2191,8 @@ impl crate::Storage for PostgresStorage {
         let rows: Vec<PgUserRow> = sqlx::query_as(
             "SELECT u.id, u.username, u.password, u.platform_role, u.current_org_id, u.enabled, u.refresh_token,
                     u.created_at, u.updated_at,
-                    u.email, u.email_verified_at, u.requires_email_verification, u.password_changed_at
+                    u.email, u.email_verified_at, u.requires_email_verification, u.password_changed_at,
+                    u.nickname
              FROM users u
              JOIN members m ON m.user_id = u.id
              WHERE m.org_id = $1
@@ -2129,43 +2204,9 @@ impl crate::Storage for PostgresStorage {
         Ok(rows.into_iter().map(User::from).collect())
     }
 
-    async fn list_users_paginated(&self, org_id: &str, page: i64, page_size: i64) -> Result<PaginatedResponse<UserWithBalance>, Box<dyn std::error::Error + Send + Sync>> {
-        // TODO(Task 9): UserWithBalance still carries legacy role/group_id columns.
-        // Once the management handlers stop reading them, the struct + this query
-        // should drop them. Until then we synthesize a role/group_id from the
-        // membership row so the existing UI keeps rendering.
-        let total: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM users u JOIN members m ON m.user_id = u.id WHERE m.org_id = $1",
-        )
-        .bind(org_id)
-        .fetch_one(&self.pool)
-        .await?;
-        let offset = (page - 1) * page_size;
-        let rows: Vec<PgUserWithBalanceRow> = sqlx::query_as(
-            "SELECT u.id, u.username, COALESCE(m.role, 'member') AS role, u.enabled, m.group_id, g.name AS group_name, \
-                    COALESCE(a.balance, 0) AS balance, COALESCE(a.threshold, 0) AS threshold, u.created_at, u.updated_at \
-             FROM users u \
-             JOIN members m ON m.user_id = u.id AND m.org_id = $1 \
-             LEFT JOIN accounts a ON a.user_id = u.id AND a.org_id = $1 \
-             LEFT JOIN groups g ON g.id = m.group_id \
-             ORDER BY u.created_at DESC LIMIT $2 OFFSET $3",
-        )
-        .bind(org_id)
-        .bind(page_size)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(PaginatedResponse {
-            items: rows.into_iter().map(UserWithBalance::from).collect(),
-            total: total.0,
-            page,
-            page_size,
-        })
-    }
-
     async fn update_user(&self, user: &User) -> Result<User, DbErr> {
         sqlx::query(
-            "UPDATE users SET username = $1, password = $2, platform_role = $3, current_org_id = $4, enabled = $5, refresh_token = $6, password_changed_at = $7, updated_at = $8 WHERE id = $9",
+            "UPDATE users SET username = $1, password = $2, platform_role = $3, current_org_id = $4, enabled = $5, refresh_token = $6, password_changed_at = $7, nickname = $8, updated_at = $9 WHERE id = $10",
         )
         .bind(&user.username)
         .bind(&user.password)
@@ -2174,19 +2215,12 @@ impl crate::Storage for PostgresStorage {
         .bind(user.enabled)
         .bind(&user.refresh_token)
         .bind(&user.password_changed_at)
+        .bind(&user.nickname)
         .bind(user.updated_at)
         .bind(&user.id)
         .execute(&self.pool)
         .await?;
         Ok(user.clone())
-    }
-
-    async fn delete_user(&self, id: &str) -> Result<(), DbErr> {
-        sqlx::query("DELETE FROM users WHERE id = $1")
-            .bind(id)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
     }
 
     // ---- Channel Models (tenant: org_id scoping) ----
@@ -2519,7 +2553,7 @@ impl crate::Storage for PostgresStorage {
         let tx_id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
             "INSERT INTO transactions (id, org_id, account_id, type, amount, balance_after, description, reference_id, created_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
         )
         .bind(&tx_id)
         .bind(org_id)
@@ -2605,6 +2639,76 @@ impl crate::Storage for PostgresStorage {
 
     async fn delete_model_fallback(&self, id: &str) -> Result<(), DbErr> {
         sqlx::query("DELETE FROM model_fallbacks WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    // ---- Auto Route Configs ----
+
+    async fn get_auto_route_config(&self, id: &str) -> Result<Option<AutoRouteConfig>, DbErr> {
+        let row: Option<PgAutoRouteConfigRow> = sqlx::query_as(
+            "SELECT id, name, config, created_by, created_at FROM auto_route_configs WHERE id = $1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(AutoRouteConfig::from))
+    }
+
+    async fn list_auto_route_configs(&self) -> Result<Vec<AutoRouteConfig>, DbErr> {
+        let rows: Vec<PgAutoRouteConfigRow> = sqlx::query_as(
+            "SELECT id, name, config, created_by, created_at FROM auto_route_configs ORDER BY created_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(AutoRouteConfig::from).collect())
+    }
+
+    async fn create_auto_route_config(
+        &self,
+        config: &AutoRouteConfig,
+    ) -> Result<AutoRouteConfig, DbErr> {
+        let config_json = serde_json::to_string(&config.config)?;
+        let row = sqlx::query_as::<_, PgAutoRouteConfigRow>(
+            r#"INSERT INTO auto_route_configs (id, name, config, created_by, created_at)
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id, name, config, created_by, created_at"#,
+        )
+        .bind(&config.id)
+        .bind(&config.name)
+        .bind(&config_json)
+        .bind(config.created_by.as_deref())
+        .bind(config.created_at)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.into())
+    }
+
+    async fn update_auto_route_config(
+        &self,
+        config: &AutoRouteConfig,
+    ) -> Result<AutoRouteConfig, DbErr> {
+        let config_json = serde_json::to_string(&config.config)?;
+        let row = sqlx::query_as::<_, PgAutoRouteConfigRow>(
+            r#"UPDATE auto_route_configs
+               SET name = $2, config = $3
+               WHERE id = $1
+               RETURNING id, name, config, created_by, created_at"#,
+        )
+        .bind(&config.id)
+        .bind(&config.name)
+        .bind(&config_json)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.into())
+    }
+
+    async fn delete_auto_route_config(&self, id: &str) -> Result<(), DbErr> {
+        sqlx::query("DELETE FROM auto_route_configs WHERE id = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;
@@ -3209,18 +3313,49 @@ impl crate::Storage for PostgresStorage {
         Ok(row.map(Member::from))
     }
 
-    async fn list_members(&self, org_id: &str) -> Result<Vec<Member>, DbErr> {
-        let rows: Vec<PgMemberRow> = sqlx::query_as(
-            "SELECT user_id, org_id, role, group_id, created_by, created_at
-             FROM members WHERE org_id = $1 ORDER BY created_at",
+    async fn list_members(&self, org_id: &str) -> Result<Vec<MemberWithDetails>, DbErr> {
+        let rows: Vec<MemberWithDetails> = sqlx::query_as::<_, MemberWithDetails>(
+            r#"
+            SELECT
+                m.user_id,
+                m.org_id,
+                u.username,
+                u.email,
+                u.nickname,
+                m.role,
+                m.group_id,
+                g.name AS group_name,
+                u.enabled,
+                COALESCE(a.balance, 0) AS balance,
+                COALESCE(a.threshold, $2) AS threshold,
+                m.created_at
+            FROM members m
+            -- INNER JOIN is safe: members.user_id has ON DELETE CASCADE
+            -- (migration 20260708000000_saas_orgs.sql), so no member row can
+            -- outlive its user. LEFT JOIN would hide FK violations rather than
+            -- fail loudly on them.
+            JOIN users u ON u.id = m.user_id
+            LEFT JOIN groups g ON g.id = m.group_id
+            LEFT JOIN accounts a ON a.user_id = m.user_id AND a.org_id = m.org_id
+            WHERE m.org_id = $1
+            ORDER BY m.created_at ASC
+            "#,
         )
         .bind(org_id)
+        .bind(DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS)
         .fetch_all(&self.pool)
         .await?;
-        Ok(rows.into_iter().map(Member::from).collect())
+        Ok(rows)
     }
 
     async fn upsert_member(&self, member: Member) -> Result<Member, DbErr> {
+        // Wrap the member upsert and the paired account INSERT in a single
+        // transaction so the per-membership invariant (every members row has
+        // a matching accounts row) holds even on partial failure. The account
+        // INSERT uses ON CONFLICT DO NOTHING so re-upserting an existing
+        // membership (e.g. role change) does not clobber the balance.
+        let mut tx = self.pool.begin().await?;
+
         let row: PgMemberRow = sqlx::query_as(
             "INSERT INTO members (user_id, org_id, role, group_id, created_by)
              VALUES ($1, $2, $3, $4, $5)
@@ -3233,8 +3368,25 @@ impl crate::Storage for PostgresStorage {
         .bind(member.role.as_str())
         .bind(&member.group_id)
         .bind(&member.created_by)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
+
+        let now = chrono::Utc::now();
+        let account_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO accounts (id, org_id, user_id, balance, threshold, created_at, updated_at)
+             VALUES ($1, $2, $3, 0, $4, $5, $5)
+             ON CONFLICT (org_id, user_id) DO NOTHING",
+        )
+        .bind(&account_id)
+        .bind(&member.org_id)
+        .bind(&member.user_id)
+        .bind(DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
         Ok(Member::from(row))
     }
 
@@ -3428,6 +3580,24 @@ impl crate::Storage for PostgresStorage {
         .execute(&mut *tx)
         .await?;
 
+        // Per-membership invariant: every members row has a matching accounts
+        // row. ON CONFLICT DO NOTHING so a re-accept (same user, same org,
+        // different invitation) does not clobber the existing balance. Same
+        // transaction as the member INSERT — partial state is impossible.
+        let account_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO accounts (id, org_id, user_id, balance, threshold, created_at, updated_at)
+             VALUES ($1, $2, $3, 0, $4, $5, $5)
+             ON CONFLICT (org_id, user_id) DO NOTHING",
+        )
+        .bind(&account_id)
+        .bind(&inv.org_id)
+        .bind(accepting_user_id)
+        .bind(DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+
         sqlx::query(
             "UPDATE invitations SET accepted_at = $2, accepted_by = $3 WHERE id::text = $1",
         )
@@ -3455,7 +3625,8 @@ impl crate::Storage for PostgresStorage {
         let row: Option<PgUserRow> = sqlx::query_as(
             "SELECT id, username, password, platform_role, current_org_id, enabled, refresh_token,
                     created_at, updated_at,
-                    email, email_verified_at, requires_email_verification, password_changed_at
+                    email, email_verified_at, requires_email_verification, password_changed_at,
+                    nickname
              FROM users WHERE LOWER(email) = LOWER($1)",
         )
         .bind(email)
@@ -3568,6 +3739,26 @@ impl crate::Storage for PostgresStorage {
             .get_user(user_id)
             .await?
             .ok_or_else(|| format!("user {user_id} disappeared after set_user_email"))?;
+        Ok(row)
+    }
+
+    async fn set_user_nickname(
+        &self,
+        user_id: &str,
+        nickname: Option<&str>,
+    ) -> Result<User, DbErr> {
+        sqlx::query("UPDATE users SET nickname = $1, updated_at = NOW() WHERE id = $2")
+            .bind(nickname)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+        // Re-read for the response — same pattern as set_user_email
+        // (PgUserRow shape is large enough that maintaining a separate
+        // RETURNING-bind is more error-prone than refetching).
+        let row = self
+            .get_user(user_id)
+            .await?
+            .ok_or_else(|| format!("user {user_id} disappeared after set_user_nickname"))?;
         Ok(row)
     }
 
@@ -4208,14 +4399,47 @@ mod org_tests {
             .await
             .expect("upsert_member");
 
+        // Invariant (Task 2 follow-up): upsert_member must create a matching
+        // accounts row. Without this assertion the next storage refactor could
+        // silently drop the account-creation side-effect.
+        let account_balance: i64 = sqlx::query_scalar(
+            "SELECT balance FROM accounts WHERE org_id = $1 AND user_id = $2",
+        )
+        .bind("org_default")
+        .bind("u-bootstrap-test")
+        .fetch_one(&storage.pool)
+        .await
+        .expect("account row must exist after upsert_member");
+        assert_eq!(account_balance, 0);
+        let account_threshold: i64 = sqlx::query_scalar(
+            "SELECT threshold FROM accounts WHERE org_id = $1 AND user_id = $2",
+        )
+        .bind("org_default")
+        .bind("u-bootstrap-test")
+        .fetch_one(&storage.pool)
+        .await
+        .expect("account row threshold must exist");
+        assert_eq!(account_threshold, DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS);
+
         let members = storage.list_members("org_default").await.expect("list_members");
         let found = members
             .iter()
             .find(|m| m.user_id == "u-bootstrap-test")
             .expect("membership row present");
-        assert_eq!(found.role, MemberRole::Owner);
+        assert_eq!(found.role, MemberRole::Owner.as_str());
+        // The joined shape must also surface the user row.
+        assert_eq!(found.username.as_deref(), Some("bootstrap_test"));
+        // Per-membership invariant surfaced through the join: every member
+        // has an accounts row (created by upsert_member), so balance is 0
+        // (not NULL → 0 via COALESCE, but a real 0).
+        assert_eq!(found.balance, 0);
+        assert_eq!(found.threshold, DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS);
 
         // cleanup
+        sqlx::query("DELETE FROM accounts WHERE user_id = 'u-bootstrap-test' AND org_id = 'org_default'")
+            .execute(&storage.pool)
+            .await
+            .expect("cleanup accounts");
         sqlx::query("DELETE FROM members WHERE user_id = 'u-bootstrap-test' AND org_id = 'org_default'")
             .execute(&storage.pool)
             .await
@@ -4224,6 +4448,91 @@ mod org_tests {
             .execute(&storage.pool)
             .await
             .expect("cleanup users");
+    }
+
+    /// `list_members` joins `users.nickname` so the Members page can call
+    /// `displayName(member)` and get the user-chosen friendly name. This
+    /// regression-guards the SELECT column and the `MemberWithDetails` field
+    /// against accidental drops.
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn list_members_surfaces_user_nickname(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+
+        // Seed a user with a nickname.
+        sqlx::query(
+            "INSERT INTO users (id, username, password, nickname, created_at, updated_at)
+             VALUES ('u-nick-list', 'nick_list', 'x', 'Nicky', NOW(), NOW())
+             ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert user with nickname");
+
+        storage
+            .upsert_member(Member {
+                user_id: "u-nick-list".to_string(),
+                org_id: "org_default".to_string(),
+                role: MemberRole::Member,
+                group_id: None,
+                created_by: Some("u-nick-list".to_string()),
+                created_at: chrono::Utc::now(),
+            })
+            .await
+            .expect("upsert_member");
+
+        let members = storage.list_members("org_default").await.expect("list_members");
+        let found = members
+            .iter()
+            .find(|m| m.user_id == "u-nick-list")
+            .expect("membership row present");
+        assert_eq!(found.nickname.as_deref(), Some("Nicky"));
+
+        // Also confirm a user with NULL nickname surfaces as None (not a panic
+        // from a missing column or a NULL→default skew).
+        sqlx::query(
+            "INSERT INTO users (id, username, password, nickname, created_at, updated_at)
+             VALUES ('u-nonick-list', 'nonick_list', 'x', NULL, NOW(), NOW())
+             ON CONFLICT (id) DO NOTHING",
+        )
+        .execute(&storage.pool)
+        .await
+        .expect("insert user without nickname");
+        storage
+            .upsert_member(Member {
+                user_id: "u-nonick-list".to_string(),
+                org_id: "org_default".to_string(),
+                role: MemberRole::Member,
+                group_id: None,
+                created_by: Some("u-nonick-list".to_string()),
+                created_at: chrono::Utc::now(),
+            })
+            .await
+            .expect("upsert_member");
+        let members = storage.list_members("org_default").await.expect("list_members again");
+        let found_null = members
+            .iter()
+            .find(|m| m.user_id == "u-nonick-list")
+            .expect("null-nickname membership present");
+        assert!(found_null.nickname.is_none());
+
+        // cleanup
+        for uid in &["u-nick-list", "u-nonick-list"] {
+            sqlx::query("DELETE FROM accounts WHERE user_id = $1 AND org_id = 'org_default'")
+                .bind(uid)
+                .execute(&storage.pool)
+                .await
+                .expect("cleanup accounts");
+            sqlx::query("DELETE FROM members WHERE user_id = $1 AND org_id = 'org_default'")
+                .bind(uid)
+                .execute(&storage.pool)
+                .await
+                .expect("cleanup members");
+            sqlx::query("DELETE FROM users WHERE id = $1")
+                .bind(uid)
+                .execute(&storage.pool)
+                .await
+                .expect("cleanup users");
+        }
     }
 
     /// Catalog visibility: platform-level rows (owner_org_id IS NULL) are visible
@@ -4262,6 +4571,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: None,
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         storage
@@ -4276,6 +4587,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: Some("org-a-vis".to_string()),
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         storage
@@ -4371,6 +4684,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: None,
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         storage
@@ -4385,6 +4700,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: Some("org-shadow".to_string()),
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         let res = storage.create_model("org-shadow", &attempt).await;
@@ -4447,6 +4764,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: None,
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         storage
@@ -4461,6 +4780,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: Some("org-shadow-2".to_string()),
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         let result = storage.create_model("org-shadow-2", &org_private).await;
@@ -4519,6 +4840,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: Some("org-shadow-3".to_string()),
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         storage
@@ -4533,6 +4856,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: None,
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         let result = storage.create_model("org-shadow-3", &platform).await;
@@ -4603,6 +4928,8 @@ mod org_tests {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: None,
+            supports_vision: false,
+            supports_tools: false,
             created_at: chrono::Utc::now(),
         };
         storage.create_model("org-pm-alpha", &model).await.expect("create_model");
@@ -4688,7 +5015,7 @@ mod invitation_tests {
         let now = chrono::Utc::now();
         let user = crate::types::User {
             id: username.to_string(),
-            username: username.to_string(),
+            username: Some(username.to_string()),
             password: "x".to_string(),
             platform_role: None,
             current_org_id: None,
@@ -4700,6 +5027,7 @@ mod invitation_tests {
             email_verified_at: None,
             requires_email_verification: false,
             password_changed_at: now,
+            nickname: None,
         };
         storage.create_user(&user).await.expect("create_user")
     }
@@ -4778,6 +5106,18 @@ mod invitation_tests {
         assert_eq!(member.user_id, invitee.id);
         assert_eq!(member.org_id, org.id);
         assert_eq!(member.role, crate::types::MemberRole::Member);
+
+        // Invariant (Task 2 follow-up): accept_invitation must create a
+        // matching accounts row alongside the membership row.
+        let account_balance: i64 = sqlx::query_scalar(
+            "SELECT balance FROM accounts WHERE org_id = $1 AND user_id = $2",
+        )
+        .bind(&org.id)
+        .bind(&invitee.id)
+        .fetch_one(&storage.pool)
+        .await
+        .expect("account row must exist after accept_invitation");
+        assert_eq!(account_balance, 0);
 
         let second = storage
             .accept_invitation(&invitation.token, &invitee.id)
@@ -5170,7 +5510,7 @@ mod phase4_tests {
         let now = chrono::Utc::now();
         crate::types::User {
             id: id.into(),
-            username: uname.into(),
+            username: Some(uname.to_string()),
             password: "x".into(),
             platform_role: None,
             current_org_id: None,
@@ -5182,6 +5522,7 @@ mod phase4_tests {
             email_verified_at: None,
             requires_email_verification: true,
             password_changed_at: now,
+            nickname: None,
         }
     }
 
@@ -5318,5 +5659,30 @@ mod phase4_tests {
             err.is_err(),
             "expected unique violation on case-insensitive duplicate email, got Ok"
         );
+    }
+
+    #[sqlx::test(migrator = "crate::MIGRATOR")]
+    async fn set_user_nickname_persists_and_clears(pool: sqlx::PgPool) {
+        let storage = crate::postgres::PostgresStorage::from_pool(pool);
+        let user = mk_user("nick-test", "nick-test", "nick-test@example.com");
+        storage.create_user(&user).await.expect("create_user");
+
+        // Set a nickname.
+        let updated = storage
+            .set_user_nickname(&user.id, Some("小明🌟"))
+            .await
+            .unwrap();
+        assert_eq!(updated.nickname.as_deref(), Some("小明🌟"));
+
+        // Refetch via get_user — must see the same value (covers SELECT roundtrip).
+        let refetched = storage.get_user(&user.id).await.unwrap().unwrap();
+        assert_eq!(refetched.nickname.as_deref(), Some("小明🌟"));
+
+        // Clear via None.
+        let cleared = storage
+            .set_user_nickname(&user.id, None)
+            .await
+            .unwrap();
+        assert!(cleared.nickname.is_none());
     }
 }

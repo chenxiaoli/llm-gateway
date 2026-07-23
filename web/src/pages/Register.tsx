@@ -12,7 +12,6 @@ import { getErrorMessage } from '../api/client';
 
 export default function Register() {
   const { t } = useTranslation();
-  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -68,10 +67,10 @@ export default function Register() {
       toast.error(t('auth.errorMismatch'));
       return;
     }
-    if (!username || !password || !email) return;
+    if (!password || !email) return;
     setLoading(true);
     try {
-      await register({ username, password, email });
+      await register({ password, email });
       // After register, the user is in "email not verified" limbo. Redirect to
       // /check-email which shows "we sent a verification email to {email}".
       navigate('/check-email', { state: { email } });
@@ -102,19 +101,6 @@ export default function Register() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-            <div className="form-control">
-              <label className="label"><span className="label-text font-medium">{t('auth.username')}</span></label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder={t('auth.username')}
-                required
-                minLength={3}
-                disabled={registrationDisabled}
-                className="input input-bordered w-full"
-              />
-            </div>
             <div className="form-control">
               <label className="label"><span className="label-text font-medium">{t('auth.email')}</span></label>
               <input

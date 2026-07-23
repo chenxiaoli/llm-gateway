@@ -12,7 +12,6 @@ export async function register(input: RegisterRequest): Promise<AuthResponse> {
   // server-side-accept the invitation in the same transaction — so the
   // previous client-side accept is no longer needed.
   const body: Record<string, unknown> = {
-    username: input.username,
     password: input.password,
     email: input.email,
   };
@@ -108,5 +107,21 @@ export async function confirmPasswordReset(token: string, new_password: string):
  */
 export async function setMyEmail(email: string): Promise<MeResponse> {
   const { data } = await apiClient.post<MeResponse>('/auth/me/email', { email });
+  return data;
+}
+
+/**
+ * Set or clear the current user's nickname. Pass an empty/whitespace string
+ * to clear (server trims + writes NULL). Validation is server-side: 1–32
+ * Unicode scalar values after trim, no control / zero-width characters.
+ *
+ * Mirrors `setMyEmail` — returns the refreshed `MeResponse` so the caller can
+ * push the fresh user fields into the auth store without waiting for the
+ * `/auth/me` refetch.
+ *
+ * Rejects with 400 `invalid_nickname` on validation failure.
+ */
+export async function setMyNickname(nickname: string): Promise<MeResponse> {
+  const { data } = await apiClient.post<MeResponse>('/auth/me/nickname', { nickname });
   return data;
 }

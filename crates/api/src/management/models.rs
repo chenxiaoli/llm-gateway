@@ -33,6 +33,15 @@ pub async fn create_model_global(
     ctx: OrgContext,
     Json(input): Json<CreateModelRequest>,
 ) -> Result<Json<Model>, ApiError> {
+    // "auto" is reserved for the model=auto routing feature (the proxy
+    // intercepts `model: "auto"` and rewrites it via the key's
+    // auto_route_config). A catalog entry literally named "auto" would
+    // shadow that route, so reject it case-insensitively up front —
+    // before any ownership or permission checks.
+    if input.name.eq_ignore_ascii_case("auto") {
+        return Err(ApiError::ModelNameReserved);
+    }
+
     // Decide ownership: explicit body value wins, otherwise non-platform-admin
     // callers get an org-private entry; platform_admin defaults to platform-level.
     let owner_org_id = input.owner_org_id.clone().or_else(|| {
@@ -56,6 +65,8 @@ pub async fn create_model_global(
         name: input.name,
         model_type: None,
         pricing_policy_id: input.pricing_policy_id,
+        supports_vision: false,
+        supports_tools: false,
         created_at: chrono::Utc::now(),
     };
 

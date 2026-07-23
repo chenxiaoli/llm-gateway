@@ -55,7 +55,7 @@ async fn register_requires_email(pool: PgPool) {
     let resp = post(
         &app,
         "/api/v1/auth/register",
-        json!({"username": "noemail", "password": "password123"}),
+        json!({"password": "password123"}),
     )
     .await;
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
@@ -69,7 +69,7 @@ async fn register_requires_email(pool: PgPool) {
     let resp = post(
         &app,
         "/api/v1/auth/register",
-        json!({"username": "noemail2", "password": "password123", "email": ""}),
+        json!({"password": "password123", "email": ""}),
     )
     .await;
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
@@ -88,7 +88,6 @@ async fn register_dispatches_verification_email(pool: PgPool) {
         &app,
         "/api/v1/auth/register",
         json!({
-            "username": "alice",
             "password": "password123",
             "email": "alice@example.com",
         }),
@@ -100,7 +99,7 @@ async fn register_dispatches_verification_email(pool: PgPool) {
     let row: (Option<String>, Option<chrono::DateTime<chrono::Utc>>, bool) =
         sqlx::query_as(
             "SELECT email, email_verified_at, requires_email_verification \
-             FROM users WHERE username = 'alice'",
+             FROM users WHERE email = 'alice@example.com'",
         )
         .fetch_one(&pool)
         .await
@@ -112,7 +111,7 @@ async fn register_dispatches_verification_email(pool: PgPool) {
     // A verification row exists with a non-empty token.
     let token: String = sqlx::query_scalar(
         "SELECT token FROM email_verifications WHERE user_id = \
-         (SELECT id FROM users WHERE username = 'alice') \
+         (SELECT id FROM users WHERE email = 'alice@example.com') \
          ORDER BY created_at DESC LIMIT 1",
     )
     .fetch_one(&pool)
@@ -131,7 +130,6 @@ async fn login_blocked_until_verified(pool: PgPool) {
         &app,
         "/api/v1/auth/register",
         json!({
-            "username": "bob",
             "password": "password123",
             "email": "bob@example.com",
         }),
@@ -143,7 +141,7 @@ async fn login_blocked_until_verified(pool: PgPool) {
     let resp = post(
         &app,
         "/api/v1/auth/login",
-        json!({"username": "bob", "password": "password123"}),
+        json!({"username": "bob@example.com", "password": "password123"}),
     )
     .await;
     assert_eq!(
@@ -172,7 +170,6 @@ async fn verify_email_round_trip(pool: PgPool) {
         &app,
         "/api/v1/auth/register",
         json!({
-            "username": "carol",
             "password": "password123",
             "email": "carol@example.com",
         }),
@@ -183,7 +180,7 @@ async fn verify_email_round_trip(pool: PgPool) {
     // Peek the verification token.
     let token: String = sqlx::query_scalar(
         "SELECT token FROM email_verifications WHERE user_id = \
-         (SELECT id FROM users WHERE username = 'carol') \
+         (SELECT id FROM users WHERE email = 'carol@example.com') \
          ORDER BY created_at DESC LIMIT 1",
     )
     .fetch_one(&pool)
@@ -201,7 +198,7 @@ async fn verify_email_round_trip(pool: PgPool) {
 
     // User is now verified.
     let verified_at: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
-        "SELECT email_verified_at FROM users WHERE username = 'carol'",
+        "SELECT email_verified_at FROM users WHERE email = 'carol@example.com'",
     )
     .fetch_one(&pool)
     .await
@@ -212,7 +209,7 @@ async fn verify_email_round_trip(pool: PgPool) {
     let resp = post(
         &app,
         "/api/v1/auth/login",
-        json!({"username": "carol", "password": "password123"}),
+        json!({"username": "carol@example.com", "password": "password123"}),
     )
     .await;
     assert_eq!(resp.status(), StatusCode::OK);
@@ -259,7 +256,6 @@ async fn me_includes_phase4_fields(pool: PgPool) {
         &app,
         "/api/v1/auth/register",
         json!({
-            "username": "dave",
             "password": "password123",
             "email": "dave@example.com",
         }),

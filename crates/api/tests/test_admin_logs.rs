@@ -1,0 +1,263 @@
+mod common;
+
+use axum::body::{Body, to_bytes};
+use axum::http::{Request, StatusCode};
+use chrono::{DateTime, Utc};
+use llm_gateway_api::{management, AppState};
+use serde_json::Value;
+use sqlx::PgPool;
+use std::sync::Arc;
+use tower::ServiceExt;
+
+fn build_app(state: Arc<AppState>) -> axum::Router {
+    management::management_router(state.clone()).with_state(state)
+}
+
+fn bearer_token(token: &str) -> String {
+    format!("Bearer {}", token)
+}
+
+async fn seed_audit_log(pool: &PgPool, org_id: &str, id: &str, created_at: DateTime<Utc>) {
+    sqlx::query(
+        "INSERT INTO api_keys (id, org_id, name, key_hash, created_at, updated_at) \
+         VALUES ('key-1', $1, 'k', 'hash', NOW(), NOW()) \
+         ON CONFLICT (id) DO NOTHING",
+    )
+    .bind(org_id)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        "INSERT INTO audit_logs \
+         (id, org_id, key_id, model_name, provider_id, channel_id, protocol, stream, \
+          request_body, response_body, status_code, latency_ms, input_tokens, output_tokens, created_at) \
+         VALUES ($1, $2, 'key-1', 'm', 'p', NULL, 'openai', false, '', '', 200, 1, 0, 0, $3)",
+    )
+    .bind(id)
+    .bind(org_id)
+    .bind(created_at)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_admin_logs_with_since_and_until_returns_200(pool: PgPool) {
+    let app = build_app(common::make_state(pool.clone()));
+    let (token, slug) = common::seed_org_with_admin(&pool).await;
+    let org_id: String = sqlx::query_scalar("SELECT id FROM orgs WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    seed_audit_log(
+        &pool,
+        &org_id,
+        "log-in-range",
+        "2026-07-12T00:00:00Z".parse::<DateTime<Utc>>().unwrap(),
+    )
+    .await;
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/api/v1/{slug}/admin/logs?page=1&page_size=20&since=2026-07-10T00:00:00Z&until=2026-07-15T00:00:00Z"
+                ))
+                .header("authorization", bearer_token(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let body_bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body_str = String::from_utf8_lossy(&body_bytes);
+    assert_eq!(status, StatusCode::OK, "body was: {body_str}");
+    let body: Value = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["id"], "log-in-range");
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_admin_logs_with_only_since_returns_200(pool: PgPool) {
+    let app = build_app(common::make_state(pool.clone()));
+    let (token, slug) = common::seed_org_with_admin(&pool).await;
+    let org_id: String = sqlx::query_scalar("SELECT id FROM orgs WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    seed_audit_log(
+        &pool,
+        &org_id,
+        "log-since",
+        "2026-07-12T00:00:00Z".parse::<DateTime<Utc>>().unwrap(),
+    )
+    .await;
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/api/v1/{slug}/admin/logs?page=1&page_size=20&since=2026-07-10T00:00:00Z"
+                ))
+                .header("authorization", bearer_token(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let body_bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body_str = String::from_utf8_lossy(&body_bytes);
+    assert_eq!(status, StatusCode::OK, "body was: {body_str}");
+    let body: Value = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(body["total"], 1);
+}
+
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_admin_logs_with_only_until_returns_200(pool: PgPool) {
+    let app = build_app(common::make_state(pool.clone()));
+    let (token, slug) = common::seed_org_with_admin(&pool).await;
+    let org_id: String = sqlx::query_scalar("SELECT id FROM orgs WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    seed_audit_log(
+        &pool,
+        &org_id,
+        "log-until",
+        "2026-07-12T00:00:00Z".parse::<DateTime<Utc>>().unwrap(),
+    )
+    .await;
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/api/v1/{slug}/admin/logs?page=1&page_size=20&until=2026-07-15T00:00:00Z"
+                ))
+                .header("authorization", bearer_token(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let body_bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body_str = String::from_utf8_lossy(&body_bytes);
+    assert_eq!(status, StatusCode::OK, "body was: {body_str}");
+    let body: Value = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(body["total"], 1);
+}
+
+// Date-only `until` (as produced by `<input type="date">`) must include logs
+// from that entire day. parse_until expands a date-only value to end-of-day
+// UTC (23:59:59.999999); without that, `until=2026-07-13` would parse as
+// midnight and drop everything after 00:00:00 on 2026-07-13.
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_admin_logs_with_date_only_until_returns_200(pool: PgPool) {
+    let app = build_app(common::make_state(pool.clone()));
+    let (token, slug) = common::seed_org_with_admin(&pool).await;
+    let org_id: String = sqlx::query_scalar("SELECT id FROM orgs WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    seed_audit_log(
+        &pool,
+        &org_id,
+        "log-midday",
+        "2026-07-13T10:00:00Z".parse::<DateTime<Utc>>().unwrap(),
+    )
+    .await;
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/api/v1/{slug}/admin/logs?page=1&page_size=20&until=2026-07-13"
+                ))
+                .header("authorization", bearer_token(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let body_bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body_str = String::from_utf8_lossy(&body_bytes);
+    assert_eq!(status, StatusCode::OK, "body was: {body_str}");
+    let body: Value = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["id"], "log-midday");
+}
+
+// Date-only `since` must include logs from that entire day, not just from
+// midnight onward — and must exclude logs from prior days. parse_since expands
+// a date-only value to midnight UTC of that day.
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn test_admin_logs_with_date_only_since_excludes_logs_before(pool: PgPool) {
+    let app = build_app(common::make_state(pool.clone()));
+    let (token, slug) = common::seed_org_with_admin(&pool).await;
+    let org_id: String = sqlx::query_scalar("SELECT id FROM orgs WHERE slug = $1")
+        .bind(&slug)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    // Log on the previous day — must be excluded.
+    seed_audit_log(
+        &pool,
+        &org_id,
+        "log-previous-day",
+        "2026-07-12T23:59:00Z".parse::<DateTime<Utc>>().unwrap(),
+    )
+    .await;
+
+    // Log on the target day — must be included.
+    seed_audit_log(
+        &pool,
+        &org_id,
+        "log-on-day",
+        "2026-07-13T00:30:00Z".parse::<DateTime<Utc>>().unwrap(),
+    )
+    .await;
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/api/v1/{slug}/admin/logs?page=1&page_size=20&since=2026-07-13"
+                ))
+                .header("authorization", bearer_token(&token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = resp.status();
+    let body_bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+    let body_str = String::from_utf8_lossy(&body_bytes);
+    assert_eq!(status, StatusCode::OK, "body was: {body_str}");
+    let body: Value = serde_json::from_slice(&body_bytes).unwrap();
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["items"][0]["id"], "log-on-day");
+}

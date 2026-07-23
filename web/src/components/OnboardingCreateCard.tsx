@@ -30,6 +30,7 @@ export function OnboardingCreateCard() {
   const user = useAuthStore((s) => s.user);
   const applyAuthResponse = useAuthStore((s) => s.applyAuthResponse);
 
+  // Pre-fill from username only — email is a poor default for an org name.
   const [name, setName] = useState(user?.username ?? '');
   const [slug, setSlug] = useState(slugify(user?.username ?? ''));
   const [error, setError] = useState<string | null>(null);

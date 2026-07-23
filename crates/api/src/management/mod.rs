@@ -1,5 +1,6 @@
 pub mod accounts;
 pub mod auth;
+pub mod auto_routes;
 pub mod budget;
 pub mod channels;
 pub mod groups;
@@ -12,7 +13,6 @@ pub mod logs;
 pub mod members;
 pub mod invitations;
 pub mod requests;
-pub mod users;
 pub mod settings;
 pub mod channel_models;
 pub mod pricing_policies;
@@ -75,6 +75,10 @@ pub fn management_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
         // is NOT flipped, they keep using the platform while the new address
         // is pending verification.
         .route("/api/v1/auth/me/email", post(auth::set_my_email))
+        // Self-service nickname set/clear. Empty string clears (writes NULL).
+        // Validation lives in `auth::validate_nickname` (1-32 chars, no
+        // control / zero-width chars) so the rule lives in exactly one place.
+        .route("/api/v1/auth/me/nickname", post(auth::set_my_nickname))
         .route("/api/v1/auth/refresh", post(auth::refresh))
         .route("/api/v1/auth/change-password", post(auth::change_password))
         // Phase 4: email verification — public (no auth required) so the
@@ -209,6 +213,17 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
             "/model-fallbacks/{id}",
             get(model_fallbacks::get_model_fallback).patch(model_fallbacks::update_model_fallback).delete(model_fallbacks::delete_model_fallback),
         )
+        // Auto Route Configs (authenticated)
+        .route(
+            "/auto-route-configs",
+            post(auto_routes::create_auto_route_config).get(auto_routes::list_auto_route_configs),
+        )
+        .route(
+            "/auto-route-configs/{id}",
+            get(auto_routes::get_auto_route_config)
+                .patch(auto_routes::update_auto_route_config)
+                .delete(auto_routes::delete_auto_route_config),
+        )
         // Providers (admin)
         .route(
             "/admin/providers",
@@ -282,27 +297,22 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
         .route("/admin/logs/{id}", get(logs::get_log))
         // Request details (admin)
         .route("/admin/requests/{request_id}", get(requests::get_request_details))
-        // Users (admin)
-        .route("/admin/users", get(users::list_users))
+        // Account / Balance (admin) — moved from /admin/users/* to /admin/members/*
+        // to match the per-org Members page (Task 6 of users → members refactor).
         .route(
-            "/admin/users/{id}",
-            patch(users::update_user).delete(users::delete_user),
-        )
-        // Account / Balance (admin)
-        .route(
-            "/admin/users/{id}/balance",
+            "/admin/members/{user_id}/balance",
             get(accounts::get_balance),
         )
         .route(
-            "/admin/users/{id}/recharge",
+            "/admin/members/{user_id}/recharge",
             post(accounts::recharge),
         )
         .route(
-            "/admin/users/{id}/adjust",
+            "/admin/members/{user_id}/adjust",
             post(accounts::adjust),
         )
         .route(
-            "/admin/users/{id}/threshold",
+            "/admin/members/{user_id}/threshold",
             patch(accounts::update_threshold),
         )
         // Seed data (reads static JSON)
@@ -323,7 +333,7 @@ fn org_scoped_routes() -> Router<Arc<AppState>> {
         )
         .route(
             "/members/{user_id}",
-            patch(members::change_member_role).delete(members::remove_member),
+            patch(members::update_member).delete(members::remove_member),
         )
         // Invitations (admin-only) — list/mint/revoke.
         .route(

@@ -200,6 +200,8 @@ pub fn get_seed_models(_provider_ids: &[(String, String)]) -> Vec<Model> {
             model_type: None,
             pricing_policy_id: None,
             owner_org_id: None,
+            supports_vision: false,
+            supports_tools: false,
             created_at: Utc::now(),
         })
         .collect()

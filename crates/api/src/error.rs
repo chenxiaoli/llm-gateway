@@ -36,6 +36,13 @@ pub enum ApiError {
     ResetConsumed,              // 410 reset_consumed
     ResetNotFound,              // 404 reset_not_found
     LastPlatformAdmin,          // 409 last_platform_admin
+    InvalidNickname,            // 400 invalid_nickname
+
+    // --- model=auto routing ---
+    AutoNotConfigured,
+    AutoNoMatchingModel { required_vision: bool, required_tools: bool },
+    AutoAllCandidatesFailed,
+    ModelNameReserved,
 }
 
 impl From<llm_gateway_org::OrgError> for ApiError {
@@ -56,6 +63,23 @@ impl From<llm_gateway_org::OrgError> for ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        // AutoNoMatchingModel carries structured capability requirements that
+        // don't fit the flat (status, message, code) tuple shape below.
+        if let ApiError::AutoNoMatchingModel { required_vision, required_tools } = &self {
+            let mut required = Vec::new();
+            if *required_vision { required.push("vision"); }
+            if *required_tools { required.push("tools"); }
+            let body = json!({
+                "error": {
+                    "message": "No model in the auto-route pool satisfies the required capabilities",
+                    "type": StatusCode::BAD_REQUEST.as_u16(),
+                    "code": "auto_no_matching_model",
+                    "required_capabilities": required,
+                }
+            });
+            return (StatusCode::BAD_REQUEST, axum::Json(body)).into_response();
+        }
+
         // RateLimited is the only variant that emits an HTTP header (Retry-After),
         // so it can't share the flat (status, message, code) tuple path below.
         if let ApiError::RateLimited { retry_after_secs } = self {
@@ -172,9 +196,30 @@ impl IntoResponse for ApiError {
                 "Cannot demote the last platform admin",
                 Some("last_platform_admin"),
             ),
+            ApiError::InvalidNickname => (
+                StatusCode::BAD_REQUEST,
+                "Nickname must be 1-32 characters and contain no control or zero-width characters",
+                Some("invalid_nickname"),
+            ),
+            ApiError::AutoNotConfigured => (
+                StatusCode::BAD_REQUEST,
+                "This API key has no auto_route_config assigned",
+                Some("auto_not_configured"),
+            ),
+            ApiError::AutoAllCandidatesFailed => (
+                StatusCode::BAD_GATEWAY,
+                "All candidate models failed for this auto-routed request",
+                Some("auto_all_candidates_failed"),
+            ),
+            ApiError::ModelNameReserved => (
+                StatusCode::BAD_REQUEST,
+                "The model name 'auto' is reserved",
+                Some("model_name_reserved"),
+            ),
             // Handled by the early-return above; unreachable here.
             ApiError::RateLimited { .. } => unreachable!("RateLimited handled above"),
             ApiError::BudgetExceeded { .. } => unreachable!("BudgetExceeded handled above"),
+            ApiError::AutoNoMatchingModel { .. } => unreachable!("handled above"),
         };
         let body = if let Some(c) = code {
             json!({ "error": { "message": message, "type": status.as_u16(), "code": c } })

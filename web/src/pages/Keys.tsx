@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useKeys, useCreateKey } from '../hooks/useKeys';
 import { useModelFallbacks } from '../hooks/useModelFallbacks';
+import { useAutoRouteConfigs } from '../hooks/useAutoRouteConfigs';
 import { useCurrencyStore, formatCurrency } from '../stores/currency';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { Button } from '../components/ui/Button';
@@ -29,6 +30,7 @@ export default function Keys() {
   const slug = useAuthStore((s) => s.currentOrg?.slug);
   const navigate = useNavigate();
   const { data: fallbacks } = useModelFallbacks();
+  const { data: autoRouteConfigs } = useAutoRouteConfigs();
   const reducedMotion = useReducedMotion();
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -37,6 +39,7 @@ export default function Keys() {
   const [rateLimit, setRateLimit] = useState('');
   const [budget, setBudget] = useState('');
   const [fallbackId, setFallbackId] = useState('');
+  const [autoRouteId, setAutoRouteId] = useState('');
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,12 +48,14 @@ export default function Keys() {
       rate_limit: rateLimit ? Number(rateLimit) : null,
       budget_monthly: budget ? Number(budget) : null,
       model_fallback_id: fallbackId || null,
+      auto_route_id: autoRouteId || null,
     });
     setCreatedKey(result.key);
     setName('');
     setRateLimit('');
     setBudget('');
     setFallbackId('');
+    setAutoRouteId('');
   };
 
   const copyKey = () => {
@@ -273,6 +278,13 @@ export default function Keys() {
               <select value={fallbackId} onChange={(e) => setFallbackId(e.target.value)} className="select select-bordered w-full">
                 <option value="">{t('keys.form.noneOption')}</option>
                 {fallbacks?.map((fb) => (<option key={fb.id} value={fb.id}>{fb.name}</option>))}
+              </select>
+            </div>
+            <div className="form-control">
+              <label className="label"><span className="label-text font-medium">{t('keys.form.autoRouteConfig')}</span></label>
+              <select value={autoRouteId} onChange={(e) => setAutoRouteId(e.target.value)} className="select select-bordered w-full">
+                <option value="">{t('keys.form.noneOption')}</option>
+                {autoRouteConfigs?.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
               </select>
             </div>
             <Button variant="primary" loading={createKeyMutation.isPending}>{t('common.create')}</Button>

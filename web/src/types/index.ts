@@ -7,6 +7,7 @@ export interface ApiKey {
   budget_monthly: number | null;
   enabled: boolean;
   model_fallback_id: string | null;
+  auto_route_id: string | null;
   created_at: string;
   updated_at: string;
   /** Phase 7: current UTC-month MTD spend in 10^8 subunits per USD.
@@ -19,6 +20,7 @@ export interface CreateKeyRequest {
   rate_limit?: number | null;
   budget_monthly?: number | null;
   model_fallback_id?: string | null;
+  auto_route_id?: string | null;
 }
 
 export interface CreateKeyResponse {
@@ -37,6 +39,7 @@ export interface UpdateKeyRequest {
   budget_monthly?: number | null;
   enabled?: boolean;
   model_fallback_id?: string | null;
+  auto_route_id?: string | null;
 }
 
 export interface Provider {
@@ -70,6 +73,8 @@ export interface Model {
   name: string;
   model_type?: string | null;
   pricing_policy_id?: string | null;
+  supports_vision: boolean;
+  supports_tools: boolean;
   created_at: string;
 }
 
@@ -91,6 +96,8 @@ export interface CreateGlobalModelRequest {
 
 export interface UpdateModelRequest {
   pricing_policy_id?: string | null;
+  supports_vision?: boolean;
+  supports_tools?: boolean;
 }
 
 export interface UserPricingInfo {
@@ -217,10 +224,16 @@ export interface LogFilter {
 
 export interface User {
   id: string;
-  username: string;
+  username: string | null;
   platform_role: 'platform_admin' | null;
   balance?: number;
   threshold?: number;
+  /**
+   * User-chosen friendly display name. null/empty when unset (user hasn't
+   * visited /profile yet). When set, takes priority over username and email
+   * in displayName().
+   */
+  nickname?: string | null;
   /**
    * User's email address. null until the user sets one (Phase 4 email flow:
    * registration collects it, but legacy accounts may have none yet).
@@ -248,10 +261,16 @@ export type MemberRole = 'owner' | 'admin' | 'member';
 
 export interface Member {
   user_id: string;
-  username: string;
+  username: string | null;
+  email: string | null;
+  nickname?: string | null;
   role: MemberRole;
   group_id: string | null;
-  joined_at: string; // ISO timestamp
+  group_name: string | null;
+  enabled: boolean;
+  balance: number; // USD float
+  threshold: number; // USD float
+  created_at: string; // ISO timestamp (was: joined_at)
 }
 
 // --- Groups ---
@@ -285,7 +304,6 @@ export interface LoginRequest {
 }
 
 export interface RegisterRequest {
-  username: string;
   password: string;
   /**
    * Required email address (Phase 4). A verification email is sent on
@@ -314,7 +332,7 @@ export interface AuthResponse {
 
 export interface MeResponse {
   id: string;
-  username: string;
+  username: string | null;
   platform_role: 'platform_admin' | null;
   /**
    * null when the user has no memberships (e.g. just self-left their last
@@ -341,6 +359,13 @@ export interface MeResponse {
    */
   email_verified_at: string | null;
   /**
+   * The signed-in user's chosen friendly name (mirrors `User.nickname`).
+   * null/undefined when unset. Backend serializes via `skip_serializing_if =
+   * Option::is_none`, so the field is absent on the wire when not set — keep
+   * this optional on the client side too.
+   */
+  nickname?: string | null;
+  /**
    * True when this server requires email verification before login. The
    * frontend surfaces UI hints (e.g. an "Add email" banner) based on this.
    */
@@ -360,25 +385,6 @@ export interface RefreshResponse {
 export interface ChangePasswordRequest {
   current_password: string;
   new_password: string;
-}
-
-export interface UserResponse {
-  id: string;
-  username: string;
-  role: 'admin' | 'user';
-  enabled: boolean;
-  group_id: string | null;
-  group_name: string | null;
-  balance: number;
-  threshold: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface UpdateUserRequest {
-  role?: 'admin' | 'user';
-  enabled?: boolean;
-  group_id?: string | null;
 }
 
 export interface SettingsResponse {
@@ -521,6 +527,30 @@ export interface CreateModelFallbackRequest {
 export interface UpdateModelFallbackRequest {
   name?: string;
   config?: ModelFallbackGroup[];
+}
+
+// ── Auto Route Config Types ───────────────────────────────────────────────
+
+export interface AutoRouteConfigData {
+  model_names: string[];
+}
+
+export interface AutoRouteConfig {
+  id: string;
+  name: string;
+  config: AutoRouteConfigData;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface CreateAutoRouteConfigRequest {
+  name: string;
+  config: AutoRouteConfigData;
+}
+
+export interface UpdateAutoRouteConfigRequest {
+  name?: string;
+  config?: AutoRouteConfigData;
 }
 
 // ── Pricing Config Types ───────────────────────────────────────────────────────
@@ -794,7 +824,7 @@ export interface InvitationPreview {
   org_name: string;
   org_slug: string;
   role: 'member' | 'admin';
-  inviter_username: string;
+  inviter_username: string | null;
   /**
    * Phase 4: the email the admin bound this invitation to. The landing page
    * surfaces it so the recipient can confirm the address matches their account.

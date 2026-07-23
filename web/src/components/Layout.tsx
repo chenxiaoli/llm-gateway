@@ -22,15 +22,18 @@ import {
   Moon,
   ChevronRight,
   User,
+  UserCircle,
   Lock,
   ChevronDown,
   Menu,
   X,
   SquareStack,
+  Compass,
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { isAdminOrAbove, isPlatformAdmin } from '../lib/auth';
 import { useTheme } from '../hooks/useTheme';
+import { displayName } from '../lib/displayName';
 import { apiClient } from '../api/client';
 import { useTranslation } from 'react-i18next';
 import { Globe } from 'lucide-react';
@@ -65,9 +68,9 @@ export default function AppLayout() {
     { key: `/${slug}/dashboard`, icon: LayoutDashboard, label: t('sidebar.dashboard') },
     { key: `/${slug}/keys`, icon: KeyRound, label: t('sidebar.keys') },
     { key: `/${slug}/model-fallbacks`, icon: ArrowRightLeft, label: t('sidebar.modelFallbacks') },
+    { key: `/${slug}/auto-routes`, icon: Compass, label: t('sidebar.autoRoutes') },
     { key: `/${slug}/models`, icon: SquareStack, label: t('sidebar.models') },
     { key: `/${slug}/usage`, icon: BarChart3, label: t('sidebar.usage') },
-    { key: `/${slug}/settings`, icon: Settings, label: t('sidebar.orgSettings') },
   ];
 
   const adminItems = [
@@ -76,11 +79,11 @@ export default function AppLayout() {
     { key: `/${slug}/admin/providers`, icon: Server, label: t('sidebar.providers') },
     { key: `/${slug}/admin/models`, icon: Cpu, label: t('sidebar.models') },
     { key: `/${slug}/admin/pricing-policies`, icon: DollarSign, label: t('sidebar.pricingPolicies') },
-    { key: `/${slug}/admin/users`, icon: Users, label: t('sidebar.users') },
     { key: `/${slug}/members`, icon: UserPlus, label: t('sidebar.members') },
     { key: `/${slug}/admin/invitations`, icon: Mail, label: t('sidebar.invitations') },
     { key: `/${slug}/admin/groups`, icon: UsersRound, label: t('groups.title') },
     { key: `/${slug}/admin/logs`, icon: FileText, label: t('sidebar.logs') },
+    { key: `/${slug}/settings`, icon: Settings, label: t('sidebar.orgSettings') },
   ];
 
   // Platform-admin-only items. The /{slug}/admin/settings handler is
@@ -97,12 +100,12 @@ export default function AppLayout() {
     dashboard: t('sidebar.dashboard'),
     keys: t('sidebar.keys'),
     'model-fallbacks': t('sidebar.modelFallbacks'),
+    'auto-routes': t('sidebar.autoRoutes'),
     usage: t('sidebar.usage'),
     providers: t('sidebar.providers'),
     channels: t('sidebar.channels'),
     models: t('sidebar.models'),
     'pricing-policies': t('sidebar.pricingPolicies'),
-    users: t('sidebar.users'),
     members: t('sidebar.members'),
     invitations: t('sidebar.invitations'),
     settings: t('sidebar.settings'),
@@ -427,10 +430,14 @@ export default function AppLayout() {
                 >
                   <div className="avatar placeholder">
                     <div className="bg-primary/15 text-primary w-7 rounded-md flex items-center justify-center">
-                      <span className="text-xs font-semibold">{user?.username?.charAt(0).toUpperCase()}</span>
+                      <span className="text-xs font-semibold">
+                        {(user ? displayName(user) : '').charAt(0).toUpperCase() || '?'}
+                      </span>
                     </div>
                   </div>
-                  <span className="hidden sm:inline text-[13px] font-medium text-base-content/60">{user?.username}</span>
+                  <span className="hidden sm:inline text-[13px] font-medium text-base-content/60">
+                    {user ? displayName(user) : ''}
+                  </span>
                   <ChevronDown className={`h-3 w-3 text-base-content/30 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
@@ -442,6 +449,13 @@ export default function AppLayout() {
                     >
                       <User className="h-4 w-4 text-base-content/40" />
                       {t('header.account')}
+                    </button>
+                    <button
+                      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors cursor-pointer"
+                      onClick={() => { setDropdownOpen(false); navigate(slug ? `/${slug}/profile` : '/login'); }}
+                    >
+                      <UserCircle className="h-4 w-4 text-base-content/40" />
+                      {t('header.profile')}
                     </button>
                     <button
                       className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-base-content/70 hover:bg-base-200/60 transition-colors cursor-pointer"

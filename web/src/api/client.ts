@@ -155,7 +155,10 @@ export function getErrorMessage(err: unknown, fallback: string): string {
 }
 
 /**
- * Returns `/api/v1/${currentOrg.slug}` for org-scoped endpoints.
+ * Returns `/${currentOrg.slug}` for org-scoped endpoints, to be combined
+ * with `apiClient.baseURL` (`/api/v1`) by axios. Returning the full
+ * `/api/v1/${slug}` here would cause axios to double the prefix and every
+ * org-scoped request would hit `/api/v1/api/v1/<slug>/...` → 410 Gone.
  *
  * @throws if no current org is set — callers must ensure the user is
  *   authenticated and has selected an org before invoking. OrgRouteGuard
@@ -166,5 +169,5 @@ export function orgPrefix(): string {
   if (!slug) {
     throw new Error('no current org — cannot build org-scoped URL');
   }
-  return `/api/v1/${slug}`;
+  return `/${slug}`;
 }

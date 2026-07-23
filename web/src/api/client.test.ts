@@ -17,7 +17,7 @@ describe('orgPrefix', () => {
     expect(() => orgPrefix()).toThrow(/no current org/i);
   });
 
-  it('returns the prefixed path when currentOrg is set', () => {
+  it('returns the slug-relative path when currentOrg is set', () => {
     const org: OrgSummary = {
       id: 'org-1',
       slug: 'acme',
@@ -26,10 +26,13 @@ describe('orgPrefix', () => {
       group_id: null,
     };
     useAuthStore.setState({ currentOrg: org });
-    expect(orgPrefix()).toBe('/api/v1/acme');
+    // Returns `/acme`, NOT `/api/v1/acme` — `apiClient.baseURL` already
+    // carries `/api/v1`. Returning `/api/v1/${slug}` here caused every
+    // org-scoped request to double the prefix (`/api/v1/api/v1/<slug>/...`).
+    expect(orgPrefix()).toBe('/acme');
   });
 
-  it('returns the prefixed path for slug with hyphen', () => {
+  it('returns the slug-relative path for slug with hyphen', () => {
     const org: OrgSummary = {
       id: 'org-2',
       slug: 'my-company',
@@ -38,6 +41,6 @@ describe('orgPrefix', () => {
       group_id: null,
     };
     useAuthStore.setState({ currentOrg: org });
-    expect(orgPrefix()).toBe('/api/v1/my-company');
+    expect(orgPrefix()).toBe('/my-company');
   });
 });

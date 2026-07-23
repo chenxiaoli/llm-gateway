@@ -1,23 +1,28 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  getUserBalance,
-  rechargeUser,
-  adjustUserBalance,
-  updateUserThreshold,
-  getMyBalance,
-  getRequestDetails,
-} from '../api/accounts';
+  getMemberBalance,
+  rechargeMember,
+  adjustMemberBalance,
+  setMemberThreshold,
+} from '../api/members';
+import { getMyBalance, getRequestDetails } from '../api/accounts';
 import type { CreateTransactionRequest, UpdateThresholdRequest } from '../types';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../api/client';
 import i18n from '../i18n';
 import { useAuthStore } from '../stores/authStore';
 
+// --- Legacy per-user account hooks ---
+// These wrap the new /admin/members/{user_id}/* routes (added in Task 6) via
+// api/members. They retain their old names + signatures so pages/Users.tsx
+// and pages/AccountBalance.tsx keep compiling; Task 11 deletes Users.tsx and
+// a follow-up will migrate AccountBalance.tsx to the new useMembers hooks.
+
 export function useUserBalance(userId: string, page = 1, pageSize = 20) {
   const slug = useAuthStore((s) => s.currentOrg?.slug) ?? '';
   return useQuery({
     queryKey: [slug, 'user-balance', userId, page, pageSize],
-    queryFn: () => getUserBalance(userId, page, pageSize),
+    queryFn: () => getMemberBalance(userId, page, pageSize),
     enabled: !!slug && !!userId,
   });
 }
@@ -32,7 +37,7 @@ export function useRechargeUser() {
     }: {
       userId: string;
       data: CreateTransactionRequest;
-    }) => rechargeUser(userId, data),
+    }) => rechargeMember(userId, { amount: data.amount, description: data.description }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: [slug, 'user-balance', variables.userId],
@@ -55,7 +60,12 @@ export function useAdjustUser() {
     }: {
       userId: string;
       data: CreateTransactionRequest;
-    }) => adjustUserBalance(userId, data),
+    }) =>
+      adjustMemberBalance(userId, {
+        type: data.type as 'credit_adjustment' | 'debit_refund',
+        amount: data.amount,
+        description: data.description,
+      }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: [slug, 'user-balance', variables.userId],
@@ -78,7 +88,7 @@ export function useUpdateThreshold() {
     }: {
       userId: string;
       data: UpdateThresholdRequest;
-    }) => updateUserThreshold(userId, data),
+    }) => setMemberThreshold(userId, data.threshold),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: [slug, 'user-balance', variables.userId],

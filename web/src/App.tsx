@@ -15,13 +15,16 @@ import CheckEmail from './pages/CheckEmail';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Onboarding from './pages/Onboarding';
+import OrgCreate from './pages/OrgCreate';
 import AcceptInvite from './pages/AcceptInvite';
 import Dashboard from './pages/Dashboard';
 import Account from './pages/Account';
 import ChangePassword from './pages/ChangePassword';
+import Profile from './pages/Profile';
 import Keys from './pages/Keys';
 import KeyDetail from './pages/KeyDetail';
 import ModelFallbacks from './pages/ModelFallbacks';
+import AutoRoutes from './pages/AutoRoutes';
 import ConsoleModels from './pages/ConsoleModels';
 import Channels from './pages/Channels';
 import ChannelDetail from './pages/ChannelDetail';
@@ -29,7 +32,6 @@ import Models from './pages/Models';
 import PricingPolicies from './pages/PricingPolicies';
 import Providers from './pages/Providers';
 import ProviderDetail from './pages/ProviderDetail';
-import Users from './pages/Users';
 import Members from './pages/Members';
 import Invitations from './pages/Invitations';
 import OrgSettings from './pages/OrgSettings';
@@ -134,6 +136,7 @@ function App() {
         <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/accept-invite" element={<AcceptInvite />} />
         <Route path="/onboarding" element={<Onboarding />} />
+        <Route path="/orgs/new" element={<OrgCreate />} />
 
         {/* Org-scoped — wraps everything else */}
         <Route path="/:orgSlug" element={<Layout />}>
@@ -144,12 +147,13 @@ function App() {
               <Route path="keys" element={<Keys />} />
               <Route path="keys/:id" element={<KeyDetail />} />
               <Route path="model-fallbacks" element={<ModelFallbacks />} />
+              <Route path="auto-routes" element={<AutoRoutes />} />
               <Route path="models" element={<ConsoleModels />} />
               <Route path="usage" element={<Usage />} />
               <Route path="members" element={<Members />} />
-              <Route path="settings" element={<OrgSettings />} />
               <Route path="account" element={<Account />} />
               <Route path="change-password" element={<ChangePassword />} />
+              <Route path="profile" element={<Profile />} />
             </Route>
           </Route>
 
@@ -162,11 +166,11 @@ function App() {
               <Route path="admin/providers/:id" element={<ProviderDetail />} />
               <Route path="admin/models" element={<Models />} />
               <Route path="admin/pricing-policies" element={<PricingPolicies />} />
-              <Route path="admin/users" element={<Users />} />
               <Route path="admin/invitations" element={<Invitations />} />
               <Route path="admin/groups" element={<Groups />} />
               <Route path="admin/users/:userId/balance" element={<AccountBalance />} />
               <Route path="admin/logs" element={<Logs />} />
+              <Route path="settings" element={<OrgSettings />} />
             </Route>
           </Route>
 
