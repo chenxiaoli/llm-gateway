@@ -198,4 +198,62 @@ describe('Members page', () => {
       expect(rechargeUrl).toBe('u-alice');
     });
   });
+
+  it('clicking Deduct in the drawer POSTs to /recharge with type:debit', async () => {
+    seedAdmin();
+    let rechargeBody: unknown = undefined;
+    server.use(
+      http.get('*/api/v1/test-org/members', () => HttpResponse.json([memberFixture])),
+      http.get('*/api/v1/test-org/admin/members/*/balance', () =>
+        HttpResponse.json({
+          account: {
+            id: 'acct-1',
+            user_id: 'u-alice',
+            balance: 50,
+            threshold: 10,
+            created_at: '2026-06-01T00:00:00Z',
+            updated_at: '2026-06-01T00:00:00Z',
+          },
+          transactions: { items: [], total: 0, page: 1, page_size: 10 },
+        }),
+      ),
+      http.get('*/api/v1/test-org/admin/groups', () =>
+        HttpResponse.json({ items: [], total: 0, page: 1, page_size: 20 }),
+      ),
+      http.post('*/api/v1/test-org/admin/members/:userId/recharge', async ({ request }) => {
+        rechargeBody = await request.json();
+        return HttpResponse.json({
+          id: 'acct-1',
+          user_id: 'u-alice',
+          balance: 40,
+          threshold: 10,
+          created_at: '2026-06-01T00:00:00Z',
+          updated_at: new Date().toISOString(),
+        });
+      }),
+    );
+
+    renderWithProviders(
+      <>
+        <Members />
+        <Toaster />
+      </>,
+      { route: ROUTE },
+    );
+
+    // Open the drawer.
+    await userEvent.click(await screen.findByRole('button', { name: 'Detail' }));
+
+    // Click Deduct (the new button next to Recharge). Both routes through the
+    // same modal — the only client-side difference is the `type` field.
+    await userEvent.click(await screen.findByRole('button', { name: 'Deduct' }));
+
+    const amountInput = await screen.findByPlaceholderText('0.00');
+    await userEvent.type(amountInput, '10');
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm Deduction' }));
+
+    await waitFor(() => {
+      expect(rechargeBody).toEqual({ amount: 10, description: 'Debit', type: 'debit' });
+    });
+  });
 });

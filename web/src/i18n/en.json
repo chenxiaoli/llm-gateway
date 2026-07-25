@@ -118,6 +118,7 @@
     "emailMismatch": "Email does not match the invitation.",
     "emailRequired": "Email is required.",
     "emailNotVerifiedMessage": "Please verify your email before logging in.",
+    "emailNotVerifiedFreshSent": "We just sent a fresh verification link to your email. Check your inbox and click the link to verify.",
     "verificationSent": "Verification email sent.",
     "resendVerification": "Resend verification email",
     "forgotPassword": "Forgot password?"
@@ -885,6 +886,7 @@
       "noGroup": "None",
       "recharge": "Recharge",
       "adjust": "Adjust",
+      "deduct": "Deduct",
       "recentTransactions": "Recent Transactions",
       "noTransactions": "No transactions yet",
       "credit": "Credit",
@@ -898,6 +900,10 @@
       "descriptionLabel": "Description",
       "descriptionPlaceholder": "e.g. Monthly top-up",
       "confirmRecharge": "Confirm Recharge"
+    },
+    "deductModal": {
+      "title": "Deduct Balance",
+      "confirmDeduct": "Confirm Deduction"
     },
     "adjustModal": {
       "title": "Adjust Balance",

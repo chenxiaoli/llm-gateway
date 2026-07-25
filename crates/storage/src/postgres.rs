@@ -3080,6 +3080,37 @@ impl crate::Storage for PostgresStorage {
         Ok(row.map(Account::from))
     }
 
+    async fn get_or_create_account_by_user_id(&self, org_id: &str, user_id: &str) -> Result<Account, Box<dyn std::error::Error + Send + Sync>> {
+        // Fast path: row already exists.
+        if let Some(existing) = self.get_account_by_user_id(org_id, user_id).await? {
+            return Ok(existing);
+        }
+        // Slow path: INSERT ... ON CONFLICT DO NOTHING, then re-SELECT. The
+        // re-SELECT (rather than RETURNING) makes the race-collision case —
+        // another request inserted the row between our SELECT and INSERT —
+        // return the winning row instead of None.
+        let account_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now();
+        sqlx::query(
+            "INSERT INTO accounts (id, org_id, user_id, balance, threshold, created_at, updated_at)
+             VALUES ($1, $2, $3, 0, $4, $5, $5)
+             ON CONFLICT (org_id, user_id) DO NOTHING",
+        )
+        .bind(&account_id)
+        .bind(org_id)
+        .bind(user_id)
+        .bind(DEFAULT_ACCOUNT_THRESHOLD_SUBUNITS)
+        .bind(now)
+        .execute(self.pool())
+        .await?;
+        self.get_account_by_user_id(org_id, user_id)
+            .await?
+            .ok_or_else(|| {
+                "get_or_create_account_by_user_id: row missing after INSERT/ON CONFLICT"
+                    .into()
+            })
+    }
+
     async fn update_account(&self, org_id: &str, account: &Account) -> Result<Account, Box<dyn std::error::Error + Send + Sync>> {
         sqlx::query(
             "UPDATE accounts SET balance = $1, threshold = $2, updated_at = $3 WHERE org_id = $4 AND id = $5"

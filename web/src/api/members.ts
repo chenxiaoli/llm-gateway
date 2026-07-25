@@ -43,11 +43,11 @@ export async function getMemberBalance(
 
 export async function rechargeMember(
   userId: string,
-  data: { amount: number; description?: string },
+  data: { type?: 'credit' | 'debit'; amount: number; description?: string },
 ): Promise<Account> {
   const { data: resp } = await apiClient.post<Account>(
     `${orgPrefix()}/admin/members/${userId}/recharge`,
-    { ...data, type: 'credit' as const },
+    { type: 'credit', ...data },
   );
   return resp;
 }

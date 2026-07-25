@@ -6,6 +6,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-07-25
+
+### Fixed — Login with unverified email now auto-dispatches a fresh verification email
+
+The `POST /api/v1/auth/login` handler previously rejected an
+unverified user with `email_not_verified` and left it to the frontend
+to surface a "resend verification" form that required the user to
+re-enter their email — redundant, since the backend had already
+authenticated them and knew their address. The handler now mints a
+fresh verification token and dispatches the email as part of the
+`email_not_verified` response. The login page replaces the email
+input + resend button with a one-click "we just sent a fresh
+verification link" panel. The `/auth/resend-verification` endpoint
+is unchanged (still 204-always, still used by the post-register
+"Check your email" page).
+
+### Fixed — `POST /{slug}/admin/members/{user_id}/recharge` no longer 404s on members without a paired `accounts` row
+
+Members added through legacy code paths (pre-`upsert_member`, manual SQL,
+or stale release binaries) can land in `members` without the matching
+`accounts` row — `upsert_member` is the only writer that creates the
+paired row, and it has only existed since the users → members refactor.
+The recharge handler was calling `get_account_by_user_id` and returning
+404 on the missing row, which broke the entire Members page for any
+affected user. The handler now calls `get_or_create_account_by_user_id`
+so a missing row self-heals on first access (balance 0, default
+threshold). Same fix applies to the new deduction path.
+
+### Added — `/recharge { type: "debit" }` for member balance deduction
+
+- `POST /api/v1/{slug}/admin/members/{user_id}/recharge` now accepts
+  `type: "credit"` (default, unchanged — adds balance) or `type: "debit"`
+  (new — subtracts balance via the storage layer's atomic
+  `deduct_balance`, with a 400 BadRequest if the deduction would push
+  the balance negative).
+- Frontend Members drawer gets a third button, **Deduct**, next to
+  Recharge and Adjust. Both Recharge and Deduct share the same modal —
+  the only difference is the `type` field on the wire. Existing callers
+  that send `type: "credit"` keep working unchanged.
+
 ### Added — `model=auto` capability-aware routing
 
 - **`model=auto` request routing**: clients can send `model=auto` on

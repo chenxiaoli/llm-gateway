@@ -729,7 +729,7 @@ export interface MeBalanceResponse {
 }
 
 export interface CreateTransactionRequest {
-  type: 'credit' | 'credit_adjustment' | 'debit_refund';
+  type: 'credit' | 'debit' | 'credit_adjustment' | 'debit_refund';
   amount: number;
   description?: string;
   reference_id?: string;

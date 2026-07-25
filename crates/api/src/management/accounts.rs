@@ -8,6 +8,7 @@ use llm_gateway_storage::{
     units_to_usd, usd_to_units,
     Account, AccountResponse as StorageAccountResponse,
     AddBalance, AddBalanceResult,
+    DeductBalance, DeductBalanceResult,
     PaginatedResponse, PaginationParams, TransactionResponse as StorageTransactionResponse,
     TransactionType,
 };
@@ -139,40 +140,99 @@ pub async fn recharge(
         return Err(ApiError::BadRequest("Amount must be positive".to_string()));
     }
 
-    // Look up account for account_id
+    // `type` defaults to "credit" so existing callers (including the
+    // frontend's rechargeMember, which always sends type:'credit') keep
+    // working unchanged. "debit" routes through the storage layer's
+    // deduct_balance, which atomically refuses to push the balance negative.
+    let is_debit = match input.transaction_type.as_str() {
+        "credit" => false,
+        "debit" => true,
+        other => {
+            return Err(ApiError::BadRequest(format!(
+                "type must be 'credit' or 'debit', got '{other}'"
+            )))
+        }
+    };
+
+    // Look up — or materialize — the account row. Members added through
+    // legacy paths (pre-upsert_member, manual SQL, stale release) often
+    // have a members row but no paired accounts row in this org; without
+    // this the handler returns 404 the first time anyone tries to recharge
+    // them, even though they are a valid member. Lazy-create mirrors what
+    // upsert_member would have done at member-write time.
     let account = state
         .storage
-        .get_account_by_user_id(&ctx.org_id, &user_id)
+        .get_or_create_account_by_user_id(&ctx.org_id, &user_id)
         .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?
-        .ok_or(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))?;
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
 
     let amount_i64 = usd_to_units(input.amount);
 
-    let req = AddBalance {
-        account_id: account.id.clone(),
-        amount: amount_i64,
-        transaction_type: TransactionType::Credit,
-        description: input.description.or_else(|| Some("Recharge".to_string())),
-        reference_id: input.reference_id,
-    };
-
-    match state.storage.add_balance(&ctx.org_id, &req).await {
-        Ok(AddBalanceResult::Success(tx)) => {
-            Ok(Json(AccountJsonResponse::from(StorageAccountResponse::from(&Account {
-                id: tx.account_id,
-                org_id: ctx.org_id.clone(),
-                user_id,
-                balance: tx.balance_after,
-                threshold: account.threshold,
-                created_at: account.created_at,
-                updated_at: tx.created_at,
-            }))))
+    if is_debit {
+        let req = DeductBalance {
+            account_id: account.id.clone(),
+            amount: amount_i64,
+            transaction_type: TransactionType::Debit,
+            description: input
+                .description
+                .or_else(|| Some("Deduction".to_string())),
+            reference_id: input.reference_id,
+            request_id: None,
+        };
+        match state.storage.deduct_balance(&ctx.org_id, &req).await {
+            Ok(DeductBalanceResult::Success(tx)) => Ok(Json(AccountJsonResponse::from(
+                StorageAccountResponse::from(&Account {
+                    id: tx.account_id,
+                    org_id: ctx.org_id.clone(),
+                    user_id,
+                    balance: tx.balance_after,
+                    threshold: account.threshold,
+                    created_at: account.created_at,
+                    updated_at: tx.created_at,
+                }),
+            ))),
+            Ok(DeductBalanceResult::InsufficientBalance {
+                current_balance,
+                requested,
+            }) => Err(ApiError::BadRequest(format!(
+                "Insufficient balance for deduction: balance={}, requested={}",
+                units_to_usd(current_balance),
+                units_to_usd(requested)
+            ))),
+            Ok(DeductBalanceResult::AccountNotFound) => Err(ApiError::NotFound(format!(
+                "Account for user '{}' not found",
+                user_id
+            ))),
+            Err(e) => Err(ApiError::Internal(e.to_string())),
         }
-        Ok(AddBalanceResult::AccountNotFound) => {
-            Err(ApiError::NotFound(format!("Account for user '{}' not found", user_id)))
+    } else {
+        let req = AddBalance {
+            account_id: account.id.clone(),
+            amount: amount_i64,
+            transaction_type: TransactionType::Credit,
+            description: input
+                .description
+                .or_else(|| Some("Recharge".to_string())),
+            reference_id: input.reference_id,
+        };
+        match state.storage.add_balance(&ctx.org_id, &req).await {
+            Ok(AddBalanceResult::Success(tx)) => Ok(Json(AccountJsonResponse::from(
+                StorageAccountResponse::from(&Account {
+                    id: tx.account_id,
+                    org_id: ctx.org_id.clone(),
+                    user_id,
+                    balance: tx.balance_after,
+                    threshold: account.threshold,
+                    created_at: account.created_at,
+                    updated_at: tx.created_at,
+                }),
+            ))),
+            Ok(AddBalanceResult::AccountNotFound) => Err(ApiError::NotFound(format!(
+                "Account for user '{}' not found",
+                user_id
+            ))),
+            Err(e) => Err(ApiError::Internal(e.to_string())),
         }
-        Err(e) => Err(ApiError::Internal(e.to_string())),
     }
 }
 

@@ -158,6 +158,16 @@ pub trait Storage: Send + Sync {
     async fn create_account(&self, org_id: &str, account: &Account) -> Result<Account, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_account(&self, org_id: &str, id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>>;
     async fn get_account_by_user_id(&self, org_id: &str, user_id: &str) -> Result<Option<Account>, Box<dyn std::error::Error + Send + Sync>>;
+    /// Return the account for `(org_id, user_id)`, creating a fresh row with
+    /// balance=0 and default threshold if none exists.
+    ///
+    /// The membership layer is supposed to guarantee a paired accounts row
+    /// (via `upsert_member`), but in practice rows go missing when members
+    /// are added through legacy code paths or stale release binaries. Calling
+    /// this from account-action handlers means a missing row self-heals
+    /// instead of 404'ing — the caller never has to special-case the
+    /// "just-added member has no balance row yet" state.
+    async fn get_or_create_account_by_user_id(&self, org_id: &str, user_id: &str) -> Result<Account, Box<dyn std::error::Error + Send + Sync>>;
     async fn update_account(&self, org_id: &str, account: &Account) -> Result<Account, Box<dyn std::error::Error + Send + Sync>>;
 
     // Transactions

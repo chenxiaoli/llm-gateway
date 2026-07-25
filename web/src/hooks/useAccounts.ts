@@ -37,7 +37,15 @@ export function useRechargeUser() {
     }: {
       userId: string;
       data: CreateTransactionRequest;
-    }) => rechargeMember(userId, { amount: data.amount, description: data.description }),
+    }) =>
+      rechargeMember(userId, {
+        // Forward the caller's type so the "Deduct" path can route through
+        // /recharge with type:'debit'. Defaults to 'credit' if the caller
+        // didn't set one (kept inside rechargeMember for the no-arg case).
+        type: data.type === 'debit' ? 'debit' : 'credit',
+        amount: data.amount,
+        description: data.description,
+      }),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: [slug, 'user-balance', variables.userId],

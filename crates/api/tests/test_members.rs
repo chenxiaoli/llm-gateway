@@ -721,3 +721,130 @@ async fn recharge_member_under_new_route(pool: PgPool) {
     .unwrap();
     assert_eq!(tx_count, 1);
 }
+
+/// Regression: POST /recharge must NOT 404 when the member has no paired
+/// accounts row in this org. This happens in the wild when a user is added
+/// to a new org via a code path that bypasses `upsert_member` (e.g. legacy
+/// routes, manual SQL, or a stale release binary). The handler now
+/// lazy-creates the account on first access — consistent with the
+/// per-membership invariant enforced by `upsert_member` at write time.
+///
+/// Before the fix: handler returned 404 with "Account for user '...' not
+/// found" the moment `get_account_by_user_id` came back empty.
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn recharge_lazy_creates_account_when_missing(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    // Member row, but NO accounts row (the broken state).
+    seed_default_member(&pool, "u-noacc", "noacc", "member").await;
+
+    let app = build_app(common::make_state(pool.clone()));
+    let admin = common::make_admin_token();
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/default/admin/members/u-noacc/recharge")
+                .header("authorization", bearer(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "type": "credit",
+                        "amount": 5.0,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Account row materialized with the recharged balance.
+    let balance: i64 = sqlx::query_scalar(
+        "SELECT balance FROM accounts WHERE user_id = 'u-noacc' AND org_id = 'org_default'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(balance, 500_000_000);
+}
+
+/// `/recharge { type: "debit" }` must subtract balance via the storage
+/// layer's `deduct_balance` path (which enforces the no-negative-balance
+/// invariant atomically). This matches the user-facing behavior the user
+/// asked for: "充值,扣费也是" — one endpoint, two signs.
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn recharge_with_type_debit_deducts_balance(pool: PgPool) {
+    common::seed_admin_user(&pool).await;
+    seed_default_member(&pool, "u-deb", "deb", "member").await;
+
+    // Seed account at $100 so a $10 deduction is covered but a $200 deduction is not.
+    sqlx::query(
+        r#"INSERT INTO accounts (id, org_id, user_id, balance, threshold, created_at, updated_at)
+           VALUES ('acc-deb', 'org_default', 'u-deb', 10000000000, 0, NOW(), NOW())
+           ON CONFLICT (org_id, user_id) DO NOTHING"#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let app = build_app(common::make_state(pool.clone()));
+    let admin = common::make_admin_token();
+
+    // $10 deduction — should succeed.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/default/admin/members/u-deb/recharge")
+                .header("authorization", bearer(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "type": "debit",
+                        "amount": 10.0,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body = body_json(resp).await;
+    assert_eq!(body["balance"], 90.0);
+
+    // $200 deduction — must fail with 400 BadRequest (insufficient balance),
+    // not 500 or a silent write that leaves balance negative.
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/default/admin/members/u-deb/recharge")
+                .header("authorization", bearer(&admin.token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "type": "debit",
+                        "amount": 200.0,
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    // Balance still $90 (the second attempt was rejected).
+    let balance: i64 = sqlx::query_scalar(
+        "SELECT balance FROM accounts WHERE user_id = 'u-deb' AND org_id = 'org_default'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(balance, 9_000_000_000);
+}

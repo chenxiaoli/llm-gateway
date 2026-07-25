@@ -1611,7 +1611,7 @@ checksum = "92daf443525c4cce67b150400bc2316076100ce0b3686209eb8cf3c31612e6f0"
 
 [[package]]
 name = "llm-gateway"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "axum",
  "chrono",
@@ -1637,7 +1637,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-api"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -1674,7 +1674,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-audit"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1685,7 +1685,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-audit-worker"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "futures",
  "llm-gateway-audit",
@@ -1702,7 +1702,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-auth"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "bcrypt",
  "chrono",
@@ -1716,7 +1716,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-billing"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "chrono",
  "llm-gateway-storage",
@@ -1725,7 +1725,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-email"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "async-trait",
  "base64",
@@ -1743,7 +1743,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-encryption"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "aes-gcm",
  "base64",
@@ -1753,7 +1753,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-nats-publisher"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "async-nats",
  "chrono",
@@ -1768,7 +1768,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-org"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -1781,7 +1781,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-provider"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -1793,14 +1793,14 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-ratelimit"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "tokio",
 ]
 
 [[package]]
 name = "llm-gateway-storage"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "async-trait",
  "base64",
@@ -1816,7 +1816,7 @@ dependencies = [
 
 [[package]]
 name = "llm-gateway-usage-worker"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "chrono",
  "futures",

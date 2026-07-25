@@ -320,7 +320,24 @@ pub async fn login(
     // The `requires` check is a future-proofing hook — currently every user
     // created via /auth/register has it set to true. Service accounts (a
     // later feature) can flip it to false to skip the gate.
+    //
+    // On rejection, we dispatch a fresh verification email so the user gets
+    // a one-click path to remediation without forcing them to re-enter their
+    // address on a separate screen. Best-effort: the user has already proven
+    // knowledge of the password, so a dispatch failure does not weaken the
+    // gate — they still need to verify before they can log in, and can retry
+    // via /auth/resend-verification.
     if user.requires_email_verification && user.email_verified_at.is_none() {
+        if let Some(email) = user.email.as_deref() {
+            dispatch_verification_email(
+                &state,
+                &user.id,
+                user.username.clone(),
+                email,
+                "login gate",
+            )
+            .await;
+        }
         return Err(ApiError::EmailNotVerified);
     }
 
@@ -362,6 +379,56 @@ const EMAIL_VERIFICATION_TTL_HOURS: i64 = 24;
 /// the account. 1 hour is long enough for a user to notice the email and
 /// click through, short enough to limit the exposure window.
 const PASSWORD_RESET_TTL_HOURS: i64 = 1;
+
+/// Mint a verification token + dispatch the verification email. Best-effort:
+/// storage / render failures are logged and swallowed. The caller has already
+/// decided the user should receive a verification email — a transient backend
+/// failure must not turn into a user-facing error when the user can retry via
+/// `/auth/resend-verification`.
+///
+/// `label` is included in log messages so multi-callsite dispatch can be
+/// told apart in traces (register vs. login-gate vs. resend vs. me/email).
+async fn dispatch_verification_email(
+    state: &Arc<AppState>,
+    user_id: &str,
+    username: Option<String>,
+    email: &str,
+    label: &'static str,
+) {
+    let expires = chrono::Utc::now() + chrono::Duration::hours(EMAIL_VERIFICATION_TTL_HOURS);
+    let verification = match state
+        .storage
+        .create_email_verification(user_id, email, expires)
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::error!(error = %e, label = label, "failed to mint verification token");
+            return;
+        }
+    };
+
+    let verification_url = format!(
+        "{}/verify-email/{}",
+        state.public_base_url.trim_end_matches('/'),
+        verification.token
+    );
+    let ctx = VerificationCtx {
+        username: username.unwrap_or_default(),
+        recipient_email: email.to_string(),
+        verification_url,
+        expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
+        public_base_url: state.public_base_url.clone(),
+    };
+    match state.templates.render_verification(ctx) {
+        Ok(msg) => {
+            dispatch_with_retry(state.mailer.clone(), msg, format!("{label} email"));
+        }
+        Err(e) => {
+            tracing::error!(error = %e, label = label, "failed to render verification email");
+        }
+    }
+}
 
 pub async fn register(
     State(state): State<Arc<AppState>>,
@@ -497,47 +564,17 @@ pub async fn register(
         .map_err(|e| ApiError::Internal(e.to_string()))?
         .ok_or_else(|| ApiError::Internal("just-created user vanished".into()))?;
 
-    // Phase 4: mint a verification token + dispatch the email. We swallow
-    // dispatch errors (the spawn'd task already retries 3x; final failure
-    // is logged). A user can always re-request via /auth/resend-verification.
-    let verification_expires = now + chrono::Duration::hours(EMAIL_VERIFICATION_TTL_HOURS);
-    match state
-        .storage
-        .create_email_verification(&user.id, &email_trimmed, verification_expires)
-        .await
-    {
-        Ok(verification) => {
-            let verification_url = format!(
-                "{}/verify-email/{}",
-                state.public_base_url.trim_end_matches('/'),
-                verification.token
-            );
-            let ctx = VerificationCtx {
-                username: user.username.clone().unwrap_or_default(),
-                recipient_email: email_trimmed.clone(),
-                verification_url,
-                expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
-                public_base_url: state.public_base_url.clone(),
-            };
-            match state.templates.render_verification(ctx) {
-                Ok(msg) => {
-                    dispatch_with_retry(state.mailer.clone(), msg, "verification email".into());
-                }
-                Err(e) => {
-                    // Template failure is a config issue, not a per-user
-                    // issue; log loudly but still return success — the user
-                    // is created and can use resend-verification later.
-                    tracing::error!(error = %e, "failed to render verification email");
-                }
-            }
-        }
-        Err(e) => {
-            // Same as above: storage failure is a server issue, not a
-            // user-blocking error. The user exists and can retry the
-            // dispatch via /auth/resend-verification once the DB heals.
-            tracing::error!(error = %e, "failed to mint verification token");
-        }
-    }
+    // Phase 4: mint a verification token + dispatch the email. Errors are
+    // logged inside the helper and a user can always re-request via
+    // /auth/resend-verification.
+    dispatch_verification_email(
+        &state,
+        &user.id,
+        user.username.clone(),
+        &email_trimmed,
+        "register",
+    )
+    .await;
 
     // If an invite_token was supplied and validated above, consume it
     // here so the user lands with the membership already in place. The
@@ -661,40 +698,17 @@ pub async fn resend_verification(
         return Ok(StatusCode::NO_CONTENT);
     }
 
-    let now = chrono::Utc::now();
-    let expires = now + chrono::Duration::hours(EMAIL_VERIFICATION_TTL_HOURS);
-    let verification = match state
-        .storage
-        .create_email_verification(&user.id, email, expires)
-        .await
-    {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::warn!(error = %e, "resend_verification: mint failed, returning 204 to avoid enumeration");
-            return Ok(StatusCode::NO_CONTENT);
-        }
-    };
-
-    let verification_url = format!(
-        "{}/verify-email/{}",
-        state.public_base_url.trim_end_matches('/'),
-        verification.token
-    );
-    let ctx = VerificationCtx {
-        username: user.username.clone().unwrap_or_default(),
-        recipient_email: email.to_string(),
-        verification_url,
-        expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
-        public_base_url: state.public_base_url.clone(),
-    };
-    match state.templates.render_verification(ctx) {
-        Ok(msg) => {
-            dispatch_with_retry(state.mailer.clone(), msg, "resend verification email".into());
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "failed to render resend verification email");
-        }
-    }
+    // Mint + dispatch. Errors are swallowed inside the helper to keep the
+    // endpoint's 204 contract uniform — exposing a 500 here would let
+    // attackers infer that the address is registered + deliverable.
+    dispatch_verification_email(
+        &state,
+        &user.id,
+        user.username.clone(),
+        email,
+        "resend verification",
+    )
+    .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -910,42 +924,14 @@ pub async fn set_my_email(
     // or render failure here does NOT roll back the email change — the user
     // can re-request via /auth/resend-verification. Mirrors `register`'s
     // pattern so the two endpoints have the same failure surface.
-    let verification_expires = chrono::Utc::now() + chrono::Duration::hours(EMAIL_VERIFICATION_TTL_HOURS);
-    match state
-        .storage
-        .create_email_verification(&updated.id, &email, verification_expires)
-        .await
-    {
-        Ok(verification) => {
-            let verification_url = format!(
-                "{}/verify-email/{}",
-                state.public_base_url.trim_end_matches('/'),
-                verification.token
-            );
-            let ctx = VerificationCtx {
-                username: updated.username.clone().unwrap_or_default(),
-                recipient_email: email.clone(),
-                verification_url,
-                expires_in_hours: EMAIL_VERIFICATION_TTL_HOURS as u32,
-                public_base_url: state.public_base_url.clone(),
-            };
-            match state.templates.render_verification(ctx) {
-                Ok(msg) => {
-                    dispatch_with_retry(
-                        state.mailer.clone(),
-                        msg,
-                        "verification email (me/email)".into(),
-                    );
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "failed to render verification email (me/email)");
-                }
-            }
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "failed to mint verification token (me/email)");
-        }
-    }
+    dispatch_verification_email(
+        &state,
+        &updated.id,
+        updated.username.clone(),
+        &email,
+        "verification email (me/email)",
+    )
+    .await;
 
     // Build the fresh MeResponse. Mirror `me`'s impersonation detection —
     // hardcoded `false` would hide the platform-admin-mode banner.

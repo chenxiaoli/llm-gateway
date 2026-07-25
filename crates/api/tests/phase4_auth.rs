@@ -156,6 +156,69 @@ async fn login_blocked_until_verified(pool: PgPool) {
     );
 }
 
+/// 3a. The login gate also dispatches a fresh verification email on rejection
+/// so the user gets a one-click remediation path. Register mints one row,
+/// then a blocked login attempt mints a second row.
+#[sqlx::test(migrator = "llm_gateway_storage::MIGRATOR")]
+async fn login_unverified_dispatches_verification_email(pool: PgPool) {
+    let app = build_app(common::make_state(pool.clone()));
+
+    let resp = post(
+        &app,
+        "/api/v1/auth/register",
+        json!({
+            "password": "password123",
+            "email": "ben@example.com",
+        }),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // One verification row exists after register.
+    let count_after_register: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM email_verifications WHERE user_id = \
+         (SELECT id FROM users WHERE email = 'ben@example.com')",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("count");
+    assert_eq!(count_after_register, 1);
+
+    // Login attempt — blocked, but should mint a fresh verification row.
+    let resp = post(
+        &app,
+        "/api/v1/auth/login",
+        json!({"username": "ben@example.com", "password": "password123"}),
+    )
+    .await;
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+    // Now two verification rows — the second one is the login-gate dispatch.
+    let count_after_login: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM email_verifications WHERE user_id = \
+         (SELECT id FROM users WHERE email = 'ben@example.com')",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("count");
+    assert_eq!(
+        count_after_login, 2,
+        "login gate must dispatch a fresh verification email"
+    );
+
+    // The most recent token is distinct from the register-time token.
+    let tokens: Vec<String> = sqlx::query_scalar(
+        "SELECT token FROM email_verifications WHERE user_id = \
+         (SELECT id FROM users WHERE email = 'ben@example.com') \
+         ORDER BY created_at ASC",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("tokens");
+    assert_eq!(tokens.len(), 2);
+    assert_ne!(tokens[0], tokens[1], "login-gate token must be fresh");
+}
+
 /// 4. Round-trip: register → peek verification token → consume → login succeeds.
 ///
 /// We peek via direct SQL (no public list method on the storage trait), which

@@ -116,6 +116,10 @@ function MemberDrawer({ member, onClose }: { member: Member | null; onClose: () 
   const groups = groupsData?.items ?? [];
 
   const [rechargeOpen, setRechargeOpen] = useState(false);
+  // Reuse one modal for both Recharge (credit) and Deduct (debit). Both hit
+  // /recharge — the only difference is the `type` field, which the backend
+  // routes to add_balance vs deduct_balance.
+  const [rechargeMode, setRechargeMode] = useState<'credit' | 'debit'>('credit');
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [rechargeAmount, setRechargeAmount] = useState('');
   const [adjustAmount, setAdjustAmount] = useState('');
@@ -136,12 +140,20 @@ function MemberDrawer({ member, onClose }: { member: Member | null; onClose: () 
     const amount = parseFloat(rechargeAmount);
     if (!amount || amount <= 0 || !userId) return;
     rechargeMutation.mutate(
-      { userId, data: { type: 'credit', amount, description: description || t('users.drawer.credit') } },
+      {
+        userId,
+        data: {
+          type: rechargeMode,
+          amount,
+          description: description || (rechargeMode === 'credit' ? t('users.drawer.credit') : t('users.drawer.debit')),
+        },
+      },
       {
         onSuccess: () => {
           setRechargeOpen(false);
           setRechargeAmount('');
           setDescription('');
+          setRechargeMode('credit');
           queryClient.invalidateQueries({ queryKey: ['members'] });
         },
       }
@@ -220,8 +232,28 @@ function MemberDrawer({ member, onClose }: { member: Member | null; onClose: () 
           )}
 
           <div className="flex gap-2">
-            <Button size="sm" className="flex-1" onClick={() => setRechargeOpen(true)}>{t('users.drawer.recharge')}</Button>
-            <Button variant="secondary" size="sm" className="flex-1" onClick={() => setAdjustOpen(true)}>{t('users.drawer.adjust')}</Button>
+            <Button
+              size="sm"
+              className="flex-1"
+              onClick={() => {
+                setRechargeMode('credit');
+                setRechargeOpen(true);
+              }}
+            >
+              {t('users.drawer.recharge')}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="flex-1"
+              onClick={() => {
+                setRechargeMode('debit');
+                setRechargeOpen(true);
+              }}
+            >
+              {t('users.drawer.deduct')}
+            </Button>
+            <Button variant="ghost" size="sm" className="flex-1" onClick={() => setAdjustOpen(true)}>{t('users.drawer.adjust')}</Button>
           </div>
 
           <div>
@@ -256,8 +288,19 @@ function MemberDrawer({ member, onClose }: { member: Member | null; onClose: () 
         </div>
       )}
 
-      {/* Recharge Modal */}
-      <Modal open={rechargeOpen} onClose={() => setRechargeOpen(false)} title={t('users.rechargeModal.title')}>
+      {/* Recharge/Deduct Modal — shared between Recharge (credit) and Deduct (debit) */}
+      <Modal
+        open={rechargeOpen}
+        onClose={() => {
+          setRechargeOpen(false);
+          setRechargeMode('credit');
+        }}
+        title={
+          rechargeMode === 'credit'
+            ? t('users.rechargeModal.title')
+            : t('users.deductModal.title')
+        }
+      >
         <div className="space-y-4">
           <div>
             <label className="text-xs font-semibold uppercase tracking-wider text-base-content/50 mb-1.5 block">{t('users.rechargeModal.amount')}</label>
@@ -282,8 +325,20 @@ function MemberDrawer({ member, onClose }: { member: Member | null; onClose: () 
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" onClick={() => setRechargeOpen(false)}>{t('common.cancel')}</Button>
-            <Button onClick={handleRecharge} loading={rechargeMutation.isPending}>{t('users.rechargeModal.confirmRecharge')}</Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setRechargeOpen(false);
+                setRechargeMode('credit');
+              }}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={handleRecharge} loading={rechargeMutation.isPending}>
+              {rechargeMode === 'credit'
+                ? t('users.rechargeModal.confirmRecharge')
+                : t('users.deductModal.confirmDeduct')}
+            </Button>
           </div>
         </div>
       </Modal>

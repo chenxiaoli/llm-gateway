@@ -118,6 +118,7 @@
     "emailMismatch": "邮箱与邀请不匹配。",
     "emailRequired": "邮箱为必填项。",
     "emailNotVerifiedMessage": "登录前请先验证邮箱。",
+    "emailNotVerifiedFreshSent": "我们已向您的邮箱发送了一封新的验证邮件，请查收并点击邮件中的链接完成验证。",
     "verificationSent": "验证邮件已发送。",
     "resendVerification": "重新发送验证邮件",
     "forgotPassword": "忘记密码？"
@@ -885,6 +886,7 @@
       "noGroup": "无",
       "recharge": "充值",
       "adjust": "调整",
+      "deduct": "扣费",
       "recentTransactions": "最近交易",
       "noTransactions": "暂无交易记录",
       "credit": "充值",
@@ -898,6 +900,10 @@
       "descriptionLabel": "描述",
       "descriptionPlaceholder": "例如：月度充值",
       "confirmRecharge": "确认充值"
+    },
+    "deductModal": {
+      "title": "扣减余额",
+      "confirmDeduct": "确认扣减"
     },
     "adjustModal": {
       "title": "调整余额",

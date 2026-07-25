@@ -105,7 +105,7 @@ describe('Login page', () => {
     });
   });
 
-  it('renders resend-verification panel when login returns email_not_verified', async () => {
+  it('renders fresh-sent verification panel when login returns email_not_verified', async () => {
     server.use(
       http.post('*/api/v1/auth/login', () =>
         HttpResponse.json(
@@ -121,42 +121,22 @@ describe('Login page', () => {
     await userEvent.type(screen.getByPlaceholderText('Password'), 'password');
     await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
 
-    // The inline Alert panel renders the "please verify" message and a
-    // resend button — and crucially does NOT call navigate.
+    // The backend dispatches a fresh verification email as part of the
+    // email_not_verified response, so the panel only needs to surface the
+    // "we just sent" message + toast — no email input, no resend button.
     await waitFor(() => {
-      expect(screen.getByText('Please verify your email before logging in.')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          'We just sent a fresh verification link to your email. Check your inbox and click the link to verify.',
+        ),
+      ).toBeInTheDocument();
     });
-    expect(screen.getByRole('button', { name: 'Resend verification email' })).toBeInTheDocument();
+    expect(mockToastSuccess).toHaveBeenCalledWith('Verification email sent.');
+    // No email input, no resend button — the path is one-click.
+    expect(screen.queryByPlaceholderText('Email')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Resend verification email' }),
+    ).not.toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
-  });
-
-  it('resends verification email and toasts success', async () => {
-    server.use(
-      http.post('*/api/v1/auth/login', () =>
-        HttpResponse.json(
-          { error: { code: 'email_not_verified', message: 'verify your email' } },
-          { status: 403 },
-        ),
-      ),
-      http.post('*/api/v1/auth/resend-verification', () =>
-        new HttpResponse(null, { status: 204 }),
-      ),
-    );
-
-    renderWithProviders(<Login />);
-
-    await userEvent.type(screen.getByPlaceholderText('Username or email'), 'unverified');
-    await userEvent.type(screen.getByPlaceholderText('Password'), 'password');
-    await userEvent.click(screen.getByRole('button', { name: 'Sign In' }));
-
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Email')).toBeInTheDocument();
-    });
-    await userEvent.type(screen.getByPlaceholderText('Email'), 'me@example.com');
-    await userEvent.click(screen.getByRole('button', { name: 'Resend verification email' }));
-
-    await waitFor(() => {
-      expect(mockToastSuccess).toHaveBeenCalledWith('Verification email sent.');
-    });
   });
 });
