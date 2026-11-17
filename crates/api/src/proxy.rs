@@ -758,14 +758,9 @@ pub struct FallbackReport {
 }
 
 impl FallbackReport {
-    /// Suffix appended to the client-facing error message. The original
-    /// message is kept as the prefix so existing client-side matching on it
-    /// keeps working.
-    ///
-    /// This is *not* written into the audit `routes` chain: the chain lists
-    /// the attempts themselves, so a chain that stops at the routing miss is
-    /// the signal that the fallback chain was never entered.
-    pub fn describe(&self) -> String {
+    /// The outcome of the chain, as plain text: why it was skipped, or which
+    /// candidates were tried and how they failed.
+    pub fn details(&self) -> String {
         let mut parts: Vec<String> = Vec::new();
         if let Some(reason) = &self.skip_reason {
             parts.push(format!("fallback skipped: {}", reason));
@@ -778,10 +773,22 @@ impl FallbackReport {
                 .join("; ");
             parts.push(format!("fallback tried: {}", tried));
         }
-        if parts.is_empty() {
+        parts.join(", ")
+    }
+
+    /// Suffix appended to the client-facing error message. The original
+    /// message is kept as the prefix so existing client-side matching on it
+    /// keeps working.
+    ///
+    /// This is *not* written into the audit `routes` chain: the chain lists
+    /// the attempts themselves, so a chain that stops at the routing miss is
+    /// the signal that the fallback chain was never entered.
+    pub fn describe(&self) -> String {
+        let details = self.details();
+        if details.is_empty() {
             String::new()
         } else {
-            format!(" [{}]", parts.join(", "))
+            format!(" [{}]", details)
         }
     }
 }
@@ -833,6 +840,15 @@ fn select_fallback_candidates(
         .collect();
     candidates.sort_by_key(|(_, p)| *p);
     candidates
+}
+
+/// Whether a fallback candidate's response counts as "served".
+///
+/// Only a 200 counts. A candidate that answers with 4xx/5xx (or any other
+/// status) is a failed attempt: the chain keeps walking instead of handing
+/// the client the first error it runs into.
+fn is_served_response(status: StatusCode) -> bool {
+    status == StatusCode::OK
 }
 
 /// Context suffix for a routing entry recorded inside a fallback attempt.
@@ -988,6 +1004,22 @@ fn try_model_fallback<'a>(
 
             match result {
                 Ok(response) => {
+                    // A candidate that answers with an error status is a failed
+                    // attempt, not a success: keep walking the chain instead of
+                    // handing the client the first error we run into.
+                    let status = response.status();
+                    if !is_served_response(status) {
+                        tracing::warn!(
+                            "[PROXY] Fallback '{}' failed: upstream returned {}",
+                            fallback_model,
+                            status
+                        );
+                        report.attempts.push((
+                            fallback_model.clone(),
+                            format!("upstream returned {}", status),
+                        ));
+                        continue;
+                    }
                     tracing::info!("[PROXY] Fallback to '{}' succeeded", fallback_model);
                     return (Some(response), report);
                 }
@@ -1846,33 +1878,68 @@ if status != 200 && status < 500 {
                 started_at: chrono::Utc::now(),
             });
 
+            // The upstream rejected the request. If a fallback chain is
+            // configured for this key, run it before giving up: when a
+            // fallback exists, an unavailable model must not fail the request
+            // while an equivalent model could still serve it. The original
+            // upstream 4xx is returned only if the whole chain fails too.
+            //
+            // No chaining: inside a fallback attempt (fallback_depth > 0) a
+            // 4xx stays terminal, exactly like every other failure mode.
+            if fallback_depth == 0 {
+                let (response, report) = try_model_fallback(
+                    &state, &headers, &body, &client_requested_model, &api_key,
+                    &request_user_id, request_is_admin, &request_id,
+                    protocol, &request_path,
+                    routes,
+                ).await;
+                if let Some(response) = response {
+                    // The fallback served the request — it dispatches the
+                    // audit row (success path) with the full chain.
+                    return Ok(response);
+                }
+                let details = report.details();
+                if !details.is_empty() {
+                    tracing::info!(
+                        "[PROXY] Upstream {} on channel '{}' — {}",
+                        status,
+                        channel.name,
+                        details
+                    );
+                }
+            }
+
             // Dispatch a single AuditTask carrying the full failover history.
-            // 4xx is terminal — return immediately, no further candidates attempted.
-            let task = AuditTask {
-                request_id: request_id.clone(),
-                key_id: api_key.id.clone(),
-                user_id: api_key.created_by.clone(),
-                model_name: upstream_name.to_string(),
-                provider_id: provider_id.clone(),
-                protocol: proto,
-                stream: is_stream,
-                request_body: body.clone(),
-                response_bytes: error_body_str.into_bytes(),
-                status_code: status as i32,
-                latency_ms: start_total.elapsed().as_millis() as i64,
-                pricing_policy,
-                markup_ratio: channel_model.markup_ratio,
-                channel_id: Some(channel.channel_id.to_string()),
-                original_model: Some(client_requested_model.clone()),
-                upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
-                model_override_reason: resolve_override_reason(&client_requested_model, &model_name, upstream_name),
-                request_path: Some(request_path.clone()),
-                upstream_url: Some(upstream_url.clone()),
-                request_headers: Some(request_headers_for_worker),
-                response_headers: Some(response_headers_for_worker),
-                routes: routes.clone(),
-            };
-            dispatch_audit_task(&state, task).await;
+            // Only at depth 0: inside a fallback attempt the row is dispatched
+            // by whoever ends up serving the request, so the chain produces
+            // exactly one row.
+            if fallback_depth == 0 {
+                let task = AuditTask {
+                    request_id: request_id.clone(),
+                    key_id: api_key.id.clone(),
+                    user_id: api_key.created_by.clone(),
+                    model_name: upstream_name.to_string(),
+                    provider_id: provider_id.clone(),
+                    protocol: proto,
+                    stream: is_stream,
+                    request_body: body.clone(),
+                    response_bytes: error_body_str.into_bytes(),
+                    status_code: status as i32,
+                    latency_ms: start_total.elapsed().as_millis() as i64,
+                    pricing_policy,
+                    markup_ratio: channel_model.markup_ratio,
+                    channel_id: Some(channel.channel_id.to_string()),
+                    original_model: Some(client_requested_model.clone()),
+                    upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
+                    model_override_reason: resolve_override_reason(&client_requested_model, &model_name, upstream_name),
+                    request_path: Some(request_path.clone()),
+                    upstream_url: Some(upstream_url.clone()),
+                    request_headers: Some(request_headers_for_worker),
+                    response_headers: Some(response_headers_for_worker),
+                    routes: routes.clone(),
+                };
+                dispatch_audit_task(&state, task).await;
+            }
 
             return Ok((StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY), error_body).into_response());
         }
@@ -2371,6 +2438,18 @@ mod tests {
         assert!(described.contains("fallback tried"));
         assert!(described.contains("minimax-m3.1-flash"));
         assert!(described.contains("not found"));
+    }
+
+    #[test]
+    fn only_a_200_counts_as_a_served_fallback_candidate() {
+        // A candidate that answers with an error is a failed attempt — the
+        // chain keeps walking instead of returning the first error.
+        assert!(is_served_response(StatusCode::OK));
+        assert!(!is_served_response(StatusCode::BAD_REQUEST));
+        assert!(!is_served_response(StatusCode::NOT_FOUND));
+        assert!(!is_served_response(StatusCode::TOO_MANY_REQUESTS));
+        assert!(!is_served_response(StatusCode::INTERNAL_SERVER_ERROR));
+        assert!(!is_served_response(StatusCode::BAD_GATEWAY));
     }
 
     #[test]
