@@ -131,18 +131,27 @@ impl FakeResponse {
     }
 }
 
-/// The fake upstream: records the model of every request it receives and
-/// answers with whatever the test configured for that model.
+/// One request the fake upstream received.
+#[derive(Clone, Debug)]
+struct RecordedRequest {
+    path: String,
+    model: String,
+    x_api_key: Option<String>,
+    anthropic_version: Option<String>,
+}
+
+/// The fake upstream: records every request it receives and answers with
+/// whatever the test configured for that model.
 #[derive(Clone)]
 struct FakeUpstream {
     base_url: String,
-    hits: Arc<Mutex<Vec<String>>>,
+    requests: Arc<Mutex<Vec<RecordedRequest>>>,
 }
 
 impl FakeUpstream {
     async fn start(responses: HashMap<String, FakeResponse>) -> Self {
-        let hits: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
-        let state = (hits.clone(), Arc::new(responses));
+        let requests: Arc<Mutex<Vec<RecordedRequest>>> = Arc::new(Mutex::new(Vec::new()));
+        let state = (requests.clone(), Arc::new(responses));
 
         let app = Router::new()
             .fallback(any(upstream_handler))
@@ -156,18 +165,33 @@ impl FakeUpstream {
 
         FakeUpstream {
             base_url: format!("http://127.0.0.1:{}", port),
-            hits,
+            requests,
         }
     }
 
     /// Models this upstream was asked for, in order.
     fn hits(&self) -> Vec<String> {
-        self.hits.lock().unwrap().clone()
+        self.requests
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|r| r.model.clone())
+            .collect()
+    }
+
+    /// Every request this upstream received, in order.
+    fn requests(&self) -> Vec<RecordedRequest> {
+        self.requests.lock().unwrap().clone()
     }
 }
 
 async fn upstream_handler(
-    State((hits, responses)): State<(Arc<Mutex<Vec<String>>>, Arc<HashMap<String, FakeResponse>>)>,
+    State((requests, responses)): State<(
+        Arc<Mutex<Vec<RecordedRequest>>>,
+        Arc<HashMap<String, FakeResponse>>,
+    )>,
+    uri: axum::http::Uri,
+    headers: HeaderMap,
     body: Bytes,
 ) -> Response {
     let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap_or(serde_json::Value::Null);
@@ -176,7 +200,18 @@ async fn upstream_handler(
         .and_then(|m| m.as_str())
         .unwrap_or("")
         .to_string();
-    hits.lock().unwrap().push(model.clone());
+    requests.lock().unwrap().push(RecordedRequest {
+        path: uri.path().to_string(),
+        model: model.clone(),
+        x_api_key: headers
+            .get("x-api-key")
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.to_string()),
+        anthropic_version: headers
+            .get("anthropic-version")
+            .and_then(|v| v.to_str().ok())
+            .map(|v| v.to_string()),
+    });
 
     let response = responses.get(&model).cloned().unwrap_or(FakeResponse {
         status: 200,
@@ -220,8 +255,20 @@ struct FixtureOptions {
     registered_models: Vec<String>,
     /// Channel that points at an unreachable endpoint (connection refused).
     dead_channel: Option<&'static str>,
+    /// Group the key's user belongs to — channels of other groups are skipped.
+    user_group: Option<&'static str>,
+    /// (channel, group) — the group a channel is restricted to.
+    channel_group: Option<(&'static str, &'static str)>,
+    /// (channel, availability window) — a channel is only used inside it.
+    channel_available_hours: Option<(&'static str, Vec<TimeSlot>)>,
+    /// Channel that is disabled entirely.
+    disabled_channel: Option<&'static str>,
+    /// Channel whose model binding is disabled.
+    disabled_channel_model: Option<&'static str>,
     /// `[upstream] timeout_secs`.
     upstream_timeout_secs: u64,
+    /// Whether the provider exposes an "anthropic" endpoint.
+    anthropic_endpoint: bool,
 }
 
 impl FixtureOptions {
@@ -237,7 +284,13 @@ impl FixtureOptions {
             with_fallback: true,
             registered_models: vec!["glm-5.1".to_string(), "minimax-m3.1-flash".to_string()],
             dead_channel: None,
+            user_group: None,
+            channel_group: None,
+            channel_available_hours: None,
+            disabled_channel: None,
+            disabled_channel_model: None,
             upstream_timeout_secs: 30,
+            anthropic_endpoint: true,
         }
     }
 }
@@ -260,6 +313,20 @@ async fn fixture(options: FixtureOptions) -> Fixture {
 
     let storage = MockStorage::default();
 
+    if let Some(group) = options.user_group {
+        storage.users.lock().unwrap().push(User {
+            id: "user-1".to_string(),
+            username: "tester".to_string(),
+            password: "x".to_string(),
+            role: "user".to_string(),
+            enabled: true,
+            refresh_token: None,
+            group_id: Some(group.to_string()),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        });
+    }
+
     storage.keys.lock().unwrap().push(ApiKey {
         id: "key-1".to_string(),
         name: "test".to_string(),
@@ -268,7 +335,7 @@ async fn fixture(options: FixtureOptions) -> Fixture {
         rate_limit: None,
         budget_monthly: None,
         enabled: true,
-        created_by: None,
+        created_by: options.user_group.map(|_| "user-1".to_string()),
         model_fallback_id: if options.with_fallback {
             Some("fb-1".to_string())
         } else {
@@ -296,7 +363,11 @@ async fn fixture(options: FixtureOptions) -> Fixture {
             id: id.to_string(),
             name: name.to_string(),
             slug: name.to_string(),
-            endpoints: Some(serde_json::json!({ "openai": base_url }).to_string()),
+            endpoints: Some(if options.anthropic_endpoint {
+                serde_json::json!({ "openai": base_url, "anthropic": base_url }).to_string()
+            } else {
+                serde_json::json!({ "openai": base_url }).to_string()
+            }),
             proxy_url: None,
             enabled: true,
             created_at: chrono::Utc::now(),
@@ -323,6 +394,16 @@ async fn fixture(options: FixtureOptions) -> Fixture {
         } else {
             "p-2"
         };
+        let group_id = options
+            .channel_group
+            .filter(|(cid, _)| *cid == id)
+            .map(|(_, group)| group.to_string());
+        // (borrowed above, the Option<&(…)> is Copy)
+        let available_hours = options
+            .channel_available_hours
+            .as_ref()
+            .filter(|(cid, _)| *cid == id)
+            .map(|(_, slots)| slots.clone());
         storage.channels.lock().unwrap().push(Channel {
             id: id.to_string(),
             provider_id: provider_id.to_string(),
@@ -335,11 +416,11 @@ async fn fixture(options: FixtureOptions) -> Fixture {
             tpm_limit: None,
             balance: None,
             weight: None,
-            enabled: true,
+            enabled: options.disabled_channel != Some(id),
             disabled_until: None,
-            available_hours: None,
+            available_hours,
             created_by: None,
-            group_id: None,
+            group_id,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         });
@@ -361,7 +442,7 @@ async fn fixture(options: FixtureOptions) -> Fixture {
             priority_override: None,
             pricing_policy_id: None,
             markup_ratio: 0,
-            enabled: true,
+            enabled: options.disabled_channel_model != Some(channel_id),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
         });
@@ -1013,4 +1094,248 @@ async fn a_streaming_request_falls_back_when_every_channel_fails() {
     );
     let routes = audits[0].routes.as_ref().unwrap();
     assert_eq!(routes.len(), 3);
+}
+
+// ── Anthropic protocol ─────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn an_anthropic_request_is_forwarded_to_the_messages_endpoint() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(200, "{\"content\":[{\"type\":\"text\",\"text\":\"hi\"}]}"),
+        )]),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let mut headers = HeaderMap::new();
+    headers.insert("authorization", format!("Bearer {}", RAW_KEY).parse().unwrap());
+    headers.insert("x-api-key", "client-key".parse().unwrap());
+    headers.insert("anthropic-version", "2023-06-01".parse().unwrap());
+    let body = "{\"model\":\"glm-5.1\",\"max_tokens\":16,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";
+
+    let response = llm_gateway_api::proxy::messages(
+        axum::extract::State(fixture.state.clone()),
+        headers,
+        body.to_string(),
+    )
+    .await
+    .expect("the anthropic request should succeed");
+
+    assert_eq!(response.status().as_u16(), 200);
+
+    let requests = fixture.upstream_c1.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].path, "/v1/messages",
+        "the anthropic protocol must keep the /v1 prefix"
+    );
+    assert_eq!(requests[0].model, "glm-5.1");
+    assert_eq!(
+        requests[0].anthropic_version.as_deref(),
+        Some("2023-06-01"),
+        "the gateway must set the anthropic-version header"
+    );
+    assert_eq!(
+        requests[0].x_api_key.as_deref(),
+        Some("upstream-key"),
+        "the upstream credentials must be used, not the client's"
+    );
+
+    let audits = audits(&fixture);
+    assert_eq!(audits.len(), 1);
+    assert_eq!(audits[0].protocol, "anthropic");
+}
+
+#[tokio::test]
+async fn an_anthropic_request_falls_back_when_the_model_is_not_registered() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "minimax-m3.1-flash".to_string(),
+            FakeResponse::new(200, "{\"content\":[{\"type\":\"text\",\"text\":\"from-minimax\"}]}"),
+        )]),
+        registered_models: vec!["minimax-m3.1-flash".to_string()],
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let mut headers = HeaderMap::new();
+    headers.insert("authorization", format!("Bearer {}", RAW_KEY).parse().unwrap());
+    let body = "{\"model\":\"glm-5.1\",\"max_tokens\":16,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";
+
+    let response = llm_gateway_api::proxy::messages(
+        axum::extract::State(fixture.state.clone()),
+        headers,
+        body.to_string(),
+    )
+    .await
+    .expect("the anthropic request should succeed");
+
+    assert_eq!(response.status().as_u16(), 200);
+    assert_eq!(fixture.upstream_c1.hits(), vec!["minimax-m3.1-flash"]);
+
+    let audits = audits(&fixture);
+    assert_eq!(audits.len(), 1);
+    assert_eq!(audits[0].protocol, "anthropic");
+    assert_eq!(audits[0].original_model.as_deref(), Some("glm-5.1"));
+    assert_eq!(audits[0].model_name, "minimax-m3.1-flash");
+}
+
+// ── Channel filtering ──────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn a_channel_of_another_group_is_not_tried() {
+    // The key's user is in group "g-1"; channel-1 belongs to "g-2" and must
+    // not be used.
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(200, "{\"served_by\":\"c1\"}"),
+        )]),
+        responses_c2: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(200, "{\"served_by\":\"c2\"}"),
+        )]),
+        user_group: Some("g-1"),
+        channel_group: Some((CH1, "g-2")),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let (status, body) = proxy_request(fixture.state.clone(), "glm-5.1").await;
+
+    assert_eq!(status, 200);
+    assert!(body.contains("c2"), "body: {}", body);
+    assert!(
+        fixture.upstream_c1.hits().is_empty(),
+        "a channel of another group must not be used"
+    );
+    assert_eq!(fixture.upstream_c2.hits(), vec!["glm-5.1"]);
+}
+
+#[tokio::test]
+async fn a_channel_outside_its_availability_window_is_not_tried() {
+    // An empty window (start == end) is never inside.
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(200, "{\"served_by\":\"c1\"}"),
+        )]),
+        responses_c2: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(200, "{\"served_by\":\"c2\"}"),
+        )]),
+        channel_available_hours: Some((
+            CH1,
+            vec![TimeSlot {
+                days: vec!["mon".to_string(), "tue".to_string(), "wed".to_string()],
+                start: "00:00".to_string(),
+                end: "00:00".to_string(),
+            }],
+        )),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let (status, body) = proxy_request(fixture.state.clone(), "glm-5.1").await;
+
+    assert_eq!(status, 200);
+    assert!(body.contains("c2"), "body: {}", body);
+    assert!(
+        fixture.upstream_c1.hits().is_empty(),
+        "a channel outside its availability window must not be used"
+    );
+    assert_eq!(fixture.upstream_c2.hits(), vec!["glm-5.1"]);
+}
+
+#[tokio::test]
+async fn a_disabled_channel_is_not_tried() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(200, "{\"served_by\":\"c1\"}"),
+        )]),
+        responses_c2: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(200, "{\"served_by\":\"c2\"}"),
+        )]),
+        disabled_channel: Some(CH1),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let (status, body) = proxy_request(fixture.state.clone(), "glm-5.1").await;
+
+    assert_eq!(status, 200);
+    assert!(body.contains("c2"), "body: {}", body);
+    assert!(fixture.upstream_c1.hits().is_empty());
+    assert_eq!(fixture.upstream_c2.hits(), vec!["glm-5.1"]);
+}
+
+#[tokio::test]
+async fn a_disabled_model_binding_is_not_tried() {
+    // The channel is enabled, but the model is not bound to it anymore.
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(200, "{\"served_by\":\"c1\"}"),
+        )]),
+        responses_c2: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(200, "{\"served_by\":\"c2\"}"),
+        )]),
+        disabled_channel_model: Some(CH1),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let (status, body) = proxy_request(fixture.state.clone(), "glm-5.1").await;
+
+    assert_eq!(status, 200);
+    assert!(body.contains("c2"), "body: {}", body);
+    assert!(fixture.upstream_c1.hits().is_empty());
+    assert_eq!(fixture.upstream_c2.hits(), vec!["glm-5.1"]);
+}
+
+#[tokio::test]
+async fn a_provider_without_the_protocol_endpoint_is_skipped() {
+    // The provider only exposes an "openai" endpoint, so it cannot serve an
+    // Anthropic request — the gateway must say so instead of failing with
+    // reqwest's "relative URL without a base".
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([
+            (
+                "glm-5.1".to_string(),
+                FakeResponse::new(200, "{\"served_by\":\"glm\"}"),
+            ),
+            (
+                "minimax-m3.1-flash".to_string(),
+                FakeResponse::new(200, "{\"served_by\":\"minimax\"}"),
+            ),
+        ]),
+        anthropic_endpoint: false,
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let mut headers = HeaderMap::new();
+    headers.insert("authorization", format!("Bearer {}", RAW_KEY).parse().unwrap());
+    let body = "{\"model\":\"glm-5.1\",\"max_tokens\":16,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";
+
+    let result = llm_gateway_api::proxy::messages(
+        axum::extract::State(fixture.state.clone()),
+        headers,
+        body.to_string(),
+    )
+    .await;
+
+    // Every channel was skipped for the same reason.
+    let err = result.expect_err("the request cannot be served");
+    assert!(
+        err.message().contains("has no 'anthropic' endpoint"),
+        "message: {}",
+        err.message()
+    );
+    assert!(fixture.upstream_c1.hits().is_empty());
 }

@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.13] - 2026-11-17
+
+### Fixed
+- A channel whose provider does not expose the endpoint for the requested protocol is now skipped with a readable error (`Provider 'p-1' has no 'anthropic' endpoint for channel 'c-1'`). The URL used to be built without a base, which failed later inside reqwest with `builder error (relative URL without a base)` — an error that says nothing about the cause. The channel is now recorded in the audit row's `routes` chain like any other unusable candidate.
+
+### Added
+- The proxy integration tests now cover the Anthropic protocol (`/v1/messages`): the request is forwarded to the upstream's `/v1/messages` endpoint with the gateway's credentials and the `anthropic-version` header, the audit row is marked as `anthropic`, and an Anthropic request for an unregistered model is served by the fallback chain.
+- The proxy integration tests now cover the channel filters: a channel restricted to another user group is not used, a channel outside its availability window is not used, a disabled channel is not used, and a channel whose model binding is disabled is not used. The fake upstream now records the request path and headers, not just the model.
+
 ## [1.8.12] - 2026-11-17
 
 ### Added

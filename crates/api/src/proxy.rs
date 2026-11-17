@@ -68,13 +68,21 @@ pub fn build_upstream_url(base_url: &str, request_path: &str, protocol: ProxyPro
 }
 
 impl ResolvedChannel {
-    /// Returns the upstream URL for the given protocol.
-    pub fn upstream_url(&self, request_path: &str, protocol: ProxyProtocol) -> String {
-        let base = match protocol {
+    /// The endpoint this channel exposes for the given protocol, if any.
+    pub fn endpoint_for(&self, protocol: ProxyProtocol) -> Option<&str> {
+        match protocol {
             ProxyProtocol::OpenAI => self.endpoint_openai.as_deref(),
             ProxyProtocol::Anthropic => self.endpoint_anthropic.as_deref(),
-        };
-        build_upstream_url(base.unwrap_or_default(), request_path, protocol)
+        }
+    }
+
+    /// Returns the upstream URL for the given protocol.
+    pub fn upstream_url(&self, request_path: &str, protocol: ProxyProtocol) -> String {
+        build_upstream_url(
+            self.endpoint_for(protocol).unwrap_or_default(),
+            request_path,
+            protocol,
+        )
     }
 }
 
@@ -1679,6 +1687,34 @@ async fn proxy_route_and_forward(
         let api_key_value = channel.upstream_api_key.clone();
 
         let upstream_url = channel.upstream_url(&request_path, protocol);
+
+        // A provider that only exposes one protocol cannot serve the other
+        // one. Say so plainly — building the URL without a base used to fail
+        // later with reqwest's "relative URL without a base".
+        if channel.endpoint_for(protocol).is_none() {
+            let error_msg = format!(
+                "Provider '{}' has no '{}' endpoint for channel '{}'",
+                channel.provider_id,
+                match protocol {
+                    ProxyProtocol::OpenAI => "openai",
+                    ProxyProtocol::Anthropic => "anthropic",
+                },
+                channel.name
+            );
+            tracing::warn!("[PROXY] {}", error_msg);
+            last_error = error_msg.clone();
+            routes.push(llm_gateway_storage::RouteAttempt {
+                model: upstream_name.to_string(),
+                channel_id: channel.channel_id.to_string(),
+                channel_name: Some(channel.name.clone()),
+                provider_id: channel.provider_id.clone(),
+                status_code: 0,
+                error_message: Some(error_msg),
+                latency_ms: 0,
+                started_at: chrono::Utc::now(),
+            });
+            continue;
+        }
 
         tracing::debug!("[PROXY] Upstream URL: {} -> {}", request_path, upstream_url);
         let proxy_build_start = Instant::now();

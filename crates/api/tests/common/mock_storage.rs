@@ -431,8 +431,14 @@ impl Storage for MockStorage {
         panic!("MockStorage::delete_group is not implemented by this test double");
     }
 
-    async fn get_user_group_id(&self, _user_id: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(None)
+    async fn get_user_group_id(&self, user_id: &str) -> Result<Option<String>, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(self
+            .users
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|u| u.id == user_id)
+            .and_then(|u| u.group_id.clone()))
     }
 
     async fn create_model_fallback(&self, config: &ModelFallbackConfig) -> Result<ModelFallbackConfig, Box<dyn std::error::Error + Send + Sync>> {
