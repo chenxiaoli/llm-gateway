@@ -214,3 +214,116 @@ fn weighted_from_context_tiered(
         + cache_creation as f64 * w_cc
     ).round() as i64
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use llm_gateway_storage::PricingPolicy;
+
+    #[test]
+    fn openai_usage_excludes_cache_tokens_from_the_input_count() {
+        // OpenAI's prompt_tokens *includes* the cached tokens; the stored
+        // input count must not, or the cache would be billed twice.
+        let body = br#"{"usage":{"prompt_tokens":100,"completion_tokens":50,
+            "prompt_tokens_details":{"cache_read_tokens":20,"cached_tokens":5}}}"#;
+        let (input, output, cache_read, cache_creation) =
+            parse_usage(body, false, Protocol::Openai);
+        assert_eq!(input, Some(75), "100 - 20 cache read - 5 cache creation");
+        assert_eq!(output, Some(50));
+        assert_eq!(cache_read, Some(20));
+        assert_eq!(cache_creation, Some(5));
+    }
+
+    #[test]
+    fn openai_usage_without_details_keeps_the_prompt_tokens_as_input() {
+        let body = br#"{"usage":{"prompt_tokens":100,"completion_tokens":50}}"#;
+        let (input, output, cache_read, cache_creation) =
+            parse_usage(body, false, Protocol::Openai);
+        assert_eq!(input, Some(100));
+        assert_eq!(output, Some(50));
+        assert_eq!(cache_read, None);
+        assert_eq!(cache_creation, None);
+    }
+
+    #[test]
+    fn anthropic_input_tokens_already_exclude_the_cache() {
+        // Anthropic reports input_tokens without the cached ones — subtracting
+        // them again would under-count.
+        let body = br#"{"usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":20}}"#;
+        let (input, output, cache_read, cache_creation) =
+            parse_usage(body, false, Protocol::Anthropic);
+        assert_eq!(input, Some(100));
+        assert_eq!(output, Some(50));
+        assert_eq!(cache_read, Some(20));
+        assert_eq!(cache_creation, None);
+    }
+
+    #[test]
+    fn openai_streaming_usage_comes_from_the_last_chunk_with_usage() {
+        let body = b"data: {\"choices\":[{\"delta\":{\"content\":\"a\"}}]}\n\n\
+                     data: {\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2}}\n\n\
+                     data: [DONE]\n\n";
+        let (input, output, cache_read, cache_creation) =
+            parse_usage(body, true, Protocol::Openai);
+        assert_eq!(input, Some(10));
+        assert_eq!(output, Some(2));
+        assert_eq!(cache_read, None);
+        assert_eq!(cache_creation, None);
+    }
+
+    #[test]
+    fn streaming_without_a_usage_chunk_reports_no_tokens() {
+        let body = b"data: {\"choices\":[{\"delta\":{\"content\":\"a\"}}]}\n\ndata: [DONE]\n\n";
+        let (input, output, _, _) = parse_usage(body, true, Protocol::Openai);
+        assert_eq!(input, None);
+        assert_eq!(output, None);
+    }
+
+    #[test]
+    fn a_response_without_usage_reports_zero_input_tokens() {
+        let body = br#"{"choices":[{"message":{"content":"hi"}}]}"#;
+        let (input, output, _, _) = parse_usage(body, false, Protocol::Openai);
+        assert_eq!(input, Some(0));
+        assert_eq!(output, None);
+    }
+
+    #[test]
+    fn per_token_cost_uses_the_prices_of_the_policy() {
+        let policy = PricingPolicy {
+            id: "pp".to_string(),
+            name: "standard".to_string(),
+            billing_type: "per_token".to_string(),
+            config: serde_json::json!({
+                "input_price_1m": 300_000_000i64,
+                "output_price_1m": 600_000_000i64,
+                "cache_read_price_1m": 30_000_000i64,
+            }),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        let cost = calculate_cost(
+            &Some(policy.config.clone()),
+            &policy.billing_type,
+            10_000,
+            Some(80),
+            Some(50),
+            Some(20),
+            None,
+        );
+        // 80 input + 50 output + 20 cache read, at $3.00 / $6.00 / $0.30 per 1M
+        // (subunits: 100M = $1, so $3.00/M is 300 subunits per token).
+        assert_eq!(cost, 24_000 + 30_000 + 600);
+    }
+
+    #[test]
+    fn the_markup_ratio_is_applied_to_the_cost() {
+        let config = serde_json::json!({
+            "input_price_1m": 300_000_000i64,
+            "output_price_1m": 0i64,
+        });
+        let base = calculate_cost(&Some(config.clone()), "per_token", 10_000, Some(1_000_000), Some(0), None, None);
+        let doubled = calculate_cost(&Some(config), "per_token", 20_000, Some(1_000_000), Some(0), None, None);
+        assert_eq!(base, 300_000_000);
+        assert_eq!(doubled, 600_000_000);
+    }
+}

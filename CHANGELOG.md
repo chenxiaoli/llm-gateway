@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.14] - 2026-11-17
+
+### Added
+- The proxy integration tests now cover billing: the token counts of an OpenAI response (cache tokens excluded from the input count, as OpenAI includes them in `prompt_tokens`), of an Anthropic response (its `input_tokens` already exclude the cache), of a streamed response, the cost computed from the model's pricing policy, the markup ratio applied to that cost, the weighted token count, and the fact that a model without a pricing policy is not charged.
+- Unit tests for the usage parsing (`crates/api/src/workers.rs`): OpenAI's cache handling, Anthropic's cache handling, streaming usage extraction, the per-token cost formula and the markup ratio.
+
 ## [1.8.13] - 2026-11-17
 
 ### Fixed

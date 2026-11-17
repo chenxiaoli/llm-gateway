@@ -20,6 +20,7 @@ pub struct MockStorage {
     pub channels: Mutex<Vec<Channel>>,
     pub channel_models: Mutex<Vec<ChannelModel>>,
     pub fallbacks: Mutex<Vec<ModelFallbackConfig>>,
+    pub pricing_policies: Mutex<Vec<PricingPolicy>>,
     /// Audit rows written through `insert_log`.
     pub logs: Mutex<Vec<AuditLog>>,
     /// Usage rows written through `record_usage`.
@@ -88,8 +89,14 @@ impl Storage for MockStorage {
         panic!("MockStorage::create_pricing_policy is not implemented by this test double");
     }
 
-    async fn get_pricing_policy(&self, _id: &str) -> Result<Option<PricingPolicy>, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(None)
+    async fn get_pricing_policy(&self, id: &str) -> Result<Option<PricingPolicy>, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(self
+            .pricing_policies
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|p| p.id == id)
+            .cloned())
     }
 
     async fn list_pricing_policies(&self) -> Result<Vec<PricingPolicy>, Box<dyn std::error::Error + Send + Sync>> {

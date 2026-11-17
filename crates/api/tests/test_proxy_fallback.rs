@@ -269,6 +269,10 @@ struct FixtureOptions {
     upstream_timeout_secs: u64,
     /// Whether the provider exposes an "anthropic" endpoint.
     anthropic_endpoint: bool,
+    /// Pricing policy attached to the model.
+    pricing: Option<PricingPolicy>,
+    /// The channel's markup ratio in basis points (10000 = no markup).
+    markup_ratio: i64,
 }
 
 impl FixtureOptions {
@@ -291,7 +295,26 @@ impl FixtureOptions {
             disabled_channel_model: None,
             upstream_timeout_secs: 30,
             anthropic_endpoint: true,
+            pricing: None,
+            markup_ratio: 10_000,
         }
+    }
+}
+
+/// The pricing policy the billing tests use: $3.00 / $6.00 / $0.30 per 1M
+/// tokens (100M subunits = $1).
+fn per_token_pricing(id: &str) -> PricingPolicy {
+    PricingPolicy {
+        id: id.to_string(),
+        name: "standard".to_string(),
+        billing_type: "per_token".to_string(),
+        config: serde_json::json!({
+            "input_price_1m": 300_000_000i64,
+            "output_price_1m": 600_000_000i64,
+            "cache_read_price_1m": 30_000_000i64,
+        }),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
     }
 }
 
@@ -345,12 +368,20 @@ async fn fixture(options: FixtureOptions) -> Fixture {
         updated_at: chrono::Utc::now(),
     });
 
+    if let Some(policy) = &options.pricing {
+        storage
+            .pricing_policies
+            .lock()
+            .unwrap()
+            .push(policy.clone());
+    }
+
     for name in &options.registered_models {
         storage.models.lock().unwrap().push(Model {
             id: format!("m-{}", name),
             name: name.clone(),
             model_type: None,
-            pricing_policy_id: None,
+            pricing_policy_id: options.pricing.as_ref().map(|p| p.id.clone()),
             created_at: chrono::Utc::now(),
         });
     }
@@ -411,7 +442,7 @@ async fn fixture(options: FixtureOptions) -> Fixture {
             api_key: "upstream-key".to_string(),
             priority,
             pricing_policy_id: None,
-            markup_ratio: 0,
+            markup_ratio: options.markup_ratio,
             rpm_limit: None,
             tpm_limit: None,
             balance: None,
@@ -441,7 +472,7 @@ async fn fixture(options: FixtureOptions) -> Fixture {
             upstream_model_name: None,
             priority_override: None,
             pricing_policy_id: None,
-            markup_ratio: 0,
+            markup_ratio: options.markup_ratio,
             enabled: options.disabled_channel_model != Some(channel_id),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
@@ -1338,4 +1369,161 @@ async fn a_provider_without_the_protocol_endpoint_is_skipped() {
         err.message()
     );
     assert!(fixture.upstream_c1.hits().is_empty());
+}
+
+// ── Billing ────────────────────────────────────────────────────────────────
+
+/// The usage events the proxy published.
+fn usages(fixture: &Fixture) -> Vec<UsageEvent> {
+    fixture.publisher.usages.lock().unwrap().clone()
+}
+
+#[tokio::test]
+async fn an_openai_response_records_its_token_usage() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(
+                200,
+                "{\"choices\":[{\"message\":{\"content\":\"hi\"}}],\"usage\":{\"prompt_tokens\":100,\
+                 \"completion_tokens\":50,\"prompt_tokens_details\":{\"cache_read_tokens\":20}}}",
+            ),
+        )]),
+        pricing: Some(per_token_pricing("pp-1")),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let (status, _body) = proxy_request(fixture.state.clone(), "glm-5.1").await;
+    assert_eq!(status, 200);
+
+    let usages = usages(&fixture);
+    assert_eq!(usages.len(), 1, "one request must produce one usage event");
+    let usage = &usages[0];
+    // OpenAI's prompt_tokens includes the cached ones.
+    assert_eq!(usage.input_tokens, Some(80));
+    assert_eq!(usage.output_tokens, Some(50));
+    assert_eq!(usage.cache_read_tokens, Some(20));
+    // 80 input + 50 output + 20 cache read at $3.00 / $6.00 / $0.30 per 1M.
+    assert_eq!(usage.cost, 24_000 + 30_000 + 600);
+    assert_eq!(usage.model_name, "glm-5.1");
+    assert_eq!(usage.protocol, "openai");
+    // Weighted tokens price the output and the cache relative to the input:
+    // 80 + 50 × (6.00/3.00) + 20 × (0.30/3.00) = 182.
+    assert_eq!(usage.weighted_tokens, 182);
+}
+
+#[tokio::test]
+async fn an_anthropic_response_records_its_token_usage() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(
+                200,
+                "{\"content\":[{\"type\":\"text\",\"text\":\"hi\"}],\"usage\":{\"input_tokens\":100,\
+                 \"output_tokens\":50,\"cache_read_input_tokens\":20}}",
+            ),
+        )]),
+        pricing: Some(per_token_pricing("pp-1")),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let mut headers = HeaderMap::new();
+    headers.insert("authorization", format!("Bearer {}", RAW_KEY).parse().unwrap());
+    let body = "{\"model\":\"glm-5.1\",\"max_tokens\":16,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";
+
+    let response = llm_gateway_api::proxy::messages(
+        axum::extract::State(fixture.state.clone()),
+        headers,
+        body.to_string(),
+    )
+    .await
+    .expect("the anthropic request should succeed");
+    assert_eq!(response.status().as_u16(), 200);
+
+    let usages = usages(&fixture);
+    assert_eq!(usages.len(), 1);
+    let usage = &usages[0];
+    // Anthropic's input_tokens already exclude the cache.
+    assert_eq!(usage.input_tokens, Some(100));
+    assert_eq!(usage.output_tokens, Some(50));
+    assert_eq!(usage.cache_read_tokens, Some(20));
+    assert_eq!(usage.cost, 30_000 + 30_000 + 600);
+    assert_eq!(usage.protocol, "anthropic");
+}
+
+#[tokio::test]
+async fn the_markup_ratio_is_applied_to_the_cost() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(
+                200,
+                "{\"choices\":[],\"usage\":{\"prompt_tokens\":1000000,\"completion_tokens\":0}}",
+            ),
+        )]),
+        pricing: Some(per_token_pricing("pp-1")),
+        markup_ratio: 20_000,
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let (status, _body) = proxy_request(fixture.state.clone(), "glm-5.1").await;
+    assert_eq!(status, 200);
+
+    let usages = usages(&fixture);
+    assert_eq!(usages.len(), 1);
+    // $3.00/M on 1M tokens = 300_000_000 subunits, doubled by the 200% markup.
+    assert_eq!(usages[0].cost, 600_000_000);
+}
+
+#[tokio::test]
+async fn a_streamed_response_records_its_token_usage() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::sse(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}]}\n\n\
+                 data: {\"choices\":[],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2}}\n\n\
+                 data: [DONE]\n\n",
+            ),
+        )]),
+        pricing: Some(per_token_pricing("pp-1")),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let (status, _body) = proxy_stream_request(fixture.state.clone(), "glm-5.1").await;
+    assert_eq!(status, 200);
+
+    let usages = usages(&fixture);
+    assert_eq!(usages.len(), 1);
+    assert_eq!(usages[0].input_tokens, Some(10));
+    assert_eq!(usages[0].output_tokens, Some(2));
+    // 10 input + 2 output at $3.00 / $6.00 per 1M.
+    assert_eq!(usages[0].cost, 3_000 + 1_200);
+}
+
+#[tokio::test]
+async fn a_request_without_a_pricing_policy_is_not_billed() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(
+                200,
+                "{\"choices\":[],\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":50}}",
+            ),
+        )]),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let (status, _body) = proxy_request(fixture.state.clone(), "glm-5.1").await;
+    assert_eq!(status, 200);
+
+    let usages = usages(&fixture);
+    assert_eq!(usages.len(), 1);
+    assert_eq!(usages[0].input_tokens, Some(100));
+    assert_eq!(usages[0].cost, 0, "without a pricing policy nothing is charged");
 }
