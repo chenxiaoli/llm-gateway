@@ -32,7 +32,11 @@ struct PgKeyRow {
     name: String,
     key_hash: String,
     key_prefix: Option<String>,
-    rate_limit: Option<i64>,
+    // Postgres stores this column as INTEGER (INT4); decoding it directly
+    // into `i64` trips sqlx's strict type check, so any key with a rate
+    // limit set failed to load at all. Read it at its native width and
+    // widen at the ApiKey boundary.
+    rate_limit: Option<i32>,
     budget_monthly: Option<i64>,
     enabled: bool,
     created_by: Option<String>,
@@ -48,7 +52,7 @@ impl From<PgKeyRow> for ApiKey {
             name: r.name,
             key_hash: r.key_hash,
             key_prefix: r.key_prefix,
-            rate_limit: r.rate_limit,
+            rate_limit: r.rate_limit.map(|v| v as i64),
             budget_monthly: r.budget_monthly,
             enabled: r.enabled,
             created_by: r.created_by,

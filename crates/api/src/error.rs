@@ -6,7 +6,7 @@ use serde_json::json;
 pub enum ApiError {
     Unauthorized,
     Forbidden,
-    RateLimited,
+    RateLimited { retry_after_secs: i64 },
     PaymentRequired,
     NotFound(String),
     BadRequest(String),
@@ -22,7 +22,7 @@ impl ApiError {
         match self {
             ApiError::Unauthorized => "Unauthorized".to_string(),
             ApiError::Forbidden => "Forbidden".to_string(),
-            ApiError::RateLimited => "Rate limit exceeded".to_string(),
+            ApiError::RateLimited { .. } => "Rate limit exceeded".to_string(),
             ApiError::PaymentRequired => "Insufficient balance".to_string(),
             ApiError::NotFound(msg) => msg.clone(),
             ApiError::BadRequest(msg) => msg.clone(),
@@ -37,7 +37,7 @@ impl ApiError {
         match self {
             ApiError::Unauthorized => StatusCode::UNAUTHORIZED.as_u16(),
             ApiError::Forbidden => StatusCode::FORBIDDEN.as_u16(),
-            ApiError::RateLimited => StatusCode::TOO_MANY_REQUESTS.as_u16(),
+            ApiError::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS.as_u16(),
             ApiError::PaymentRequired => StatusCode::PAYMENT_REQUIRED.as_u16(),
             ApiError::NotFound(_) => StatusCode::NOT_FOUND.as_u16(),
             ApiError::BadRequest(_) => StatusCode::BAD_REQUEST.as_u16(),
@@ -50,10 +50,28 @@ impl ApiError {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        // RateLimited is the only variant that carries an HTTP header
+        // (Retry-After), so it can't share the flat (status, message) path.
+        if let ApiError::RateLimited { retry_after_secs } = self {
+            let body = json!({
+                "error": {
+                    "message": "Rate limit exceeded",
+                    "type": StatusCode::TOO_MANY_REQUESTS.as_u16(),
+                }
+            });
+            let mut resp = (StatusCode::TOO_MANY_REQUESTS, axum::Json(body)).into_response();
+            resp.headers_mut().insert(
+                "retry-after",
+                axum::http::HeaderValue::from_str(&retry_after_secs.to_string())
+                    .expect("retry_after_secs fits in a HeaderValue"),
+            );
+            return resp;
+        }
+
         let (status, message) = match &self {
             ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized"),
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden"),
-            ApiError::RateLimited => (StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded"),
+            ApiError::RateLimited { .. } => (StatusCode::TOO_MANY_REQUESTS, "Rate limit exceeded"),
             ApiError::PaymentRequired => (StatusCode::PAYMENT_REQUIRED, "Insufficient balance"),
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.as_str()),
             ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
@@ -66,5 +84,25 @@ impl IntoResponse for ApiError {
         };
         let body = json!({ "error": { "message": message, "type": status.as_u16() } });
         (status, axum::Json(body)).into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::response::IntoResponse;
+
+    #[tokio::test]
+    async fn the_rate_limit_error_carries_a_retry_after_header() {
+        let response = ApiError::RateLimited { retry_after_secs: 60 }.into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response.headers().get("retry-after").unwrap(), "60");
+    }
+
+    #[tokio::test]
+    async fn other_errors_carry_no_retry_after_header() {
+        let response = ApiError::NotFound("nope".to_string()).into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert!(response.headers().get("retry-after").is_none());
     }
 }

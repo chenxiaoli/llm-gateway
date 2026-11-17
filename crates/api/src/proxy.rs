@@ -1228,6 +1228,33 @@ async fn proxy_inner(
         return Err(ApiError::Forbidden);
     }
 
+    // === Step 1.5: Rate-limit check ===
+    // `api_keys.rate_limit` is the per-key RPM limit. It was never enforced:
+    // the limiter was built and put into the app state, but nothing ever
+    // called it — and because the column is an INTEGER, a key with a limit
+    // set could not even be loaded (see the storage layer).
+    //
+    // The limiter is in-memory and per gateway process, so the effective
+    // limit is `rate_limit × number of gateway replicas`. The bucket is
+    // per key, with the model dimension collapsed so the limit applies to
+    // every model the key may call.
+    if let Some(rpm) = api_key.rate_limit {
+        let allowed = state
+            .rate_limiter
+            .check_and_increment(&api_key.id, "", Some(rpm), None, None)
+            .await;
+        if !allowed {
+            tracing::warn!(
+                "[PROXY] Rate limit exceeded for key '{}' ({} rpm)",
+                api_key.id,
+                rpm
+            );
+            return Err(ApiError::RateLimited {
+                retry_after_secs: state.system_info.rate_limit_window_secs,
+            });
+        }
+    }
+
     // === Step 2: Balance check ===
     // Keys with created_by = None (e.g. admin-created test keys) skip balance checks.
     // A threshold of 0 means "no limit" — skip the check in that case.

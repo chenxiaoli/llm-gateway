@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.15] - 2026-11-17
+
+### Fixed
+- An API key with a rate limit set could not be loaded at all. `api_keys.rate_limit` is a Postgres `INTEGER`, but the row was decoded into `Option<i64>`, which sqlx rejects ("mismatched types; Rust type `i64` is not compatible with SQL type `INT4`"). Every request with such a key failed with a 500 — and the limit itself was never enforced anyway. The column is now read at its native width and widened at the `ApiKey` boundary.
+- The rate limiter's counters never expired. The window size was stored but never used, so a key that reached its limit stayed blocked until the gateway restarted. The counters now reset when their window is over.
+
+### Changed
+- The per-key rate limit (`api_keys.rate_limit`, RPM) is now enforced on the proxy path. It never was: the limiter was built and put into the app state, but nothing ever called it. Over the limit the request is rejected with `429` and a `Retry-After` header set to the configured rate-limit window (`[rate_limit] window_size_secs`). The limiter is in-memory and per gateway process, so the effective limit is `rate_limit × number of gateway replicas`.
+
 ## [1.8.14] - 2026-11-17
 
 ### Added

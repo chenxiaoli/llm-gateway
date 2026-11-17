@@ -273,6 +273,8 @@ struct FixtureOptions {
     pricing: Option<PricingPolicy>,
     /// The channel's markup ratio in basis points (10000 = no markup).
     markup_ratio: i64,
+    /// The key's RPM limit (None = unlimited).
+    rate_limit: Option<i64>,
 }
 
 impl FixtureOptions {
@@ -297,6 +299,7 @@ impl FixtureOptions {
             anthropic_endpoint: true,
             pricing: None,
             markup_ratio: 10_000,
+            rate_limit: None,
         }
     }
 }
@@ -355,10 +358,10 @@ async fn fixture(options: FixtureOptions) -> Fixture {
         name: "test".to_string(),
         key_hash: hash_api_key(RAW_KEY),
         key_prefix: None,
-        rate_limit: None,
         budget_monthly: None,
         enabled: true,
         created_by: options.user_group.map(|_| "user-1".to_string()),
+        rate_limit: options.rate_limit,
         model_fallback_id: if options.with_fallback {
             Some("fb-1".to_string())
         } else {
@@ -1526,4 +1529,67 @@ async fn a_request_without_a_pricing_policy_is_not_billed() {
     assert_eq!(usages.len(), 1);
     assert_eq!(usages[0].input_tokens, Some(100));
     assert_eq!(usages[0].cost, 0, "without a pricing policy nothing is charged");
+}
+
+// ── Rate limiting ──────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn a_key_over_its_rate_limit_is_rejected() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(200, "{\"served_by\":\"glm\"}"),
+        )]),
+        rate_limit: Some(2),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    // The first two requests are served.
+    for _ in 0..2 {
+        let (status, _body) = proxy_request(fixture.state.clone(), "glm-5.1").await;
+        assert_eq!(status, 200);
+    }
+
+    // The third one is over the limit.
+    let mut headers = HeaderMap::new();
+    headers.insert("authorization", format!("Bearer {}", RAW_KEY).parse().unwrap());
+    let body = "{\"model\":\"glm-5.1\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}";
+    let response = proxy_with_protocol(
+        axum::extract::State(fixture.state.clone()),
+        headers,
+        body.to_string(),
+    )
+    .await
+    .expect_err("the request must be rejected");
+
+    assert_eq!(response.status_code(), 429);
+    assert!(response.message().contains("Rate limit exceeded"));
+    assert_eq!(
+        response.status_code(),
+        429,
+        "the client must see a 429, not a 500"
+    );
+
+    // The rejected request never reached the upstream.
+    assert_eq!(fixture.upstream_c1.hits(), vec!["glm-5.1", "glm-5.1"]);
+}
+
+#[tokio::test]
+async fn a_key_without_a_rate_limit_is_never_rejected() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(200, "{\"served_by\":\"glm\"}"),
+        )]),
+        rate_limit: None,
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    for _ in 0..5 {
+        let (status, _body) = proxy_request(fixture.state.clone(), "glm-5.1").await;
+        assert_eq!(status, 200);
+    }
+    assert_eq!(fixture.upstream_c1.hits().len(), 5);
 }
