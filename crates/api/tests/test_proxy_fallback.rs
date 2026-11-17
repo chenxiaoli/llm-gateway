@@ -96,6 +96,7 @@ impl EventPublisher for RecordingPublisher {
 struct FakeResponse {
     status: u16,
     body: String,
+    content_type: String,
     /// Delay before answering — used to hang the upstream on purpose.
     delay: Duration,
 }
@@ -105,6 +106,7 @@ impl FakeResponse {
         FakeResponse {
             status,
             body: body.to_string(),
+            content_type: "application/json".to_string(),
             delay: Duration::ZERO,
         }
     }
@@ -113,7 +115,18 @@ impl FakeResponse {
         FakeResponse {
             status,
             body: body.to_string(),
+            content_type: "application/json".to_string(),
             delay: Duration::from_millis(delay_ms),
+        }
+    }
+
+    /// A server-sent-events response.
+    fn sse(body: &str) -> Self {
+        FakeResponse {
+            status: 200,
+            body: body.to_string(),
+            content_type: "text/event-stream".to_string(),
+            delay: Duration::ZERO,
         }
     }
 }
@@ -168,6 +181,7 @@ async fn upstream_handler(
     let response = responses.get(&model).cloned().unwrap_or(FakeResponse {
         status: 200,
         body: format!("{{\"served_by\":\"{}\"}}", model),
+        content_type: "application/json".to_string(),
         delay: Duration::ZERO,
     });
 
@@ -177,7 +191,7 @@ async fn upstream_handler(
 
     Response::builder()
         .status(response.status)
-        .header("content-type", "application/json")
+        .header("content-type", response.content_type.clone())
         .body(axum::body::Body::from(response.body))
         .unwrap()
 }
@@ -414,6 +428,30 @@ async fn proxy_request(state: Arc<AppState>, model: &str) -> (u16, String) {
         }
         // The axum layer turns an ApiError into the same status/body the
         // client sees; the proxy itself returns it as an error value.
+        Err(err) => (err.status_code(), err.message()),
+    }
+}
+
+/// A streaming request (`"stream": true`).
+async fn proxy_stream_request(state: Arc<AppState>, model: &str) -> (u16, String) {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        "authorization",
+        format!("Bearer {}", RAW_KEY).parse().unwrap(),
+    );
+    let body = format!(
+        "{{\"model\":\"{}\",\"stream\":true,\"messages\":[{{\"role\":\"user\",\"content\":\"hi\"}}]}}",
+        model
+    );
+
+    match proxy_with_protocol(axum::extract::State(state), headers, body).await {
+        Ok(response) => {
+            let status = response.status().as_u16();
+            let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            (status, String::from_utf8_lossy(&bytes).to_string())
+        }
         Err(err) => (err.status_code(), err.message()),
     }
 }
@@ -828,4 +866,151 @@ async fn a_successful_request_records_one_audit_row() {
     let routes = audits[0].routes.as_ref().unwrap();
     assert_eq!(routes.len(), 1);
     assert_eq!(routes[0].status_code, 200);
+}
+
+// ── Streaming (SSE) ────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn a_streaming_request_forwards_the_events_and_audits_them() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::sse(
+                "data: {\"choices\":[{\"delta\":{\"content\":\"he\"}}]}\n\n\
+                 data: {\"choices\":[{\"delta\":{\"content\":\"llo\"}}]}\n\n\
+                 data: [DONE]\n\n",
+            ),
+        )]),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let (status, body) = proxy_stream_request(fixture.state.clone(), "glm-5.1").await;
+
+    assert_eq!(status, 200);
+    assert!(body.contains("hello") || body.contains("he"), "body: {}", body);
+
+    let audits = audits(&fixture);
+    assert_eq!(audits.len(), 1);
+    assert!(audits[0].stream, "the audit must be marked as a stream");
+    assert_eq!(audits[0].status_code, 200);
+    assert!(
+        audits[0].response_body.contains("hello")
+            || audits[0].response_body.contains("he"),
+        "the audit must contain the streamed events: {}",
+        audits[0].response_body
+    );
+}
+
+#[tokio::test]
+async fn an_sse_error_event_circuit_breaks_the_channel() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::sse(
+                "event: error\ndata: {\"error\":{\"message\":\"upstream exploded\"}}\n\n",
+            ),
+        )]),
+        responses_c2: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::sse("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n"),
+        )]),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    // The stream is already committed to the client, so the error event is
+    // forwarded rather than turned into another model.
+    let (status, body) = proxy_stream_request(fixture.state.clone(), "glm-5.1").await;
+    assert_eq!(status, 200);
+    assert!(body.contains("upstream exploded"), "body: {}", body);
+    assert_eq!(fixture.upstream_c1.hits(), vec!["glm-5.1"]);
+
+    // The (channel, model) pair is circuit-broken now: the next request skips
+    // the channel that produced the error event.
+    let (status, body) = proxy_stream_request(fixture.state.clone(), "glm-5.1").await;
+    assert_eq!(status, 200);
+    assert!(body.contains("ok"), "body: {}", body);
+    assert_eq!(
+        fixture.upstream_c1.hits(),
+        vec!["glm-5.1"],
+        "the circuit-broken channel must be skipped"
+    );
+    assert_eq!(fixture.upstream_c2.hits(), vec!["glm-5.1"]);
+}
+
+#[tokio::test]
+async fn a_streaming_request_fails_over_to_the_next_channel_on_5xx() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(500, "{\"error\":\"boom\"}"),
+        )]),
+        responses_c2: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::sse("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n"),
+        )]),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let (status, body) = proxy_stream_request(fixture.state.clone(), "glm-5.1").await;
+
+    assert_eq!(status, 200);
+    assert!(body.contains("ok"), "body: {}", body);
+    assert_eq!(fixture.upstream_c1.hits(), vec!["glm-5.1"]);
+    assert_eq!(fixture.upstream_c2.hits(), vec!["glm-5.1"]);
+
+    let audits = audits(&fixture);
+    assert_eq!(audits.len(), 1);
+    assert!(audits[0].stream);
+    let routes = audits[0].routes.as_ref().unwrap();
+    assert_eq!(routes.len(), 2);
+    assert_eq!(routes[0].status_code, 500);
+    assert_eq!(routes[1].status_code, 200);
+}
+
+#[tokio::test]
+async fn a_streaming_request_falls_back_when_every_channel_fails() {
+    let fixture = fixture(FixtureOptions {
+        responses_c1: HashMap::from([
+            (
+                "glm-5.1".to_string(),
+                FakeResponse::new(404, "{\"error\":\"no such model\"}"),
+            ),
+            (
+                "minimax-m3.1-flash".to_string(),
+                FakeResponse::sse("data: {\"choices\":[{\"delta\":{\"content\":\"from-minimax\"}}]}\n\ndata: [DONE]\n\n"),
+            ),
+        ]),
+        responses_c2: HashMap::from([(
+            "glm-5.1".to_string(),
+            FakeResponse::new(404, "{\"error\":\"no such model\"}"),
+        )]),
+        ..FixtureOptions::new()
+    })
+    .await;
+
+    let (status, body) = proxy_stream_request(fixture.state.clone(), "glm-5.1").await;
+
+    // The fallback served the stream.
+    assert_eq!(status, 200);
+    assert!(body.contains("from-minimax"), "body: {}", body);
+    assert_eq!(
+        fixture.upstream_c1.hits(),
+        vec!["glm-5.1", "minimax-m3.1-flash"]
+    );
+    assert_eq!(fixture.upstream_c2.hits(), vec!["glm-5.1"]);
+
+    let audits = audits(&fixture);
+    assert_eq!(audits.len(), 1, "the chain must not produce a row per attempt");
+    assert!(audits[0].stream);
+    assert_eq!(audits[0].model_name, "minimax-m3.1-flash");
+    assert_eq!(audits[0].original_model.as_deref(), Some("glm-5.1"));
+    assert_eq!(
+        audits[0].model_override_reason.as_deref(),
+        Some("model_fallback")
+    );
+    let routes = audits[0].routes.as_ref().unwrap();
+    assert_eq!(routes.len(), 3);
 }

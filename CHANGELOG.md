@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.12] - 2026-11-17
+
+### Added
+- The proxy integration tests now cover the streaming (SSE) path: a streamed response is forwarded to the client and audited as a stream (with the accumulated events in the audit row), an SSE `error` event circuit-breaks the (channel, model) pair so the next request skips that channel, a stream whose upstream answers 5xx fails over to the next channel of the same model, and a stream whose every channel fails is served by the fallback chain. The fake upstream can now answer with `text/event-stream`.
+
 ## [1.8.11] - 2026-11-17
 
 ### Fixed
