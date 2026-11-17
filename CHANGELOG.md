@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.8.7] - 2026-11-17
 
 ### Fixed
 - Routing-level failures (unknown model, no enabled channel) now produce an **audit log row**. Previously those paths returned a bare 404 without dispatching an `AuditTask`, so nothing was written to `audit_logs` — and because the `routes` accumulator (which *did* contain every routing miss and every fallback attempt) was dropped along with the error, the model-fallback chain was completely invisible. The new row carries the full `routes` chain, so "the fallback chain did not fire" and "the fallback chain fired and every candidate failed" are now distinguishable in the admin Logs page.
