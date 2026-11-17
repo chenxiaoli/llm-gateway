@@ -842,6 +842,17 @@ fn select_fallback_candidates(
     candidates
 }
 
+/// A candidate's upstream error, kept so it can be returned to the client
+/// verbatim if the whole chain (channels + fallback) fails.
+struct ClientError {
+    status: u16,
+    body: axum::body::Bytes,
+    /// The route attempt this error produced (already recorded in `routes`).
+    attempt: llm_gateway_storage::RouteAttempt,
+    /// The upstream's response headers (recorded in the audit row).
+    response_headers: String,
+}
+
 /// Whether a fallback candidate's response counts as "served".
 ///
 /// Only a 200 counts. A candidate that answers with 4xx/5xx (or any other
@@ -1590,6 +1601,17 @@ async fn proxy_route_and_forward(
     let default_client = reqwest::Client::new();
     let mut last_error = String::new();
 
+    // The upstream error of the most recent 4xx attempt. A 4xx means "this
+    // channel cannot serve this model" — it does not mean "this model is
+    // unavailable": the remaining channels of the same model get their turn
+    // first, and only when they are all exhausted is the model considered
+    // unavailable (and the fallback chain, if any, takes over).
+    //
+    // The error is kept so it can be handed to the client verbatim if the
+    // fallback chain also fails — the upstream's status code and body are
+    // the client's answer, not a synthesized 502.
+    let mut last_client_error: Option<ClientError> = None;
+
     // === Route with failover ===
     // `routes` is threaded in by the caller (proxy_inner allocates one Vec per
     // HTTP request; try_model_fallback passes the same Vec down through each
@@ -1828,26 +1850,6 @@ if status != 200 && status < 500 {
                 serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
             };
 
-            // Build request headers JSON (for audit log — only forwarded headers, exclude sensitive ones and x-forwarded-*)
-            let request_headers_for_worker = build_request_headers_json(&headers);
-
-            let proto = match protocol {
-                ProxyProtocol::OpenAI => Protocol::Openai,
-                ProxyProtocol::Anthropic => Protocol::Anthropic,
-            };
-
-            let pricing_policy = {
-                let policy_id = channel_model.pricing_policy_id.as_deref()
-                    .or(model_entry.model.pricing_policy_id.as_deref());
-                match policy_id {
-                    Some(id) => {
-                        state.storage.get_pricing_policy(id).await
-                            .map_err(|e| ApiError::Internal(e.to_string()))?
-                    }
-                    None => None,
-                }
-            };
-
             // Get raw bytes and try to decompress gzip if needed
             let error_body = resp.bytes().await.unwrap_or_default();
             let error_body_str = if error_body.len() >= 2 && error_body[0] == 0x1F && error_body[1] == 0x8B {
@@ -1855,9 +1857,10 @@ if status != 200 && status < 500 {
                 use std::io::Read;
                 let mut decoder = flate2::read::GzDecoder::new(&error_body[..]);
                 let mut decompressed = String::new();
-                match decoder.read_to_string(&mut decompressed) {
-                    Ok(_) => decompressed,
-                    Err(_) => String::from_utf8_lossy(&error_body).into_owned(),
+                if let Ok(_) = decoder.read_to_string(&mut decompressed) {
+                    decompressed
+                } else {
+                    String::from_utf8_lossy(&error_body).into_owned()
                 }
             } else {
                 String::from_utf8_lossy(&error_body).into_owned()
@@ -1867,7 +1870,7 @@ if status != 200 && status < 500 {
             tracing::debug!("[PROXY] Upstream error response: status={}, body_len={}", status, error_body_str.len());
 
             // Record this 4xx attempt in the routes array.
-            routes.push(llm_gateway_storage::RouteAttempt {
+            let attempt = llm_gateway_storage::RouteAttempt {
                 model: upstream_name.to_string(),
                 channel_id: channel.channel_id.to_string(),
                 channel_name: Some(channel.name.clone()),
@@ -1876,72 +1879,26 @@ if status != 200 && status < 500 {
                 error_message: Some(error_body_str.clone()),
                 latency_ms,
                 started_at: chrono::Utc::now(),
+            };
+            routes.push(attempt.clone());
+
+            // The upstream rejected the request on *this* channel. That does
+            // not make the model unavailable yet — the remaining channels of
+            // the same model get their turn first. Only when they are all
+            // exhausted is the model considered unavailable, and only then
+            // does the fallback chain (if the key has one) take over.
+            //
+            // The error is kept so it can be handed to the client verbatim if
+            // the fallback chain fails too.
+            last_error = format!("Upstream error {} on channel '{}'", status, channel.name);
+            last_client_error = Some(ClientError {
+                status,
+                body: error_body,
+                attempt,
+                response_headers: response_headers_for_worker,
             });
 
-            // The upstream rejected the request. If a fallback chain is
-            // configured for this key, run it before giving up: when a
-            // fallback exists, an unavailable model must not fail the request
-            // while an equivalent model could still serve it. The original
-            // upstream 4xx is returned only if the whole chain fails too.
-            //
-            // No chaining: inside a fallback attempt (fallback_depth > 0) a
-            // 4xx stays terminal, exactly like every other failure mode.
-            if fallback_depth == 0 {
-                let (response, report) = try_model_fallback(
-                    &state, &headers, &body, &client_requested_model, &api_key,
-                    &request_user_id, request_is_admin, &request_id,
-                    protocol, &request_path,
-                    routes,
-                ).await;
-                if let Some(response) = response {
-                    // The fallback served the request — it dispatches the
-                    // audit row (success path) with the full chain.
-                    return Ok(response);
-                }
-                let details = report.details();
-                if !details.is_empty() {
-                    tracing::info!(
-                        "[PROXY] Upstream {} on channel '{}' — {}",
-                        status,
-                        channel.name,
-                        details
-                    );
-                }
-            }
-
-            // Dispatch a single AuditTask carrying the full failover history.
-            // Only at depth 0: inside a fallback attempt the row is dispatched
-            // by whoever ends up serving the request, so the chain produces
-            // exactly one row.
-            if fallback_depth == 0 {
-                let task = AuditTask {
-                    request_id: request_id.clone(),
-                    key_id: api_key.id.clone(),
-                    user_id: api_key.created_by.clone(),
-                    model_name: upstream_name.to_string(),
-                    provider_id: provider_id.clone(),
-                    protocol: proto,
-                    stream: is_stream,
-                    request_body: body.clone(),
-                    response_bytes: error_body_str.into_bytes(),
-                    status_code: status as i32,
-                    latency_ms: start_total.elapsed().as_millis() as i64,
-                    pricing_policy,
-                    markup_ratio: channel_model.markup_ratio,
-                    channel_id: Some(channel.channel_id.to_string()),
-                    original_model: Some(client_requested_model.clone()),
-                    upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
-                    model_override_reason: resolve_override_reason(&client_requested_model, &model_name, upstream_name),
-                    request_path: Some(request_path.clone()),
-                    upstream_url: Some(upstream_url.clone()),
-                    request_headers: Some(request_headers_for_worker),
-                    response_headers: Some(response_headers_for_worker),
-                    routes: routes.clone(),
-                };
-                dispatch_audit_task(&state, task).await;
-            }
-
-            return Ok((StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY), error_body).into_response());
+            continue;
         }
 
         tracing::debug!("[PROXY] Upstream success response: status={}, is_stream={}", status, is_stream);
@@ -2112,7 +2069,11 @@ if status != 200 && status < 500 {
         return Ok(response_bytes.into_response());
     }
 
-    // All channels failed — try model fallback.
+    // All channels failed — the requested model is unavailable. If the key
+    // has a fallback chain configured, run it now: every channel of the
+    // requested model has been tried, so an equivalent model is the only way
+    // left to serve the request.
+    //
     // Snapshot the last attempt of the original routing pass first: the
     // fallback chain appends its own attempts to `routes`, and the audit row
     // should describe the original failure (the full chain lives in `routes`).
@@ -2139,15 +2100,33 @@ if status != 200 && status < 500 {
     // stay silent so it doesn't produce a duplicate row; the depth=0 caller
     // will dispatch once after `try_model_fallback` returns None.
     if fallback_depth == 0 {
-        if let Some(last) = last_attempt {
+        // What the client is about to receive: the upstream error when there
+        // was one (that is what gets returned below), otherwise the last
+        // channel attempt.
+        let outcome = match &last_client_error {
+            Some(err) => Some((
+                err.attempt.model.clone(),
+                err.attempt.channel_id.clone(),
+                err.attempt.provider_id.clone(),
+                err.status as i32,
+                err.attempt.error_message.clone().unwrap_or_default().into_bytes(),
+                Some(err.response_headers.clone()),
+            )),
+            None => last_attempt.as_ref().map(|last| (
+                last.model.clone(),
+                last.channel_id.clone(),
+                last.provider_id.clone(),
+                last.status_code,
+                last.error_message.clone().unwrap_or_default().into_bytes(),
+                None,
+            )),
+        };
+
+        if let Some((model_name, channel_id, attempt_provider_id, status_code, response_bytes, response_headers)) = outcome {
             let proto = match protocol {
                 ProxyProtocol::OpenAI => Protocol::Openai,
                 ProxyProtocol::Anthropic => Protocol::Anthropic,
             };
-            let last_channel_id = last.channel_id.clone();
-            let last_model_name = last.model.clone();
-            let last_error_msg = last.error_message.clone().unwrap_or_default();
-            let last_status = last.status_code;
 
             // Resolve pricing policy from the last-attempted channel (best effort;
             // we don't have channel_model here, fall back to the model's policy).
@@ -2161,28 +2140,43 @@ if status != 200 && status < 500 {
                 request_id: request_id.clone(),
                 key_id: api_key.id.clone(),
                 user_id: api_key.created_by.clone(),
-                model_name: last_model_name,
-                provider_id: provider_id.clone(),
+                model_name,
+                provider_id: if attempt_provider_id.is_empty() {
+                    provider_id.clone()
+                } else {
+                    attempt_provider_id
+                },
                 protocol: proto,
                 stream: is_stream,
                 request_body: body.clone(),
-                response_bytes: last_error_msg.into_bytes(),
-                status_code: last_status,
+                response_bytes,
+                status_code,
                 latency_ms: start_total.elapsed().as_millis() as i64,
                 pricing_policy,
                 markup_ratio: 0,
-                channel_id: Some(last_channel_id),
+                channel_id: Some(channel_id),
                 original_model: Some(client_requested_model.clone()),
                 upstream_model: None,
                 model_override_reason: None,
                 request_path: Some(request_path.clone()),
                 upstream_url: None,
-                request_headers: None,
-                response_headers: None,
+                request_headers: Some(build_request_headers_json(&headers)),
+                response_headers,
                 routes: routes.clone(),
             };
             dispatch_audit_task(&state, task).await;
         }
+    }
+
+    // The upstream error is the client's answer when there was one: its status
+    // code and body are passed through verbatim, exactly as if no fallback
+    // chain existed.
+    if let Some(err) = last_client_error {
+        return Ok((
+            StatusCode::from_u16(err.status).unwrap_or(StatusCode::BAD_GATEWAY),
+            err.body,
+        )
+            .into_response());
     }
 
     Err(ApiError::UpstreamError(502, format!("All channels failed. Last error: {}{}", last_error, fallback_report.describe())))
