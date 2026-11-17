@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.10] - 2026-11-17
+
+### Added
+- Integration tests for the model-fallback chain (`crates/api/tests/test_proxy_fallback.rs`). The proxy is now exercised end to end without PostgreSQL or NATS: the upstream is a real HTTP server on localhost, the storage is an in-memory double (`crates/api/tests/common/mock_storage.rs`), and the event publisher is a recorder. The tests pin down the routing order (every channel of the requested model first, then the fallback chain), the error the client receives when the chain fails, and that a request produces exactly one audit event carrying the whole chain.
+
+### Changed
+- `AppState.nats_publisher` is now an `Arc<dyn EventPublisher>` instead of an `Arc<NatsPublisher>`. Behaviour is unchanged — the gateway still publishes to NATS — but the proxy can be tested without a NATS server.
+
 ## [1.8.9] - 2026-11-17
 
 ### Changed

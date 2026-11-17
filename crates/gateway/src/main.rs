@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Init NATS publisher (required)
     let nats_cfg = config.nats.as_ref().ok_or("[nats] section is required in config.toml")?;
-    let nats_publisher: Arc<llm_gateway_nats_publisher::NatsPublisher> =
+    let nats_publisher: Arc<dyn llm_gateway_nats_publisher::EventPublisher> =
         match llm_gateway_nats_publisher::NatsPublisher::new(&nats_cfg.url, nats_cfg.token.clone()).await {
             Ok(pub_) => {
                 tracing::info!("Connected to NATS: {}", nats_cfg.url);

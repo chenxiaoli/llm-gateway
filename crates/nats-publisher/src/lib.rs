@@ -89,6 +89,47 @@ pub struct NatsPublisher {
     js: Context,
 }
 
+/// Where the proxy sends its usage and audit events.
+///
+/// The gateway uses NATS; tests use an in-memory recorder so the proxy can be
+/// exercised without a NATS server.
+#[async_trait::async_trait]
+pub trait EventPublisher: Send + Sync {
+    async fn publish_usage(
+        &self,
+        event: &UsageEvent,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    async fn publish_audit(
+        &self,
+        event: &AuditEvent,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Status of a JetStream stream (used by the admin NATS panel).
+    async fn stream_info(&self, name: &str) -> Result<StreamStatusInfo, String>;
+}
+
+#[async_trait::async_trait]
+impl EventPublisher for NatsPublisher {
+    async fn publish_usage(
+        &self,
+        event: &UsageEvent,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.publish_usage(event).await
+    }
+
+    async fn publish_audit(
+        &self,
+        event: &AuditEvent,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.publish_audit(event).await
+    }
+
+    async fn stream_info(&self, name: &str) -> Result<StreamStatusInfo, String> {
+        NatsPublisher::stream_info(self, name).await
+    }
+}
+
 impl NatsPublisher {
     /// Connect to the NATS server at `url` and create the required JetStream
     /// streams idempotently.
