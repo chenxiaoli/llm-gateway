@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.9] - 2026-11-17
+
+### Changed
+- An upstream 4xx no longer ends the request on the first channel that produces one. A 4xx means "this channel cannot serve this model", not "this model is unavailable": every channel of the requested model is now tried first, and only when they are all exhausted is the model considered unavailable and the fallback chain (if the key has one) entered. 1.8.8 entered the fallback chain on the first 4xx, skipping the remaining channels of the same model.
+- When the requested model turns out to be unavailable and the fallback chain fails too, the client still receives the upstream's status code and body verbatim — but from the last 4xx attempt rather than the first, matching the "last error" convention the 5xx path already used.
+- The audit row of a failed request now carries the request headers and the upstream's response headers (previously empty for the "all channels failed" path).
+
 ## [1.8.8] - 2026-11-17
 
 ### Fixed
