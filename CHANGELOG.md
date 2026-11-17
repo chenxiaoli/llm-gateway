@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+- Routing-level failures (unknown model, no enabled channel) now produce an **audit log row**. Previously those paths returned a bare 404 without dispatching an `AuditTask`, so nothing was written to `audit_logs` — and because the `routes` accumulator (which *did* contain every routing miss and every fallback attempt) was dropped along with the error, the model-fallback chain was completely invisible. The new row carries the full `routes` chain, so "the fallback chain did not fire" and "the fallback chain fired and every candidate failed" are now distinguishable in the admin Logs page.
+- The model-fallback chain no longer fails silently. `try_model_fallback` now returns a structured report (skipped / which candidates failed) instead of `Option<Response>`. Every skip reason is logged at `info` instead of `debug` (the old `debug!` lines were invisible at the default log level, so a fallback config that was never bound to the API key looked exactly like a fallback config that was working), and the client-facing error message now carries the outcome: `Model 'glm-5.1' not found [fallback skipped: API key 'k1' has no model_fallback_id bound]` or `... [fallback tried: minimax-m3.1-flash → Model 'minimax-m3.1-flash' not found]`. The original message is kept as the prefix so existing client-side matching still works.
+- The audit `routes` chain stays a pure attempt log: it lists what was actually tried, and nothing else — no synthetic "fallback skipped" / "fallback failed" entry is appended. An entry recorded while serving a fallback attempt now names the model the client originally asked for (`Model 'minimax-m3.1-flash' not in registry (fallback for 'glm-5.1')`), so the chain reads as a story: a chain that stops at the routing miss means the fallback chain was never entered.
+- Fallback groups no longer lose their target models. `priorities` is positional (it pairs with `models` by index) and the candidate list was built with `models.iter().zip(priorities.iter())`; `zip` truncates to the shorter side, so a group whose `priorities` array was shorter than its `models` array silently dropped the trailing models — the fallback target could disappear with no error and no log line. Missing priorities now default to `index + 1` (tried after every explicitly prioritized model).
+- Fallback group matching now trims whitespace around model names, on both sides. A config saved as `"glm-5.1 "` (trailing space) never matched the requested model, which disabled the whole chain. The admin UI now trims names on save; the backend trims on match for configs created through the Management API.
+- The Model Fallbacks admin form no longer desynchronizes `models` and `priorities`. Empty model rows were filtered out of `models` but left in place in `priorities`, so every model after the gap was paired with the wrong priority. Both arrays are now filtered together.
+- `audit_log.model_override_reason` now records `model_fallback` when the request was served by a different model than the client asked for (previously it always said `channel_mapping`, or nothing at all). `channel_mapping` is still used for channel-level upstream aliases.
+
 ## [1.8.6] - 2026-07-14
 
 ### Fixed

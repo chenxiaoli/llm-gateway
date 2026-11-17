@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useModelFallbacks, useCreateModelFallback, useUpdateModelFallback, useDeleteModelFallback } from '../hooks/useModelFallbacks';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { cleanFallbackGroups } from '../lib/fallbackGroups';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import type { ModelFallbackGroup } from '../types';
@@ -45,12 +46,7 @@ export default function ModelFallbacks() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError('');
-    const cleanedGroups = groups
-      .map((g) => ({
-        models: g.models.filter((m) => m.trim() !== ''),
-        priorities: g.priorities,
-      }))
-      .filter((g) => g.models.length >= 2);
+    const cleanedGroups = cleanFallbackGroups(groups);
 
     if (cleanedGroups.length === 0) {
       setValidationError(t('modelFallbacks.editModal.validationError'));

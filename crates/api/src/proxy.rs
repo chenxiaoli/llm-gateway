@@ -739,8 +739,134 @@ async fn process_sse_stream(
     dispatch_audit_task(&state, task).await;
 }
 
+// ─── Model fallback reporting ───────────────────────────────────────────────
+
+/// What happened to the model-fallback chain for a request.
+///
+/// The chain used to be invisible: a routing failure returned a bare 404 and
+/// the `routes` accumulator — which *did* contain every attempt — was dropped
+/// on the floor. The report keeps that information and surfaces it both in the
+/// audit row and in the client-facing error message.
+#[derive(Debug, Clone, Default)]
+pub struct FallbackReport {
+    /// Set when no fallback was attempted at all (nothing bound to the key,
+    /// no group for the requested model, or a group without other models).
+    pub skip_reason: Option<String>,
+    /// (fallback model, error message) for every candidate that was tried and
+    /// failed, in the order they were tried.
+    pub attempts: Vec<(String, String)>,
+}
+
+impl FallbackReport {
+    /// Suffix appended to the client-facing error message. The original
+    /// message is kept as the prefix so existing client-side matching on it
+    /// keeps working.
+    ///
+    /// This is *not* written into the audit `routes` chain: the chain lists
+    /// the attempts themselves, so a chain that stops at the routing miss is
+    /// the signal that the fallback chain was never entered.
+    pub fn describe(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(reason) = &self.skip_reason {
+            parts.push(format!("fallback skipped: {}", reason));
+        }
+        if !self.attempts.is_empty() {
+            let tried = self.attempts
+                .iter()
+                .map(|(m, e)| format!("{} → {}", m, e))
+                .collect::<Vec<_>>()
+                .join("; ");
+            parts.push(format!("fallback tried: {}", tried));
+        }
+        if parts.is_empty() {
+            String::new()
+        } else {
+            format!(" [{}]", parts.join(", "))
+        }
+    }
+}
+
+/// Normalize a model name for fallback matching: trim whitespace, lowercase.
+///
+/// The UI trims names on save, but configs created through the Management API
+/// can carry stray whitespace, and an exact match against `"glm-5.1 "` would
+/// silently disable the whole fallback chain.
+fn normalize_model_name(name: &str) -> String {
+    name.trim().to_lowercase()
+}
+
+/// Find the fallback group that contains the requested model.
+fn find_fallback_group<'a>(
+    config: &'a [llm_gateway_storage::ModelFallbackGroup],
+    requested_model: &str,
+) -> Option<&'a llm_gateway_storage::ModelFallbackGroup> {
+    let target = normalize_model_name(requested_model);
+    config
+        .iter()
+        .find(|g| g.models.iter().any(|m| normalize_model_name(m) == target))
+}
+
+/// Pick the fallback candidates of a group: every model except the requested
+/// one, ordered by ascending priority.
+///
+/// `priorities` is positional — it pairs with `models` by index. The previous
+/// implementation used `models.iter().zip(priorities.iter())`, and `zip`
+/// truncates to the shorter side: a group whose `priorities` array was
+/// shorter than its `models` array silently lost its trailing models, so the
+/// fallback target could disappear with no error and no log line. Missing
+/// priorities now default to `index + 1`, i.e. they are tried after every
+/// explicitly prioritized model.
+fn select_fallback_candidates(
+    group: &llm_gateway_storage::ModelFallbackGroup,
+    requested_model: &str,
+) -> Vec<(String, i32)> {
+    let target = normalize_model_name(requested_model);
+    let mut candidates: Vec<(String, i32)> = group
+        .models
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| normalize_model_name(m) != target)
+        .map(|(i, m)| {
+            let priority = group.priorities.get(i).copied().unwrap_or(i as i32 + 1);
+            (m.trim().to_string(), priority)
+        })
+        .collect();
+    candidates.sort_by_key(|(_, p)| *p);
+    candidates
+}
+
+/// Context suffix for a routing entry recorded inside a fallback attempt.
+///
+/// The audit `routes` chain lists the attempts themselves — no synthetic
+/// "fallback skipped" entry is added — so an entry recorded while serving a
+/// fallback attempt names the model the client originally asked for.
+fn attempt_context(fallback_depth: u32, client_requested_model: &str) -> String {
+    if fallback_depth > 0 {
+        format!(" (fallback for '{}')", client_requested_model)
+    } else {
+        String::new()
+    }
+}
+
+/// Why the served model differs from the client's request: a model-fallback
+/// substitution, or a channel-level upstream alias.
+fn resolve_override_reason(
+    client_requested_model: &str,
+    model_name: &str,
+    upstream_name: &str,
+) -> Option<String> {
+    if !client_requested_model.trim().eq_ignore_ascii_case(model_name.trim()) {
+        Some("model_fallback".to_string())
+    } else if upstream_name != model_name {
+        Some("channel_mapping".to_string())
+    } else {
+        None
+    }
+}
+
 /// Try fallback models when the initial model fails to route.
-/// Returns Some(response) if a fallback succeeded, None if no fallback available.
+/// Returns `Some(response)` if a fallback succeeded, `None` otherwise, plus a
+/// report describing what the chain did (skipped / which candidates failed).
 /// Recurses into `proxy_route_and_forward` (not `proxy_inner`) so auth/balance/role
 /// are not re-run on each attempt.
 fn try_model_fallback<'a>(
@@ -755,49 +881,66 @@ fn try_model_fallback<'a>(
     protocol: ProxyProtocol,
     request_path: &'a str,
     routes: &'a mut Vec<llm_gateway_storage::RouteAttempt>,
-) -> std::pin::Pin<Box<dyn std::future::Future<Output = Option<axum::response::Response>> + Send + 'a>> {
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = (Option<axum::response::Response>, FallbackReport)> + Send + 'a>> {
     Box::pin(async move {
+        let mut report = FallbackReport::default();
+
         let fallback_id = match api_key.model_fallback_id.as_ref() {
             Some(id) => id,
             None => {
-                tracing::debug!("[PROXY] No model_fallback_id on API key '{}' — fallback skipped", api_key.id);
-                return None;
+                let reason = format!(
+                    "API key '{}' has no model_fallback_id bound",
+                    api_key.id
+                );
+                tracing::info!("[PROXY] {} — fallback skipped", reason);
+                report.skip_reason = Some(reason);
+                return (None, report);
             }
         };
         let fallback_config = match state.storage.get_model_fallback(fallback_id).await {
             Ok(Some(c)) => c,
             Ok(None) => {
-                tracing::warn!("[PROXY] model_fallback_id '{}' not found in DB — fallback skipped", fallback_id);
-                return None;
+                let reason = format!(
+                    "model_fallback_id '{}' not found in DB (deleted?)",
+                    fallback_id
+                );
+                tracing::warn!("[PROXY] {} — fallback skipped", reason);
+                report.skip_reason = Some(reason);
+                return (None, report);
             }
             Err(e) => {
-                tracing::warn!("[PROXY] Failed to load model_fallback_id '{}': {:?} — fallback skipped", fallback_id, e);
-                return None;
+                let reason = format!("failed to load model_fallback_id '{}': {:?}", fallback_id, e);
+                tracing::warn!("[PROXY] {} — fallback skipped", reason);
+                report.skip_reason = Some(reason);
+                return (None, report);
             }
         };
-        let model_lower = client_requested_model.to_lowercase();
 
-        let group = match fallback_config.config.iter().find(|g| {
-            g.models.iter().any(|m| m.to_lowercase() == model_lower)
-        }) {
+        let group = match find_fallback_group(&fallback_config.config, client_requested_model) {
             Some(g) => g,
             None => {
-                tracing::debug!(
-                    "[PROXY] No fallback group contains model '{}' (config '{}' has {} groups) — fallback skipped",
-                    client_requested_model, fallback_config.name, fallback_config.config.len()
+                let reason = format!(
+                    "no fallback group contains model '{}' (config '{}' has {} groups)",
+                    client_requested_model,
+                    fallback_config.name,
+                    fallback_config.config.len()
                 );
-                return None;
+                tracing::info!("[PROXY] {} — fallback skipped", reason);
+                report.skip_reason = Some(reason);
+                return (None, report);
             }
         };
 
-        let mut fallbacks: Vec<(&String, i32)> = group
-            .models
-            .iter()
-            .zip(group.priorities.iter())
-            .filter(|(m, _)| m.to_lowercase() != model_lower)
-            .map(|(m, p)| (m, *p))
-            .collect();
-        fallbacks.sort_by_key(|(_, p)| *p);
+        let fallbacks = select_fallback_candidates(group, client_requested_model);
+        if fallbacks.is_empty() {
+            let reason = format!(
+                "fallback group for model '{}' has no other model to fall back to",
+                client_requested_model
+            );
+            tracing::info!("[PROXY] {} — fallback skipped", reason);
+            report.skip_reason = Some(reason);
+            return (None, report);
+        }
 
         for (fallback_model, _) in fallbacks {
             tracing::info!("[PROXY] Trying fallback model '{}' for failed '{}'", fallback_model, client_requested_model);
@@ -809,8 +952,10 @@ fn try_model_fallback<'a>(
                 let req_json: serde_json::Value = match serde_json::from_str(body) {
                     Ok(v) => v,
                     Err(e) => {
-                        tracing::warn!("[PROXY] Failed to parse request body for fallback: {} — fallback skipped", e);
-                        return None;
+                        let reason = format!("failed to parse request body for fallback: {}", e);
+                        tracing::warn!("[PROXY] {} — fallback skipped", reason);
+                        report.skip_reason = Some(reason);
+                        return (None, report);
                     }
                 };
                 let mut modified = req_json;
@@ -844,17 +989,155 @@ fn try_model_fallback<'a>(
             match result {
                 Ok(response) => {
                     tracing::info!("[PROXY] Fallback to '{}' succeeded", fallback_model);
-                    return Some(response);
+                    return (Some(response), report);
                 }
                 Err(e) => {
-                    tracing::warn!("[PROXY] Fallback '{}' failed: {:?}", fallback_model, e);
+                    tracing::warn!("[PROXY] Fallback '{}' failed: {}", fallback_model, e.message());
+                    report.attempts.push((fallback_model, e.message()));
                     continue;
                 }
             }
         }
 
-        None
+        (None, report)
     })
+}
+
+/// Context needed to record a routing-level failure (unknown model, no
+/// enabled channel) — the request identity plus the fallback chain state.
+struct RoutingFailureCtx<'a> {
+    state: &'a Arc<AppState>,
+    headers: &'a HeaderMap,
+    body: &'a str,
+    client_requested_model: &'a str,
+    api_key: &'a llm_gateway_storage::ApiKey,
+    request_user_id: &'a Option<String>,
+    request_is_admin: bool,
+    request_id: &'a str,
+    protocol: ProxyProtocol,
+    request_path: &'a str,
+    fallback_depth: u32,
+    is_stream: bool,
+    /// Start of the whole request (top-level call), used for the audit latency.
+    request_start: Instant,
+}
+
+/// Handle a routing-level failure.
+///
+/// Order of operations:
+///   1. try the fallback chain (top level only — a fallback attempt must not
+///      re-trigger a fallback);
+///   2. dispatch an audit row — routing failures used to produce **no** audit
+///      row at all, which is why a misconfigured fallback chain looked like
+///      "the gateway ignored my config". The row carries the `routes` chain,
+///      which is a pure attempt log: if the chain stops at the routing miss,
+///      the fallback chain was never entered;
+///   3. return the original 404, with the fallback outcome appended so the
+///      client can see why the request could not be served.
+async fn fail_routing(
+    ctx: &RoutingFailureCtx<'_>,
+    routes: &mut Vec<llm_gateway_storage::RouteAttempt>,
+    base_message: String,
+    served_model: Option<&str>,
+) -> Result<axum::response::Response, ApiError> {
+    let mut report = FallbackReport::default();
+
+    if ctx.fallback_depth == 0 {
+        let (response, r) = try_model_fallback(
+            ctx.state,
+            ctx.headers,
+            ctx.body,
+            ctx.client_requested_model,
+            ctx.api_key,
+            ctx.request_user_id,
+            ctx.request_is_admin,
+            ctx.request_id,
+            ctx.protocol,
+            ctx.request_path,
+            routes,
+        )
+        .await;
+        report = r;
+        if let Some(response) = response {
+            return Ok(response);
+        }
+
+        // No synthetic entry is added to `routes` here: the chain already
+        // lists every attempt that was made (the routing miss, and one entry
+        // per fallback candidate). If the chain stops at the routing miss,
+        // the fallback chain was never entered — that is visible at a glance.
+
+        dispatch_routing_failure_audit(
+            ctx,
+            routes,
+            &format!("{}{}", base_message, report.describe()),
+            served_model,
+        )
+        .await;
+    }
+    Err(ApiError::NotFound(format!("{}{}", base_message, report.describe())))
+}
+
+/// Dispatch the audit row for a routing-level failure.
+///
+/// The row carries the full `routes` chain — every routing miss and every
+/// fallback attempt — so the fallback behaviour becomes visible in the admin
+/// Logs page instead of only in the (debug-level) log stream.
+async fn dispatch_routing_failure_audit(
+    ctx: &RoutingFailureCtx<'_>,
+    routes: &[llm_gateway_storage::RouteAttempt],
+    error_message: &str,
+    served_model: Option<&str>,
+) {
+    let proto = match ctx.protocol {
+        ProxyProtocol::OpenAI => Protocol::Openai,
+        ProxyProtocol::Anthropic => Protocol::Anthropic,
+    };
+    let task = AuditTask {
+        request_id: ctx.request_id.to_string(),
+        key_id: ctx.api_key.id.clone(),
+        user_id: ctx.api_key.created_by.clone(),
+        model_name: served_model
+            .unwrap_or(ctx.client_requested_model)
+            .to_string(),
+        provider_id: String::new(),
+        protocol: proto,
+        stream: ctx.is_stream,
+        request_body: ctx.body.to_string(),
+        response_bytes: error_message.as_bytes().to_vec(),
+        status_code: StatusCode::NOT_FOUND.as_u16() as i32,
+        latency_ms: ctx.request_start.elapsed().as_millis() as i64,
+        pricing_policy: None,
+        markup_ratio: 0,
+        channel_id: None,
+        original_model: Some(ctx.client_requested_model.to_string()),
+        upstream_model: None,
+        model_override_reason: None,
+        request_path: Some(ctx.request_path.to_string()),
+        upstream_url: None,
+        request_headers: Some(build_request_headers_json(ctx.headers)),
+        response_headers: None,
+        routes: routes.to_vec(),
+    };
+    dispatch_audit_task(ctx.state, task).await;
+}
+
+/// Build the request-headers JSON recorded in the audit row (forwarded
+/// headers only — sensitive and `x-forwarded-*` headers are excluded).
+fn build_request_headers_json(headers: &HeaderMap) -> String {
+    let mut map = serde_json::Map::new();
+    for (name, value) in headers.iter() {
+        match name.as_str() {
+            "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
+            _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
+            _ => {
+                if let Ok(v) = value.to_str() {
+                    map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
+                }
+            }
+        }
+    }
+    serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
 }
 
 /// HTTP handler entry point. Runs once-per-request work (auth, balance check,
@@ -971,6 +1254,10 @@ async fn proxy_route_and_forward(
     routes: &mut Vec<llm_gateway_storage::RouteAttempt>,
     fallback_depth: u32,
 ) -> Result<axum::response::Response, ApiError> {
+    // Total request latency — stamped here so routing-level failures (which
+    // return before the failover loop) report the full request duration.
+    let start_total = Instant::now();
+
     // === Parse model (req_json is parsed by the caller and moved in) ===
     let model_name = req_json
         .get("model")
@@ -997,6 +1284,34 @@ async fn proxy_route_and_forward(
         .and_then(|s| s.as_bool())
         .unwrap_or(false);
 
+    // Context shared by every routing-level failure path (unknown model, no
+    // enabled channel): it carries the fallback chain state and the audit
+    // identity so a routing failure is recorded instead of vanishing.
+    let failure_ctx = RoutingFailureCtx {
+        state: &state,
+        headers: &headers,
+        body: &body,
+        client_requested_model: &client_requested_model,
+        api_key: &api_key,
+        request_user_id: &request_user_id,
+        request_is_admin,
+        request_id: &request_id,
+        protocol,
+        request_path: &request_path,
+        fallback_depth,
+        is_stream,
+        request_start: start_total,
+    };
+
+    // Inside a fallback attempt every routing entry records which model the
+    // client actually asked for, so the audit `routes` chain reads as a
+    // complete story:
+    //   "Model 'glm-5.1' not in registry"
+    //   "Model 'minimax-m3.1-flash' not in registry (fallback for 'glm-5.1')"
+    // A chain that stops at the first entry means the fallback chain was
+    // never entered.
+    let attempt_ctx = attempt_context(fallback_depth, &client_requested_model);
+
     let model_entry = match models
         .iter()
         .find(|m| m.model.name.to_lowercase() == model_name.to_lowercase())
@@ -1010,21 +1325,17 @@ async fn proxy_route_and_forward(
                 channel_name: None,
                 provider_id: String::new(),
                 status_code: 0,
-                error_message: Some(format!("Model '{}' not in registry", model_name)),
+                error_message: Some(format!("Model '{}' not in registry{}", model_name, attempt_ctx)),
                 latency_ms: 0,
                 started_at: chrono::Utc::now(),
             });
-            if fallback_depth == 0 {
-                if let Some(resp) = try_model_fallback(
-                    &state, &headers, &body, &client_requested_model, &api_key,
-                    &request_user_id, request_is_admin, &request_id,
-                    protocol, &request_path,
-                    routes,
-                ).await {
-                    return Ok(resp);
-                }
-            }
-            return Err(ApiError::NotFound(format!("Model '{}' not found", model_name)));
+            return fail_routing(
+                &failure_ctx,
+                routes,
+                format!("Model '{}' not found", model_name),
+                None,
+            )
+            .await;
         }
     };
 
@@ -1064,21 +1375,17 @@ async fn proxy_route_and_forward(
                 channel_name: None,
                 provider_id: String::new(),
                 status_code: 0,
-                error_message: Some(format!("No enabled channels for model '{}' (cache empty)", model_name)),
+                error_message: Some(format!("No enabled channels for model '{}' (cache empty){}", model_name, attempt_ctx)),
                 latency_ms: 0,
                 started_at: chrono::Utc::now(),
             });
-            if fallback_depth == 0 {
-                if let Some(resp) = try_model_fallback(
-                    &state, &headers, &body, &client_requested_model, &api_key,
-                    &request_user_id, request_is_admin, &request_id,
-                    protocol, &request_path,
-                    routes,
-                ).await {
-                    return Ok(resp);
-                }
-            }
-            return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
+            return fail_routing(
+                &failure_ctx,
+                routes,
+                format!("No enabled channels for model '{}'", model_name),
+                Some(&model_name),
+            )
+            .await;
         }
         // Apply user-group routing filter
         if let Some(ref user_id) = request_user_id {
@@ -1151,21 +1458,17 @@ async fn proxy_route_and_forward(
                 channel_name: None,
                 provider_id: String::new(),
                 status_code: 0,
-                error_message: Some(format!("No enabled channels for model '{}' (DB routing empty)", model_name)),
+                error_message: Some(format!("No enabled channels for model '{}' (DB routing empty){}", model_name, attempt_ctx)),
                 latency_ms: 0,
                 started_at: chrono::Utc::now(),
             });
-            if fallback_depth == 0 {
-                if let Some(resp) = try_model_fallback(
-                    &state, &headers, &body, &client_requested_model, &api_key,
-                    &request_user_id, request_is_admin, &request_id,
-                    protocol, &request_path,
-                    routes,
-                ).await {
-                    return Ok(resp);
-                }
-            }
-            return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
+            return fail_routing(
+                &failure_ctx,
+                routes,
+                format!("No enabled channels for model '{}'", model_name),
+                Some(&model_name),
+            )
+            .await;
         }
 
         let provider_id = available_channels[0].1.provider_id.as_str();
@@ -1230,21 +1533,17 @@ async fn proxy_route_and_forward(
                 channel_name: None,
                 provider_id: String::new(),
                 status_code: 0,
-                error_message: Some(format!("No enabled channels for model '{}' (all circuit-broken)", model_name)),
+                error_message: Some(format!("No enabled channels for model '{}' (all circuit-broken){}", model_name, attempt_ctx)),
                 latency_ms: 0,
                 started_at: chrono::Utc::now(),
             });
-            if fallback_depth == 0 {
-                if let Some(resp) = try_model_fallback(
-                    &state, &headers, &body, &client_requested_model, &api_key,
-                    &request_user_id, request_is_admin, &request_id,
-                    protocol, &request_path,
-                    routes,
-                ).await {
-                    return Ok(resp);
-                }
-            }
-            return Err(ApiError::NotFound(format!("No enabled channels for model '{}'", model_name)));
+            return fail_routing(
+                &failure_ctx,
+                routes,
+                format!("No enabled channels for model '{}'", model_name),
+                Some(&model_name),
+            )
+            .await;
         }
         candidates
     };
@@ -1264,8 +1563,8 @@ async fn proxy_route_and_forward(
     // HTTP request; try_model_fallback passes the same Vec down through each
     // recursive fallback attempt) so that the single AuditTask dispatched at
     // the top of the chain sees every attempt — including fallbacks — in order.
-    let start_total = Instant::now();
-
+    // `start_total` is stamped at the top of this function (see above) so the
+    // latency reported for a routing-level failure covers the whole request.
     for (channel, channel_model) in &routing_candidates {
         // Use upstream_model_name if provided, otherwise use the model name from request
         let upstream_name = channel_model.upstream_model_name.as_deref().unwrap_or(&model_name);
@@ -1498,21 +1797,7 @@ if status != 200 && status < 500 {
             };
 
             // Build request headers JSON (for audit log — only forwarded headers, exclude sensitive ones and x-forwarded-*)
-            let request_headers_for_worker: String = {
-                let mut map = serde_json::Map::new();
-                for (name, value) in headers.iter() {
-                    match name.as_str() {
-                        "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
-                        _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
-                        _ => {
-                            if let Ok(v) = value.to_str() {
-                                map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
-                            }
-                        }
-                    }
-                }
-                serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
-            };
+            let request_headers_for_worker = build_request_headers_json(&headers);
 
             let proto = match protocol {
                 ProxyProtocol::OpenAI => Protocol::Openai,
@@ -1580,7 +1865,7 @@ if status != 200 && status < 500 {
                 channel_id: Some(channel.channel_id.to_string()),
                 original_model: Some(client_requested_model.clone()),
                 upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
-                model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
+                model_override_reason: resolve_override_reason(&client_requested_model, &model_name, upstream_name),
                 request_path: Some(request_path.clone()),
                 upstream_url: Some(upstream_url.clone()),
                 request_headers: Some(request_headers_for_worker),
@@ -1595,21 +1880,7 @@ if status != 200 && status < 500 {
         tracing::debug!("[PROXY] Upstream success response: status={}, is_stream={}", status, is_stream);
 
         // Build request headers JSON (for audit log — only forwarded headers, exclude sensitive ones and x-forwarded-*)
-        let request_headers_for_worker: String = {
-            let mut map = serde_json::Map::new();
-            for (name, value) in headers.iter() {
-                match name.as_str() {
-                    "host" | "authorization" | "content-length" | "x-api-key" | "api-key" => continue,
-                    _ if name.as_str().to_lowercase().starts_with("x-forwarded-") => continue,
-                    _ => {
-                        if let Ok(v) = value.to_str() {
-                            map.insert(name.to_string(), serde_json::Value::String(v.to_string()));
-                        }
-                    }
-                }
-            }
-            serde_json::to_string(&map).unwrap_or_else(|_| "{}".to_string())
-        };
+        let request_headers_for_worker = build_request_headers_json(&headers);
 
         // === Handle streaming: SSE passthrough with mpsc channel architecture ===
         if is_stream {
@@ -1656,7 +1927,7 @@ if status != 200 && status < 500 {
                 channel_id: channel.channel_id.to_string(),
                 original_model: Some(client_requested_model.clone()),
                 upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
-                model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
+                model_override_reason: resolve_override_reason(&client_requested_model, &model_name, upstream_name),
                 request_path: request_path.clone(),
                 upstream_url: upstream_url.clone(),
                 request_headers: request_headers_for_worker.clone(),
@@ -1762,7 +2033,7 @@ if status != 200 && status < 500 {
             channel_id: Some(channel.channel_id.to_string()),
             original_model: Some(client_requested_model.clone()),
             upstream_model: if upstream_name != &model_name { Some(upstream_name.to_string()) } else { None },
-            model_override_reason: if upstream_name != &model_name { Some("channel_mapping".to_string()) } else { None },
+            model_override_reason: resolve_override_reason(&client_requested_model, &model_name, upstream_name),
             request_path: Some(request_path.clone()),
             upstream_url: Some(upstream_url.clone()),
             request_headers: Some(request_headers_for_worker.clone()),
@@ -1774,16 +2045,25 @@ if status != 200 && status < 500 {
         return Ok(response_bytes.into_response());
     }
 
-    // All channels failed — try model fallback
+    // All channels failed — try model fallback.
+    // Snapshot the last attempt of the original routing pass first: the
+    // fallback chain appends its own attempts to `routes`, and the audit row
+    // should describe the original failure (the full chain lives in `routes`).
+    let last_attempt = routes.last().cloned();
+
+    let mut fallback_report = FallbackReport::default();
     if fallback_depth == 0 {
-        if let Some(resp) = try_model_fallback(
+        let (response, r) = try_model_fallback(
             &state, &headers, &body, &client_requested_model, &api_key,
             &request_user_id, request_is_admin, &request_id,
             protocol, &request_path,
             routes,
-        ).await {
+        ).await;
+        fallback_report = r;
+        if let Some(resp) = response {
             return Ok(resp);
         }
+        // No synthetic entry: `routes` lists the attempts themselves.
     }
 
     // All channels failed. At depth=0 (top of the chain) dispatch a single
@@ -1792,7 +2072,7 @@ if status != 200 && status < 500 {
     // stay silent so it doesn't produce a duplicate row; the depth=0 caller
     // will dispatch once after `try_model_fallback` returns None.
     if fallback_depth == 0 {
-        if let Some(last) = routes.last() {
+        if let Some(last) = last_attempt {
             let proto = match protocol {
                 ProxyProtocol::OpenAI => Protocol::Openai,
                 ProxyProtocol::Anthropic => Protocol::Anthropic,
@@ -1838,7 +2118,7 @@ if status != 200 && status < 500 {
         }
     }
 
-    Err(ApiError::UpstreamError(502, format!("All channels failed. Last error: {}", last_error)))
+    Err(ApiError::UpstreamError(502, format!("All channels failed. Last error: {}{}", last_error, fallback_report.describe())))
 }
 /// Axum handler for proxy requests.
 pub async fn proxy(
@@ -2002,5 +2282,129 @@ mod tests {
         let anthropic = ProxyProtocol::Anthropic;
         assert!(matches!(openai, ProxyProtocol::OpenAI));
         assert!(matches!(anthropic, ProxyProtocol::Anthropic));
+    }
+
+    // ─── Model fallback ─────────────────────────────────────────────────────
+
+    fn group(models: &[&str], priorities: &[i32]) -> llm_gateway_storage::ModelFallbackGroup {
+        llm_gateway_storage::ModelFallbackGroup {
+            models: models.iter().map(|m| m.to_string()).collect(),
+            priorities: priorities.to_vec(),
+        }
+    }
+
+    #[test]
+    fn fallback_group_matches_case_insensitively() {
+        let config = vec![group(&["glm-5.1", "minimax-m3.1-flash"], &[1, 2])];
+        assert!(find_fallback_group(&config, "glm-5.1").is_some());
+        assert!(find_fallback_group(&config, "GLM-5.1").is_some());
+        assert!(find_fallback_group(&config, "glm-5.2").is_none());
+    }
+
+    #[test]
+    fn fallback_group_matches_after_trimming_whitespace() {
+        // A config saved with a stray space ("glm-5.1 ") used to never match
+        // the requested model, which silently disabled the whole chain.
+        let config = vec![group(&["glm-5.1 ", "minimax-m3.1-flash"], &[1, 2])];
+        assert!(find_fallback_group(&config, "glm-5.1").is_some());
+    }
+
+    #[test]
+    fn fallback_candidates_exclude_the_requested_model() {
+        let g = group(&["glm-5.1", "minimax-m3.1-flash"], &[1, 2]);
+        let candidates = select_fallback_candidates(&g, "glm-5.1");
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].0, "minimax-m3.1-flash");
+        assert_eq!(candidates[0].1, 2);
+    }
+
+    #[test]
+    fn fallback_candidates_are_ordered_by_priority() {
+        let g = group(
+            &["glm-5.1", "b-model", "a-model"],
+            &[1, 5, 3],
+        );
+        let candidates = select_fallback_candidates(&g, "glm-5.1");
+        let names: Vec<&str> = candidates.iter().map(|(m, _)| m.as_str()).collect();
+        assert_eq!(names, vec!["a-model", "b-model"]);
+    }
+
+    #[test]
+    fn fallback_candidates_are_not_dropped_when_priorities_is_short() {
+        // `zip` truncated to the shorter side: a `priorities` array shorter than
+        // `models` silently lost the trailing models, so the fallback target
+        // could disappear with no error at all.
+        let g = group(&["glm-5.1", "minimax-m3.1-flash", "third-model"], &[1]);
+        let candidates = select_fallback_candidates(&g, "glm-5.1");
+        let names: Vec<&str> = candidates.iter().map(|(m, _)| m.as_str()).collect();
+        assert_eq!(names.len(), 2, "candidates must not be silently dropped");
+        assert!(names.contains(&"minimax-m3.1-flash"));
+        assert!(names.contains(&"third-model"));
+        // Missing priorities default to index + 1, i.e. after the explicit ones.
+        assert_eq!(candidates[0].1, 2);
+        assert_eq!(candidates[1].1, 3);
+    }
+
+    #[test]
+    fn fallback_report_describes_skip_reason() {
+        let report = FallbackReport {
+            skip_reason: Some("API key 'k1' has no model_fallback_id bound".to_string()),
+            attempts: Vec::new(),
+        };
+        assert!(report.describe().contains("fallback skipped"));
+        assert!(report.describe().contains("no model_fallback_id"));
+        // The skip reason is reported to the client and to the log stream —
+        // never written into the audit `routes` chain.
+        assert!(!report.describe().is_empty());
+    }
+
+    #[test]
+    fn fallback_report_describes_failed_attempts() {
+        let report = FallbackReport {
+            skip_reason: None,
+            attempts: vec![(
+                "minimax-m3.1-flash".to_string(),
+                "Model 'minimax-m3.1-flash' not found".to_string(),
+            )],
+        };
+        let described = report.describe();
+        assert!(described.contains("fallback tried"));
+        assert!(described.contains("minimax-m3.1-flash"));
+        assert!(described.contains("not found"));
+    }
+
+    #[test]
+    fn attempt_context_names_the_original_model_inside_a_fallback() {
+        // Top-level attempt: no context, the entry is the client's own model.
+        assert_eq!(attempt_context(0, "glm-5.1"), "");
+        // Inside a fallback attempt the entry says which model it stands in for.
+        assert_eq!(
+            attempt_context(1, "glm-5.1"),
+            " (fallback for 'glm-5.1')"
+        );
+    }
+
+    #[test]
+    fn override_reason_distinguishes_fallback_from_channel_mapping() {
+        // Fallback substitution: the served model differs from what the client asked for.
+        assert_eq!(
+            resolve_override_reason("glm-5.1", "minimax-m3.1-flash", "minimax-m3.1-flash"),
+            Some("model_fallback".to_string())
+        );
+        // Same model, different upstream alias → channel mapping.
+        assert_eq!(
+            resolve_override_reason("glm-5.1", "glm-5.1", "glm-5.1-upstream"),
+            Some("channel_mapping".to_string())
+        );
+        // Nothing was substituted.
+        assert_eq!(
+            resolve_override_reason("glm-5.1", "glm-5.1", "glm-5.1"),
+            None
+        );
+        // Case differences are not a substitution.
+        assert_eq!(
+            resolve_override_reason("GLM-5.1", "glm-5.1", "glm-5.1"),
+            None
+        );
     }
 }
