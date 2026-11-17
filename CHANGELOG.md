@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.8] - 2026-11-17
+
+### Fixed
+- An upstream 4xx now triggers the model-fallback chain instead of ending the request. The upstream rejected the request (400, 401, 403, 404, 422, …) was treated as terminal: the error body was returned to the client immediately, the fallback chain never ran, and no other model could serve the request. When a fallback is configured for the key, the chain now runs first and the upstream 4xx is returned only if the whole chain fails too — which is what `docs/superpowers/specs/2026-04-27-model-fallback-design.md` has always specified ("If the request fails for any reason (model not found, no channels, upstream 5xx, upstream 4xx, connection error)"). The upstream error body and status code are still passed through to the client verbatim when the chain fails, so nothing changes for clients that read the upstream error.
+- A fallback candidate that answers with an error status is now a failed attempt rather than a success. The first candidate to return 4xx/5xx used to end the chain and hand its error to the client; the chain now keeps walking through the remaining candidates in priority order and only the last failure surfaces.
+- A fallback attempt no longer emits its own audit row. The audit row for a failed fallback attempt is now dispatched once, by whichever level of the chain ends up serving (or failing) the request, so a request that walks N candidates produces one row with the full chain in `routes` instead of one row per candidate.
+
 ## [1.8.7] - 2026-11-17
 
 ### Fixed
