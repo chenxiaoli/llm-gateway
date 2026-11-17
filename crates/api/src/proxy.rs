@@ -853,6 +853,18 @@ struct ClientError {
     response_headers: String,
 }
 
+/// The innermost cause of an error — e.g. "operation timed out" for a reqwest
+/// timeout, whose own message is only "error sending request for url (...)".
+fn error_root_cause(err: &(dyn std::error::Error + 'static)) -> String {
+    let mut cause = err.source();
+    let mut last = err.to_string();
+    while let Some(e) = cause {
+        last = e.to_string();
+        cause = e.source();
+    }
+    last
+}
+
 /// Whether a fallback candidate's response counts as "served".
 ///
 /// Only a 200 counts. A candidate that answers with 4xx/5xx (or any other
@@ -1514,16 +1526,31 @@ async fn proxy_route_and_forward(
             .await;
         }
 
-        let provider_id = available_channels[0].1.provider_id.as_str();
-        let provider = state
-            .storage
-            .get_provider(provider_id)
-            .await
-            .map_err(|e| ApiError::Internal(e.to_string()))?
-            .ok_or(ApiError::NotFound(format!("Provider '{}' not found", provider_id)))?;
-
         let mut candidates: Vec<(ResolvedChannel, llm_gateway_storage::ChannelModel)> = Vec::new();
         for (cm, channel) in &available_channels {
+            // Each channel has its own provider, so the endpoint and the proxy
+            // settings must be resolved per channel. Resolving the provider
+            // once (from the first channel) sent every candidate — including
+            // the fallback models — to the first channel's provider, with the
+            // first channel's credentials.
+            let provider = match state.storage.get_provider(&channel.provider_id).await {
+                Ok(Some(p)) => p,
+                Ok(None) => {
+                    tracing::warn!(
+                        "[PROXY] Provider '{}' not found for channel '{}' — channel skipped",
+                        channel.provider_id, channel.name
+                    );
+                    continue;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "[PROXY] Failed to load provider '{}' for channel '{}': {} — channel skipped",
+                        channel.provider_id, channel.name, e
+                    );
+                    continue;
+                }
+            };
+
             let endpoints: serde_json::Value = provider
                 .endpoints
                 .as_ref()
@@ -1598,7 +1625,15 @@ async fn proxy_route_and_forward(
         .map(|(c, _)| c.provider_id.clone())
         .ok_or_else(|| ApiError::Internal("No channels available".to_string()))?;
 
-    let default_client = reqwest::Client::new();
+    // The upstream timeout comes from the configuration (`[upstream]
+    // timeout_secs`). It used to never be applied to the upstream request, so
+    // a hanging upstream hung the request forever — and the fallback chain,
+    // which exists for exactly that case, never got a chance to run.
+    let upstream_timeout = Duration::from_secs(state.system_info.upstream_timeout_secs.max(1));
+    let default_client = reqwest::Client::builder()
+        .timeout(upstream_timeout)
+        .build()
+        .map_err(|e| ApiError::Internal(e.to_string()))?;
     let mut last_error = String::new();
 
     // The upstream error of the most recent 4xx attempt. A 4xx means "this
@@ -1651,7 +1686,11 @@ async fn proxy_route_and_forward(
             Some(proxy_url) => {
                 match reqwest::Proxy::all(proxy_url) {
                     Ok(proxy) => {
-                        match reqwest::Client::builder().proxy(proxy).build() {
+                        match reqwest::Client::builder()
+                            .proxy(proxy)
+                            .timeout(upstream_timeout)
+                            .build()
+                        {
                             Ok(c) => c,
                             Err(e) => {
                                 let proxy_build_latency_ms = proxy_build_start.elapsed().as_millis() as i64;
@@ -1746,7 +1785,16 @@ async fn proxy_route_and_forward(
             Ok(r) => r,
             Err(e) => {
                 let latency_ms = start.elapsed().as_millis() as i64;
-                let error_msg = format!("Connection error on channel '{}': {}", channel.name, e);
+                // Include the root cause: reqwest's own message only says
+                // "error sending request for url (...)", which hides whether
+                // the upstream refused the connection or the request timed
+                // out — the two need different reactions.
+                let error_msg = format!(
+                    "Connection error on channel '{}': {} ({})",
+                    channel.name,
+                    e,
+                    error_root_cause(&e)
+                );
                 last_error = error_msg.clone();
 
                 // Record this failed attempt for the audit row. The single AuditTask
@@ -1943,7 +1991,7 @@ if status != 200 && status < 500 {
                 key_id: api_key.id.clone(),
                 user_id: api_key.created_by.clone(),
                 model_name: upstream_name.to_string(),
-                provider_id: provider_id.clone(),
+                provider_id: channel.provider_id.clone(),
                 protocol: proto,
                 request_body: body.clone(),
                 pricing_policy,
@@ -2045,7 +2093,7 @@ if status != 200 && status < 500 {
             key_id: api_key.id.clone(),
             user_id: api_key.created_by.clone(),
             model_name: upstream_name.to_string(),
-            provider_id: provider_id.clone(),
+            provider_id: channel.provider_id.clone(),
             protocol: proto,
             stream: false,
             request_body: body.clone(),
@@ -2432,6 +2480,27 @@ mod tests {
         assert!(described.contains("fallback tried"));
         assert!(described.contains("minimax-m3.1-flash"));
         assert!(described.contains("not found"));
+    }
+
+    #[test]
+    fn weighted_routing_prefers_the_heavier_channel() {
+        // Channels of the same priority are ordered by weight. With a 1000:1
+        // split the heavy channel must win the vast majority of draws.
+        let mut heavy_first = 0;
+        let trials = 500;
+        for _ in 0..trials {
+            let mut items = vec![("heavy", 1000i32), ("light", 1i32)];
+            select_weighted_order(&mut items, |i| i.1);
+            if items[0].0 == "heavy" {
+                heavy_first += 1;
+            }
+        }
+        assert!(
+            heavy_first > trials * 95 / 100,
+            "the heavy channel won only {} of {} draws",
+            heavy_first,
+            trials
+        );
     }
 
     #[test]

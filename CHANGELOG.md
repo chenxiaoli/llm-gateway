@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.8.11] - 2026-11-17
+
+### Fixed
+- The database routing path sent every candidate to the **first** channel's provider. When the in-memory channel registry had no entry for a model (a cache miss — right after startup, or for a model added a moment ago), the proxy resolved the provider once, from the first available channel, and reused its endpoints and credentials for every other channel. A model served by channels on two different providers therefore sent all of its requests — the fallback models included — to the first provider, with the first channel's API key. The provider is now resolved per channel.
+- The configured upstream timeout (`[upstream] timeout_secs`) was never applied to the upstream request. A hanging upstream hung the request forever, and the fallback chain — which exists for exactly that case — never got a chance to run. The timeout is now applied to the upstream client.
+- `audit_log.provider_id` now records the provider of the channel that actually served the request, instead of the provider of the first candidate.
+- Connection errors now carry their root cause. reqwest's own message is only "error sending request for url (...)", which does not say whether the upstream refused the connection or the request timed out — two situations that need different reactions. The audit row now reads `Connection error on channel 'x': error sending request for url (...) (operation timed out)`.
+
+### Added
+- The proxy integration tests now cover the failover paths as well: 5xx failover between the channels of a model, 429 circuit breaking (the next request skips the rate-limited channel), connection errors, upstream timeouts, and the weighted routing of same-priority channels. Each channel gets its own fake upstream, so a test can make one channel fail while the other succeeds.
+
 ## [1.8.10] - 2026-11-17
 
 ### Added
