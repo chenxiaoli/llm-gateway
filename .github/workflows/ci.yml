@@ -94,6 +94,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     if: startsWith(github.ref, 'refs/tags/v')
     strategy:
+      # One platform failing must not cancel the others — a cancelled sibling
+      # hides the real failure and leaves the release job skipped.
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -101,7 +104,10 @@ jobs:
             artifact: llm-gateway-linux-x86_64
             binary: llm-gateway
             archive: llm-gateway-linux-x86_64
-          - os: macos-14
+          # macos-14 was retired from GitHub Actions on 2026-11-02 — its ARM64
+          # configuration ("macos-14-arm64-us-default") no longer exists, so
+          # the job failed instantly and took the release job with it.
+          - os: macos-15
             target: aarch64-apple-darwin
             artifact: llm-gateway-macos-arm64
             binary: llm-gateway
