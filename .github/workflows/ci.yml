@@ -93,6 +93,9 @@ jobs:
     needs: backend-test
     runs-on: ${{ matrix.os }}
     if: startsWith(github.ref, 'refs/tags/v')
+    # A platform that cannot be built must not hold the release hostage — the
+    # GitHub release is published with whatever did build.
+    continue-on-error: ${{ matrix.allow_failure || false }}
     strategy:
       # One platform failing must not cancel the others — a cancelled sibling
       # hides the real failure and leaves the release job skipped.
@@ -104,14 +107,17 @@ jobs:
             artifact: llm-gateway-linux-x86_64
             binary: llm-gateway
             archive: llm-gateway-linux-x86_64
-          # macos-14 was retired from GitHub Actions on 2026-11-02 — its ARM64
-          # configuration ("macos-14-arm64-us-default") no longer exists, so
-          # the job failed instantly and took the release job with it.
-          - os: macos-15
-            target: aarch64-apple-darwin
-            artifact: llm-gateway-macos-arm64
+          # macos-14 was retired from GitHub Actions on 2026-11-02, and the
+          # macOS ARM64 runner pool is capacity-constrained (jobs there sit in
+          # the queue for 15+ minutes and time out). The Intel image is
+          # reliably available, so the macOS binary is built there — and the
+          # leg is allowed to fail so it can never block the release.
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            artifact: llm-gateway-macos-x86_64
             binary: llm-gateway
-            archive: llm-gateway-macos-arm64
+            archive: llm-gateway-macos-x86_64
+            allow_failure: true
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact: llm-gateway-windows-x86_64
@@ -216,7 +222,7 @@ jobs:
             | File | Platform |
             |------|----------|
             | `llm-gateway-linux-x86_64` | Linux x86_64 |
-            | `llm-gateway-macos-arm64` | macOS ARM64 (Apple Silicon) |
+            | `llm-gateway-macos-x86_64` | macOS x86_64 (Intel) |
             | `llm-gateway-windows-x86_64.exe` | Windows x86_64 |
 
             Web dashboard is embedded in the binary. Access it at `http://localhost:8080/` after starting.
